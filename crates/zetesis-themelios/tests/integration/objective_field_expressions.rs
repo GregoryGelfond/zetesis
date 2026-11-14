@@ -6,7 +6,7 @@ use zetesis_reference_support::resource_limits;
 use std::collections::BTreeSet;
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
-use zetesis_themelios::FormulaLimits;
+use zetesis_themelios::{FormulaLimits, FormulaWarning};
 
 const CASES: &str = include_str!("../fixtures/objective-field-expressions.jsonl");
 
@@ -40,24 +40,48 @@ fn evaluated_fields_match_fresh_clingo() {
 }
 
 #[test]
-fn eligible_field_arithmetic_keeps_located_failures() {
-    for source in [
-        "d(0).#minimize{1/X:d(X)}.",
-        "d(0).#minimize{1,1/X:d(X)}.",
-        "d(2147483647).#minimize{X+1:d(X)}.",
-    ] {
-        let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
-        assert!(
-            matches!(
-                error,
-                zetesis_themelios::FormulaFailure::Expansion(
-                    zetesis_themelios::ExpansionFailure::Evaluation { .. }
-                )
-            ),
-            "{source}: {error}"
+fn eligible_field_zero_divisors_omit_their_rows() {
+    // The weight or the tuple field divides by zero at the one eligible row.
+    // The row is omitted, so no answer is scored, and the objective keeps
+    // the warning.
+    for objective in ["#minimize{1/X:d(X)}.", "#minimize{1,1/X:d(X)}."] {
+        let source = format!("d(0).{objective}");
+        let input = reference::admit(&source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        let [FormulaWarning::ZeroDivisor { location }] = input.warnings() else {
+            panic!("{source}: one zero-divisor warning: {:?}", input.warnings());
+        };
+        assert_eq!(
+            input
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
+            objective
         );
-        assert!(!error.diagnostics().is_empty());
+        assert_eq!(
+            reference::exhaustive(&input),
+            Records::from([(BTreeSet::from(["d(0)".into()]), None)]),
+            "{source}"
+        );
+        assert!(input.objectives().priorities().is_empty(), "{source}");
     }
+}
+
+#[test]
+fn eligible_field_overflow_keeps_its_located_failure() {
+    let source = "d(2147483647).#minimize{X+1:d(X)}.";
+    let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
+    assert!(
+        matches!(
+            error,
+            zetesis_themelios::FormulaFailure::Expansion(
+                zetesis_themelios::ExpansionFailure::Evaluation { .. }
+            )
+        ),
+        "{source}: {error}"
+    );
+    assert!(!error.diagnostics().is_empty());
 }
 
 #[test]

@@ -305,12 +305,9 @@ impl<'source> Preparation<'_, '_, 'source> {
                 self.retain(objective, template)?;
             }
         }
-        // A condition-only witness cannot rescue an instance whose scalar
-        // fields were all undefined. Keep only the join's zero-divisor evidence.
-        let joined = bindings.take_family();
-        if family.zero.is_none() {
-            family.zero = joined.zero;
-        }
+        // A zero divisor met in the condition belongs to the same family as
+        // one met in a field.
+        family.merge(bindings.take_family());
         Ok(family)
     }
 
@@ -399,7 +396,6 @@ impl<'source> Preparation<'_, '_, 'source> {
         )?;
         bindings.evidence();
         let mut numeric = false;
-        let mut family = Evidence::default();
         while let Some(row) = bindings.next_row(
             self.computation,
             self.limits,
@@ -426,10 +422,8 @@ impl<'source> Preparation<'_, '_, 'source> {
                 }
                 numeric |= row.passes;
             }
-            family.defined = true;
         }
-        family.zero = bindings.take_family().zero;
-        Ok((numeric, family))
+        Ok((numeric, bindings.take_family()))
     }
 
     fn validate_scopes(
@@ -524,10 +518,8 @@ impl<'source> Preparation<'_, '_, 'source> {
             return Ok(None);
         }
         let Some(weight) = weight_number else {
-            family.defined = true;
             return Ok(None);
         };
-        family.defined = true;
         let Some(priority) = priority_number else {
             return Ok(None);
         };

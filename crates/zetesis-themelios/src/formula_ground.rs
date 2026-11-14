@@ -2039,6 +2039,15 @@ impl<'source> Builder<'_, '_, 'source> {
                             self.disjunct_instance(&element.head, &binding, condition, body, rule)?;
                         disjunction = self.or(disjunction, literal, rule.location)?;
                     }
+                    if local.take_family().zero.is_some() {
+                        self.undefined_disjuncts(
+                            element,
+                            assignment,
+                            support,
+                            (body, rule),
+                            (&mut disjunction, &mut count),
+                        )?;
+                    }
                 }
                 // Exhaustion, not a stopped prefix, establishes the empty disjunction.
                 let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
@@ -2122,6 +2131,105 @@ impl<'source> Builder<'_, '_, 'source> {
         let absent = self.neg(condition, rule.location)?;
         let eligible = self.neg(absent, rule.location)?;
         self.and(implication, eligible, rule.location)
+    }
+    /// The disjuncts of `element` whose head takes no value. A head that
+    /// divides by zero in each of its instances under one condition binding
+    /// is true there: the disjunct is the one a written `#true : condition`
+    /// has, and needs no atom. clingo grounds the same instance so.
+    ///
+    /// Called only when the element's family met a zero divisor. It visits
+    /// each condition binding once and asks one head join whether that
+    /// binding has a defined head; the bindings that have one were emitted by
+    /// the caller. A zero divisor in the condition itself leaves no binding.
+    fn undefined_disjuncts(
+        &mut self,
+        element: &'source crate::formula_conditional_head_ir::ConditionalHeadIr,
+        assignment: &Binding,
+        support: &Support<'source>,
+        (body, rule): (usize, &RuleIr),
+        (disjunction, count): (&mut usize, &mut u128),
+    ) -> Result<(), FormulaFailure> {
+        const TRUE: HeadLiteral = HeadLiteral {
+            negation: DefaultNegation::None,
+            operand: HeadOperand::Boolean(true),
+        };
+        let heads = element.body_variables..element.variables;
+        let mut conditions = Join::local_head(
+            Ir::Source(element.condition.as_slice()),
+            &assignment.prefix(element.outer_variables),
+            heads.clone(),
+            support,
+            self.budget,
+            Context::new(
+                &*self.computation,
+                self.limits,
+                self.counters,
+                rule.location,
+            ),
+        )?;
+        conditions.conditions_only();
+        conditions.share_families(
+            Rc::clone(&self.families),
+            self.limits,
+            self.counters,
+            rule.location,
+        )?;
+        while let Some(binding) = conditions.next(
+            self.computation,
+            self.limits,
+            self.budget,
+            self.counters,
+            rule.location,
+        )? {
+            self.work(rule.location)?;
+            let mut instances = Join::local_head(
+                Ir::Source(element.condition.as_slice()),
+                &binding,
+                heads.clone(),
+                support,
+                self.budget,
+                Context::new(
+                    &*self.computation,
+                    self.limits,
+                    self.counters,
+                    rule.location,
+                ),
+            )?;
+            instances.share_families(
+                Rc::clone(&self.families),
+                self.limits,
+                self.counters,
+                rule.location,
+            )?;
+            let defined = instances
+                .next(
+                    self.computation,
+                    self.limits,
+                    self.budget,
+                    self.counters,
+                    rule.location,
+                )?
+                .is_some();
+            if defined || instances.take_family().zero.is_none() {
+                continue;
+            }
+            *count += 1;
+            ceiling(
+                FormulaResource::DisjunctionElements,
+                *count,
+                self.limits.max_disjunction_elements as u128,
+                rule.location,
+            )?;
+            let condition = self.body_ir(
+                Ir::Source(element.condition.as_slice()).iter(),
+                &binding.prefix(element.body_variables),
+                rule.location,
+                support,
+            )?;
+            let literal = self.disjunct_instance(&TRUE, &binding, condition, body, rule)?;
+            *disjunction = self.or(*disjunction, literal, rule.location)?;
+        }
+        Ok(())
     }
     pub(super) fn producer(
         &mut self,

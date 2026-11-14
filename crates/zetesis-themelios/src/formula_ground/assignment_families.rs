@@ -1,9 +1,12 @@
 //! Family sharing preserves the original theory and every frozen reduct.
 use super::*;
 use crate::formula_support::testing;
-use crate::test_support::interpretation;
+use crate::test_support::{
+    answer_sets, atom_sets, interpretation, overflow_statement, zero_divisor_statements,
+};
 use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Limits, models, models_reduct};
+use zetesis_test_support::programs::{nullary, unary};
 
 /// Reproduce the prior cache boundary without changing the source or its joins.
 fn full_binding_keys(preparation: &mut crate::formula::Preparation) {
@@ -131,15 +134,45 @@ fn projected_families_preserve_formula_semantics() {
 
 #[test]
 fn projected_families_keep_outer_arithmetic_diagnostics() {
-    let source = "d(0;1). {a}. ok :- d(X), N=#count{1:a,1/(1-X)>0}.";
+    // At X = 1 the element's one instance divides by zero and is omitted, so
+    // that binding counts no tuple and `ok(0)` holds whatever `a` is; at
+    // X = 0 the element stands. Were the element kept at X = 1, `ok(0)` would
+    // not hold beside `a`.
+    let source = "d(0;1). {a}. ok(N) :- d(X), N=#count{1:a,1/(1-X)>0}.";
+    same_truth(source);
+    let shared = ground(testing::prepare(source), None, None).unwrap();
+    let mut prior = testing::prepare(source);
+    full_binding_keys(&mut prior);
+    let prior = ground(prior, None, None).unwrap();
+    assert_eq!(
+        zero_divisor_statements(source, &shared.warnings),
+        ["ok(N) :- d(X), N=#count{1:a,1/(1-X)>0}."]
+    );
+    assert_eq!(shared.warnings, prior.warnings);
+    let d = |number| unary("d", number);
+    let ok = |count| unary("ok", count);
+    assert_eq!(
+        answer_sets(&shared.theory, &shared.atoms),
+        atom_sets([
+            &[d(0), d(1), ok(0)],
+            &[d(0), d(1), ok(0), ok(1), nullary("a")]
+        ])
+    );
+}
+
+#[test]
+fn projected_families_keep_outer_arithmetic_failures() {
+    // The element overflows at X = 1 alone, which the defined binding X = 0
+    // does not excuse: both key routes refuse with the same failure.
+    let source = "d(0;1). {a}. ok(N) :- d(X), N=#count{1:a,X+2147483647>0}.";
     let shared = ground(testing::prepare(source), None, None).unwrap_err();
     let mut prior = testing::prepare(source);
     full_binding_keys(&mut prior);
     let prior = ground(prior, None, None).unwrap_err();
-    assert!(matches!(
-        shared,
-        FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation { .. })
-    ));
+    assert_eq!(
+        overflow_statement(source, &shared, &prior),
+        "ok(N) :- d(X), N=#count{1:a,X+2147483647>0}."
+    );
     assert_eq!(shared.to_string(), prior.to_string());
 }
 

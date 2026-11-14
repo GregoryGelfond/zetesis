@@ -6,7 +6,8 @@ use crate::support::grounding_observers::Observer;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits, FormulaResource,
-    InputLimit, admit_bundle_formula, admit_formula, prepare_bundle_formula, prepare_formula,
+    FormulaWarning, InputLimit, admit_bundle_formula, admit_formula, prepare_bundle_formula,
+    prepare_formula,
 };
 
 #[test]
@@ -67,13 +68,22 @@ fn send_analysis_precedes_grounding() {
 
 #[test]
 fn materialization_checks_dynamic_arithmetic() {
-    let prepared = prepared("p(0). q(1/X) :- p(X).");
-    assert!(matches!(
-        prepared.ground(),
-        Err(FormulaFailure::Expansion(
-            ExpansionFailure::Evaluation { .. }
-        ))
-    ));
+    // Preparation accepts the division, which no closed term decides.
+    // Grounding reaches it at X = 0: the instance is omitted, so only the
+    // fact remains, and the rule keeps the warning.
+    let admitted = prepared("p(0). q(1/X) :- p(X).").ground().unwrap();
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        "q(1/X) :- p(X)."
+    );
+    assert_eq!(admitted.atoms(), formula("p(0).").atoms());
 }
 
 #[test]

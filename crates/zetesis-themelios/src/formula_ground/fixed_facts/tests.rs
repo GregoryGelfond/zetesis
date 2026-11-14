@@ -3,10 +3,11 @@ use std::cell::Cell;
 use crate::formula::Compiled;
 use crate::formula_ground::{Builder, Purpose, ground};
 use crate::formula_support::testing;
-use crate::test_support::compiled_atoms;
+use crate::test_support::{answer_sets, atom_sets, compiled_atoms, zero_divisor_statements};
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
 use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+use zetesis_test_support::programs::unary;
 
 thread_local! {
     static ENABLED: Cell<bool> = const { Cell::new(true) };
@@ -213,25 +214,55 @@ fn fact_rules_and_blocks_supply_the_same_authority() {
 
 #[test]
 fn fixed_body_facts_keep_independent_scalar_errors() {
-    for source in [
-        "d(0). :- d(X),A=X+1,A=0,Z=1/X.",
-        "d(1). :- d(X),not X/2=0,X+2147483647=0.",
-        "d(0). h(1/X) :- d(X).",
+    let source = "d(1). :- d(X),not X/2=0,X+2147483647=0.";
+    let failure = || {
+        crate::admit_formula(
+            source.into(),
+            crate::AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .expect_err("independent reached scalar failure")
+    };
+    assert_eq!(
+        format!("{:?}", failure()),
+        format!("{:?}", without(failure)),
+        "{source}"
+    );
+}
+
+#[test]
+fn fixed_body_facts_keep_zero_divisor_omissions() {
+    for (source, statement) in [
+        // The comparison `A=0` is false where `Z=1/X` divides by zero: the
+        // instance is omitted with its warning all the same.
+        ("d(0). :- d(X),A=X+1,A=0,Z=1/X.", ":- d(X),A=X+1,A=0,Z=1/X."),
+        ("d(0). h(1/X) :- d(X).", "h(1/X) :- d(X)."),
     ] {
-        let failure = || {
+        let admit = || {
             crate::admit_formula(
                 source.into(),
                 crate::AdmissionOptions::default(),
                 ExpansionLimits::default(),
                 FormulaLimits::default(),
             )
-            .expect_err("independent reached scalar failure")
+            .expect("a zero divisor omits its instance")
         };
-        assert_eq!(
-            format!("{:?}", failure()),
-            format!("{:?}", without(failure)),
-            "{source}"
-        );
+        for admitted in [admit(), without(admit)] {
+            assert_eq!(
+                zero_divisor_statements(source, admitted.warnings()),
+                [statement],
+                "{source}"
+            );
+            // The fact is the one atom and the one answer set: the head has
+            // no instance, and a kept constraint would leave no answer set.
+            assert_eq!(admitted.atoms().len(), 1, "{source}");
+            assert_eq!(
+                answer_sets(admitted.theory(), admitted.atom_catalog()),
+                atom_sets([&[unary("d", 0)]]),
+                "{source}"
+            );
+        }
     }
 }
 

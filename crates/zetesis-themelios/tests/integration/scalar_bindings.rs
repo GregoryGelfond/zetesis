@@ -6,7 +6,9 @@ use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_stable::{Limits, StableModels};
-use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{
+    ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
+};
 
 fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
     let admitted = formula(source);
@@ -145,7 +147,28 @@ fn local_bindings_do_not_escape_choice_and_aggregate_scopes() {
 }
 
 #[test]
-fn value_ranges_recursive_growth_and_arithmetic_have_typed_refusals() {
+fn a_binder_that_divides_by_zero_generates_no_instance() {
+    // The binder's value divides by zero at the one row, so the rule
+    // generates no instance and keeps the warning.
+    let rule = "p(Y):-d(X),Y=1/X.";
+    let source = format!("d(0).{rule}");
+    let admitted = formula(&source);
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        rule
+    );
+    assert_eq!(models(&source), models("d(0)."));
+}
+
+#[test]
+fn value_ranges_recursive_growth_and_overflow_have_typed_refusals() {
     for (source, resource, limit) in [
         ("p(X):-X=1..3.", FormulaResource::AssignmentValues, 2),
         ("p(0).p(X+1):-p(X).", FormulaResource::SupportRounds, 3),
@@ -162,12 +185,10 @@ fn value_ranges_recursive_growth_and_arithmetic_have_typed_refusals() {
         );
         assert!(!failure.diagnostics().is_empty());
     }
-    for source in ["d(0).p(Y):-d(X),Y=1/X.", "d(2147483647).p(X+1):-d(X)."] {
-        assert!(matches!(
-            admit(source, &FormulaLimits::default()),
-            Err(FormulaFailure::Expansion(
-                ExpansionFailure::Evaluation { .. }
-            ))
-        ));
-    }
+    assert!(matches!(
+        admit("d(2147483647).p(X+1):-d(X).", &FormulaLimits::default()),
+        Err(FormulaFailure::Expansion(
+            ExpansionFailure::Evaluation { .. }
+        ))
+    ));
 }

@@ -1,9 +1,10 @@
 //! Evidence over complete substitutions, independent of relational join order.
 //!
-//! Presence, rather than counts, is sufficient: a defined false instance is a
-//! witness, an independently excluded erroneous instance is not, and a missing
-//! relational extension contributes nothing. A cursor over a partial support
-//! round may collect evidence but must never finalize it.
+//! A family records one thing: whether a substitution it reached divided by
+//! zero. That instance is omitted and its statement warns once. A defined
+//! instance, true or false, an independently excluded erroneous one and a
+//! missing relational extension record nothing. A cursor over a partial
+//! support round may collect evidence but must never finalize it.
 
 use crate::ProgramSite;
 use themelios_program::term::BinaryOp;
@@ -15,25 +16,22 @@ use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, Fo
 
 #[derive(Default)]
 pub(crate) struct Evidence {
-    pub(crate) defined: bool,
+    /// The first zero-divisor failure the family reached.
     pub(crate) zero: Option<ExpansionFailure>,
 }
 
 impl Evidence {
     pub(crate) fn merge(&mut self, other: Self) {
-        self.defined |= other.defined;
         if self.zero.is_none() {
             self.zero = other.zero;
         }
     }
 
-    /// Only a traversal of the completed original family may call this.
-    pub(crate) fn finish(self) -> Result<bool, FormulaFailure> {
-        match self.zero {
-            Some(error) if !self.defined => Err(error.into()),
-            Some(_) => Ok(true),
-            None => Ok(false),
-        }
+    /// Whether the family omitted an instance for a zero divisor, which its
+    /// statement reports once as a warning. Only a traversal of the completed
+    /// original family may call this.
+    pub(crate) fn finish(self) -> bool {
+        self.zero.is_some()
     }
 }
 
@@ -50,7 +48,7 @@ impl Warnings {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
-        if evidence.finish()? {
+        if evidence.finish() {
             self.insert(limits, counters, location)?;
         }
         Ok(())

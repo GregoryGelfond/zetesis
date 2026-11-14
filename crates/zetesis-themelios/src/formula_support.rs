@@ -1857,6 +1857,12 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(join)
     }
 
+    /// Stop after the condition stage: each passing condition row is
+    /// returned once, with no head value generated for it.
+    pub(crate) fn conditions_only(&mut self) {
+        self.head_slots = self.head_slots.start..self.head_slots.start;
+    }
+
     fn stage_head(
         &mut self,
         slots: std::ops::Range<usize>,
@@ -2450,9 +2456,11 @@ impl<'a, 'source> Join<'a, 'source> {
             self.trail_bytes - old + self.changes[self.depth].capacity() * size_of::<usize>();
         result
     }
-    /// Fix, for the current order and prefix, the depth at which each
-    /// comparison is decided and whether any check waits for the complete
-    /// row. Called after every arrangement and after the prefix is fixed.
+    /// Evaluate `guard` beside every row no comparison excludes, so that a
+    /// fatal failure in it refuses and a zero divisor is recorded. A row whose
+    /// only failure is that zero divisor is still returned: the guard is the
+    /// consequent of a conditional literal, and its consumer reads an
+    /// undefined consequent as false.
     pub(crate) fn check_guard(&mut self, guard: &'a crate::formula_guard::Guard) {
         if guard.expressions().any(family::expression) {
             self.coverage = Coverage::Complete;
@@ -2501,6 +2509,9 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         Ok(prefix)
     }
+    /// Fix, for the current order and prefix, the depth at which each
+    /// comparison is decided and whether any check waits for the complete
+    /// row. Called after every arrangement and after the prefix is fixed.
     fn decide(
         &mut self,
         computation: &Computation<'_, '_>,
@@ -2680,7 +2691,6 @@ impl<'a, 'source> Join<'a, 'source> {
                     location,
                 ) {
                     Ok(Some(values)) => {
-                        self.family.defined = true;
                         return Ok(Some(Staged {
                             frame: Frame::Owned(values),
                             passes: true,
@@ -2710,7 +2720,6 @@ impl<'a, 'source> Join<'a, 'source> {
                 return Ok(None);
             };
             if !row.passes || self.head_slots.is_empty() {
-                self.family.defined = true;
                 return Ok(Some(row));
             }
             let mut pending = crate::formula_binding_cursor::Cursor::new(
@@ -2736,6 +2745,12 @@ impl<'a, 'source> Join<'a, 'source> {
             filters::Selection::Zero(error) => {
                 self.family.zero.get_or_insert(error);
                 None
+            }
+            // The row itself is defined: only the guard checked beside it
+            // divides by zero, and its consumer gives that guard a value.
+            filters::Selection::UndefinedGuard { passes, error } => {
+                self.family.zero.get_or_insert(error);
+                Some(Staged { frame, passes })
             }
         }
     }

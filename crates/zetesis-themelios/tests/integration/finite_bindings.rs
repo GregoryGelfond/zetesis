@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource,
+    FormulaLimits, FormulaResource, FormulaWarning,
 };
 
 use reference::{Models, exhaustive, holds, native, values};
@@ -204,9 +204,33 @@ fn scope_and_nonbinding_negation_do_not_acquire_accidental_domains() {
 }
 
 #[test]
-fn active_undefined_operands_remain_located_failures() {
+fn an_active_undefined_endpoint_omits_its_instance() {
+    // The interval's upper endpoint divides by zero at the one binding of D,
+    // so the rule generates no value of X and keeps the warning.
+    let rule = "p(X):-d(D),not not X=1..1/D.";
+    let program = input(&format!("d(0).{rule}"));
+    let [FormulaWarning::ZeroDivisor { location }] = program.warnings() else {
+        panic!("one zero-divisor warning: {:?}", program.warnings());
+    };
+    assert_eq!(location.location().expect("parsed source").source, SOURCE);
+    assert_eq!(
+        program
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        rule
+    );
+    let expected = native(&input("d(0)."));
+    assert_eq!(native(&program), expected);
+    assert_eq!(exhaustive(&program), expected);
+}
+
+#[test]
+fn closed_undefined_operands_remain_located_failures() {
+    // Each division is written closed, so source preparation refuses it
+    // before any substitution exists.
     for source in [
-        "d(0).p(X):-d(D),not not X=1..1/D.",
         "d(1).p:-d(X),not not (X,1)=(1,2,1/0).",
         "p(X):-0<X,X<3,not not X=1>2<1/0.",
     ] {

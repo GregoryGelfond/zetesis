@@ -10,8 +10,8 @@ use zetesis_reference_support::{BundleFixture, admit, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_bundle_formula,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
+    ProfileFeature, admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -155,26 +155,44 @@ fn generated_heads_do_not_supply_their_own_dependencies_or_hide_unsafe_slots() {
     }
 }
 #[test]
-fn evaluated_undefinedness_and_overflow_remain_whole_input_failures() {
-    for (source, predicted) in [
-        (
-            "d(0).{p(1/X):d(X)}.",
-            themelios_program::term::EvalError::Undefined,
-        ),
-        (
-            "d(0).a(1/X)|b:-d(X).",
-            themelios_program::term::EvalError::Undefined,
-        ),
-        (
-            "n(2147483647).{p(N+1):n(N)}.",
-            themelios_program::term::EvalError::Overflow,
-        ),
-    ] {
-        let error = admit(source, &FormulaLimits::default()).expect_err(source);
-        assert!(
-            matches!(error, FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. }) if error == predicted)
+fn evaluated_zero_divisors_omit_their_head_instances() {
+    // The head value divides by zero at the one binding, so the choice
+    // element and the disjunctive rule each lose their only instance: no
+    // head atom is supported, b included. The statement keeps the warning.
+    for statement in ["{p(1/X):d(X)}.", "a(1/X)|b:-d(X)."] {
+        let source = format!("d(0).{statement}");
+        let admitted = admit(&source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+            panic!(
+                "{source}: one zero-divisor warning: {:?}",
+                admitted.warnings()
+            );
+        };
+        assert_eq!(
+            admitted
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
+            statement
+        );
+        assert_eq!(
+            complete(&admitted),
+            BTreeSet::from([BTreeSet::from(["d(0)".to_owned()])]),
+            "{source}"
         );
     }
+}
+
+#[test]
+fn evaluated_overflow_remains_a_whole_input_failure() {
+    let source = "n(2147483647).{p(N+1):n(N)}.";
+    let predicted = themelios_program::term::EvalError::Overflow;
+    let error = admit(source, &FormulaLimits::default()).expect_err(source);
+    assert!(
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. }) if error == predicted)
+    );
 }
 
 #[test]

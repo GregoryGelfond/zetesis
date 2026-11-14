@@ -726,11 +726,10 @@ for the exact named-capacity scope and preservation premises.
 ## Partial arithmetic families
 
 Only an evaluated numeric division or remainder by zero can omit a source
-instance. A nonempty original rule family needs at least one complete
-substitution whose reached arithmetic is jointly defined; a defined comparison
-that is false still supplies that witness. Thus `d(0;2). p(X):-d(X),1/X=1.`
-keeps just the facts and reports a warning, whereas the same rule over `d(0)`
-is refused. Empty positive joins are valid and silent. An ordinary comparison
+instance, and it always does: the instance is dropped and its statement
+reports a warning. Thus `d(0;2). p(X):-d(X),1/X=1.` keeps just the facts and
+reports a warning, and so does the same rule over `d(0)`, whose family has no
+other instance. Empty positive joins are valid and silent. An ordinary comparison
 over relationally bound variables, such as `X!=0`, explicitly excludes that
 substitution and produces no warning for its zero divisor.
 
@@ -751,10 +750,12 @@ The decisive traversal reads completed support, before formula emission.
 It does not use comparison-pruned candidate domains, support delta partitions
 or already-produced-head shortcuts as family evidence. Normalized fragments of
 one original rule combine their evidence. Each nested choice, aggregate or
-conditional local family is judged separately for its fixed outer binding, so
-a valid family at another outer binding cannot rescue it. Alternatives of one
-authored local element share evidence; distinct authored elements do not. An
-undefined conditional consequent omits its whole local implication. Defined
+conditional local family is traversed for its fixed outer binding. The
+alternatives of one authored conditional consequent belong to one instance: it
+keeps the alternatives that are defined, and when every one divides by zero
+the consequent is false, so the implication requires its condition to be
+false. The head of a conditional disjunct that divides by zero in every
+instance under a condition binding is true under that binding. Defined
 false consequents and empty nonarithmetic witness sets retain their logical
 meaning, including under default negation. The additional complete
 traversal spends the existing grounding work and substitution ceilings;

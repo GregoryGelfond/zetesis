@@ -2,10 +2,11 @@
 //!
 //! Comparison/domain pruning and support delta shortcuts are deliberately absent
 //! in evidence cursors. A whole flat family whose scalar and key obligations
-//! are proved total on completed support needs no such scan. A complete false
-//! row otherwise still witnesses defined arithmetic. Each local
-//! source occurrence is finalized for its fixed outer binding, after combining
-//! its normalized alternatives. Top-level fragments with the same original
+//! are proved total on completed support needs no such scan. The scan records
+//! whether a reached substitution divided by zero, which its statement
+//! reports as a warning, and returns any fatal failure. Each local source
+//! occurrence is finalized for its fixed outer binding, after combining its
+//! normalized alternatives. Top-level fragments with the same original
 //! source span likewise merge their evidence.
 //! Work stacks borrow the finite compiled scope tree. Their live frontier is
 //! bounded by its nesting and alternatives, not by the total substitutions
@@ -340,18 +341,6 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
             )? {
                 let (body, body_variables, continuation) =
                     (frame.body, frame.body_variables, frame.continuation);
-                if matches!(
-                    continuation,
-                    Continue::Consequent(Consequent::Atoms(..) | Consequent::Guards(_))
-                ) {
-                    // A selected condition is only a prefix of this local
-                    // substitution. Its consequent alternatives must supply
-                    // the jointly defined witness; a false condition already
-                    // excludes the consequent and remains a defined witness.
-                    let mut evidence = frame.join.take_family();
-                    evidence.defined &= !row.passes;
-                    task.evidence.merge(evidence);
-                }
                 if row.passes {
                     let destination = self.stack.len() - 1;
                     self.children(body, &row.values.prefix(body_variables), location)?;

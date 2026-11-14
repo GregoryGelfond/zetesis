@@ -2,7 +2,7 @@
 
 use zetesis_reference_support::prepare;
 use zetesis_themelios::{
-    ExpansionFailure, FormulaFailure, GroundingOutcome, GroundingPhase,
+    ExpansionFailure, FormulaFailure, FormulaWarning, GroundingOutcome, GroundingPhase,
     observation::EvaluationError,
 };
 
@@ -78,24 +78,64 @@ fn literal_divisors_omit_family_row_evaluation() {
     }
 }
 
-#[test]
-fn possible_zero_divisors_retain_family_refusal() {
-    for source in ["d(0). :- d(X), 1/X=0.", "d(1). :- d(X), X/0=0."] {
-        failure(
-            source,
-            &EvaluationError::Undefined,
-            GroundingPhase::SupportCompletion,
+/// `warnings` is the one warning of `source`: a zero divisor omitted from
+/// an instance of its constraint.
+fn warned(source: &str, warnings: &[FormulaWarning]) {
+    let [FormulaWarning::ZeroDivisor { location }] = warnings else {
+        panic!("{source}: one zero-divisor warning: {warnings:?}");
+    };
+    let span = location.location().expect("parsed source").span;
+    assert_eq!(
+        &source[span.start().get() as usize..span.end().get() as usize],
+        &source[source.find(":-").unwrap()..],
+        "{source}"
+    );
+}
+
+/// Both routes admit `source`, one fact and a constraint: the final family
+/// pass evaluates the constraint's row and completes, the constraint keeps
+/// the warning and contributes no instance.
+fn omission(source: &str) {
+    for hybrid in [false, true] {
+        let observer = Observer::default();
+        let prepared = prepare(source).unwrap();
+        if hybrid {
+            let admitted = prepared
+                .ground_hybrid_with_observer(Some(&observer))
+                .unwrap();
+            warned(source, admitted.warnings());
+            assert_eq!(admitted.streamed_instances(), 0, "{source}");
+        } else {
+            let admitted = prepared.ground_with_observer(Some(&observer)).unwrap();
+            warned(source, admitted.warnings());
+            // The fact's root is the only one.
+            assert_eq!(admitted.theory().roots().len(), 1, "{source}");
+        }
+        let pass = family_pass(&observer);
+        assert_eq!(pass.outcome, GroundingOutcome::Completed, "{source}");
+        assert!(
+            pass.work.join_rows.is_some_and(|rows| rows > 0),
+            "{source}, hybrid={hybrid}"
+        );
+        assert!(
+            pass.work
+                .expression_evaluations
+                .is_some_and(|count| count > 0),
+            "{source}, hybrid={hybrid}"
         );
     }
 }
 
 #[test]
-fn nested_zero_divisors_retain_family_refusal() {
-    failure(
-        "d(0). :- d(X), (1/X)/2=0.",
-        &EvaluationError::Undefined,
-        GroundingPhase::SupportCompletion,
-    );
+fn possible_zero_divisors_retain_the_family_warning() {
+    for source in ["d(0). :- d(X), 1/X=0.", "d(1). :- d(X), X/0=0."] {
+        omission(source);
+    }
+}
+
+#[test]
+fn nested_zero_divisors_retain_the_family_warning() {
+    omission("d(0). :- d(X), (1/X)/2=0.");
 }
 
 #[test]

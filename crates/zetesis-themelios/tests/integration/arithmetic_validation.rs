@@ -1,16 +1,18 @@
 //! A comparison over the relationally bound variables that is defined and
 //! false excludes the substitution, and nothing in an excluded substitution is
 //! reached. Every other substitution validates its arithmetic in full: a
-//! reached zero divisor is admitted only alongside a jointly defined family witness;
-//! other reached arithmetic failures refuse the program. Incomplete
-//! relational prefixes have no such duty.
+//! reached zero divisor omits its instance and leaves a warning on its
+//! statement, whether or not its family has a defined instance; other
+//! reached arithmetic failures refuse the program. Incomplete relational
+//! prefixes have no such duty.
 
 use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
-    ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, observation::EvaluationError,
+    ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
+    observation::EvaluationError,
 };
 
 fn refused(source: &str, expected: &EvaluationError) {
@@ -41,8 +43,49 @@ fn admitted(source: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
     reference::exhaustive(&admitted)
 }
 
+/// The answer sets of `source`, admitted without a warning: no substitution
+/// reached a zero divisor.
+fn silent(source: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
+    let admitted = reference::admit(source, &FormulaLimits::default())
+        .unwrap_or_else(|failure| panic!("{source}: {failure}"));
+    assert!(
+        admitted.warnings().is_empty(),
+        "{source}: {:?}",
+        admitted.warnings()
+    );
+    reference::exhaustive(&admitted)
+}
+
+/// The answer sets of `source`, admitted with exactly one warning: a zero
+/// divisor omitted from an instance of `statement`.
+fn omitting(source: &str, statement: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
+    let admitted = reference::admit(source, &FormulaLimits::default())
+        .unwrap_or_else(|failure| panic!("{source}: {failure}"));
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!(
+            "{source}: one zero-divisor warning: {:?}",
+            admitted.warnings()
+        );
+    };
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        statement,
+        "{source}"
+    );
+    reference::exhaustive(&admitted)
+}
+
 fn family(atoms: &[&str]) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
     BTreeSet::from([(atoms.iter().map(|atom| (*atom).to_owned()).collect(), None)])
+}
+
+/// The family of these answer sets, none with costs.
+fn answer_sets(models: &[&[&str]]) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
+    models.iter().flat_map(|atoms| family(atoms)).collect()
 }
 
 #[test]
@@ -70,10 +113,18 @@ fn excluded_substitutions_are_not_reached() {
 }
 
 #[test]
-fn reached_operations_refuse() {
-    // Nothing excludes X = 0 here, so the division is reached; X != 0 over
-    // d(1..2) excludes nothing, so the overflow is reached.
-    refused("d(0).p(X):-d(X),1/X=1.", &EvaluationError::Undefined);
+fn a_reached_zero_divisor_omits_its_instance() {
+    // Nothing excludes X = 0 here, so the division is reached: the rule's
+    // one instance is omitted and the rule keeps the warning.
+    assert_eq!(
+        omitting("d(0).p(X):-d(X),1/X=1.", "p(X):-d(X),1/X=1."),
+        family(&["d(0)"])
+    );
+}
+
+#[test]
+fn a_reached_overflow_refuses() {
+    // X != 0 over d(1..2) excludes nothing, so the overflow is reached.
     refused(
         "d(1..2).p(X):-d(X),X!=0,X+2147483647<0.",
         &EvaluationError::Overflow,
@@ -81,13 +132,16 @@ fn reached_operations_refuse() {
 }
 
 #[test]
-fn body_generators_preserve_relational_comparison_failures() {
-    // A body generator consumes an already complete relational binding;
-    // it cannot discharge the division that binding reaches.
+fn body_generators_do_not_hide_a_reached_zero_divisor() {
+    // A body generator consumes an already complete relational binding; it
+    // neither discharges the division that binding reaches nor generates
+    // an instance from it.
     for generator in ["Y=X+1", "Y=X..X+1"] {
-        refused(
-            &format!("d(0).p(X,Y):-d(X),1/X=1,{generator}."),
-            &EvaluationError::Undefined,
+        let rule = format!("p(X,Y):-d(X),1/X=1,{generator}.");
+        assert_eq!(
+            omitting(&format!("d(0).{rule}"), &rule),
+            family(&["d(0)"]),
+            "{rule}"
         );
     }
 }
@@ -111,26 +165,29 @@ fn a_defined_false_substitution_keeps_the_rule_admissible() {
 fn an_exclusion_at_any_depth_hides_a_failure_at_another() {
     // 1/X fails for X = 0 once d(X) is bound; X + Y != Y is false for the
     // same X only once e(Y) is bound, deeper in the join. The substitution is
-    // excluded, not refused, and the verdict does not depend on which is met
-    // first.
+    // excluded, not omitted with a warning, and the verdict does not depend
+    // on which is met first.
     for body in ["d(X),e(Y),1/X=1,X+Y!=Y", "d(X),e(Y),X+Y!=Y,1/X=1"] {
         let source = format!("d(0..1).e(1..2).p(X,Y):-{body}.");
         assert_eq!(
-            admitted(&source),
+            silent(&source),
             family(&["d(0)", "d(1)", "e(1)", "e(2)", "p(1,1)", "p(1,2)"]),
             "{source}"
         );
     }
-    // A comparison that excludes nothing leaves the failure a refusal.
-    refused(
-        "d(0).e(1..2).p(X,Y):-d(X),e(Y),1/X=1,X!=3.",
-        &EvaluationError::Undefined,
+    // A comparison that excludes nothing leaves the division reached: its
+    // instances are omitted and the rule keeps the warning.
+    let rule = "p(X,Y):-d(X),e(Y),1/X=1,X!=3.";
+    assert_eq!(
+        omitting(&format!("d(0).e(1..2).{rule}"), rule),
+        family(&["d(0)", "e(1)", "e(2)"])
     );
-    // The same for a failure met before the relation that decides the exclusion.
+    // An exclusion also hides a failure met before the relation that decides
+    // the exclusion.
     for body in ["d(X),1=2,1/X=1,e(X,Y)", "e(X,Y),1/X=1,1=2,d(X)"] {
         let source = format!("d(0).e(0,1).e(2,2).p(X,Y):-{body}.");
         assert_eq!(
-            admitted(&source),
+            silent(&source),
             family(&["d(0)", "e(0,1)", "e(2,2)"]),
             "{source}"
         );
@@ -145,9 +202,12 @@ const EMPTY_EXTENSIONS: &[&str] = &[
 ];
 
 #[test]
-fn incomplete_positive_prefixes_do_not_raise_errors() {
+fn incomplete_positive_prefixes_raise_no_warning() {
+    // No row completes the join, so the division in its prefix is under no
+    // duty: nothing is omitted and no warning is kept.
     for source in EMPTY_EXTENSIONS {
         let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
+        assert!(admitted.warnings().is_empty(), "{source}");
         let original = reference::admit(
             source.split("p(X,Y):-").next().unwrap(),
             &FormulaLimits::default(),
@@ -163,12 +223,16 @@ fn incomplete_positive_prefixes_do_not_raise_errors() {
 
 #[test]
 fn an_excluded_substitution_generates_nothing() {
-    // 1 = 2 excludes the one substitution before any binder runs.
+    // 1 = 2 excludes the one substitution before any binder runs, so no
+    // division is reached and no warning is kept.
     for body in ["X=0,1=2,Y=1/X", "Y=1/X,1=2,X=0"] {
         let source = format!("p(Y):-{body}.");
-        assert_eq!(admitted(&source), family(&[]), "{source}");
+        assert_eq!(silent(&source), family(&[]), "{source}");
     }
-    refused("p(Y):-X=0,Y=1/X.", &EvaluationError::Undefined);
+    // Without the exclusion the binder reaches 1/0: it generates nothing
+    // either, and the rule keeps the warning.
+    let rule = "p(Y):-X=0,Y=1/X.";
+    assert_eq!(omitting(rule, rule), family(&[]));
 }
 
 #[test]
@@ -177,16 +241,21 @@ fn constant_comparisons_exclude_or_reach() {
         "#const z=0. d(0).p(X):-d(X),1=2,1/(X+z)=1.",
         "#const z=0. d(0).p(X):-d(X),1/(X+z)=1,1=2.",
     ] {
-        assert_eq!(admitted(source), family(&["d(0)"]), "{source}");
+        assert_eq!(silent(source), family(&["d(0)"]), "{source}");
     }
     // A closed undefined term is refused as written, during source
     // preparation, before any substitution exists to exclude.
     for source in ["p:-1=2,1/0=1.", "p:-1/0=1,1=2.", "p:-1/0=1."] {
         refused(source, &EvaluationError::Undefined);
     }
-    refused(
-        "#const z=0. d(0).p(X):-d(X),1/(X+z)=1.",
-        &EvaluationError::Undefined,
+    // With no comparison to exclude it, the substitution reaches the
+    // division: its instance is omitted and the rule keeps the warning.
+    assert_eq!(
+        omitting(
+            "#const z=0. d(0).p(X):-d(X),1/(X+z)=1.",
+            "p(X):-d(X),1/(X+z)=1."
+        ),
+        family(&["d(0)"])
     );
 }
 
@@ -195,11 +264,13 @@ fn objective_substitutions_follow_the_same_rule() {
     for field in ["1", "0", "symbol", "1@symbol"] {
         for body in ["d(X),1=2,1/X=1", "d(X),1/X=1,1=2"] {
             let source = format!("d(0).:~{body}.[{field}]");
-            assert_eq!(admitted(&source), family(&["d(0)"]), "{source}");
+            assert_eq!(silent(&source), family(&["d(0)"]), "{source}");
         }
-        refused(
-            &format!("d(0).:~d(X),1/X=1.[{field}]"),
-            &EvaluationError::Undefined,
+        let statement = format!(":~d(X),1/X=1.[{field}]");
+        assert_eq!(
+            omitting(&format!("d(0).{statement}"), &statement),
+            family(&["d(0)"]),
+            "{statement}"
         );
     }
 }
@@ -241,13 +312,15 @@ fn defined_and_empty_join_families_match_clingo() {
 }
 
 #[test]
-#[ignore = "requires clingo: all undefined families differ from clingo"]
-fn all_undefined_families_differ_from_clingo() {
-    // clingo drops the only undefined instance; the library refuses a
-    // nonempty source family lacking any jointly defined substitution.
+#[ignore = "requires clingo: all undefined families match clingo"]
+fn all_undefined_families_match_clingo() {
+    // clingo drops the only undefined instance with a note; the library
+    // omits it with a warning, and the two families agree.
     let source = "d(0).p(X):-d(X),1/X=1.";
-    refused(source, &EvaluationError::Undefined);
-    assert_eq!(oracle::records(source), family(&["d(0)"]));
+    assert_eq!(
+        omitting(source, "p(X):-d(X),1/X=1."),
+        oracle::records(source)
+    );
 }
 
 #[test]
@@ -276,15 +349,21 @@ fn scoped_guards_are_reached_only_on_substitutions_nothing_excludes() {
             } else {
                 source.trim_end_matches("[1]").to_owned()
             };
-            assert_eq!(admitted(&source), family(&["d(0)"]), "{source}");
+            assert_eq!(silent(&source), family(&["d(0)"]), "{source}");
         }
-        let source = format!("d(0).{scope}d(X),#count{{}}>1/X.[1]");
-        let source = if scope == ":~" {
-            source
+        // Nothing excludes X = 0 here, so the guard's division is reached:
+        // the instance is omitted and its statement keeps the warning.
+        let statement = format!("{scope}d(X),#count{{}}>1/X.[1]");
+        let statement = if scope == ":~" {
+            statement
         } else {
-            source.trim_end_matches("[1]").to_owned()
+            statement.trim_end_matches("[1]").to_owned()
         };
-        refused(&source, &EvaluationError::Undefined);
+        assert_eq!(
+            omitting(&format!("d(0).{statement}"), &statement),
+            family(&["d(0)"]),
+            "{statement}"
+        );
     }
 }
 
@@ -324,6 +403,9 @@ fn missing_positive_extensions_skip_scoped_validation() {
     ] {
         let source = format!("d(0).e(1,1).e(2,2).{tail}");
         let admitted = reference::admit(&source, &FormulaLimits::default()).unwrap();
+        // The skipped guard divides by zero at X = 0, which only a warning
+        // would show.
+        assert!(admitted.warnings().is_empty(), "{source}");
         let original = reference::admit("d(0).e(1,1).e(2,2).", &FormulaLimits::default()).unwrap();
         assert_eq!(
             reference::exhaustive(&admitted),
@@ -345,11 +427,16 @@ fn rule_validation_uses_no_objective_scratch_allowance() {
 }
 
 #[test]
-fn tuple_shape_mismatch_preserves_required_errors() {
+fn tuple_shape_mismatch_does_not_hide_its_zero_divisor() {
+    // The shapes differ whatever their fields hold, yet every field is
+    // evaluated: the division is reached, its instance is omitted and the
+    // rule keeps the warning.
     for comparison in ["(1,1/X)=(1,)", "(1,)=(1,1/X)"] {
-        refused(
-            &format!("d(0).p(X):-d(X),{comparison}."),
-            &EvaluationError::Undefined,
+        let rule = format!("p(X):-d(X),{comparison}.");
+        assert_eq!(
+            omitting(&format!("d(0).{rule}"), &rule),
+            family(&["d(0)"]),
+            "{rule}"
         );
     }
 }
@@ -374,6 +461,10 @@ const STAGED_HEADS: &[(&str, &str)] = &[
 fn head_values_follow_scalar_body_selection() {
     for (source, expanded) in STAGED_HEADS {
         let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
+        // A head evaluated for a row its body does not select would divide
+        // by zero in several of these sources, which only a warning would
+        // show.
+        assert!(admitted.warnings().is_empty(), "{source}");
         let expanded = reference::admit(expanded, &FormulaLimits::default()).unwrap();
         assert_eq!(
             reference::exhaustive(&admitted),
@@ -387,16 +478,20 @@ fn head_values_follow_scalar_body_selection() {
 fn body_values_keep_their_validation_scope() {
     // A gate or an aggregate is not a comparison over the substitution: it
     // excludes nothing at grounding, so the operations beside it are reached.
+    // The instance that divides by zero is omitted and its statement keeps
+    // the warning.
     for source in [
         "d(0).p(1/X):-d(X),not d(X).",
         "d(0).p(1/X):-d(X),#count{}=1.",
         "d(0).{p(1/X):d(X),not d(X)}.",
         "d(0).{p(1/X)}:-d(X),#count{}=1.",
     ] {
-        refused(source, &EvaluationError::Undefined);
+        let statement = &source["d(0).".len()..];
+        assert_eq!(omitting(source, statement), family(&["d(0)"]), "{source}");
     }
     // A false comparison excludes the substitution, and with it the operation
-    // in a gate, a head, a guard or an aggregate element beside it.
+    // in a gate, a head, a guard or an aggregate element beside it: nothing
+    // is reached, so no warning is kept.
     for (source, expected) in [
         ("d(0).p:-d(X),1=2,not q(1/X).", &["d(0)"][..]),
         ("d(0).p:-d(X),not q(1/X),1=2.", &["d(0)"][..]),
@@ -404,7 +499,7 @@ fn body_values_keep_their_validation_scope() {
         ("d(0).{p(1):d(X),1=2,not q(1/X)}.", &["d(0)"][..]),
         ("d(0).#sum{W:p(1):d(X),W=1/X,1=2}>=0.", &["d(0)"][..]),
     ] {
-        assert_eq!(admitted(source), family(expected), "{source}");
+        assert_eq!(silent(source), family(expected), "{source}");
     }
 }
 
@@ -479,24 +574,39 @@ fn independent_fatal_branches_are_not_hidden_inside_one_expression() {
 }
 
 #[test]
-fn every_arithmetic_expression_needs_the_same_defined_substitution() {
-    // Each division separately has a defined witness; there is no binding
-    // where both divisions are defined, so the whole family is refused.
-    refused(
-        "d(0;1).p(X):-d(X),1/X>0,1/(1-X)>0.",
-        &EvaluationError::Undefined,
+fn a_zero_divisor_in_any_expression_omits_the_instance() {
+    // Each division is defined at one binding and undefined at the other, so
+    // every instance divides by zero somewhere: both are omitted, under the
+    // rule's one warning.
+    let rule = "p(X):-d(X),1/X>0,1/(1-X)>0.";
+    assert_eq!(
+        omitting(&format!("d(0;1).{rule}"), rule),
+        family(&["d(0)", "d(1)"])
     );
 }
 
 #[test]
-fn a_valid_outer_binding_does_not_rescue_an_undefined_local_family() {
-    for rule in [
-        "{p(K,X):d(K,X),1/X=1}:-k(K).",
-        "p(K):-k(K),1=#count{X:d(K,X),1/X=1}.",
+fn a_defined_outer_binding_does_not_hide_a_local_omission() {
+    // The local family under K = 0 holds one instance, which divides by zero
+    // and is omitted. The family under K = 1 is defined: it neither removes
+    // the warning nor restores that instance.
+    for (rule, expected) in [
+        (
+            "{p(K,X):d(K,X),1/X=1}:-k(K).",
+            &[
+                &["k(0)", "k(1)", "d(0,0)", "d(1,1)"][..],
+                &["k(0)", "k(1)", "d(0,0)", "d(1,1)", "p(1,1)"],
+            ][..],
+        ),
+        (
+            "p(K):-k(K),1=#count{X:d(K,X),1/X=1}.",
+            &[&["k(0)", "k(1)", "d(0,0)", "d(1,1)", "p(1)"][..]][..],
+        ),
     ] {
-        refused(
-            &format!("k(0;1).d(0,0).d(1,1).{rule}"),
-            &EvaluationError::Undefined,
+        assert_eq!(
+            omitting(&format!("k(0;1).d(0,0).d(1,1).{rule}"), rule),
+            answer_sets(expected),
+            "{rule}"
         );
     }
 }
@@ -513,10 +623,14 @@ fn missing_local_facts_leave_an_empty_silent_family() {
 }
 
 #[test]
-fn each_local_element_is_a_separate_source_family() {
-    refused(
-        "d(0).e(1).{p(X):d(X),1/X=1;q(Y):e(Y),1/Y=1}.",
-        &EvaluationError::Undefined,
+fn a_defined_local_element_does_not_hide_an_omitted_one() {
+    // The first element's one instance divides by zero and is omitted. The
+    // second element is defined: it keeps its choice of q(1) and neither
+    // removes the warning nor restores p(0).
+    let choice = "{p(X):d(X),1/X=1;q(Y):e(Y),1/Y=1}.";
+    assert_eq!(
+        omitting(&format!("d(0).e(1).{choice}"), choice),
+        answer_sets(&[&["d(0)", "e(1)"], &["d(0)", "e(1)", "q(1)"]])
     );
 }
 
@@ -551,9 +665,13 @@ fn independent_comparison_components_preserve_fatal_errors() {
 
 #[test]
 fn false_tuple_shape_does_not_hide_a_separate_zero_divisor() {
-    refused(
-        "d(0).e(1).p(X):-d(X),e(Y),(X,)=(X,Y),1/X=1.",
-        &EvaluationError::Undefined,
+    // The tuple comparison is false for its shape alone and excludes
+    // nothing, so the division beside it is reached: the instance is omitted
+    // and the rule keeps the warning.
+    let rule = "p(X):-d(X),e(Y),(X,)=(X,Y),1/X=1.";
+    assert_eq!(
+        omitting(&format!("d(0).e(1).{rule}"), rule),
+        family(&["d(0)", "e(1)"])
     );
 }
 
@@ -600,12 +718,13 @@ fn an_independent_fatal_branch_survives_an_unavailable_generated_input() {
 
 #[test]
 fn conditional_local_bindings_share_the_original_family() {
-    let source = "d(0;1).q(1).p:-q(1/X):d(X).";
-    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
-    assert_eq!(result.warnings().len(), 1);
+    // The consequent divides by zero under the binding X = 0 and is defined
+    // under X = 1: one warning, for the rule. A conditional literal keeps the
+    // undefined binding, with a false consequent, so p needs d(0) false.
+    let rule = "p:-q(1/X):d(X).";
     assert_eq!(
-        reference::exhaustive(&result),
-        family(&["d(0)", "d(1)", "q(1)", "p"])
+        omitting(&format!("d(0;1).q(1).{rule}"), rule),
+        family(&["d(0)", "d(1)", "q(1)"])
     );
 }
 
@@ -621,12 +740,25 @@ fn conditional_condition_pool_alternatives_share_the_original_family() {
 }
 
 #[test]
-fn separate_authored_local_elements_do_not_share_a_witness() {
-    for rule in [
-        "{p(1/X):d(X);p(1):d(X)}.",
-        "p:-1=#count{X:d(X),1/X>0;1:d(X),1>0}.",
+fn elements_over_one_condition_are_omitted_separately() {
+    // Both authored elements range over d(X). The one that divides by zero
+    // is omitted with the statement's warning; the defined one beside it
+    // still contributes its instance.
+    for (rule, expected) in [
+        (
+            "{p(1/X):d(X);p(1):d(X)}.",
+            &[&["d(0)"][..], &["d(0)", "p(1)"]][..],
+        ),
+        (
+            "p:-1=#count{X:d(X),1/X>0;1:d(X),1>0}.",
+            &[&["d(0)", "p"][..]][..],
+        ),
     ] {
-        refused(&format!("d(0).{rule}"), &EvaluationError::Undefined);
+        assert_eq!(
+            omitting(&format!("d(0).{rule}"), rule),
+            answer_sets(expected),
+            "{rule}"
+        );
     }
 }
 
@@ -641,10 +773,16 @@ fn fact_blocked_producers_preserve_downstream_overflow() {
 }
 
 #[test]
-fn fact_blocked_producers_preserve_downstream_undefined() {
-    refused(
-        "blocked. d(0). h(X):-d(X),not blocked. k(1/X):-h(X).",
-        &EvaluationError::Undefined,
+fn a_fact_blocked_producer_does_not_hide_a_zero_divisor() {
+    // As with the overflow above, h(0) stays in the support that admission
+    // reads, so the division downstream is reached: its instance is omitted
+    // and its rule keeps the warning.
+    assert_eq!(
+        omitting(
+            "blocked. d(0). h(X):-d(X),not blocked. k(1/X):-h(X).",
+            "k(1/X):-h(X)."
+        ),
+        family(&["blocked", "d(0)"])
     );
 }
 
@@ -657,9 +795,10 @@ fn removing_a_blocked_producer_changes_overflow_admission() {
 }
 
 #[test]
-fn removing_a_blocked_producer_changes_undefined_admission() {
+fn removing_a_blocked_producer_removes_the_zero_divisor_warning() {
+    // Without a producer h has no support, so the division is never reached.
     assert_eq!(
-        admitted("blocked. d(0). k(1/X):-h(X)."),
+        silent("blocked. d(0). k(1/X):-h(X)."),
         family(&["blocked", "d(0)"]),
     );
 }

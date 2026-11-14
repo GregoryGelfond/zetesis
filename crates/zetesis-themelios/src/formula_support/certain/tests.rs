@@ -7,7 +7,7 @@ use super::testing::{with_every_predicate_assumed, without_certainty};
 use crate::formula::Compiled;
 use crate::formula_ground::ground;
 use crate::formula_support::testing;
-use crate::test_support::compiled_atoms;
+use crate::test_support::{compiled_atoms, zero_divisor_statements};
 use zetesis_algebra::Cancellation;
 use zetesis_core::{Sign, Value};
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
@@ -16,19 +16,22 @@ fn compile(source: &str) -> Compiled {
     ground(testing::prepare(source), None, None).unwrap()
 }
 
-/// Whether grounding `source` is refused because a family has a zero-divisor
-/// instance and no defined one: the undefined-operation failure, and no
-/// other.
-fn refused_as_undefined(source: &str) -> bool {
-    matches!(
-        ground(testing::prepare(source), None, None),
-        Err(crate::FormulaFailure::Expansion(
-            crate::ExpansionFailure::Evaluation {
-                error: themelios_program::term::EvalError::Undefined,
-                ..
-            }
-        ))
-    )
+/// `source` grounded with certainty and without it, in that order. Either way
+/// it must be admitted with one zero-divisor warning, for `statement`, and
+/// have exactly the answer sets `expected`. Certainty changes neither; it
+/// changes which instances a family has, which the callers compare.
+fn omitting(source: &str, statement: &str, expected: &[&str]) -> (Compiled, Compiled) {
+    let compiled = compile(source);
+    let written = without_certainty(|| compile(source));
+    for grounded in [&compiled, &written] {
+        assert_eq!(
+            zero_divisor_statements(source, &grounded.warnings),
+            [statement],
+            "{source}"
+        );
+        assert_eq!(answer_sets(grounded), sets(expected), "{source}");
+    }
+    (compiled, written)
 }
 
 /// The answer sets of `source` grounded without certainty, as it was before
@@ -588,92 +591,177 @@ fn an_explicit_fact_with_another_producer_is_still_read_as_true() {
 }
 
 #[test]
-fn an_exact_assignment_refuses_arithmetic_undefined_at_its_one_value() {
-    // The count is 3 in every interpretation, so `6/(N-3)` has no defined
-    // instance and its family is entirely undefined. The counts 0 to 2 that
-    // an uncertain condition also proposes are defined, and admit the rule
-    // with a warning.
+fn an_exact_assignment_omits_the_instance_undefined_at_its_one_value() {
+    // The count is 3 in every interpretation, so the rule's one instance
+    // divides by zero and is omitted with a warning: `p` has no atom. The
+    // counts 0 to 2 that an uncertain condition also proposes are defined, so
+    // `p` has an atom at each, which no answer set holds.
     let source = "c(1..3). p(Y) :- N = #count { X : c(X) }, Y = 6/(N-3). {a}.";
-    assert!(refused_as_undefined(source));
-    assert_eq!(
-        written_answer_sets(source),
-        sets(&["c(1) c(2) c(3)", "c(1) c(2) c(3) a"])
+    let (compiled, written) = omitting(
+        source,
+        "p(Y) :- N = #count { X : c(X) }, Y = 6/(N-3).",
+        &["c(1) c(2) c(3)", "c(1) c(2) c(3) a"],
     );
+    assert!(heads(&compiled, "p(").is_empty());
+    assert_eq!(heads(&written, "p("), ["p(-2)", "p(-3)", "p(-6)"]);
 }
 
 // The seven tests below pin how far the narrowing reaches: a family follows
-// the values an assignment can still take wherever it reads them. Each
-// program is admitted with a warning when no predicate is treated as
-// certain, and answers as written there.
+// the values an assignment can still take wherever it reads them. At those
+// values every instance of the family divides by zero, so each is omitted
+// with a warning and the family yields nothing. With no predicate treated as
+// certain the family also has instances at values no answer set takes, and
+// the answer sets are the same. A constraint and a choice body show no more
+// than that: their instances at those other values are defined and false, so
+// neither grounding holds one.
 
 #[test]
-fn a_rule_reading_an_exact_head_is_refused_where_that_value_is_undefined() {
+fn a_rule_reading_an_exact_head_is_omitted_where_that_value_is_undefined() {
     // Only `n(3)` is supported, so the reader's one instance divides by zero.
     let source = "c(1..3). n(N) :- N = #count { D : c(D) }. z(X) :- n(N), X = 6/(N-3).";
-    assert!(refused_as_undefined(source));
-    assert_eq!(written_answer_sets(source), sets(&["c(1) c(2) c(3) n(3)"]));
+    let (compiled, written) = omitting(
+        source,
+        "z(X) :- n(N), X = 6/(N-3).",
+        &["c(1) c(2) c(3) n(3)"],
+    );
+    assert!(heads(&compiled, "z(").is_empty());
+    assert_eq!(heads(&written, "z("), ["z(-2)", "z(-3)", "z(-6)"]);
 }
 
 #[test]
 fn a_reader_of_a_reader_follows_the_exact_head() {
     let source = "c(1..2). n(N) :- N = #count { D : c(D) }. m(N) :- n(N). \
         z(X) :- m(N), X = 6/(N-2).";
-    assert!(refused_as_undefined(source));
-    assert_eq!(written_answer_sets(source), sets(&["c(1) c(2) n(2) m(2)"]));
-}
-
-#[test]
-fn a_constraint_reading_an_exact_head_follows_it() {
-    let source = "c(1..3). n(N) :- N = #count { D : c(D) }. {a}. :- n(N), 6/(N-3) > 1, a.";
-    assert!(refused_as_undefined(source));
-    assert_eq!(
-        written_answer_sets(source),
-        sets(&["c(1) c(2) c(3) n(3)", "c(1) c(2) c(3) n(3) a"])
+    let (compiled, written) = omitting(
+        source,
+        "z(X) :- m(N), X = 6/(N-2).",
+        &["c(1) c(2) n(2) m(2)"],
     );
+    assert!(heads(&compiled, "z(").is_empty());
+    assert_eq!(heads(&written, "z("), ["z(-3)", "z(-6)"]);
 }
 
 #[test]
-fn a_choice_body_reading_an_exact_head_follows_it() {
+fn a_constraint_reading_an_exact_head_is_omitted_at_an_undefined_value() {
+    // `6/(N-3) > 1` is false at the counts 0 to 2, so the constraint has no
+    // instance without certainty either. Were its instance at 3 kept as a
+    // body that holds, no answer set would hold `a`.
+    let source = "c(1..3). n(N) :- N = #count { D : c(D) }. {a}. :- n(N), 6/(N-3) > 1, a.";
+    let (compiled, written) = omitting(
+        source,
+        ":- n(N), 6/(N-3) > 1, a.",
+        &["c(1) c(2) c(3) n(3)", "c(1) c(2) c(3) n(3) a"],
+    );
+    assert_eq!(heads(&compiled, "n("), ["n(3)"]);
+    assert_eq!(heads(&written, "n("), ["n(0)", "n(1)", "n(2)", "n(3)"]);
+}
+
+#[test]
+fn a_choice_body_reading_an_exact_head_is_omitted_at_an_undefined_value() {
+    // `6/(N-2) > 1` is false at the counts 0 and 1, so no grounding supports
+    // the choice: `y` has no atom.
     let source = "c(1..2). n(N) :- N = #count { D : c(D) }. {y} :- n(N), 6/(N-2) > 1.";
-    assert!(refused_as_undefined(source));
-    assert_eq!(written_answer_sets(source), sets(&["c(1) c(2) n(2)"]));
+    let (compiled, written) = omitting(source, "{y} :- n(N), 6/(N-2) > 1.", &["c(1) c(2) n(2)"]);
+    assert_eq!(heads(&compiled, "n("), ["n(2)"]);
+    assert_eq!(heads(&written, "n("), ["n(0)", "n(1)", "n(2)"]);
+    assert!(heads(&compiled, "y").is_empty());
+    assert!(heads(&written, "y").is_empty());
 }
 
 #[test]
 fn an_aggregate_element_reading_an_exact_head_follows_it() {
-    // The element's one tuple is undefined, so its local family is.
+    // The element's one tuple is undefined and omitted, so the sum is over no
+    // tuple. Without certainty the element has a tuple at each of the counts
+    // 0 and 1, of weights -3 and -6, and the sum takes each of their totals.
     let source = "c(1..2). n(N) :- N = #count { D : c(D) }. \
         q(S) :- S = #sum { 6/(N-2) : n(N) }.";
-    assert!(refused_as_undefined(source));
-    assert_eq!(written_answer_sets(source), sets(&["c(1) c(2) n(2) q(0)"]));
+    let (compiled, written) = omitting(
+        source,
+        "q(S) :- S = #sum { 6/(N-2) : n(N) }.",
+        &["c(1) c(2) n(2) q(0)"],
+    );
+    assert_eq!(heads(&compiled, "q("), ["q(0)"]);
+    assert_eq!(heads(&written, "q("), ["q(-9)", "q(-6)", "q(-3)", "q(0)"]);
 }
 
 #[test]
 fn a_weak_constraint_reading_an_exact_head_follows_it() {
+    // The objective has no element at the count 2, whose weight is undefined,
+    // and one at each of the counts 0 and 1 where they are proposed.
     let source = "c(1..2). n(N) :- N = #count { D : c(D) }. {a}. :~ n(N), a. [6/(N-2)@1]";
-    assert!(refused_as_undefined(source));
-    assert_eq!(
-        written_answer_sets(source),
-        sets(&["c(1) c(2) n(2)", "c(1) c(2) n(2) a"])
+    let (compiled, written) = omitting(
+        source,
+        ":~ n(N), a. [6/(N-2)@1]",
+        &["c(1) c(2) n(2)", "c(1) c(2) n(2) a"],
     );
+    assert!(compiled.objectives.templates().is_empty());
+    assert_eq!(written.objectives.templates().len(), 2);
 }
 
 #[test]
-fn an_assignment_left_with_several_values_is_refused_where_each_is_undefined() {
+fn an_assignment_left_with_several_values_is_omitted_where_each_is_undefined() {
     // The three tuples over `c` are required and the two over `d` are not,
-    // so the count is 3, 4 or 5, and the divisor is zero at each.
+    // so the count is 3, 4 or 5, and the divisor is zero at each. Without
+    // certainty the counts 0 to 2 are proposed as well.
     let source = "c(1..3). {d(1..2)}. \
         z(X) :- N = #count { D : c(D); D,d : d(D) }, X = 60/((N-3)*(N-4)*(N-5)).";
-    assert!(refused_as_undefined(source));
-    assert_eq!(
-        written_answer_sets(source),
-        sets(&[
+    let (compiled, written) = omitting(
+        source,
+        "z(X) :- N = #count { D : c(D); D,d : d(D) }, X = 60/((N-3)*(N-4)*(N-5)).",
+        &[
             "c(1) c(2) c(3)",
             "c(1) c(2) c(3) d(1)",
             "c(1) c(2) c(3) d(2)",
-            "c(1) c(2) c(3) d(1) d(2)"
-        ])
+            "c(1) c(2) c(3) d(1) d(2)",
+        ],
     );
+    assert!(heads(&compiled, "z(").is_empty());
+    assert_eq!(heads(&written, "z("), ["z(-1)", "z(-2)", "z(-10)"]);
+}
+
+// The next two tests pin the narrowing for the two forms a zero divisor
+// cannot show it for. Their arithmetic overflows at every value the exact
+// head excludes and at no other, so each program is admitted exactly when
+// its family follows that head.
+
+/// Whether `source`, grounded with no predicate treated as certain, is
+/// refused for an arithmetic overflow.
+fn overflows_as_written(source: &str) -> bool {
+    matches!(
+        without_certainty(|| ground(testing::prepare(source), None, None)),
+        Err(crate::FormulaFailure::Expansion(
+            crate::ExpansionFailure::Evaluation {
+                error: themelios_program::term::EvalError::Overflow,
+                ..
+            }
+        ))
+    )
+}
+
+#[test]
+fn a_constraint_reading_an_exact_head_follows_it() {
+    // `2000000000 * (4 - N)` overflows at every count but 3, the only one
+    // `n` takes. There the comparison holds, so the constraint excludes `a`.
+    let source = "c(1..3). n(N) :- N = #count { D : c(D) }. {a}. \
+        :- n(N), 2000000000 * (4 - N) > 0, a.";
+    assert_eq!(
+        answer_sets(&compile(source)),
+        sets(&["c(1) c(2) c(3) n(3)"])
+    );
+    assert!(overflows_as_written(source));
+}
+
+#[test]
+fn a_choice_body_reading_an_exact_head_follows_it() {
+    // `2000000000 * (3 - N)` overflows at the counts 0 and 1 and holds at 2,
+    // the only one `n` takes, so the choice is supported there.
+    let source = "c(1..2). n(N) :- N = #count { D : c(D) }. \
+        {y} :- n(N), 2000000000 * (3 - N) > 0.";
+    assert_eq!(
+        answer_sets(&compile(source)),
+        sets(&["c(1) c(2) n(2)", "c(1) c(2) n(2) y"])
+    );
+    assert!(overflows_as_written(source));
 }
 
 #[test]
@@ -687,34 +775,52 @@ fn an_exact_assignment_admits_arithmetic_that_fails_only_at_unrealized_values() 
 }
 
 // A rule held back for its required tuples takes fewer values too, so its
-// family and the families that read its head change with it, in both
-// directions.
+// family and the families that read its head change with it.
 
 #[test]
-fn a_held_back_assignment_is_refused_where_its_remaining_value_is_undefined() {
+fn a_held_back_assignment_omits_the_instance_undefined_at_its_remaining_value() {
     // The fact's tuple is required, so the count below 2 is 1, where
-    // `6/(N-1)` divides by zero. With the tuple optional the count 0 is
-    // defined, and admits the rule with a warning.
+    // `6/(N-1)` divides by zero: the rule's one instance is omitted and `p`
+    // has no atom. With the tuple optional the count 0 is defined as well,
+    // and supports `p(-6)`, which no answer set holds.
     let source = "f(3). {p(Y)} :- N = #count { V : p(V); V : f(V) }, N < 2, Y = 6/(N-1).";
-    assert!(refused_as_undefined(source));
-    assert_eq!(written_answer_sets(source), sets(&["f(3)"]));
+    let (compiled, written) = omitting(
+        source,
+        "{p(Y)} :- N = #count { V : p(V); V : f(V) }, N < 2, Y = 6/(N-1).",
+        &["f(3)"],
+    );
+    assert!(heads(&compiled, "p(").is_empty());
+    assert_eq!(heads(&written, "p("), ["p(-6)"]);
 }
 
 #[test]
-fn a_rule_reading_a_held_back_head_is_refused_where_its_value_is_undefined() {
-    // Only `p(1)` is supported, so the reader's one instance divides by zero.
+fn a_rule_reading_a_held_back_head_is_omitted_where_its_value_is_undefined() {
+    // Only `p(1)` is supported, so the reader's one instance divides by zero
+    // and `z` has no atom. With the fact's tuple optional `p(0)` is supported
+    // too, and the reader is defined there.
     let source = "f(1). {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 2. \
         z(Y) :- p(N), Y = 6/(N-1).";
-    assert!(refused_as_undefined(source));
-    assert_eq!(written_answer_sets(source), sets(&["f(1)", "f(1) p(1)"]));
+    let (compiled, written) =
+        omitting(source, "z(Y) :- p(N), Y = 6/(N-1).", &["f(1)", "f(1) p(1)"]);
+    assert!(heads(&compiled, "z(").is_empty());
+    assert_eq!(heads(&written, "z("), ["z(-6)"]);
 }
 
 #[test]
 fn a_held_back_assignment_admits_what_only_an_unrequired_value_refused() {
     // The fact's tuple is required, so the maximum is at least 3. With the
     // tuple optional the empty maximum is proposed, and `#inf + 1` is
-    // arithmetic on a value that is no number.
+    // arithmetic on a value that is no number: a fatal failure, which
+    // refuses.
     let source = "f(3). {p(N+1)} :- N = #max { V : p(V); V : f(V) }, N < 6.";
     assert_eq!(answer_sets(&compile(source)), sets(&["f(3)"]));
-    assert!(without_certainty(|| refused_as_undefined(source)));
+    assert!(matches!(
+        without_certainty(|| ground(testing::prepare(source), None, None)),
+        Err(crate::FormulaFailure::Expansion(
+            crate::ExpansionFailure::Evaluation {
+                error: themelios_program::term::EvalError::Undefined,
+                ..
+            }
+        ))
+    ));
 }

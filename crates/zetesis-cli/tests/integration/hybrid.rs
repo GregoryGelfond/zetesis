@@ -308,22 +308,24 @@ fn hybrid_warnings_remain_on_the_diagnostic_stream() {
 }
 
 #[test]
-fn hybrid_retains_all_undefined_admission_refusal() {
-    let failure = run_finalized_with_diagnostics(
-        "d(0). p(X):-d(X),1/X=1.".into(),
+fn hybrid_omits_an_all_undefined_family_with_a_warning() {
+    // The rule's one instance divides by zero. Hybrid admission omits it:
+    // the warning reaches the diagnostic stream once, at the rule, and the
+    // fact is the one answer.
+    let (outcome, output, diagnostics) = solve(
+        "d(0). p(X):-d(X),1/X=1.",
         &options(&["--grounder", "lazy", "--oracle", "countermodel"]),
-        &mut Vec::new(),
-        &mut io::sink(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(
-        failure.cause.as_ref(),
-        RunError::FormulaAdmission(FormulaFailure::Expansion(
-            zetesis_themelios::ExpansionFailure::Evaluation { .. }
-        ))
-    ));
-    assert!(failure.semantic().is_none());
+    );
+    assert_eq!(
+        diagnostics
+            .matches("warning[zetesis::zero-divisor]")
+            .count(),
+        1
+    );
+    assert!(diagnostics.contains("<input>:1:7"), "{diagnostics}");
+    assert_eq!(outcome.semantic().completion(), Some(Completion::Exhausted));
+    assert!(outcome.semantic().hybrid_execution().is_some());
+    assert_eq!(family(&output), vec![vec!["d(0)".to_owned()]]);
 }
 
 #[test]

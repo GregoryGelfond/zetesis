@@ -15,8 +15,8 @@ use zetesis_clingo_support as oracle;
 use zetesis_ferraris::NodeView as Node;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_bundle_formula, admit_formula,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
+    ProfileFeature, admit_bundle_formula, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(97);
@@ -70,6 +70,20 @@ fn refusal(error: &FormulaFailure, expected: &str) {
     }
 }
 
+/// The rule that keeps a reviewed case's zero-divisor warning. No other
+/// admitted case keeps a warning.
+fn warned_rule(name: &str) -> Option<&'static str> {
+    match name {
+        // The consequent divides by zero under its one condition d(0); the
+        // recorded family has it false there, so z is not derived.
+        "undefined_consequent" => Some("z:-1/X=1:d(X)."),
+        // The condition divides by zero, so its one row is absent and the
+        // conditional holds without it.
+        "undefined_condition" => Some("z:-p(X):d(X),not 1/X=1."),
+        _ => None,
+    }
+}
+
 #[test]
 fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
     // The original generative_double_condition source is now admitted by the
@@ -88,6 +102,26 @@ fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
             assert_eq!(row["valid"], true);
             let program = result.unwrap_or_else(|error| panic!("{}: {error}", row["name"]));
             assert_eq!(program.source().expect("source input").text(), source);
+            let warned: Vec<_> = program
+                .warnings()
+                .iter()
+                .map(|warning| {
+                    let FormulaWarning::ZeroDivisor { location } = warning;
+                    program
+                        .source()
+                        .expect("source input")
+                        .slice(location.location().expect("parsed source").span)
+                        .unwrap()
+                })
+                .collect();
+            assert_eq!(
+                warned,
+                warned_rule(row["name"].as_str().unwrap())
+                    .into_iter()
+                    .collect::<Vec<_>>(),
+                "{}",
+                row["name"]
+            );
             let expected = expected(&row);
             assert_eq!(exhaustive(&program), expected, "{}", row["name"]);
             assert_eq!(native(&program), expected, "{}", row["name"]);
@@ -100,7 +134,7 @@ fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
             valid_refused += usize::from(row["valid"] == true);
         }
     }
-    assert_eq!((admitted, refused, models, valid_refused), (85, 6, 229, 2));
+    assert_eq!((admitted, refused, models, valid_refused), (87, 4, 231, 0));
 }
 
 fn original_rule(program: &AdmittedFormula, head: &str) -> usize {

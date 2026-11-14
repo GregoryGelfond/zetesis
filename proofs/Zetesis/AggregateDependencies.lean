@@ -23,7 +23,7 @@ builder consumes only the complete projected input row. The traversal preserves
 ordered parent/child rows, typed failures and the original clause sequence.
 
 The separate support-reuse layer combines completed possible-head images and
-idempotent defined/first-zero evidence. Under complete traversal and projection
+idempotent first-zero evidence. Under complete traversal and projection
 sufficiency, coalescing consecutive equal projections preserves that observation.
 It does not preserve formula-witness occurrences or apply to unfinished results.
 
@@ -423,27 +423,25 @@ namespace SupportReuse
 universe p k e
 variable {Parent : Type p} {Key : Type k} {Error : Type e}
 
-/-- The observation of a completed possible-head continuation. Heads form a set;
-`defined` records whether any complete substitution has defined arithmetic, and
-`zero` retains the first unexcluded zero-divisor diagnostic, if one occurred.
-Immediate fatal failures and unfinished traversals supply no observation.
-Completion means finishing this continuation, not finalizing the enclosing
-source family's arithmetic: a zero without a defined witness remains evidence. -/
+/-- The observation of a completed possible-head continuation. Heads form a set,
+and `zero` retains the first unexcluded zero-divisor diagnostic, if one
+occurred: the evidence that an instance was omitted. Immediate fatal failures
+and unfinished traversals supply no observation. Completion means finishing
+this continuation, not finalizing the enclosing source family's arithmetic. -/
 structure Observation (Atom : Type w) (Error : Type e) where
   heads : Atoms Atom
-  defined : Bool
   zero : Option Error
 
 /-- Combine completed observations in source traversal order. Repeated heads
-and defined witnesses are idempotent; an earlier diagnostic has priority. -/
+are idempotent; an earlier diagnostic has priority. -/
 def merge (first later : Observation A Error) : Observation A Error :=
-  ⟨Union first.heads later.heads, first.defined || later.defined,
+  ⟨Union first.heads later.heads,
     match first.zero with
     | some error => some error
     | none => later.zero⟩
 
-/-- No completed parent contributes no head, defined witness or diagnostic. -/
-def empty : Observation A Error := ⟨Empty, false, none⟩
+/-- No completed parent contributes no head or diagnostic. -/
+def empty : Observation A Error := ⟨Empty, none⟩
 
 /-- Repeating a completed observation cannot add support or alter its evidence,
 even in front of later observations. The first zero is retained, not reordered. -/
@@ -455,9 +453,8 @@ theorem merge_repeated (first later : Observation A Error) :
     intro atom
     simp only [Union, or_self_left]
   cases first with
-  | mk heads defined zero =>
-    cases defined <;> cases zero <;> simpa only [merge, Bool.false_or, Bool.true_or,
-      Observation.mk.injEq, and_true] using repeatedHeads
+  | mk heads zero =>
+    cases zero <;> simpa only [merge, Observation.mk.injEq, and_true] using repeatedHeads
 
 /-- The complete ordered traversal combines every parent's observation. -/
 def full (observation : Parent → Observation A Error) : List Parent → Observation A Error
@@ -482,8 +479,8 @@ def reuse [DecidableEq Key] (projection : Parent → Key)
   | [] => empty
   | parent :: rest => runFrom projection observation parent rest
 
-/-- Skipping repeated projections preserves exactly the union of possible heads,
-the defined-witness flag and the first zero-divisor diagnostic. Every supplied
+/-- Skipping repeated projections preserves exactly the union of possible heads
+and the first zero-divisor diagnostic. Every supplied
 parent must have completed its entire continuation, and the projection must
 determine this full observation on completed parents. Equality of just the head
 image would not suffice for diagnostics. The observations belong to one fixed
@@ -508,13 +505,13 @@ theorem reuse_exact [DecidableEq Key] (projection : Parent → Key)
     | nil =>
       intro previous _ _
       cases observed : observation previous with
-      | mk heads defined zero =>
+      | mk heads zero =>
         have emptyHeads : heads = Union heads Empty := by
           apply atoms_ext
           intro atom
           simp only [Union, Empty, or_false]
-        cases defined <;> cases zero <;> simpa only [runFrom, full, merge, empty,
-          observed, Bool.or_false, Observation.mk.injEq, and_true] using emptyHeads
+        cases zero <;> simpa only [runFrom, full, merge, empty,
+          observed, Observation.mk.injEq, and_true] using emptyHeads
     | cons parent rest inductionHypothesis =>
       intro previous previousComplete allComplete
       have parentComplete : Complete parent := allComplete parent (by simp)
@@ -544,7 +541,7 @@ theorem reuse_exact [DecidableEq Key] (projection : Parent → Key)
 -- Equal head images alone do not permit skipping different diagnostic evidence.
 example :
     let observation : Nat → Observation Unit Nat := fun index =>
-      ⟨Empty, false, if index = 0 then none else some index⟩
+      ⟨Empty, if index = 0 then none else some index⟩
     (reuse (fun _ => ()) observation [0, 1]).zero ≠
       (full observation [0, 1]).zero := by decide
 

@@ -5,7 +5,7 @@ use crate::support::finite_bindings as reference;
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
 use zetesis_reference_support::formula;
-use zetesis_themelios::{ExpansionFailure, FormulaFailure};
+use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaWarning};
 
 const CASES: &[(&str, &str)] = &[
     (
@@ -114,7 +114,6 @@ fn arithmetic_refusals_retain_the_source_rule() {
         ("d(-2147483647-1). p(X\\(-1)):-d(X).", EvalError::Overflow),
         ("d(-2147483647-1). p(-X):-d(X).", EvalError::Overflow),
         ("d(-2147483647-1). p(|X|):-d(X).", EvalError::Overflow),
-        ("d(0). p(1/X):-d(X).", EvalError::Undefined),
         ("d(-1). p(2**X):-d(X).", EvalError::Undefined),
         ("d(a). p(X+1):-d(X).", EvalError::Undefined),
         ("d(f(1)). p(X+1):-d(X).", EvalError::Undefined),
@@ -147,6 +146,32 @@ fn arithmetic_refusals_retain_the_source_rule() {
             "exact source rule location: {source}"
         );
     }
+}
+
+#[test]
+fn a_zero_divisor_warning_retains_the_source_rule() {
+    let source = "d(0). p(1/X):-d(X).";
+    let source_id = SourceId::new(29);
+    let admitted = admission::admitted(source_id, source);
+    // The head divides by zero at the one row: the instance is omitted, and
+    // the warning is located at exactly the rule.
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    let location = location.location().expect("parsed source");
+    assert_eq!(location.source, source_id);
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.span)
+            .unwrap(),
+        &source[source.find("p(").unwrap()..],
+        "exact source rule location"
+    );
+    let expected = reference::native(&formula("d(0)."));
+    assert_eq!(reference::native(&admitted), expected);
+    assert_eq!(reference::exhaustive(&admitted), expected);
 }
 
 #[test]

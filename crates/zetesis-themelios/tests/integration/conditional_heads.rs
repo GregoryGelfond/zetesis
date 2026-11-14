@@ -29,16 +29,73 @@ const CASES: &[(&str, &[&[&str]])] = &[
     ),
 ];
 
+/// A head that divides by zero under a condition binding is true there: the
+/// disjunct holds wherever its condition does and derives no atom, as a
+/// written `#true : condition` does. A defined instance beside an undefined
+/// one is kept, and a condition that divides by zero has no instance.
+const UNDEFINED_HEADS: &[(&str, &[&[&str]])] = &[
+    ("d(0).p(1/X):d(X).", &[&["d(0)"]]),
+    ("d(0;1).p(1/X):d(X).", &[&["d(0)", "d(1)"]]),
+    (
+        "{d(0)}.d(1).p(1/X):d(X).",
+        &[&["d(0)", "d(1)"], &["d(1)", "p(1)"]],
+    ),
+    (
+        "{d(0)}.d(1).r|p(1/X):d(X).",
+        &[&["d(0)", "d(1)"], &["d(1)", "p(1)"], &["d(1)", "r"]],
+    ),
+    (
+        "d(0;1).{a}.p(1/X):d(X):-a.",
+        &[&["d(0)", "d(1)"], &["d(0)", "d(1)", "a"]],
+    ),
+    (
+        "{d(0;1)}.{q(1)}.not q(1/X):d(X).",
+        &[
+            &["d(0)"],
+            &["d(0)", "d(1)"],
+            &["d(0)", "d(1)", "q(1)"],
+            &["d(0)", "q(1)"],
+            &["d(1)"],
+        ],
+    ),
+    // The divisors 0 and 1: one instance is undefined and the other is kept.
+    ("{d(1)}.p(2/(X-1..X)):d(X).", &[&["d(1)", "p(2)"]]),
+    (
+        "{d(0;1)}.p(2/X):d(X)|q(2/Y):d(Y),Y<1.",
+        &[&["d(0)"], &["d(0)", "d(1)"], &["d(1)", "p(2)"]],
+    ),
+    ("d(0;1).p(X):d(X),1/X=1.", &[&["d(0)", "d(1)", "p(1)"]]),
+    (
+        "{d(0;1)}.e(2).p(Z/X):d(X):-e(Z).",
+        &[
+            &["d(0)", "d(1)", "e(2)"],
+            &["d(0)", "e(2)"],
+            &["d(1)", "e(2)", "p(2)"],
+        ],
+    ),
+];
+
+fn cases() -> impl Iterator<Item = &'static (&'static str, &'static [&'static [&'static str]])> {
+    CASES.iter().chain(UNDEFINED_HEADS)
+}
+
 #[test]
 fn complete_families_preserve_conditional_eligibility() {
-    for &(source, records) in CASES {
+    for &(source, records) in cases() {
         assert_eq!(native(&formula(source)), expected(records), "{source}");
     }
 }
 
 #[test]
+fn an_undefined_head_warns_once() {
+    for &(source, _) in UNDEFINED_HEADS {
+        assert_eq!(formula(source).warnings().len(), 1, "{source}");
+    }
+}
+
+#[test]
 fn membership_matches_independent_subset_enumeration() {
-    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
+    reference::stability_matches_exhaustion(cases().map(|&(source, _)| source), formula);
 }
 
 #[test]
@@ -65,13 +122,13 @@ fn original_occurrences_keep_their_source() {
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
     let mut models = 0;
-    for &(source, records) in CASES {
+    for &(source, records) in cases() {
         let actual = oracle::objective_free_models(&external(source, true));
         assert_eq!(actual, expected(records), "{source}");
         assert_eq!(native(&formula(source)), actual, "{source}");
         models += actual.len();
     }
-    println!("complete_sources={} full_models={models}", CASES.len());
+    println!("complete_sources={} full_models={models}", cases().count());
 }
 
 #[derive(Clone)]
@@ -193,6 +250,30 @@ fn local_conditions_cannot_bind_the_outer_rule() {
 #[test]
 fn local_instance_limit_is_inclusive() {
     let source = "d(1..3).a(X):d(X).";
+    let admitted = admit(
+        source,
+        &resource_limits::formula(FormulaResource::DisjunctionElements, 3),
+    )
+    .unwrap();
+    assert_eq!(native(&admitted), native(&formula(source)));
+    assert!(matches!(
+        admit(
+            source,
+            &resource_limits::formula(FormulaResource::DisjunctionElements, 2)
+        ),
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::DisjunctionElements,
+            limit: 2,
+            observed: 3,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn an_undefined_head_counts_as_a_disjunction_element() {
+    // Three condition bindings, each with a head that divides by zero.
+    let source = "d(0).e(1..3).p(Y/X):d(X),e(Y).";
     let admitted = admit(
         source,
         &resource_limits::formula(FormulaResource::DisjunctionElements, 3),

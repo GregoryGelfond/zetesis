@@ -97,7 +97,8 @@ fn query_rule(
             Ok::<_, FormulaFailure>(rows)
         })
         .unwrap();
-    join.take_family().finish().unwrap();
+    // No fixture of these queries divides: their rows are the whole family.
+    assert!(!join.take_family().finish());
     assert_eq!(join.lease.bytes(), join.storage_bytes());
     cleared(&join);
     rows.sort();

@@ -1,4 +1,6 @@
 use super::*;
+use crate::test_support::atoms_named;
+use zetesis_test_support::programs::numbered;
 
 fn same_native_payload(left: &Compiled, right: &Compiled) {
     assert_same_program(left, right);
@@ -84,36 +86,51 @@ fn unsupported_local_scopes_keep_their_original_traversal() {
 #[test]
 fn local_arithmetic_failures_keep_their_error_and_site() {
     use crate::observation::EvaluationError;
-    for (facts, expression, expected) in [
-        ("p(0).", "1/X > 0", EvaluationError::Undefined),
-        ("p(1).", "(X+2147483647)/1 > 0", EvaluationError::Overflow),
-    ] {
-        let source =
-            format!("b(2). {facts} out(B,N) :- b(B), N=#count{{X:p(X),X<B,{expression}}}.");
-        let before =
-            controlled(true, || ground(testing::prepare(&source), None, None)).unwrap_err();
-        let receipts = Receipts::default();
-        let after = ground(testing::prepare(&source), Some(&receipts), None).unwrap_err();
-        match (before, after) {
-            (
-                FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation {
-                    error: before,
-                    location: before_site,
-                }),
-                FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation {
-                    error: after,
-                    location: after_site,
-                }),
-            ) => {
-                assert_eq!(before, expected);
-                assert_eq!(after, expected);
-                assert_eq!(before_site, after_site);
-            }
-            other => panic!("matching local arithmetic failures expected: {other:?}"),
+    let source = "b(2). p(1). out(B,N) :- b(B), N=#count{X:p(X),X<B,(X+2147483647)/1 > 0}.";
+    let before = controlled(true, || ground(testing::prepare(source), None, None)).unwrap_err();
+    let receipts = Receipts::default();
+    let after = ground(testing::prepare(source), Some(&receipts), None).unwrap_err();
+    match (before, after) {
+        (
+            FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation {
+                error: before,
+                location: before_site,
+            }),
+            FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation {
+                error: after,
+                location: after_site,
+            }),
+        ) => {
+            assert_eq!(before, EvaluationError::Overflow);
+            assert_eq!(after, EvaluationError::Overflow);
+            assert_eq!(before_site, after_site);
         }
-        assert_eq!(receipts.emission.get().range_probes, Some(0));
-        assert_eq!(receipts.other.get().range_probes, Some(0));
+        other => panic!("matching local arithmetic failures expected: {other:?}"),
     }
+    assert_eq!(receipts.emission.get().range_probes, Some(0));
+    assert_eq!(receipts.other.get().range_probes, Some(0));
+}
+
+#[test]
+fn local_undefined_family_is_omitted_with_its_warning() {
+    // The element's one instance divides by zero and is omitted, so the count
+    // is over no tuple: `out(2,0)` and no `out(2,1)`.
+    let source = "b(2). p(0). out(B,N) :- b(B), N=#count{X:p(X),X<B,1/X > 0}.";
+    let reference = controlled(true, || ground(testing::prepare(source), None, None)).unwrap();
+    assert_eq!(
+        zero_divisor_statements(source, &reference.warnings),
+        ["out(B,N) :- b(B), N=#count{X:p(X),X<B,1/X > 0}."]
+    );
+    let receipts = Receipts::default();
+    let selected = ground(testing::prepare(source), Some(&receipts), None).unwrap();
+    same_native_payload(&reference, &selected);
+    assert_eq!(atoms_named(&selected, "out"), [numbered("out", &[2, 0])]);
+    assert_eq!(
+        answer_sets(&selected.theory, &selected.atoms),
+        atom_sets([&[unary("b", 2), unary("p", 0), numbered("out", &[2, 0])]])
+    );
+    assert_eq!(receipts.emission.get().range_probes, Some(0));
+    assert_eq!(receipts.other.get().range_probes, Some(0));
 }
 
 #[test]

@@ -212,7 +212,7 @@ fn evidence_keeps_false_defined_rows_of_same_location_siblings() {
             assert_eq!(certificates, 1);
             // The total sibling's false row converts the zero-only sibling
             // into a warning. Pruning that witness would cause an error.
-            assert!(evidence.finish().unwrap());
+            assert!(evidence.finish());
         },
     );
 }

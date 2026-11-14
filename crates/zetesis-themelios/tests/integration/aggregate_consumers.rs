@@ -304,18 +304,26 @@ fn empty_maximum_allows_every_finite_choice_count() {
 }
 
 #[test]
-fn undefined_consumers_refuse_the_complete_input() {
-    let error = admit_formula(
-        "q(N/0):-N=#count{}.".into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(
-        error,
-        FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-    ));
+fn an_undefined_consumer_omits_its_only_instance() {
+    let source = "q(N/0):-N=#count{}.";
+    let admitted = input(source);
+    // The count's one value divides by zero in the head, so the rule has no
+    // instance and keeps the warning.
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(location.location().expect("parsed source").source, SOURCE);
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        source
+    );
+    let expected = Models::from([BTreeSet::new()]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
 }
 
 #[test]

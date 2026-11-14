@@ -14,7 +14,7 @@ use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     AdmissionFailure, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, ProfileFeature,
 };
 
 const SOURCE: SourceId = SourceId::new(317);
@@ -184,19 +184,24 @@ fn missing_extrema_retain_complete_key_limits() {
     }
 }
 
+/// The statement of `admitted`'s one warning, which reports under this
+/// module's source identity a zero divisor omitted from that statement.
+fn omitted_statement(admitted: &AdmittedFormula) -> &str {
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    let location = location.location().expect("parsed source");
+    assert_eq!(location.source, SOURCE);
+    admitted
+        .source()
+        .expect("source input")
+        .slice(location.span)
+        .unwrap()
+}
+
 #[test]
-fn neutral_rows_cannot_hide_undefined_bindings() {
-    for source in [
-        "#sum{1/0:a}.",
-        "#min{1/0:a}.",
-        "d(0).#sum{word:p(Y):d(X),Y=1/X}=0.",
-        "d(0).e.#sum{word:p(Y):d(X),Y=1/X,not e}=0.",
-        "d(0).#min{:p(Y):d(X),Y=1/X}.",
-        "d(0).#min{:p(Y):d(X),Y=1/X}=#sup.",
-        "d(0).e.#max{:p(Y):d(X),Y=1/X,not e}=#inf.",
-        "#max{1/0:a}=#inf:-#false.",
-        "d(0).#sum+{-1:p(Y):d(X),Y=1/X}=0.",
-    ] {
+fn neutral_rows_cannot_hide_closed_undefined_terms() {
+    for source in ["#sum{1/0:a}.", "#min{1/0:a}.", "#max{1/0:a}=#inf:-#false."] {
         let error = limited(
             source,
             ExpansionLimits::default(),
@@ -215,24 +220,38 @@ fn neutral_rows_cannot_hide_undefined_bindings() {
 }
 
 #[test]
-fn neutral_tuple_fields_preserve_undefined_arithmetic() {
-    let error = limited(
-        "d(0).#sum{word,1/X:a:d(X)}=0.",
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .expect_err("neutral contribution does not skip tuple evaluation");
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                error: themelios_program::term::EvalError::Undefined,
-                ..
-            })
-        ),
-        "{error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+fn neutral_rows_cannot_hide_omitted_bindings() {
+    // Each row would contribute nothing to its aggregate, and its binding
+    // divides by zero. Source evaluation precedes contribution selection:
+    // the row is omitted with the statement's warning, and the facts remain
+    // the only atoms.
+    for (facts, head) in [
+        ("d(0).", "#sum{word:p(Y):d(X),Y=1/X}=0."),
+        ("d(0).e.", "#sum{word:p(Y):d(X),Y=1/X,not e}=0."),
+        ("d(0).", "#min{:p(Y):d(X),Y=1/X}."),
+        ("d(0).", "#min{:p(Y):d(X),Y=1/X}=#sup."),
+        ("d(0).e.", "#max{:p(Y):d(X),Y=1/X,not e}=#inf."),
+        ("d(0).", "#sum+{-1:p(Y):d(X),Y=1/X}=0."),
+    ] {
+        let admitted = input(&format!("{facts}{head}"));
+        assert_eq!(omitted_statement(&admitted), head);
+        let expected = native(&input(facts));
+        assert_eq!(native(&admitted), expected, "{head}");
+        assert_eq!(exhaustive(&admitted), expected, "{head}");
+    }
+}
+
+#[test]
+fn neutral_tuple_fields_do_not_hide_a_zero_divisor() {
+    // The weight contributes nothing, yet the tuple's other field is still
+    // evaluated. It divides by zero, so the element is omitted with the
+    // statement's warning and a keeps no permission.
+    let head = "#sum{word,1/X:a:d(X)}=0.";
+    let admitted = input(&format!("d(0).{head}"));
+    assert_eq!(omitted_statement(&admitted), head);
+    let expected = native(&input("d(0)."));
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
 }
 
 #[test]

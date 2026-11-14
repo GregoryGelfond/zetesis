@@ -1,6 +1,7 @@
 //! Possible-head continuations omit no original formula witness.
 use super::*;
 use crate::formula::Preparation;
+use crate::test_support::{compiled_atoms, overflow_statement, zero_divisor_statements};
 use zetesis_core::Atom;
 
 fn prepare(source: &str, reuse: bool) -> Preparation {
@@ -137,61 +138,103 @@ fn changed_continuation_inputs_refresh_support() {
     }
 }
 
-fn same_diagnostic(shared: FormulaFailure, reference: FormulaFailure) {
-    let (
-        FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation {
-            error: left,
-            location: left_site,
-        }),
-        FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation {
-            error: right,
-            location: right_site,
-        }),
-    ) = (shared, reference)
-    else {
-        panic!("expected typed source arithmetic failures")
-    };
-    assert_eq!(left, right);
-    assert_eq!(left_site, right_site);
+#[test]
+fn support_continuations_preserve_arithmetic_evidence() {
+    for (source, warned) in [
+        // A repeated failing continuation precedes a defined continuation.
+        (
+            "d(1,a).d(1,b).d(2,a). {p}. q(X,C,N) :- d(X,_), C=1/(X-1), N=#count{1:p}.",
+            &["q(X,C,N) :- d(X,_), C=1/(X-1), N=#count{1:p}."][..],
+        ),
+        // A scalar false row excludes its independent arithmetic error.
+        (
+            "d(1,a).d(1,b).d(2,a). {p}. q(X,C,N) :- d(X,_), C=1/(X-1), N=#count{1:p}, X!=1.",
+            &[],
+        ),
+    ] {
+        let shared = crate::formula_ground::ground(prepare(source, true), None, None).unwrap();
+        let reference = crate::formula_ground::ground(prepare(source, false), None, None).unwrap();
+        assert_eq!(
+            zero_divisor_statements(source, &shared.warnings),
+            warned,
+            "{source}"
+        );
+        assert_eq!(shared.atoms.atoms(), reference.atoms.atoms());
+        assert_eq!(
+            (shared.theory.nodes(), shared.theory.operands()),
+            (reference.theory.nodes(), reference.theory.operands())
+        );
+        assert_eq!(shared.theory.roots(), reference.theory.roots());
+        assert_eq!(shared.origins, reference.origins);
+        assert_eq!(shared.warnings, reference.warnings);
+    }
 }
 
 #[test]
-fn support_continuations_preserve_arithmetic_evidence() {
-    for source in [
-        // A repeated failing continuation precedes a defined continuation.
-        "d(1,a).d(1,b).d(2,a). {p}. q(X,C,N) :- d(X,_), C=1/(X-1), N=#count{1:p}.",
-        // Undefined aggregate element arithmetic remains a family diagnostic.
-        "d(1,a).d(1,b).d(2,a). {p}. q(X,N) :- d(X,_), N=#count{1:p,1/(X-1)>0}.",
-        // A scalar false row excludes its independent arithmetic error.
-        "d(1,a).d(1,b).d(2,a). {p}. q(X,C,N) :- d(X,_), C=1/(X-1), N=#count{1:p}, X!=1.",
-    ] {
-        let shared = crate::formula_ground::ground(prepare(source, true), None, None);
-        let reference = crate::formula_ground::ground(prepare(source, false), None, None);
-        match (shared, reference) {
-            (Ok(shared), Ok(reference)) => {
-                assert_eq!(shared.atoms.atoms(), reference.atoms.atoms());
-                assert_eq!(
-                    (shared.theory.nodes(), shared.theory.operands()),
-                    (reference.theory.nodes(), reference.theory.operands())
-                );
-                assert_eq!(shared.theory.roots(), reference.theory.roots());
-                assert_eq!(shared.origins, reference.origins);
-                assert_eq!(shared.warnings, reference.warnings);
-            }
-            (Err(shared), Err(reference)) => same_diagnostic(shared, reference),
-            (shared, reference) => {
-                panic!("diagnostic mismatch for {source}: {shared:?}, {reference:?}")
-            }
-        }
+fn an_undefined_aggregate_element_remains_a_family_warning() {
+    // At X = 1 the element's one instance divides by zero, under both
+    // witnesses of that continuation. It is omitted, so the count there is
+    // over no tuple: `q(1,0)` and no `q(1,1)`.
+    let source = "d(1,a).d(1,b).d(2,a). {p}. q(X,N) :- d(X,_), N=#count{1:p,1/(X-1)>0}.";
+    let heads = [[1, 0], [2, 0], [2, 1]];
+    let (shared, _) = completion(source, true);
+    assert_eq!(shared, completion(source, false).0);
+    assert_eq!(outputs(&shared, "q"), heads);
+    for reuse in [true, false] {
+        let compiled = crate::formula_ground::ground(prepare(source, reuse), None, None).unwrap();
+        assert_eq!(
+            zero_divisor_statements(source, &compiled.warnings),
+            ["q(X,N) :- d(X,_), N=#count{1:p,1/(X-1)>0}."]
+        );
+        assert_eq!(outputs(&compiled_atoms(&compiled), "q"), heads);
+    }
+    // The theories are compared with factoring held off on both routes. Left
+    // on, it roots `q(1,0)` once where the reference roots it for each of the
+    // two witnesses.
+    same_formula(source);
+}
+
+#[test]
+fn an_overflowing_aggregate_element_remains_a_family_failure() {
+    // The element overflows at X = 1 alone, under both witnesses of that
+    // continuation, which the defined binding X = 2 does not excuse.
+    let source = "d(1,a).d(1,b).d(2,a). {p}. q(X,N) :- d(X,_), N=#count{1:p,(3-X)*2000000000>0}.";
+    let shared = crate::formula_ground::ground(prepare(source, true), None, None).unwrap_err();
+    let reference = crate::formula_ground::ground(prepare(source, false), None, None).unwrap_err();
+    assert_eq!(
+        overflow_statement(source, &shared, &reference),
+        "q(X,N) :- d(X,_), N=#count{1:p,(3-X)*2000000000>0}."
+    );
+}
+
+#[test]
+fn omitted_continuations_keep_their_warning() {
+    // The two witnesses share one continuation, whose value divides by zero.
+    // It is omitted with a warning on both routes, and `q` has no atom.
+    let source = "d(1,a).d(1,b). {p}. q(C,N) :- d(X,_), C=1/(X-1), N=#count{1:p}.";
+    let shared = crate::formula_ground::ground(prepare(source, true), None, None).unwrap();
+    let reference = crate::formula_ground::ground(prepare(source, false), None, None).unwrap();
+    assert_eq!(
+        zero_divisor_statements(source, &shared.warnings),
+        ["q(C,N) :- d(X,_), C=1/(X-1), N=#count{1:p}."]
+    );
+    assert_eq!(shared.warnings, reference.warnings);
+    for compiled in [&shared, &reference] {
+        assert!(outputs(&compiled_atoms(compiled), "q").is_empty());
     }
 }
 
 #[test]
 fn failed_continuations_keep_their_diagnostic() {
-    let source = "d(1,a).d(1,b). {p}. q(C,N) :- d(X,_), C=1/(X-1), N=#count{1:p}.";
+    // The two witnesses share one continuation, whose value overflows: both
+    // routes refuse with the same failure at the rule.
+    let source = "d(1,a).d(1,b). {p}. q(C,N) :- d(X,_), C=X+2147483647, N=#count{1:p}.";
     let shared = crate::formula_ground::ground(prepare(source, true), None, None).unwrap_err();
     let reference = crate::formula_ground::ground(prepare(source, false), None, None).unwrap_err();
-    same_diagnostic(shared, reference);
+    assert_eq!(
+        overflow_statement(source, &shared, &reference),
+        "q(C,N) :- d(X,_), C=X+2147483647, N=#count{1:p}."
+    );
 }
 
 #[test]

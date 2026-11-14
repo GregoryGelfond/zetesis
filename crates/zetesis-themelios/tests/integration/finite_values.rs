@@ -9,8 +9,8 @@ use zetesis_reference_support::{canonical, formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
+    ProfileFeature, admit_formula,
 };
 
 fn competition_case() -> &'static zetesis_validation::curated::Case {
@@ -331,13 +331,38 @@ fn anonymous_constructor_facts_remain_refused() {
 }
 
 #[test]
-fn scalar_failures_remain_admission_errors() {
-    for source in [
-        "d(a).p(f(X+1)):-d(X).",
-        "d(1).q:-not p(f(X/0)),d(X).",
-        "d(0).q:-d(X),not p(1/X).",
-        "d(2147483647).p(f(X+1)):-d(X).",
+fn undefined_negative_arguments_omit_their_instances() {
+    // The argument of the negated atom divides by zero at the one binding.
+    // The instance is omitted, not read as the absence of p, so q is not
+    // derived. The rule keeps the warning.
+    for (facts, rule) in [
+        ("d(1).", "q:-not p(f(X/0)),d(X)."),
+        ("d(0).", "q:-d(X),not p(1/X)."),
     ] {
+        let admitted = formula(&format!("{facts}{rule}"));
+        let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+            panic!(
+                "{rule}: one zero-divisor warning: {:?}",
+                admitted.warnings()
+            );
+        };
+        assert_eq!(
+            admitted
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
+            rule
+        );
+        let expected = native(&formula(facts));
+        assert_eq!(native(&admitted), expected, "{rule}");
+        assert_eq!(exhaustive(&admitted), expected, "{rule}");
+    }
+}
+
+#[test]
+fn scalar_failures_remain_admission_errors() {
+    for source in ["d(a).p(f(X+1)):-d(X).", "d(2147483647).p(f(X+1)):-d(X)."] {
         assert!(
             matches!(
                 limited(

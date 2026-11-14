@@ -11,7 +11,7 @@ use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(139);
@@ -228,22 +228,27 @@ fn negated_conditions_cannot_supply_local_bindings() {
 }
 
 #[test]
-fn undefined_negative_arguments_refuse_admission() {
-    let error = admit_formula(
-        "1#count{1:a:X=0,not b(1/X)}1.".into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-        ),
-        "{error}"
+fn an_undefined_negative_argument_omits_its_element() {
+    let source = "1#count{1:a:X=0,not b(1/X)}1.";
+    let admitted = input(source);
+    // The negated atom's argument divides by zero at the element's one
+    // binding. The element is omitted, not made eligible by the absence of
+    // b: the count is empty, its bounds fail and no answer set remains. The
+    // statement keeps the warning.
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(location.location().expect("parsed source").source, SOURCE);
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        source
     );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    assert!(native(&admitted).is_empty());
+    assert!(exhaustive(&admitted).is_empty());
 }
 
 #[test]

@@ -218,29 +218,30 @@ Certainty changes which atoms an assignment supports, and so which atoms and
 objective priorities a theory names. It changes the answer sets of no admitted
 program. A positive flat source has only certain predicates.
 
-It does decide which programs are admitted, because arithmetic is evaluated
-at the values an assignment can still take and no other (the
-[language reference](../reference/language.md) states the rule).
-`c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 6/(N-3).` has the one instance
-`N = 3`, which divides by zero, so its family is entirely undefined and the
-program is refused; over an uncertain condition the counts 0 to 2 are defined
-and admit it with a warning. `Y = 2000000000 * (4 - N)` in its place is
-admitted with `p(2000000000)`; over an uncertain condition it overflows at the
-count 0 and is refused.
+It does decide which programs are admitted, in one direction, because
+arithmetic is evaluated at the values an assignment can still take and no
+other (the [language reference](../reference/language.md) states the rule).
+`c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 2000000000 * (4 - N).` is admitted
+with `p(2000000000)`; over an uncertain condition it overflows at the count 0
+and is refused. A zero divisor decides nothing: `Y = 6/(N-3)` in its place has
+the one instance `N = 3`, which divides by zero and is omitted with a warning,
+as it is beside the defined instances that an uncertain count adds.
 
 The same follows wherever those values are read. The assignment's head has
 only the atoms its values support, so a rule, a constraint, a choice body, an
 aggregate element or a weak constraint that reads the head, directly or
 through other rules, has only those instances: after
-`n(N) :- N = #count{X : c(X)}.` the rule `z(Y) :- n(N), Y = 6/(N-3).` is
-refused too. An assignment need not be exact for this: when some of its tuples
-are required and others are not, it takes fewer values than it did, and a
-family undefined at each of them is refused. That includes a rule held back
-for its required tuples. `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)},
-N < 2, Y = 6/(N-1).` has the one value 1, which divides by zero, and is
-refused, where the count from 0 had admitted it with a warning.
+`n(N) :- N = #count{X : c(X)}.` the rule
+`z(Y) :- n(N), Y = 2000000000 * (4 - N).` is admitted too, and
+`z(Y) :- n(N), Y = 6/(N-3).` has its one instance omitted with a warning. An
+assignment need not be exact for this: when some of its tuples are required
+and others are not, it takes fewer values than it did. That includes a rule
+held back for its required tuples.
 `f(3). {p(N+1)} :- N = #max{V : p(V); V : f(V)}, N < 6.` is admitted with its
 one answer set `f(3)`, where the empty maximum had refused it at `#inf + 1`.
+In `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)}, N < 2, Y = 6/(N-1).` the
+one value 1 divides by zero, so the rule has no instance and keeps its
+warning.
 
 The substitution rests on the roots that derive each atom, so emission checks
 them on the theory it built rather than taking them from the analysis. Every
@@ -1056,11 +1057,10 @@ support completion keep their original traversals.
 
 Source-family evidence is finalized over completed support and the original
 source occurrence, not one support round or normalized fragment. Evaluated
-numeric division or remainder by zero omits an instance only when the same
-family also contains a jointly defined instance; a defined false instance is a
-witness. An entirely undefined family refuses admission, while an empty positive
-join is silent. Each local element has a separate family for each fixed outer
-binding. Original objective-element identities keep their pooled fragments
+numeric division or remainder by zero omits its instance, whatever else the
+family holds, and its statement keeps a warning; a family of such instances
+alone contributes nothing. An empty positive join is silent. Each local element
+has a separate family for each fixed outer binding. Original objective-element identities keep their pooled fragments
 together without merging distinct elements. Successful owners retain one typed
 warning per original statement site within the finite warning ceiling.
 
@@ -1665,10 +1665,10 @@ the separate whole-program wake schedule retains its narrower applicability.
 Every selected input still passes the same typed tuple matcher and scalar evaluator.
 An empty proposal set establishes completion only after every required variant
 and conservative producer has finished. Final formula emission visits all
-complete authored-body families and preserves their definedness evidence,
-including jointly defined false instances. Independent relational exclusions
+complete authored-body families and preserves their arithmetic evidence: every
+omitted zero divisor and every fatal failure. Independent relational exclusions
 and empty joins supply no arithmetic failure. Possible support membership alone
-cannot conceal a required arithmetic error or establish an all-undefined family.
+cannot conceal a required arithmetic error or the warning of an omission.
 
 The preservation argument concerns possible heads, not answer-set truth.
 Removing these flat negative non-inputs leaves the positive occurrence order,

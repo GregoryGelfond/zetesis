@@ -3,8 +3,22 @@
 use crate::support::finite_bindings::{expected, native};
 use zetesis_reference_support::{admit, formula};
 use zetesis_themelios::{
-    ExpansionFailure, FormulaFailure, FormulaLimits, observation::EvaluationError,
+    AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaWarning,
+    observation::EvaluationError,
 };
+
+/// The statement of `admitted`'s one warning, which reports a zero divisor
+/// omitted from an instance of that statement.
+fn omitted_statement(admitted: &AdmittedFormula) -> &str {
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    admitted
+        .source()
+        .expect("source input")
+        .slice(location.location().expect("parsed source").span)
+        .unwrap()
+}
 
 #[test]
 fn comparison_heads_do_not_bind_source_variables() {
@@ -20,41 +34,61 @@ fn comparison_heads_do_not_bind_source_variables() {
 }
 
 #[test]
-fn comparison_head_failures_keep_source_locations() {
-    for (source, expected) in [
-        ("d(0).1/X=1:-d(X).", EvaluationError::Undefined),
-        ("d(1).X+2147483647=0:-d(X).", EvaluationError::Overflow),
-        ("d(0).2<1<1/X:-d(X).", EvaluationError::Undefined),
-    ] {
-        let Err(failure) = admit(source, &FormulaLimits::default()) else {
-            panic!("{source}: expected {expected}");
-        };
+fn a_comparison_head_overflow_keeps_its_source_location() {
+    let source = "d(1).X+2147483647=0:-d(X).";
+    let expected = EvaluationError::Overflow;
+    let Err(failure) = admit(source, &FormulaLimits::default()) else {
+        panic!("{source}: expected {expected}");
+    };
+    assert!(
+        matches!(&failure,
+            FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. })
+                if error == &expected),
+        "{source}: {failure}"
+    );
+    let diagnostics = failure.diagnostics();
+    assert!(!diagnostics.is_empty(), "{source}");
+    for diagnostic in diagnostics {
+        let span = diagnostic.primary().location.span;
+        let start = usize::try_from(span.start().get()).unwrap();
+        let end = usize::try_from(span.end().get()).unwrap();
         assert!(
-            matches!(&failure,
-                FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. })
-                    if error == &expected),
-            "{source}: {failure}"
+            source
+                .get(start..end)
+                .is_some_and(|text| text.contains('/') || text.contains('+')),
+            "{source}: {diagnostic:?}"
         );
-        let diagnostics = failure.diagnostics();
-        assert!(!diagnostics.is_empty(), "{source}");
-        for diagnostic in diagnostics {
-            let span = diagnostic.primary().location.span;
-            let start = usize::try_from(span.start().get()).unwrap();
-            let end = usize::try_from(span.end().get()).unwrap();
-            assert!(
-                source
-                    .get(start..end)
-                    .is_some_and(|text| text.contains('/') || text.contains('+')),
-                "{source}: {diagnostic:?}"
-            );
-        }
     }
+}
+
+#[test]
+fn a_comparison_head_zero_divisor_warns_at_its_rule() {
+    // The head is undefined at X = 0: that instance is omitted, not read as
+    // a violated requirement, and the rule keeps the warning.
+    let admitted = formula("d(0).1/X=1:-d(X).");
+    assert_eq!(omitted_statement(&admitted), "1/X=1:-d(X).");
+    assert_eq!(native(&admitted), expected(&[&["d(0)"]]));
+}
+
+#[test]
+fn a_chain_head_with_an_undefined_link_is_omitted_whole() {
+    // The link 1<1/X divides by zero at X = 0, so the chain is undefined
+    // there and the instance is omitted with the rule's warning, although
+    // the link 2<1 is false whatever X is. clingo 5.8.2 decides each link
+    // apart and keeps the false one as a violated requirement: it has no
+    // answer set here.
+    let admitted = formula("d(0).2<1<1/X:-d(X).");
+    assert_eq!(omitted_statement(&admitted), "2<1<1/X:-d(X).");
+    assert_eq!(native(&admitted), expected(&[&["d(0)"]]));
 }
 
 #[test]
 fn excluded_body_rows_do_not_reach_comparison_heads() {
     for source in ["d(0).1/X=1:-d(X),X!=0.", "d(0).1/X=1:-d(X),1=2."] {
-        assert_eq!(native(&formula(source)), expected(&[&["d(0)"]]), "{source}");
+        let admitted = formula(source);
+        // A head that was reached would divide by zero and leave a warning.
+        assert!(admitted.warnings().is_empty(), "{source}");
+        assert_eq!(native(&admitted), expected(&[&["d(0)"]]), "{source}");
     }
 }
 
@@ -81,49 +115,66 @@ fn comparison_constraints_retain_authored_origins() {
 }
 
 #[test]
-fn head_truth_does_not_exclude_body_failures() {
-    // The head's truth cannot act as an independent false body comparison.
+fn head_truth_does_not_hide_body_zero_divisors() {
+    // The head's truth cannot act as an independent false body comparison:
+    // whatever it is, the body's division is reached, the instance is
+    // omitted and the rule keeps the warning.
     // Boolean controls establish the same body-validation boundary.
     for head in ["#true", "#false", "X=X", "X!=X", "not X=X", "not not X=X"] {
-        let source = format!("d(0).{head}:-d(X),1/X=1.");
-        assert!(
-            matches!(
-                admit(&source, &FormulaLimits::default()),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                    error: EvaluationError::Undefined,
-                    ..
-                }))
-            ),
-            "{source}"
-        );
+        let rule = format!("{head}:-d(X),1/X=1.");
+        let admitted = formula(&format!("d(0).{rule}"));
+        assert_eq!(omitted_statement(&admitted), rule);
+        assert_eq!(native(&admitted), expected(&[&["d(0)"]]), "{rule}");
     }
 }
 
 #[test]
-fn head_truth_preserves_nested_body_failures() {
+fn head_truth_does_not_hide_nested_aggregate_zero_divisors() {
+    // The count's one element divides by zero and is omitted, leaving the
+    // empty count 0: the body holds, so a false head leaves no answer set.
+    // The rule keeps the warning whatever its head.
+    for (head, holds) in [
+        ("#true", true),
+        ("#false", false),
+        ("1=1", true),
+        ("1!=1", false),
+    ] {
+        let rule = format!("{head}:-#count{{X:d(X),1/X=1}}=0.");
+        let admitted = formula(&format!("d(0).{rule}"));
+        assert_eq!(omitted_statement(&admitted), rule);
+        let models = if holds {
+            expected(&[&["d(0)"]])
+        } else {
+            expected(&[])
+        };
+        assert_eq!(native(&admitted), models, "{rule}");
+    }
+}
+
+#[test]
+fn head_truth_does_not_hide_nested_consequent_zero_divisors() {
+    // The consequent divides by zero under its condition d(0), so it is
+    // false there and the body fails: the answer set is the same whatever
+    // the head. The rule keeps the warning.
     for head in ["#true", "#false", "1=1", "1!=1"] {
-        for body in ["1/X=1:d(X)", "#count{X:d(X),1/X=1}=0"] {
-            let source = format!("d(0).{head}:-{body}.");
-            assert!(
-                matches!(
-                    admit(&source, &FormulaLimits::default()),
-                    Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                        error: EvaluationError::Undefined,
-                        ..
-                    }))
-                ),
-                "{source}"
-            );
-        }
+        let rule = format!("{head}:-1/X=1:d(X).");
+        let admitted = formula(&format!("d(0).{rule}"));
+        assert_eq!(omitted_statement(&admitted), rule);
+        assert_eq!(native(&admitted), expected(&[&["d(0)"]]), "{rule}");
     }
 }
 
 #[test]
 fn head_truth_preserves_nested_body_warnings() {
+    // Neither body holds: the consequent is false under d(0), where it
+    // divides by zero, and the count is 1, from d(1). So the answer set is
+    // the facts whatever the head, and the rule keeps its warning.
     for head in ["#true", "#false", "1=1", "1!=1"] {
         for body in ["1/X=1:d(X)", "#count{X:d(X),1/X=1}=0"] {
-            let source = format!("d(0;1).{head}:-{body}.");
-            assert_eq!(formula(&source).warnings().len(), 1, "{source}");
+            let rule = format!("{head}:-{body}.");
+            let admitted = formula(&format!("d(0;1).{rule}"));
+            assert_eq!(omitted_statement(&admitted), rule);
+            assert_eq!(native(&admitted), expected(&[&["d(0)", "d(1)"]]), "{rule}");
         }
     }
 }

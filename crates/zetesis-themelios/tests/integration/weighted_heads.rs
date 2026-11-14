@@ -17,7 +17,7 @@ use zetesis_algebra::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    admit_formula, prepare_formula,
+    FormulaWarning, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(167);
@@ -395,22 +395,33 @@ fn variable_weights_select_completed_rows() {
 
 #[test]
 fn negative_eligibility_cannot_hide_undefined_weights() {
-    let source = "d(0).e.0#sum{W:a:d(X),W=1/X,not e}0.";
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-        ),
-        "{error}"
+    let head = "0#sum{W:a:d(X),W=1/X,not e}0.";
+    let admitted = input(&format!("d(0).e.{head}"));
+    // The fact e makes the element ineligible, and its weight divides by
+    // zero at the one row. Ineligibility does not hide that: the element is
+    // omitted, so a is not even supported, and the statement keeps the
+    // warning.
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(location.location().expect("parsed source").source, SOURCE);
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        head
     );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    assert_eq!(
+        admitted
+            .atoms()
+            .iter()
+            .map(canonical)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["d(0)".to_owned(), "e".to_owned()])
+    );
+    assert_eq!(native(&admitted), native(&input("d(0).e.")));
 }
 
 #[test]

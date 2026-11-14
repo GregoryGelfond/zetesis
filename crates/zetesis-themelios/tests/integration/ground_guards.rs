@@ -11,7 +11,7 @@ use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,
+    FormulaLimits, FormulaResource, FormulaWarning, admit_bundle_formula, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -152,8 +152,6 @@ fn undefined_or_overflowing_guard_values_never_become_boolean_false() {
         "{p:not 1/0=0}.",
         "p:-#count{1:not 1/0=0}=1.",
         "d(2147483647).p:-d(X),not X+1=0.",
-        "d(0).p:-d(X),not (1,2)=(1,2,1/X).",
-        "d(0).p:-d(X),not not (1,2,1/X)!=(1,2).",
     ] {
         let error = input(source).unwrap_err();
         assert!(
@@ -164,6 +162,35 @@ fn undefined_or_overflowing_guard_values_never_become_boolean_false() {
             "{source}: {error}"
         );
         assert!(!error.diagnostics().is_empty());
+    }
+}
+
+#[test]
+fn undefined_guard_fields_omit_their_instances() {
+    // The tuples differ in shape whatever the division yields, which would
+    // make each negated guard true. The field divides by zero at the one
+    // binding, so the instance is omitted instead and p is not derived. The
+    // rule keeps the warning.
+    for rule in [
+        "p:-d(X),not (1,2)=(1,2,1/X).",
+        "p:-d(X),not not (1,2,1/X)!=(1,2).",
+    ] {
+        let program = input(&format!("d(0).{rule}")).unwrap();
+        let [FormulaWarning::ZeroDivisor { location }] = program.warnings() else {
+            panic!("{rule}: one zero-divisor warning: {:?}", program.warnings());
+        };
+        assert_eq!(location.location().expect("parsed source").source, SOURCE);
+        assert_eq!(
+            program
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
+            rule
+        );
+        let expected = native(&input("d(0).").unwrap());
+        assert_eq!(native(&program), expected, "{rule}");
+        assert_eq!(exhaustive(&program), expected, "{rule}");
     }
 }
 

@@ -2,6 +2,7 @@
 //! Slice1 uses only actual carrier events; occurrence replay remains absent.
 use super::*;
 use crate::formula_ground::families;
+use crate::test_support::atoms_named;
 
 fn compile_pair(source: &str) -> (Compiled, Compiled, families::testing::Counts) {
     let (shared, used) = families::testing::scoped(true, || {
@@ -144,8 +145,38 @@ fn shared_carrier_keeps_signed_required_and_typed_values() {
 }
 
 #[test]
-fn fatal_source_failure_keeps_exact_diagnostics_without_publication() {
-    let source = "d(1). {a}. ok :- d(X), N=#count{1:a,1/(1-X)>0}.";
+fn shared_carrier_omits_a_zero_divisor_element_with_a_warning() {
+    // The element's one instance divides by zero and is omitted, so the one
+    // family the carrier publishes, for X = 1, counts no tuple: `ok(0)` holds
+    // whatever `a` is, and no `ok(1)` exists.
+    let source = "d(1). {a}. ok(N) :- d(X), N=#count{1:a,1/(1-X)>0}.";
+    let events = same_truth(source);
+    assert_eq!(events.produced, 1);
+    assert_eq!(events.reused, 0);
+    assert_eq!(events.carrier_borrowed, 1);
+    assert_eq!(events.consumed, 1);
+    let shared =
+        families::testing::scoped(true, || ground(testing::prepare(source), None, None)).unwrap();
+    assert_eq!(
+        zero_divisor_statements(source, &shared.warnings),
+        ["ok(N) :- d(X), N=#count{1:a,1/(1-X)>0}."]
+    );
+    assert_eq!(atoms_named(&shared, "ok"), [unary("ok", 0)]);
+    assert_eq!(
+        answer_sets(&shared.theory, &shared.atoms),
+        atom_sets([
+            &[unary("d", 1), unary("ok", 0)],
+            &[unary("d", 1), unary("ok", 0), nullary("a")]
+        ])
+    );
+}
+
+/// An element that overflows under its one outer binding.
+const OVERFLOWING: &str = "d(1). {a}. ok(N) :- d(X), N=#count{1:a,X+2147483647>0}.";
+
+/// The failures of `source` with shared carriers and without them, in that
+/// order, and the family events of the shared route.
+fn refused(source: &str) -> (FormulaFailure, FormulaFailure, families::testing::Counts) {
     let (shared, events) = families::testing::scoped(true, || {
         let result = ground(testing::prepare(source), None, None);
         (result.unwrap_err(), families::testing::counts())
@@ -153,12 +184,23 @@ fn fatal_source_failure_keeps_exact_diagnostics_without_publication() {
     let ordinary = families::testing::scoped(false, || {
         ground(testing::prepare(source), None, None).unwrap_err()
     });
-    assert!(matches!(
-        shared,
-        FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation { .. })
-    ));
+    (shared, ordinary, events)
+}
+
+#[test]
+fn fatal_source_failure_keeps_exact_diagnostics() {
+    let (shared, ordinary, _) = refused(OVERFLOWING);
+    assert_eq!(
+        overflow_statement(OVERFLOWING, &shared, &ordinary),
+        "ok(N) :- d(X), N=#count{1:a,X+2147483647>0}."
+    );
     assert_eq!(shared.to_string(), ordinary.to_string());
     assert_eq!(shared.diagnostics(), ordinary.diagnostics());
+}
+
+#[test]
+fn fatal_source_failure_publishes_no_family() {
+    let (_, _, events) = refused(OVERFLOWING);
     assert_eq!(events.produced, 0);
     assert_eq!(events.reused, 0);
     assert_eq!(events.carrier_borrowed, 0);

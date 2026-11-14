@@ -48,19 +48,17 @@ Notable changes by release. Versions follow Semantic Versioning.
   substitutes every value. No admitted program's answer sets change. See
   [certain predicates](docs/book/architecture/grounding.md#certain-predicates).
   Observable effects other than time:
-  - Admission changes in both directions, because arithmetic is evaluated
-    only at the values such an assignment can still take: one when every
-    tuple is required, fewer than before when some are. That holds for the
-    assignment's own rule and for whatever reads its head, directly or
-    through other rules: a rule, a constraint, a choice body, an aggregate
-    element or a weak constraint. A family that is undefined at each of those
-    values is refused as entirely undefined, where a value that could not
-    occur had admitted it with a warning; clingo omits the instance with an
-    informational message and answers. So
-    `c(1..3). n(N) :- N = #count{D : c(D)}. z(X) :- n(N), X = 6/(N-3).` is
-    refused, as is `X = 60/((N-3)*(N-4)*(N-5))` over a count that can be 3, 4
-    or 5. A family that overflowed only at values that could not occur is
-    admitted.
+  - Arithmetic is evaluated only at the values such an assignment can still
+    take: one when every tuple is required, fewer than before when some are.
+    That holds for the assignment's own rule and for whatever reads its head,
+    directly or through other rules: a rule, a constraint, a choice body, an
+    aggregate element or a weak constraint. A family that overflowed only at
+    values that could not occur is admitted. A family that divides by zero at
+    each of the remaining values contributes no instance and keeps its
+    warning, by the zero-divisor entry below:
+    `c(1..3). n(N) :- N = #count{D : c(D)}. z(X) :- n(N), X = 6/(N-3).`
+    answers without an atom of `z`, as does `X = 60/((N-3)*(N-4)*(N-5))` over
+    a count that can be 3, 4 or 5.
   - A warning that only an unrealized value raised is no longer given.
   - The atoms and nodes a theory reports change, as do the objective
     priorities it retains: a priority only an unrealized value would open is
@@ -71,6 +69,29 @@ Notable changes by release. Versions follow Semantic Versioning.
   - Before a theory is published, emission checks that every atom it read as
     true is derived by unconditional ordinary roots, and refuses with the
     source-activity failure otherwise.
+- An instance that divides by zero is always omitted, with a warning. A
+  rule, constraint, choice element, aggregate element or objective element
+  whose every instance divides by zero was refused as an entirely undefined
+  family. It now contributes no instance and its statement warns, as it
+  already did when the family also held a defined instance; clingo omits the
+  same instances with an informational message. Overflow, arithmetic on a
+  value that is no number and an invalid exponent still refuse. So does an
+  undefined closed term such as `p(1/0).`, which is checked as written before
+  any substitution exists and which clingo drops. See
+  [numeric boundaries](docs/book/reference/language.md#numeric-boundaries-and-refusal-meaning).
+  - Programs refused for an entirely undefined family are now admitted.
+  - **The answer sets of some admitted programs change.** A conditional
+    literal keeps one instance for each binding of its condition, so a
+    consequent that divides by zero cannot be left out. It was: the
+    implication of a body conditional, or the disjunct of a head conditional,
+    disappeared for that binding. A body consequent with no defined
+    alternative is now false under its condition, and such a head is true
+    under it, as clingo grounds `#false : condition` and `#true : condition`.
+    `d(0;1). q(1). p :- q(1/X) : d(X).` derived `p` and no longer does;
+    `d(0;1). p(1/X) : d(X).` derived `p(1)` and no longer does. The earlier
+    answers disagreed with clingo.
+  - A source family's evidence records only whether a substitution divided
+    by zero (`ArithmeticFamilies`).
 - A walk orders its splits by what its region has decided. A chain is a
   conjunction or disjunction read over its operands; the region has shortened
   it when an operand is settled without settling the chain and two or more of
@@ -175,15 +196,14 @@ Notable changes by release. Versions follow Semantic Versioning.
   reached their fixed point, and reads their tuples as required when their
   conditions hold certain atoms. No admitted program's answer sets change.
   Observable effects:
-  - Such a rule takes fewer values, so admission changes in both directions,
-    as the entry on certain predicates above describes for a rule traversed
-    once; the same holds for whatever reads its head.
+  - Such a rule takes fewer values, with the effects the entry on certain
+    predicates above describes for a rule traversed once; the same holds for
+    whatever reads its head.
     `f(3). {p(N+1)} :- N = #max{V : p(V); V : f(V)}, N < 6.` was refused at
-    `#inf + 1` and now has its answer set `f(3)`.
-    `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)}, N < 2, Y = 6/(N-1).`
-    answered `f(3)` with a warning, because the count 0 was defined; its one
-    value is now 1, which divides by zero, and it is refused as entirely
-    undefined, where clingo omits the instance and answers.
+    `#inf + 1` and now has its answer set `f(3)`. In
+    `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)}, N < 2, Y = 6/(N-1).` the
+    one value is now 1, which divides by zero, so the rule has no instance
+    and keeps its warning.
   - Reported support work changes for these rules: their first traversal
     comes later, and they propose fewer values.
   - A tuple is required only through certain predicates, so these forms still

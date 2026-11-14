@@ -322,12 +322,12 @@
   {
     "name": "Zetesis.AggregateDependencies.SupportReuse.merge_repeated",
     "file": "Zetesis/AggregateDependencies.lean",
-    "line": 450
+    "line": 448
   },
   {
     "name": "Zetesis.AggregateDependencies.SupportReuse.reuse_exact",
     "file": "Zetesis/AggregateDependencies.lean",
-    "line": 496
+    "line": 493
   },
   {
     "name": "Zetesis.AggregateInvariants.sum_invariant",
@@ -1147,52 +1147,87 @@
   {
     "name": "Zetesis.ArithmeticFamilies.empty_admissible",
     "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 48
+    "line": 62
   },
   {
     "name": "Zetesis.ArithmeticFamilies.empty_unwarned",
     "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 52
+    "line": 66
   },
   {
     "name": "Zetesis.ArithmeticFamilies.fatal_refused",
     "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 56
+    "line": 70
   },
   {
-    "name": "Zetesis.ArithmeticFamilies.filtered_witness",
-    "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 63
-  },
-  {
-    "name": "Zetesis.ArithmeticFamilies.zero_divisor_requires_defined",
-    "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 71
-  },
-  {
-    "name": "Zetesis.ArithmeticFamilies.entirely_undefined_refused",
+    "name": "Zetesis.ArithmeticFamilies.zero_divisor_admitted",
     "file": "Zetesis/ArithmeticFamilies.lean",
     "line": 77
   },
   {
+    "name": "Zetesis.ArithmeticFamilies.entirely_undefined_warned",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 83
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.warning_ignores_defined",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 97
+  },
+  {
     "name": "Zetesis.ArithmeticFamilies.admission_by_outcomes",
     "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 85
+    "line": 106
   },
   {
     "name": "Zetesis.ArithmeticFamilies.warning_by_outcomes",
     "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 91
+    "line": 112
   },
   {
-    "name": "Zetesis.ArithmeticFamilies.prefix_does_not_establish_refusal",
+    "name": "Zetesis.ArithmeticFamilies.admission_of_append",
     "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 100
+    "line": 121
   },
   {
-    "name": "Zetesis.ArithmeticFamilies.flattening_can_conceal_refusal",
+    "name": "Zetesis.ArithmeticFamilies.refusal_from_prefix",
     "file": "Zetesis/ArithmeticFamilies.lean",
-    "line": 106
+    "line": 127
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.prefix_does_not_establish_admission",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 134
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.warning_of_append",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 140
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.undefined_consequent_false",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 153
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.undefined_consequent_excludes_condition",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 161
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.undefined_alternative_ignored",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 173
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.undefined_head_true",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 183
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.undefined_head_disjunct",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 191
   },
   {
     "name": "Zetesis.AssociativeWitnesses.disjunction_truth",

@@ -230,13 +230,20 @@
 'Zetesis.ArithmeticFamilies.empty_admissible' depends on axioms: [propext]
 'Zetesis.ArithmeticFamilies.empty_unwarned' depends on axioms: [propext]
 'Zetesis.ArithmeticFamilies.fatal_refused' does not depend on any axioms
-'Zetesis.ArithmeticFamilies.filtered_witness' does not depend on any axioms
-'Zetesis.ArithmeticFamilies.zero_divisor_requires_defined' does not depend on any axioms
-'Zetesis.ArithmeticFamilies.entirely_undefined_refused' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.zero_divisor_admitted' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.entirely_undefined_warned' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.warning_ignores_defined' depends on axioms: [propext]
 'Zetesis.ArithmeticFamilies.admission_by_outcomes' depends on axioms: [propext]
 'Zetesis.ArithmeticFamilies.warning_by_outcomes' depends on axioms: [propext]
-'Zetesis.ArithmeticFamilies.prefix_does_not_establish_refusal' depends on axioms: [propext]
-'Zetesis.ArithmeticFamilies.flattening_can_conceal_refusal' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.admission_of_append' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.refusal_from_prefix' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.prefix_does_not_establish_admission' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.warning_of_append' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.undefined_consequent_false' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.undefined_consequent_excludes_condition' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.undefined_alternative_ignored' depends on axioms: [propext, Quot.sound]
+'Zetesis.ArithmeticFamilies.undefined_head_true' does not depend on any axioms
+'Zetesis.ArithmeticFamilies.undefined_head_disjunct' does not depend on any axioms
 'Zetesis.AssociativeWitnesses.disjunction_truth' depends on axioms: [propext, Quot.sound]
 'Zetesis.AssociativeWitnesses.conjunction_truth' depends on axioms: [propext, Quot.sound]
 'Zetesis.AssociativeWitnesses.disjunction_unit' depends on axioms: [propext, Classical.choice, Quot.sound]

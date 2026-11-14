@@ -8,9 +8,9 @@ use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
 use zetesis_themelios::{
     ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
-    ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, GroundingObserver,
-    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, HybridFeature,
-    HybridFormula, JoinStrategy, ProgramSite,
+    ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, FormulaWarning,
+    GroundingObserver, GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork,
+    HybridFeature, HybridFormula, JoinStrategy, ProgramSite,
 };
 
 fn model(owner: &HybridFormula, selected: &[&str]) -> Model {
@@ -242,10 +242,47 @@ fn defined_false_instances_witness_arithmetic_admission() {
     );
 }
 
+/// The statement of `owner`'s one warning, which reports a zero divisor
+/// omitted from an instance of that statement.
+fn omitted_statement(owner: &HybridFormula) -> &str {
+    let [FormulaWarning::ZeroDivisor { location }] = owner.warnings() else {
+        panic!("one zero-divisor warning: {:?}", owner.warnings());
+    };
+    owner
+        .source()
+        .expect("source input")
+        .slice(location.location().expect("parsed source").span)
+        .unwrap()
+}
+
+/// The family of these answer sets, spelled.
+fn family(
+    answer_sets: &[&[&str]],
+) -> std::collections::BTreeSet<std::collections::BTreeSet<String>> {
+    answer_sets
+        .iter()
+        .map(|atoms| atoms.iter().map(|atom| (*atom).to_owned()).collect())
+        .collect()
+}
+
+#[test]
+fn candidate_gates_cannot_hide_a_zero_divisor() {
+    // An interpretation can omit p, but the constraint's arithmetic is
+    // validated before every candidate. Its one instance divides by zero:
+    // it is omitted with a warning at admission, so no candidate violates
+    // the constraint.
+    let owner = hybrid("d(0). {p(X)}:-d(X). :-p(X),1/X=1.");
+    assert_eq!(omitted_statement(&owner), ":-p(X),1/X=1.");
+    assert_eq!(
+        verdict(&owner, &["d(0)", "p(0)"]),
+        ConstraintVerdict::Satisfied
+    );
+    assert_eq!(full_family(&owner), family(&[&["d(0)"], &["d(0)", "p(0)"]]));
+}
+
 #[test]
 fn candidate_gates_cannot_hide_fatal_source_arithmetic() {
     for source in [
-        "d(0). {p(X)}:-d(X). :-p(X),1/X=1.",
         "d(1). {p(X)}:-d(X). :-p(X),X+2147483647=0.",
         "d(0). {p(X)}:-d(X). :-p(X),1/X-(2147483647+1)=0.",
     ] {
@@ -265,14 +302,13 @@ fn candidate_gates_cannot_hide_fatal_source_arithmetic() {
 }
 
 #[test]
-fn independent_constraint_families_do_not_rescue_undefined_ones() {
-    let result = prepared("d(0). {p(X)}:-d(X). :-p(X),1/X=1. :-p(X),X=1.").ground_hybrid();
-    assert!(matches!(
-        result,
-        Err(FormulaFailure::Expansion(
-            ExpansionFailure::Evaluation { .. }
-        ))
-    ));
+fn an_independent_constraint_does_not_hide_an_omitted_one() {
+    // The second constraint is defined at X = 0 and false there. It is a
+    // separate statement: the first constraint's one instance is still
+    // omitted under its own warning, and neither constraint rejects p(0).
+    let owner = hybrid("d(0). {p(X)}:-d(X). :-p(X),1/X=1. :-p(X),X=1.");
+    assert_eq!(omitted_statement(&owner), ":-p(X),1/X=1.");
+    assert_eq!(full_family(&owner), family(&[&["d(0)"], &["d(0)", "p(0)"]]));
 }
 
 #[test]

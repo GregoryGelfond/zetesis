@@ -5,7 +5,9 @@ use crate::formula::Compiled;
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode};
 use crate::formula_support::{Context, Probe, testing};
 use crate::grounding_observer::{GroundingPhase, Profile};
-use crate::test_support::Observer;
+use crate::test_support::{
+    Observer, answer_sets, atom_sets, compiled_atoms, overflow_statement, zero_divisor_statements,
+};
 use crate::{FormulaFailure, FormulaResource, GroundingWork as Receipt};
 use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Sign, ValueNode, ValueNodeRef};
@@ -413,16 +415,56 @@ fn structural_deltas_preserve_formula_semantics() {
 fn structural_deltas_preserve_arithmetic_evidence() {
     let (actual, _) = equivalent("p(f(0)).p(f(1)).r(Y):-p(f(X)),Y=1/X.");
     assert_eq!(actual.warnings.len(), 1);
-    for source in [
-        "p(f(0)).r(Y):-p(f(X)),Y=1/X.",
-        "p(f(0)).r(Y):-p(f(X)),Y=1/X,X=0.",
+    // The rule's one instance divides by zero and is omitted with a warning,
+    // as the reference omits it: the fact is the only atom and answer set.
+    let facts = [atom(
+        "p",
+        vec![value(vec![function("f", 1), ValueNode::Number(0)])],
+    )];
+    for (source, statement) in [
+        ("p(f(0)).r(Y):-p(f(X)),Y=1/X.", "r(Y):-p(f(X)),Y=1/X."),
+        (
+            "p(f(0)).r(Y):-p(f(X)),Y=1/X,X=0.",
+            "r(Y):-p(f(X)),Y=1/X,X=0.",
+        ),
+    ] {
+        let (actual, _) = equivalent(source);
+        assert_eq!(
+            zero_divisor_statements(source, &actual.warnings),
+            [statement],
+            "{source}"
+        );
+        assert_eq!(compiled_atoms(&actual), facts, "{source}");
+        assert_eq!(
+            answer_sets(&actual.theory, &actual.atoms),
+            atom_sets([&facts]),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn structural_deltas_preserve_arithmetic_failures() {
+    for (source, statement) in [
+        (
+            "p(f(1)).r(Y):-p(f(X)),Y=X+2147483647.",
+            "r(Y):-p(f(X)),Y=X+2147483647.",
+        ),
+        (
+            "p(f(1)).r(Y):-p(f(X)),Y=X+2147483647,X=1.",
+            "r(Y):-p(f(X)),Y=X+2147483647,X=1.",
+        ),
     ] {
         let (actual, visits) = compiled(source, true);
         let (reference, _) = compiled(source, false);
         assert!(visits > 0);
         let actual = actual.unwrap_err();
         let reference = reference.unwrap_err();
-        assert!(matches!(actual.cause(), FormulaFailure::Expansion(_)));
+        assert_eq!(
+            overflow_statement(source, &actual, &reference),
+            statement,
+            "{source}"
+        );
         assert_eq!(actual.to_string(), reference.to_string());
     }
 }

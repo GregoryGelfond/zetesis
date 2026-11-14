@@ -1053,17 +1053,35 @@ unfinished families and introduces no new semantic atoms.
 
 [`ArithmeticFamilies`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ArithmeticFamilies.lean)
 specifies admission from the classified outcomes of a complete substitution
-family. Empty joins are admissible and silent. A defined but false substitution
-is a valid definedness witness. Fatal evaluation failures cannot be rescued by
-other substitutions. Reordering or revisiting the same outcomes preserves both
-admission and warnings.
+family. Empty joins are admissible and silent. A zero divisor is omitted and
+warned of whether or not another substitution is defined, so a family of zero
+divisors alone is admitted with no instance. Fatal evaluation failures cannot
+be rescued by other substitutions. Reordering or revisiting the same outcomes
+preserves both admission and warnings.
 
-The counterexamples state two required boundaries: an unfinished prefix cannot
-establish that a family is entirely undefined, and combining families from
-different outer bindings can conceal a local refusal. Rust must establish
-complete original-family coverage, joint expression definedness, correct
-zero-divisor classification and those local scopes. Normalized fragments must
-preserve their original family identity; sharing a diagnostic span is not
+Admission is pointwise in any partition of a family, so it does not depend on
+where local scopes are drawn. A refusal can be read from a prefix; an admission
+cannot, since a later substitution can fail fatally.
+
+A conditional literal keeps the instance under its condition. `Consequent` is
+the disjunction of the values a body conditional's alternatives take, with
+`none` for an alternative that divides by zero: `undefined_consequent_false`
+and `undefined_consequent_excludes_condition` say that with none defined the
+instance holds exactly when its condition does not, and
+`undefined_alternative_ignored` that a defined alternative decides it. `Head`
+is every value a conditional disjunct's head takes: `undefined_head_true` and
+`undefined_head_disjunct` say that with none defined the disjunct holds
+exactly when its condition does. `formula_conditional` emits the first as an
+implication to false, and `formula_ground::undefined_disjuncts` the second as
+the disjunct of a written `#true : condition`; the laws state those values,
+not that emission. `Head` is used at its empty case alone: a head that takes
+several values under one binding is emitted as separate disjuncts, not as
+their conjunction.
+
+Rust must establish
+complete original-family coverage and correct zero-divisor classification. A
+warning belongs to its statement: normalized fragments must preserve their
+original statement identity; sharing a diagnostic span is not
 enough. These laws do not certify the source walker, its work limits or checked
 arithmetic. An arithmetic fault and a missing positive fact are different objects.
 
@@ -1074,7 +1092,7 @@ body assignments, and every body and head key is covered by those inputs.
 Head suffixes may copy values or construct terms from covered inputs, retaining
 ordinary construction limits; arithmetic head expressions decline. It can then omit a scan
 that would discover neither an undefined instance nor a fatal diagnostic. The
-proof attempt does not construct a definedness witness or claim that a join is
+proof attempt does not claim that a join is
 nonempty; empty required columns and any unproved sibling retain the ordinary
 whole-family traversal. `ArithmeticFamilies` does not prove this Rust classifier,
 its original-family association, scalar/key coverage, temporary storage or
@@ -3295,7 +3313,7 @@ continuation whose complete source read summary agrees under the same rule and
 support. `AggregateDependencies.SupportReuse.reuse_exact` states the separate
 mathematical law: a finite traversal may coalesce consecutive projections when
 all continuations are complete and equal projections determine the same head
-image, defined flag and first-zero diagnostic. Head union and this evidence are
+image and first-zero diagnostic. Head union and this evidence are
 idempotent, with the earliest diagnostic retained. The module includes a
 counterexample showing that head-image equality alone is insufficient.
 This law concerns completed observations; an immediate fatal failure or an

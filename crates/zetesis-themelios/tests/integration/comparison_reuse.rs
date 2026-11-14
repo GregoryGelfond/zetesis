@@ -4,10 +4,9 @@ use crate::support::source_cases;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
-use themelios_program::term::EvalError;
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning};
 
 const FIXTURE: &str = include_str!("../fixtures/comparison-reuse.jsonl");
 const FALSE_FILTER_SOURCE: &str = "d(0).p:-d(X),X!=0,1/X>0.";
@@ -36,30 +35,38 @@ fn an_earlier_false_comparison_excludes_the_substitution() {
         .collect();
     assert_eq!(excluded.len(), 1);
     assert_eq!(excluded[0].source, FALSE_FILTER_SOURCE);
-    // X != 0 excludes the substitution X = 0, so 1/X is never reached and the
-    // native family is the reference's.
+    // X != 0 excludes the substitution X = 0, so 1/X is never reached: no
+    // warning is kept, and the native family is the reference's.
     let input = reference::admit(FALSE_FILTER_SOURCE, &FormulaLimits::default())
         .expect("the excluded substitution reaches no operation");
+    assert!(input.warnings().is_empty());
     assert_eq!(reference::exhaustive(&input), excluded[0].records);
 }
 
 #[test]
-fn comparisons_cannot_admit_an_entirely_undefined_family() {
-    for source in [
-        "d(0).p:-d(X),1/X=0,X=0,X+0=0.",
-        "d(0).p:-d(X),X=0,1/X=0,X+0=0.",
-    ] {
-        let error = reference::admit(source, &FormulaLimits::default())
-            .expect_err("a complete row still evaluates every inconclusive comparison");
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                    error: EvalError::Undefined,
-                    ..
-                })
-            ),
-            "{source}: {error:?}"
+fn a_complete_row_evaluates_every_inconclusive_comparison() {
+    // X=0 and X+0=0 hold on the one row, and neither stands in for 1/X=0:
+    // the division is still evaluated, its instance is omitted and the rule
+    // keeps the warning.
+    for rule in ["p:-d(X),1/X=0,X=0,X+0=0.", "p:-d(X),X=0,1/X=0,X+0=0."] {
+        let source = format!("d(0).{rule}");
+        let input = reference::admit(&source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error:?}"));
+        let [FormulaWarning::ZeroDivisor { location }] = input.warnings() else {
+            panic!("{source}: one zero-divisor warning: {:?}", input.warnings());
+        };
+        assert_eq!(
+            input
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
+            rule
+        );
+        assert_eq!(
+            reference::exhaustive(&input),
+            Records::from([(["d(0)".to_owned()].into(), None)]),
+            "{source}"
         );
     }
 }

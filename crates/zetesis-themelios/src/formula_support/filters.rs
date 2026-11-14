@@ -17,6 +17,12 @@ pub(super) enum Selection {
     Defined(bool),
     Excluded,
     Zero(ExpansionFailure),
+    /// The row is defined and no comparison excludes it; only the guard
+    /// checked beside it divides by zero.
+    UndefinedGuard {
+        passes: bool,
+        error: ExpansionFailure,
+    },
 }
 
 impl Join<'_, '_> {
@@ -98,15 +104,11 @@ impl Join<'_, '_> {
                 &mut failure,
             )?;
         }
-        for expression in self.head_bounds.iter().map(|guard| &guard.bound).chain(
-            self.checked_guard
-                .into_iter()
-                .flat_map(crate::formula_guard::Guard::expressions),
-        ) {
+        for guard in self.head_bounds {
             let result = self
                 .evaluation
                 .source_expression(
-                    expression,
+                    &guard.bound,
                     |variable| binding.key(variable, location),
                     computation,
                     limits,
@@ -121,13 +123,69 @@ impl Join<'_, '_> {
                 &mut failure,
             )?;
         }
-        match failure {
-            None => Ok(Selection::Defined(passes)),
-            Some(_) if excluded => Ok(Selection::Excluded),
-            Some((error, true)) => Ok(Selection::Zero(error)),
-            Some((error, false)) => Err(error.into()),
+        let undefined = consequent_zero(
+            self.checked_guard,
+            &mut self.evaluation,
+            &binding,
+            &mut failure,
+            super::Context::new(computation, limits, counters, location),
+        )?;
+        match (failure, undefined) {
+            (None, Some(error)) if !excluded => Ok(Selection::UndefinedGuard { passes, error }),
+            (None, _) => Ok(Selection::Defined(passes)),
+            (Some(_), _) if excluded => Ok(Selection::Excluded),
+            (Some((error, true)), _) => Ok(Selection::Zero(error)),
+            (Some((error, false)), _) => Err(error.into()),
         }
     }
+}
+
+/// The zero divisor that `guard`, checked beside a row, meets under `binding`,
+/// if any. The guard is a consequent, not part of the row. Its fatal failure
+/// goes to `failure`, where it refuses as the row's own would and takes
+/// precedence over a zero divisor. Its zero divisor is returned apart: the
+/// row stays, and the consequent is read as false.
+fn consequent_zero(
+    guard: Option<&crate::formula_guard::Guard>,
+    evaluation: &mut Evaluation,
+    binding: &Binding,
+    failure: &mut Option<(ExpansionFailure, bool)>,
+    context: super::Context<'_, &mut Computation<'_, '_>>,
+) -> Result<Option<ExpansionFailure>, FormulaFailure> {
+    let super::Context {
+        computation,
+        work:
+            super::GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    let mut undefined = None;
+    for expression in guard
+        .into_iter()
+        .flat_map(crate::formula_guard::Guard::expressions)
+    {
+        match evaluation.source_expression(
+            expression,
+            |variable| binding.key(variable, location),
+            computation,
+            limits,
+            counters,
+            location,
+        ) {
+            Ok(_) => {}
+            Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
+                if evaluation.zero_divisor() {
+                    undefined.get_or_insert(error);
+                } else if failure.as_ref().is_none_or(|(_, zero)| *zero) {
+                    *failure = Some((error, false));
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(undefined)
 }
 
 /// Available checks may exclude a failed generator. A failed check never

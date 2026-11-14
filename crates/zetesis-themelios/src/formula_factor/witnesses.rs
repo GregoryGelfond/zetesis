@@ -3,11 +3,14 @@ use super::testing::{self as route, Counts, Point};
 use crate::formula::Compiled;
 use crate::formula_ground::{ground, ground_retained};
 use crate::formula_support::testing;
-use crate::test_support::compiled_atoms;
-use crate::{ExpansionFailure, FormulaFailure, FormulaResource};
+use crate::test_support::{
+    atoms_named, compiled_atoms, overflow_statement, zero_divisor_statements,
+};
+use crate::{FormulaFailure, FormulaResource};
 use zetesis_algebra::Cancellation;
 use zetesis_core::Atom;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+use zetesis_test_support::programs::unary;
 
 fn compile(source: &str, factored: bool) -> (Compiled, Counts) {
     let (result, counts) = route::scoped(factored, || ground(testing::prepare(source), None, None));
@@ -160,34 +163,79 @@ fn rejected_families_publish_no_witnesses() {
     }
 }
 
-fn same_error(source: &str) {
-    let (shared, _) = route::scoped(true, || ground(testing::prepare(source), None, None));
-    let (reference, _) = route::scoped(false, || ground(testing::prepare(source), None, None));
-    match (shared.unwrap_err(), reference.unwrap_err()) {
-        (
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, location }),
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                error: expected,
-                location: site,
-            }),
-        ) => {
-            assert_eq!(error, expected);
-            assert_eq!(location, site);
-        }
-        errors => panic!("expected identical typed arithmetic failures: {errors:?}"),
-    }
+/// The factoring events of `source` and its `q` atoms, after checking that
+/// factoring leaves it the truth of the unfactored reference and one
+/// zero-divisor warning, for `statement`.
+fn omitting(source: &str, statement: &str) -> (Counts, Vec<Atom>) {
+    let counts = same_truth(source);
+    let (shared, _) = compile(source, true);
+    assert_eq!(
+        zero_divisor_statements(source, &shared.warnings),
+        [statement],
+        "{source}"
+    );
+    (counts, atoms_named(&shared, "q"))
 }
 
 #[test]
 fn witness_factoring_preserves_arithmetic_evidence() {
-    for source in [
-        "d(0,a).d(0,b). {p}. q(N) :- d(X,_), N=#count{1:p,1/X>0}.",
-        "d(0,a).d(0,b). {p}. q(N+1/X) :- d(X,_), N=#count{1:p}.",
-    ] {
-        same_error(source);
-    }
+    // The element's one tuple divides by zero and is omitted, so the count is
+    // over no tuple: both witnesses continue to its one value, 0.
+    assert_eq!(
+        omitting(
+            "d(0,a).d(0,b). {p}. q(N) :- d(X,_), N=#count{1:p,1/X>0}.",
+            "q(N) :- d(X,_), N=#count{1:p,1/X>0}.",
+        ),
+        (
+            Counts {
+                runs: 1,
+                witnesses: 2,
+                continuations: 1
+            },
+            vec![unary("q", 0)]
+        )
+    );
+    // Every head value divides by zero, so the rule has no instance and its
+    // run publishes no witness.
+    assert_eq!(
+        omitting(
+            "d(0,a).d(0,b). {p}. q(N+1/X) :- d(X,_), N=#count{1:p}.",
+            "q(N+1/X) :- d(X,_), N=#count{1:p}.",
+        ),
+        (
+            Counts {
+                runs: 1,
+                witnesses: 0,
+                continuations: 0
+            },
+            Vec::new()
+        )
+    );
     let source = "d(0,a).d(0,b).d(1,a). {p}. q(N) :- d(X,_), N=#count{1:p}, N/X>0.";
     assert!(same_truth(source).runs > 0);
+}
+
+#[test]
+fn witness_factoring_preserves_arithmetic_failures() {
+    for (source, statement) in [
+        // The element overflows under its one outer binding.
+        (
+            "d(1,a).d(1,b). {p}. q(N) :- d(X,_), N=#count{1:p,X+2147483647>0}.",
+            "q(N) :- d(X,_), N=#count{1:p,X+2147483647>0}.",
+        ),
+        // Every head value overflows.
+        (
+            "d(1,a).d(1,b). {p}. q(N+X+2147483647) :- d(X,_), N=#count{1:p}.",
+            "q(N+X+2147483647) :- d(X,_), N=#count{1:p}.",
+        ),
+    ] {
+        let (shared, _) = route::scoped(true, || ground(testing::prepare(source), None, None));
+        let (reference, _) = route::scoped(false, || ground(testing::prepare(source), None, None));
+        assert_eq!(
+            overflow_statement(source, &shared.unwrap_err(), &reference.unwrap_err()),
+            statement
+        );
+    }
 }
 
 #[test]

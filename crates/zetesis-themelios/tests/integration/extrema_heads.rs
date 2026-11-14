@@ -13,11 +13,10 @@ use crate::support::objective_boundaries;
 use cases::sources;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
-use themelios_program::term::EvalError;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
-    prepare_formula,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
+    admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(179);
@@ -428,25 +427,27 @@ fn local_values_require_independent_bindings() {
 }
 
 #[test]
-fn undefined_generated_values_refuse_the_whole_source() {
-    let error = admit_formula(
-        "0<=#min{Y:a:d(X),Y=1/X}.d(0).".into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                error: EvalError::Undefined,
-                ..
-            })
-        ),
-        "{error}"
+fn an_undefined_generated_value_omits_its_element() {
+    let statement = "0<=#min{Y:a:d(X),Y=1/X}.";
+    let admitted = input(&format!("{statement}d(0)."));
+    // The element's one value divides by zero, so the element is omitted
+    // and a keeps no permission. The statement keeps the warning.
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(location.location().expect("parsed source").source, SOURCE);
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        statement
     );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    assert_eq!(
+        native(&admitted),
+        Models::from([BTreeSet::from(["d(0)".into()])])
+    );
 }
 
 #[test]

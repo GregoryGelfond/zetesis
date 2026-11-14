@@ -66,11 +66,9 @@ below; their existence is not a claim of undefined input or resource exhaustion.
 
 Source arithmetic follows the
 [complete-family policy](language.md#numeric-boundaries-and-refusal-meaning):
-only evaluated numeric division or remainder by zero can omit an instance with
-a warning, and only when that same original family has a jointly defined
-instance. A defined but false instance supplies a witness; an empty positive
-join is silent. Local elements are assessed separately for each fixed outer
-binding. Fatal arithmetic failures in the reached phase, including independent
+only evaluated numeric division or remainder by zero can omit an instance,
+which it always does, with a warning for its statement. A family of such
+instances alone contributes nothing; an empty positive join is silent. Fatal arithmetic failures in the reached phase, including independent
 expression branches after a zero divisor, still refuse admission. An omitted
 body or condition does not advance to a later head or consequent phase.
 Closed-term preparation and

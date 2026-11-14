@@ -6,8 +6,8 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use zetesis_reference_support::{admit, formula, prepare, prepared, resource_limits};
 use zetesis_themelios::{
-    AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_formula,
+    AnalysisBasis, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
+    admit_formula,
 };
 
 // Explicit finite substitutions retain each whole supporting atom. Arithmetic
@@ -211,16 +211,30 @@ fn aggregate_proposals_must_match_captured_arguments() {
 }
 
 #[test]
-fn undefined_arithmetic_requires_a_complete_row() {
+fn a_zero_divisor_warns_only_on_a_complete_row() {
+    // With no p atom, or no d atom to bind X, no row is complete: X/0 is
+    // never evaluated and no warning is kept.
     for source in ["d(1).q(X):-d(X),p(X/0).", "p(1).q(X):-d(X),p(X/0)."] {
-        assert!(admit(source, &FormulaLimits::default()).is_ok(), "{source}");
+        let admitted = admit(source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert!(admitted.warnings().is_empty(), "{source}");
     }
-    assert!(matches!(
-        admit("d(1).p(1).q(X):-d(X),p(X/0).", &FormulaLimits::default()),
-        Err(FormulaFailure::Expansion(
-            ExpansionFailure::Evaluation { .. }
-        ))
-    ));
+    // The one complete row divides by zero: its instance is omitted and the
+    // rule keeps the warning.
+    let rule = "q(X):-d(X),p(X/0).";
+    let admitted = formula(&format!("d(1).p(1).{rule}"));
+    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
+        panic!("one zero-divisor warning: {:?}", admitted.warnings());
+    };
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        rule
+    );
+    assert_eq!(native(&admitted), native(&formula("d(1).p(1).")));
 }
 
 #[test]

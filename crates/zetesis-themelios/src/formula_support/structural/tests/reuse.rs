@@ -1,5 +1,8 @@
 use super::*;
-use crate::ExpansionFailure;
+use crate::test_support::{
+    answer_sets, atom_sets, atoms_named, compiled_atoms, overflow_statement,
+    zero_divisor_statements,
+};
 
 fn reuse_rows(source: &str, enabled: bool) -> (Run, usize) {
     let mut output = None;
@@ -129,7 +132,34 @@ fn later_support_rounds_keep_complete_producers() {
 
 #[test]
 fn prepared_arguments_preserve_arithmetic_diagnostics() {
+    // Both instances of the rule divide by zero and are omitted with its one
+    // warning, whether or not the prepared argument is reused: `r` has no
+    // atom, and the facts are the one answer set.
     let source = "k(0).t(1..2).p(f(0)).p(other(1..3)).r(X,Y,Z):-k(X),t(Y),p(f(X)),Z=1/X.";
+    let (actual, hits) = theory(source, true);
+    let (reference, skipped) = theory(source, false);
+    assert!(hits > 0);
+    assert_eq!(skipped, 0);
+    assert_eq!(
+        zero_divisor_statements(source, &actual.warnings),
+        ["r(X,Y,Z):-k(X),t(Y),p(f(X)),Z=1/X."]
+    );
+    assert_eq!(actual.warnings, reference.warnings);
+    let atoms = compiled_atoms(&actual);
+    assert_eq!(atoms, compiled_atoms(&reference));
+    assert_eq!(atoms.len(), 7);
+    assert!(atoms_named(&actual, "r").is_empty());
+    for compiled in [&actual, &reference] {
+        assert_eq!(
+            answer_sets(&compiled.theory, &compiled.atoms),
+            atom_sets([&atoms])
+        );
+    }
+}
+
+#[test]
+fn prepared_arguments_preserve_arithmetic_failures() {
+    let source = "k(1).t(1..2).p(f(1)).p(other(1..3)).r(X,Y,Z):-k(X),t(Y),p(f(X)),Z=X+2147483647.";
     let failure = |enabled| {
         reuse_scoped(enabled, || {
             crate::formula_ground::ground(testing::prepare(source), None, None).unwrap_err()
@@ -138,10 +168,10 @@ fn prepared_arguments_preserve_arithmetic_diagnostics() {
     };
     let actual = failure(true);
     let reference = failure(false);
-    assert!(matches!(
-        actual,
-        FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-    ));
+    assert_eq!(
+        overflow_statement(source, &actual, &reference),
+        "r(X,Y,Z):-k(X),t(Y),p(f(X)),Z=X+2147483647."
+    );
     assert_eq!(format!("{actual:?}"), format!("{reference:?}"));
 }
 

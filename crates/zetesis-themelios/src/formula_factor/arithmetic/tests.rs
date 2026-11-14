@@ -5,11 +5,12 @@ use crate::formula::Compiled;
 use crate::formula_ground::{ground, ground_retained};
 use crate::formula_ir::{HeadIr, LiteralIr};
 use crate::formula_support::{Counters, testing};
-use crate::test_support::compiled_atoms;
+use crate::test_support::{answer_sets, atom_sets, compiled_atoms, zero_divisor_statements};
 use crate::{ExpansionFailure, FormulaFailure, FormulaResource};
 use zetesis_algebra::Cancellation;
-use zetesis_core::Atom;
+use zetesis_core::{Atom, Value};
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+use zetesis_test_support::programs::atom;
 
 const INDEPENDENT: &str = "{p(1,a);p(1,b);q(2,a);q(2,b)}. h(X,X+1) :- p(X,_), q(X+1,_).";
 
@@ -205,28 +206,51 @@ fn connected_or_local_arithmetic_keeps_the_complete_join() {
 
 #[test]
 fn authoritative_arithmetic_failures_precede_factoring() {
-    for source in [
-        "p(0,a).q(1,a). h(X,1/X) :- p(X,_),q(1,_).",
-        "p(a,1).q(2,1). h(X,X+1) :- p(X,_),q(2,_).",
-    ] {
-        let (factored, counts) =
-            route::scoped(true, || ground(testing::prepare(source), None, None));
-        let (reference, _) = route::scoped(false, || ground(testing::prepare(source), None, None));
-        assert_eq!(counts, Counts::default());
-        match (factored.unwrap_err(), reference.unwrap_err()) {
-            (
-                FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, location }),
-                FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                    error: expected,
-                    location: site,
-                }),
-            ) => {
-                assert_eq!(error, expected);
-                assert_eq!(location, site);
-            }
-            failures => panic!("same typed arithmetic failure: {failures:?}"),
+    let source = "p(a,1).q(2,1). h(X,X+1) :- p(X,_),q(2,_).";
+    let (factored, counts) = route::scoped(true, || ground(testing::prepare(source), None, None));
+    let (reference, _) = route::scoped(false, || ground(testing::prepare(source), None, None));
+    assert_eq!(counts, Counts::default());
+    match (factored.unwrap_err(), reference.unwrap_err()) {
+        (
+            FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, location }),
+            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                error: expected,
+                location: site,
+            }),
+        ) => {
+            assert_eq!(error, expected);
+            assert_eq!(location, site);
         }
+        failures => panic!("same typed arithmetic failure: {failures:?}"),
     }
+}
+
+#[test]
+fn an_entirely_undefined_family_leaves_factoring_no_head_row() {
+    // The rule's one instance divides by zero and is omitted with a warning,
+    // so `h` has no row: certification completes over an empty head carrier
+    // and no producer is emitted.
+    let source = "p(0,a).q(1,a). h(X,1/X) :- p(X,_),q(1,_).";
+    assert_eq!(
+        same_truth(source),
+        Counts {
+            heads: 0,
+            certified: 1,
+            witnesses: 0,
+            emissions: 0
+        }
+    );
+    let (compiled, _) = compile(source, true);
+    assert_eq!(
+        zero_divisor_statements(source, &compiled.warnings),
+        ["h(X,1/X) :- p(X,_),q(1,_)."]
+    );
+    let fact = |name, number| atom(name, vec![Value::Number(number), Value::Symbol("a".into())]);
+    assert_eq!(compiled_atoms(&compiled), [fact("p", 0), fact("q", 1)]);
+    assert_eq!(
+        answer_sets(&compiled.theory, &compiled.atoms),
+        atom_sets([&[fact("p", 0), fact("q", 1)]])
+    );
 }
 
 #[test]

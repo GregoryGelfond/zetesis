@@ -359,20 +359,19 @@ and the exclusion role.
   `s(X,W)` is joined. Without it the join visits more rows; both solvers answer `p(1)`..`p(9)` either way. A failure
   such a prefix row meets is retained, as today, so admission does not change.
 - **Always false:** support completion and emission skip the fragment's joins, since a defined false body literal
-  produces no head and no ground instance. Family classification skips the fragment only when both hold:
-  1. the comparison's exclusion role is plan-decided, so it excludes every substitution;
-  2. every other expression of the fragment carries a static certificate, so every substitution is jointly defined.
-
-  Then every substitution is a defined, excluded witness of its source family (`proofs/Zetesis/ArithmeticFamilies.lean`),
-  and the fragment contributes `filtered` exactly when its positive join is nonempty, which takes one positive binding.
-  `d(1). p :- d(X), X/(1;0) > 5.` keeps its `filtered` witness from `X/1 > 5` and stays admitted with one warning,
-  from `X/0`. The two conditions keep out the substitutions that are not jointly defined and excluded:
-  - `d(1). p :- d(X), Y = X+1, Y > 5, 1/(X-1) = 0.` is refused today. `Y > 5` is statically false but over a
-    generated value, so it excludes nothing, the division by zero makes the family entirely undefined, and condition 1
-    keeps the program refused.
-  - `d(1). z(0). p :- d(X), z(Z), X > (5;0), X/Z > 0.` is refused today. The fragment with `X > 5` is false and
-    plan-decided, but `X/Z` has no certificate; an excluded but erroneous substitution is no witness
-    (`formula_support/family.rs`). Condition 2 keeps it refused.
+  produces no head and no ground instance. Family classification skips the fragment only when the comparison's
+  exclusion role is plan-decided, so that it excludes every substitution: an excluded substitution reaches nothing,
+  and so neither warns nor refuses (`proofs/Zetesis/ArithmeticFamilies.lean`). This was written for a family rule
+  that refused a family with no defined instance, and then asked a second condition, a static certificate for every
+  other expression of the fragment, so that the excluded substitutions could stand as the family's defined
+  witnesses. A zero divisor is now omitted whatever its family holds, no witness is needed, and the one condition
+  suffices.
+  `d(1). p :- d(X), X/(1;0) > 5.` stays admitted with one warning, from `X/0`. The condition keeps out a comparison
+  that is false without excluding:
+  `d(1). p :- d(X), Y = X+1, Y > 5, 1/(X-1) = 0.` is admitted with a warning. `Y > 5` is statically false but over a
+  generated value, so it excludes nothing, the division by zero is reached, and its fragment must still be
+  classified for the warning. In `d(1). z(0). p :- d(X), z(Z), X > (5;0), X/Z > 0.` the fragment with `X > 5` is
+  false and plan-decided and reaches nothing; the warning comes from the fragment with `X > 0`.
 
 **(1d) Static totality during support rounds.** Query: `integer(e)` with static certificates, for every arithmetic
 expression of a rule body that has a head. It grants prefix pruning (`Coverage::Selected`) for that rule's joins in
@@ -669,8 +668,8 @@ comparison forms.
   | `q(-5..5). r(1..9). p :- q(X), r(Y), X > 0, Y/X > 1.` | `p` with every fact, admitted with no warning; no consumer treats `Y/X` as defined |
   | `d(1). p :- d(X), X/(1;0) > 5.` | `d(1)`, admitted with one zero-divisor warning |
   | `{a}. b(5) :- a. :- b(X), X > 3.` | one answer set, ∅; under Stage 3, `b(5)` is fixed false and its producer kept as `:- a.` |
-  | `d(1). p :- d(X), Y = X+1, Y > 5, 1/(X-1) = 0.` | refused today (`zetesis::source-expansion`) and stays refused; clingo answers `d(1)` with an info message |
-  | `d(1). z(0). p :- d(X), z(Z), X > (5;0), X/Z > 0.` | refused today and stays refused; clingo answers `d(1) z(0)` with info messages |
+  | `d(1). p :- d(X), Y = X+1, Y > 5, 1/(X-1) = 0.` | `d(1)`, admitted with one zero-divisor warning, as clingo answers with an info message; refused before a zero divisor was always omitted |
+  | `d(1). z(0). p :- d(X), z(Z), X > (5;0), X/Z > 0.` | `d(1) z(0)`, admitted with one zero-divisor warning, as clingo answers with info messages; refused before a zero divisor was always omitted |
   | `q(0..5). p :- q(X), X = 1..5, X > 0, 1/X >= 0.` | `p` with every fact, admitted with no warning: `X = 1..5` is a membership test, so X's domain stays [0,5] and `X > 0` is not decided statically |
   | `q(-1..1). r(1..9). s(1..5,1..9). p(W) :- q(X), r(Y), Y/X > 1, s(X,W).` | `p(1)`..`p(9)` with every fact, admitted with no warning: a typed form must not divide by zero at the prefix X = 0 |
   | `q(-1..1). r(1..9). s(1..5,1..9). p(W) :- q(X), r(Y), X > 0, s(X,W).` | `p(1)`..`p(9)` with every fact, unchanged by (1b) dropping `X > 0`; its rows read are reported |
@@ -683,7 +682,7 @@ comparison forms.
 The proofs already state the parts this composes: set producers (`DomainProducers.transfer_monotone`,
 `derivation_covered`), integer envelopes (`IntegerEnvelopes`), the checked semantics (`ScalarArithmetic`), guard
 exactness (`DomainBindings.guarded_continuations_exact`) and the family policy (`ArithmeticFamilies.Admissible`,
-`prefix_does_not_establish_refusal`). New statements, in one module, `NumericDomains`:
+`prefix_does_not_establish_admission`). New statements, in one module, `NumericDomains`:
 
 1. **Image and refinement producers.** A producer's output is an operation applied to values drawn from each input's
    domain, met with guard refinements over `Integer` operands; the transfer is monotone and every derivation is
