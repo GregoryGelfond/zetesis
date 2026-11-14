@@ -29,8 +29,10 @@ pub(crate) struct Evaluation {
 }
 
 impl Evaluation {
-    /// A reused successful source value has no unavailable arithmetic output.
-    pub(super) fn clear_zero_divisor(&mut self) {
+    /// Forget the last operation's zero divisor: a reused successful source
+    /// value has no unavailable arithmetic output, and a failure another
+    /// owner evaluated is not this evaluation's.
+    pub(crate) fn clear_zero_divisor(&mut self) {
         self.zero_divisor = false;
     }
 

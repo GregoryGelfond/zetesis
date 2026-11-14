@@ -788,6 +788,13 @@ the choice of `p(1,1)`. If no `e(0,X)` fact is present, that local family is
 empty and has no arithmetic warning. An absent fact is not an undefined
 arithmetic value.
 
+One omission keeps no warning. An element of an aggregate assignment that
+divides by zero is omitted from the assignment's values, and its warning is
+kept through the rule's instance: when a later comparison of the rule rejects
+the value the assignment is left with, as `N != 0` does in
+`d(0). {a}. q(N) :- d(X), N = #count{1 : a, 1/X <= 1}, N != 0.`, the rule is
+admitted without one. The answer sets are unaffected.
+
 A conditional literal keeps one instance for each binding of its condition, so
 an instance whose consequent divides by zero is not left out: the condition
 still holds or fails there, and the instance is read by what remains of it.
@@ -805,7 +812,12 @@ still holds or fails there, and the instance is read by what remains of it.
 - In a disjunctive head, a disjunct whose head divides by zero in every
   instance under a binding is true under that binding, as a written
   `#true : d(0)` is, and derives no atom: `{d(0)}. d(1). p(1/X) : d(X).` has
-  the answer sets `{d(0), d(1)}` and `{d(1), p(1)}`.
+  the answer sets `{d(0), d(1)}` and `{d(1), p(1)}`. The alternatives of a
+  pooled head are read together under one binding, so a defined one is kept
+  and the head is true only where none is: `{d(0)}. p(1/X;2) : d(X).` has the
+  answer set `{d(0), p(2)}`. A value that the condition binds by an interval
+  is a binding of its own: `{d(1)}. p(2/Y) : d(X), Y = 0..X.` has the answer
+  set `{d(1)}`, the head being true under `Y = 0`.
 - A zero divisor in the condition leaves no binding, as in a rule body:
   `d(0;1). q(1). p :- q(X) : d(X), 1/X = 1.` derives `p`.
 
@@ -875,7 +887,9 @@ no answer set, because its head is a violated requirement. Nothing is omitted
 there, so no warning is kept. A chain is undefined only when no link is false
 and one divides by zero: in `d(0). p :- d(X), not 0<1<1/X.` the instance is
 omitted with a warning. A fatal failure in any link still refuses, whatever
-the other links hold.
+the other links hold. An interval among a chain's terms gives one alternative
+for each of its values, and each is read by its links in the same way:
+`d(0;1). p(X) :- d(X), not 3<2<(1..2)/X.` derives `p(0)` and `p(1)`.
 
 A binder, interval check, tuple comparison, aggregate guard or comparison over
 a generated value does not provide the relational exclusion described above.

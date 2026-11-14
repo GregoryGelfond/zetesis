@@ -213,8 +213,9 @@ impl Compiler<'_> {
         }))
     }
 
-    /// Data-valued alternatives are generated before their truth is tested.
-    /// Source variables remain inputs: these comparisons never bind a name.
+    /// The values of an interval are generated before the chain's truth is
+    /// tested under each. Source variables remain inputs: these comparisons
+    /// never bind a name.
     pub(super) fn ranged_guard(
         &mut self,
         comparison: &Comparison,
@@ -243,25 +244,39 @@ impl Compiler<'_> {
                 comparisons: vec![GuardComparison::Range(value, lower, upper)],
             });
         }
-        let mut left = self.generated_term(comparison.first(), variables, bindings)?;
+        // Each term is compiled once. An interval inside it becomes a
+        // generated slot, which the two links that read a middle term share,
+        // and the arithmetic over that slot stays in the links: a link that
+        // divides by zero is then an undefined link, which a false link
+        // beside it decides, and not a generator without a value.
+        let mut left = self.ranged_expression(comparison.first(), variables, bindings)?;
         let mut comparisons = Vec::new();
-        for (relation, right) in comparison.steps() {
-            let right = self.generated_term(right, variables, bindings)?;
+        let mut steps = comparison.steps().peekable();
+        while let Some((relation, right)) = steps.next() {
+            let right = self.ranged_expression(right, variables, bindings)?;
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
             self.budget.charge(
                 ExpansionResource::ScalarBytes,
-                (std::mem::size_of::<GuardComparison>()
-                    + 2 * std::mem::size_of::<crate::formula_ir::Operation>())
-                    as u128,
+                std::mem::size_of::<GuardComparison>() as u128,
                 self.location,
             )?;
-            comparisons.push(GuardComparison::Scalar(
-                Self::scalar_expression(&left),
-                relation,
-                Self::scalar_expression(&right),
-            ));
-            left = right;
+            // The next link reads this term as its left side.
+            let shared = if steps.peek().is_some() {
+                self.budget.charge(
+                    ExpansionResource::TermWork,
+                    right.nodes.len() as u128,
+                    self.location,
+                )?;
+                Some(right.copy(|| Ok(()), self.budget, self.location)?)
+            } else {
+                None
+            };
+            comparisons.push(GuardComparison::Scalar(left, relation, right));
+            let Some(shared) = shared else {
+                break;
+            };
+            left = shared;
         }
         Ok(Guard::Comparisons {
             negation,

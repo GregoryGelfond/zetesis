@@ -714,6 +714,43 @@ fn an_independent_fatal_branch_survives_an_unavailable_generated_input() {
 }
 
 #[test]
+fn an_assignment_overflow_refuses_beside_a_zero_divisor() {
+    // An assignment aggregate's carrier is computed apart from the row's own
+    // evaluation, whose last operation may have divided by zero: in an
+    // earlier generator of the same row, or in the head, a choice bound or a
+    // comparison head of the row before. The carrier's overflow is fatal
+    // beside each, and is not read as that zero divisor.
+    for source in [
+        "d(0).{q}.h(Y,V):-d(X),Y=1/X,V=#sum{2147483647,a;1,b:q}.",
+        "d(1;2).{q}.h(2/(X-1),V):-d(X),V=#sum{X*1073741824,a:q}.",
+        "d(0;1;2).{q}.h(2/(X-1),V):-d(X),V=#sum{X*1073741824,a:q}.",
+        "d(0;1).{q}.{c(X,V)}1/X:-d(X),V=#sum{X*2147483647+X,a:q}.",
+        "d(1;2).{q}.2/(X-1)>0:-d(X),V=#sum{X*1073741824,a:q},V>=0.",
+    ] {
+        refused(source, &EvaluationError::Overflow);
+    }
+}
+
+#[test]
+fn an_assignment_exponent_failure_refuses_beside_a_zero_divisor() {
+    refused(
+        "d(1;2).{q}.h(2/(X-1),V):-d(X),V=#sum{2**(1-X),a:q}.",
+        &EvaluationError::Undefined,
+    );
+}
+
+#[test]
+fn a_zero_divisor_beside_a_defined_assignment_omits_its_instance() {
+    // The same rule over the one row whose head divides by zero and whose
+    // carrier is defined: the instance is omitted with the rule's warning.
+    let rule = "h(2/(X-1),V):-d(X),V=#sum{X*1073741824,a:q}.";
+    assert_eq!(
+        omitting(&format!("d(1).{{q}}.{rule}"), rule),
+        answer_sets(&[&["d(1)"], &["d(1)", "q"]])
+    );
+}
+
+#[test]
 fn an_undefined_consequent_is_false_beside_a_defined_binding() {
     // The consequent divides by zero under the binding X = 0 and is defined
     // under X = 1: one warning, for the rule. A conditional literal keeps the
@@ -806,6 +843,63 @@ const UNDEFINED_CHAINS: &[(&str, &str, &[&str])] = &[
     ),
 ];
 
+/// Chains with an interval among their terms, each of whose values has a
+/// false link beside the link that divides by zero. An interval value is
+/// one alternative of the chain and is read by its links as any chain is,
+/// so the false link decides each: nothing is omitted and no warning is
+/// kept.
+const DECIDED_RANGED_CHAINS: &[(&str, &[&[&str]])] = &[
+    (
+        "d(0;1).p(X):-d(X),not 3<2<(1..2)/X.",
+        &[&["d(0)", "d(1)", "p(0)", "p(1)"]],
+    ),
+    ("d(0).p:-d(X),not 2<(1..1)<1/X.", &[&["d(0)", "p"]]),
+    ("d(0;1).p(X):-d(X),(1..2)/X<3<2.", &[&["d(0)", "d(1)"]]),
+    (
+        "d(0;1).{q(X):d(X),not 3<2<(1..2)/X}.",
+        &[
+            &["d(0)", "d(1)"],
+            &["d(0)", "d(1)", "q(0)"],
+            &["d(0)", "d(1)", "q(1)"],
+            &["d(0)", "d(1)", "q(0)", "q(1)"],
+        ],
+    ),
+    (
+        "d(0;1).p:-2<=#count{X:d(X),not 3<2<(1..2)/X}.",
+        &[&["d(0)", "d(1)", "p"]],
+    ),
+];
+
+/// Chains with an interval one of whose values has no false link where a
+/// link divides by zero. That value's alternative is omitted with the
+/// statement's warning; a value with a false link is decided beside it.
+const UNDEFINED_RANGED_CHAINS: &[(&str, &str, &[&[&str]])] = &[
+    // At X = 0 the value 1 has the false link 1<1 and the value 2 has none.
+    (
+        "d(0;1).",
+        "p(X):-d(X),not 1<(1..2)<=2/X.",
+        &[&["d(0)", "d(1)", "p(0)", "p(1)"]],
+    ),
+    (
+        "d(0;1).",
+        "p(X):-d(X),1<(1..2)<=2/X.",
+        &[&["d(0)", "d(1)", "p(1)"]],
+    ),
+    (
+        "d(0;1).",
+        "p:-not 1<(1..2)<=2/X:d(X).",
+        &[&["d(0)", "d(1)", "p"]],
+    ),
+    ("d(0;1).", ":-not 1<(1..2)<=2/X:d(X).", &[]),
+    // No value has a false link at X = 0.
+    ("d(0).", "p:-d(X),not 0<(1..2)<3/X.", &[&["d(0)"]]),
+    (
+        "d(0;2).",
+        "p(X):-d(X),not 1<(2..3)<6/X<4.",
+        &[&["d(0)", "d(2)", "p(2)"]],
+    ),
+];
+
 #[test]
 fn a_false_link_decides_a_chain_beside_an_undefined_one() {
     for &(source, expected) in DECIDED_CHAINS {
@@ -819,6 +913,24 @@ fn a_chain_with_no_false_link_is_undefined_where_a_link_is() {
         assert_eq!(
             omitting(&format!("{facts}{statement}"), statement),
             family(expected),
+            "{statement}"
+        );
+    }
+}
+
+#[test]
+fn a_false_link_decides_each_value_of_an_interval_in_a_chain() {
+    for &(source, expected) in DECIDED_RANGED_CHAINS {
+        assert_eq!(silent(source), answer_sets(expected), "{source}");
+    }
+}
+
+#[test]
+fn an_interval_value_with_no_false_link_is_omitted_where_a_link_is_undefined() {
+    for &(facts, statement, expected) in UNDEFINED_RANGED_CHAINS {
+        assert_eq!(
+            omitting(&format!("{facts}{statement}"), statement),
+            answer_sets(expected),
             "{statement}"
         );
     }
@@ -864,6 +976,16 @@ fn chains_with_an_undefined_link_match_clingo() {
         assert_eq!(
             oracle::records(&format!("{facts}{statement}")),
             family(expected),
+            "{statement}"
+        );
+    }
+    for &(source, expected) in DECIDED_RANGED_CHAINS {
+        assert_eq!(oracle::records(source), answer_sets(expected), "{source}");
+    }
+    for &(facts, statement, expected) in UNDEFINED_RANGED_CHAINS {
+        assert_eq!(
+            oracle::records(&format!("{facts}{statement}")),
+            answer_sets(expected),
             "{statement}"
         );
     }

@@ -789,6 +789,12 @@ impl<'a, 'source> Cursor<'a, 'source> {
                     };
                     aggregate
                 });
+                // The carrier is computed by evaluations of its own, which
+                // leave `evaluation` as an earlier generator or row left it.
+                // A failure it returns is therefore fatal, never this
+                // generator's zero divisor: an element that divides by zero
+                // is omitted inside the carrier's own joins.
+                evaluation.clear_zero_divisor();
                 let values = if let Some(families) = &self.families {
                     families.values(
                         aggregate,

@@ -169,14 +169,10 @@ fn undefined_consequents_match_clingo_full_models() {
 fn a_fatal_failure_in_a_consequent_still_refuses() {
     // An overflow is no zero divisor. It refuses beside one in the same
     // comparison, beside one at another binding, and in an atom's argument.
-    // A comparison consequent is evaluated beside every binding no
-    // comparison excludes, so it also refuses where a tuple comparison,
-    // which excludes nothing, fails the binding.
     for source in [
-        "d(0).p:-1/X=2147483647+1:d(X).",
+        "d(0).p:-1/X=X+2147483647+1:d(X).",
         "d(0;1).p:-1/X=2147483647+X:d(X).",
         "d(0;1).q(1).p:-q(2147483647+X):d(X).",
-        "d(0;1).p:-2147483647+X=1:d(X),(X,1)!=(1,1).",
     ] {
         let failure = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
@@ -204,15 +200,29 @@ fn an_excluded_binding_reaches_no_consequent() {
 }
 
 #[test]
-fn a_binding_that_fails_its_condition_keeps_no_implication() {
-    // A tuple comparison excludes nothing, so the comparison consequent is
-    // still evaluated beside `X = 0` and warns. The binding does not hold,
-    // and no implication is kept for it.
+fn a_binding_that_fails_its_condition_reaches_no_consequent() {
+    // A tuple comparison excludes nothing, but it is part of the condition.
+    // The binding that fails it has no implication, and its consequent is
+    // not evaluated: a zero divisor there leaves no warning, and an overflow
+    // there does not refuse.
     check(
         "d(0;1).p:-1/X=1:d(X),(X,1)!=(0,1).",
-        1,
+        0,
         &["d(0)", "d(1)", "p"],
     );
+    check(
+        "d(0;1).p:-2147483647+X=1:d(X),(X,1)!=(1,1).",
+        0,
+        &["d(0)", "d(1)"],
+    );
+}
+
+#[test]
+fn a_condition_that_divides_by_zero_reaches_no_consequent() {
+    // The condition has no binding, so the literal holds, and the overflow
+    // in its consequent is not reached. The statement warns for the
+    // condition's omitted instance.
+    check("d(0).p:-X+2147483647+1=1:d(X),1/X>0.", 1, &["d(0)", "p"]);
 }
 
 #[test]

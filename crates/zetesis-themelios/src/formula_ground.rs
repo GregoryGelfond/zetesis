@@ -1988,74 +1988,125 @@ impl<'source> Builder<'_, '_, 'source> {
             HeadIr::Normal(head) => self.normal(*head, rule, assignment, body),
             HeadIr::Disjunction(heads) => self.disjunction(heads, body, assignment, rule),
             HeadIr::ConditionalDisjunction { ordinary, elements } => {
-                let mut disjunction = FALSUM;
-                let mut count = 0;
-                for head in ordinary {
-                    let literal = self.disjunct_instance(head, assignment, VERUM, body, rule)?;
-                    disjunction = self.or(disjunction, literal, rule.location)?;
-                    count += 1;
-                }
-                for element in elements {
-                    let mut local = Join::local_head(
-                        Ir::Source(element.condition.as_slice()),
-                        &assignment.prefix(element.outer_variables),
-                        element.body_variables..element.variables,
-                        support,
-                        self.budget,
-                        Context::new(
-                            &*self.computation,
-                            self.limits,
-                            self.counters,
-                            rule.location,
-                        ),
-                    )?;
-                    local.share_families(
-                        Rc::clone(&self.families),
-                        self.limits,
-                        self.counters,
-                        rule.location,
-                    )?;
-                    while let Some(binding) = local.next(
-                        self.computation,
-                        self.limits,
-                        self.budget,
-                        self.counters,
-                        rule.location,
-                    )? {
-                        count += 1;
-                        ceiling(
-                            FormulaResource::DisjunctionElements,
-                            count,
-                            self.limits.max_disjunction_elements as u128,
-                            rule.location,
-                        )?;
-                        let condition = self.body_ir(
-                            Ir::Source(element.condition.as_slice()).iter(),
-                            &binding.prefix(element.body_variables),
-                            rule.location,
-                            support,
-                        )?;
-                        let literal =
-                            self.disjunct_instance(&element.head, &binding, condition, body, rule)?;
-                        disjunction = self.or(disjunction, literal, rule.location)?;
-                    }
-                    if local.take_family().zero.is_some() {
-                        self.undefined_disjuncts(
-                            element,
-                            assignment,
-                            support,
-                            (body, rule),
-                            (&mut disjunction, &mut count),
-                        )?;
-                    }
-                }
-                // Exhaustion, not a stopped prefix, establishes the empty disjunction.
-                let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
-                self.root(formula, rule)
+                self.conditional_disjunction(rule, (ordinary, elements), assignment, support, body)
             }
             HeadIr::Choice(group) => self.choice(rule, group, body, assignment, support),
         }
     }
+    /// Publish one instance of a rule whose head holds conditional
+    /// disjuncts: the implication from `body` to the disjunction of its
+    /// ordinary heads and of every instance of its conditional ones.
+    fn conditional_disjunction(
+        &mut self,
+        rule: &'source RuleIr,
+        (ordinary, elements): (
+            &[HeadLiteral],
+            &'source [crate::formula_conditional_head_ir::ConditionalHeadIr],
+        ),
+        assignment: &Binding,
+        support: &Support<'source>,
+        body: usize,
+    ) -> Result<(), FormulaFailure> {
+        let mut disjunction = FALSUM;
+        let mut count = 0;
+        for head in ordinary {
+            let literal = self.disjunct_instance(head, assignment, VERUM, body, rule)?;
+            disjunction = self.or(disjunction, literal, rule.location)?;
+            count += 1;
+        }
+        // The head alternatives of one condition alternative of one source
+        // disjunct are contiguous and are read together.
+        let mut rest = elements;
+        while let Some(first) = rest.first() {
+            let width = rest
+                .iter()
+                .take_while(|element| {
+                    element.family == first.family && element.alternative == first.alternative
+                })
+                .count();
+            let (alternatives, later) = rest.split_at(width);
+            rest = later;
+            let mut zero = false;
+            for element in alternatives {
+                zero |= self.defined_disjuncts(
+                    element,
+                    assignment,
+                    support,
+                    (body, rule),
+                    (&mut disjunction, &mut count),
+                )?;
+            }
+            if zero {
+                self.undefined_disjuncts(
+                    alternatives,
+                    assignment,
+                    support,
+                    (body, rule),
+                    (&mut disjunction, &mut count),
+                )?;
+            }
+        }
+        // Exhaustion, not a stopped prefix, establishes the empty disjunction.
+        let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
+        self.root(formula, rule)
+    }
+
+    /// The disjuncts of `element` whose head is defined: one for each
+    /// instance of the head under each row of the condition. Returns whether
+    /// an instance divided by zero, which the join omitted.
+    fn defined_disjuncts(
+        &mut self,
+        element: &'source crate::formula_conditional_head_ir::ConditionalHeadIr,
+        assignment: &Binding,
+        support: &Support<'source>,
+        (body, rule): (usize, &RuleIr),
+        (disjunction, count): (&mut usize, &mut u128),
+    ) -> Result<bool, FormulaFailure> {
+        let mut local = Join::local_head(
+            Ir::Source(element.condition.as_slice()),
+            &assignment.prefix(element.outer_variables),
+            element.body_variables..element.variables,
+            support,
+            self.budget,
+            Context::new(
+                &*self.computation,
+                self.limits,
+                self.counters,
+                rule.location,
+            ),
+        )?;
+        local.share_families(
+            Rc::clone(&self.families),
+            self.limits,
+            self.counters,
+            rule.location,
+        )?;
+        while let Some(binding) = local.next(
+            self.computation,
+            self.limits,
+            self.budget,
+            self.counters,
+            rule.location,
+        )? {
+            *count += 1;
+            ceiling(
+                FormulaResource::DisjunctionElements,
+                *count,
+                self.limits.max_disjunction_elements as u128,
+                rule.location,
+            )?;
+            let condition = self.body_ir(
+                Ir::Source(element.condition.as_slice()).iter(),
+                &binding.prefix(element.body_variables),
+                rule.location,
+                support,
+            )?;
+            let literal = self.disjunct_instance(&element.head, &binding, condition, body, rule)?;
+            *disjunction = self.or(*disjunction, literal, rule.location)?;
+        }
+        Ok(local.take_family().zero.is_some())
+    }
+
     fn disjunction(
         &mut self,
         heads: &[HeadLiteral],
@@ -2132,18 +2183,26 @@ impl<'source> Builder<'_, '_, 'source> {
         let eligible = self.neg(absent, rule.location)?;
         self.and(implication, eligible, rule.location)
     }
-    /// The disjuncts of `element` whose head takes no value. A head that
-    /// divides by zero in each of its instances under one condition binding
-    /// is true there: the disjunct is the one a written `#true : condition`
-    /// has, and needs no atom. clingo grounds the same instance so.
+    /// The disjuncts of one condition alternative of a source disjunct whose
+    /// head takes no value. `alternatives` are that disjunct's head
+    /// alternatives over the one condition: a pooled head gives several, any
+    /// other head one. Under one row of the condition, a head that has no
+    /// defined instance in any alternative and divides by zero in one is
+    /// true: the disjunct is the one a written `#true : condition` has, and
+    /// needs no atom. clingo grounds the same instance so. Where some
+    /// alternative is defined under the row, the caller emitted it and the
+    /// undefined ones contribute nothing, as alternatives of a disjunction.
     ///
-    /// Called only when the element's family met a zero divisor. It visits
-    /// each condition binding once and asks one head join whether that
-    /// binding has a defined head; the bindings that have one were emitted by
-    /// the caller. A zero divisor in the condition itself leaves no binding.
+    /// Called only when an alternative's family met a zero divisor. It
+    /// visits each condition row once, through the first alternative's
+    /// condition stage, and asks each alternative's head stage for that row
+    /// (`Join::head_outcome`): the condition's generators run once, in the
+    /// condition stage, so a head variable the condition binds by an
+    /// interval keeps the row's value. A zero divisor in the condition
+    /// itself leaves no row.
     fn undefined_disjuncts(
         &mut self,
-        element: &'source crate::formula_conditional_head_ir::ConditionalHeadIr,
+        alternatives: &'source [crate::formula_conditional_head_ir::ConditionalHeadIr],
         assignment: &Binding,
         support: &Support<'source>,
         (body, rule): (usize, &RuleIr),
@@ -2153,11 +2212,17 @@ impl<'source> Builder<'_, '_, 'source> {
             negation: DefaultNegation::None,
             operand: HeadOperand::Boolean(true),
         };
-        let heads = element.body_variables..element.variables;
+        let first = alternatives
+            .first()
+            .expect("a source disjunct has an alternative");
+        debug_assert!(alternatives.iter().all(|element| {
+            element.outer_variables == first.outer_variables
+                && element.body_variables == first.body_variables
+        }));
         let mut conditions = Join::local_head(
-            Ir::Source(element.condition.as_slice()),
-            &assignment.prefix(element.outer_variables),
-            heads.clone(),
+            Ir::Source(first.condition.as_slice()),
+            &assignment.prefix(first.outer_variables),
+            first.body_variables..first.variables,
             support,
             self.budget,
             Context::new(
@@ -2181,36 +2246,8 @@ impl<'source> Builder<'_, '_, 'source> {
             self.counters,
             rule.location,
         )? {
-            self.work(rule.location)?;
-            let mut instances = Join::local_head(
-                Ir::Source(element.condition.as_slice()),
-                &binding,
-                heads.clone(),
-                support,
-                self.budget,
-                Context::new(
-                    &*self.computation,
-                    self.limits,
-                    self.counters,
-                    rule.location,
-                ),
-            )?;
-            instances.share_families(
-                Rc::clone(&self.families),
-                self.limits,
-                self.counters,
-                rule.location,
-            )?;
-            let defined = instances
-                .next(
-                    self.computation,
-                    self.limits,
-                    self.budget,
-                    self.counters,
-                    rule.location,
-                )?
-                .is_some();
-            if defined || instances.take_family().zero.is_none() {
+            let outcome = self.head_outcome(alternatives, &binding, assignment, support, rule)?;
+            if outcome.defined || !outcome.zero {
                 continue;
             }
             *count += 1;
@@ -2221,8 +2258,8 @@ impl<'source> Builder<'_, '_, 'source> {
                 rule.location,
             )?;
             let condition = self.body_ir(
-                Ir::Source(element.condition.as_slice()).iter(),
-                &binding.prefix(element.body_variables),
+                Ir::Source(first.condition.as_slice()).iter(),
+                &binding.prefix(first.body_variables),
                 rule.location,
                 support,
             )?;
@@ -2231,6 +2268,66 @@ impl<'source> Builder<'_, '_, 'source> {
         }
         Ok(())
     }
+    /// What the heads of `alternatives` hold under the condition row
+    /// `binding`: whether one has a defined instance there, and whether one
+    /// divides by zero there. Each alternative's head stage is asked for
+    /// that row (`Join::head_outcome`) until one is defined.
+    fn head_outcome(
+        &mut self,
+        alternatives: &'source [crate::formula_conditional_head_ir::ConditionalHeadIr],
+        binding: &Binding,
+        assignment: &Binding,
+        support: &Support<'source>,
+        rule: &RuleIr,
+    ) -> Result<formula_support::HeadOutcome, FormulaFailure> {
+        let mut outcome = formula_support::HeadOutcome {
+            defined: false,
+            zero: false,
+        };
+        for element in alternatives {
+            self.work(rule.location)?;
+            let mut head = Join::local_head(
+                Ir::Source(element.condition.as_slice()),
+                &assignment.prefix(element.outer_variables),
+                element.body_variables..element.variables,
+                support,
+                self.budget,
+                Context::new(
+                    &*self.computation,
+                    self.limits,
+                    self.counters,
+                    rule.location,
+                ),
+            )?;
+            head.share_families(
+                Rc::clone(&self.families),
+                self.limits,
+                self.counters,
+                rule.location,
+            )?;
+            let row = binding.copied(
+                &*self.computation,
+                self.limits,
+                self.counters,
+                rule.location,
+            )?;
+            let under = head.head_outcome(
+                row,
+                self.computation,
+                self.limits,
+                self.budget,
+                self.counters,
+                rule.location,
+            )?;
+            outcome.zero |= under.zero;
+            if under.defined {
+                outcome.defined = true;
+                break;
+            }
+        }
+        Ok(outcome)
+    }
+
     pub(super) fn producer(
         &mut self,
         head: usize,

@@ -29,10 +29,11 @@ const CASES: &[(&str, &[&[&str]])] = &[
     ),
 ];
 
-/// A head that divides by zero under a condition binding is true there: the
-/// disjunct holds wherever its condition does and derives no atom, as a
-/// written `#true : condition` does. A defined instance beside an undefined
-/// one is kept, and a condition that divides by zero has no instance.
+/// A head that divides by zero in each of its instances under a condition
+/// binding is true there: the disjunct holds wherever its condition does and
+/// derives no atom, as a written `#true : condition` does. A defined
+/// instance beside an undefined one is kept, and a condition that divides by
+/// zero has no instance.
 const UNDEFINED_HEADS: &[(&str, &[&[&str]])] = &[
     ("d(0).p(1/X):d(X).", &[&["d(0)"]]),
     ("d(0;1).p(1/X):d(X).", &[&["d(0)", "d(1)"]]),
@@ -72,6 +73,27 @@ const UNDEFINED_HEADS: &[(&str, &[&[&str]])] = &[
             &["d(0)", "e(2)"],
             &["d(1)", "e(2)", "p(2)"],
         ],
+    ),
+    // A condition that binds the divisor by an interval. Each of its values
+    // is a binding of its own, and the head is true under the one at which
+    // it divides by zero.
+    ("{d(1)}.p(2/Y):d(X),Y=0..X.", &[&["d(1)"]]),
+    (
+        "{d(1;2)}.p(2/Y):d(X),Y=0..X.",
+        &[&["d(1)"], &["d(1)", "d(2)"], &["d(2)"]],
+    ),
+    ("{d(1)}.p(2/(Y-1)):d(X),Y=1..2.", &[&["d(1)"]]),
+    ("{d(2)}.p(4/(Y-X)):d(X),Y=1..3.", &[&["d(2)"]]),
+    ("{d(1)}.q|p(2/Y):d(X),Y=0..X.", &[&["d(1)"], &["q"]]),
+    ("p(2/Y):Y=0..1.", &[&[]]),
+    // A pooled head. Its alternatives are read together under one binding:
+    // one that is defined there is kept, and the head is true only where
+    // none is.
+    ("{d(0)}.p(1/X;2):d(X).", &[&["d(0)", "p(2)"]]),
+    ("{d(0)}.p(1/X;2/X):d(X).", &[&["d(0)"]]),
+    (
+        "{d(0)}.q|p(1/X;2):d(X).",
+        &[&["d(0)", "p(2)"], &["d(0)", "q"], &["q"]],
     ),
 ];
 

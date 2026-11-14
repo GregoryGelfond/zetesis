@@ -449,7 +449,7 @@ data it indexes; the static certificate only predicts where an index will succee
   | Traversal | (2a), (2b) |
   |---|---|
   | support rounds, flat normal rules with no generated head arguments, both formula sub-routes | yes: one index per descriptor and round snapshot, each probe cut to its occurrence's delta interval |
-  | family evidence (`formula_ground/arithmetic.rs`) | no: evidence cursors keep every false row as a witness of defined arithmetic |
+  | family evidence (`formula_ground/arithmetic.rs`) | no: evidence cursors visit every row, so that each zero divisor a family reaches is recorded |
   | final emission (eager grounding), the same flat normal scope including constraints | yes |
   | exact activity on direct source evaluation (`evaluate_acyclic`, `formula_source_activity/acyclic.rs`) | no; a later extension with its own argument |
   | retained emission, hybrid capture, hybrid region and model checks | no; their support completion may use the support-round route above |

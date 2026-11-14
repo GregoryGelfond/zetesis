@@ -880,6 +880,15 @@ fn finish(
     })
 }
 
+/// What a conditional head's head stage holds under one condition row.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HeadOutcome {
+    /// An instance of the head is defined there.
+    pub(crate) defined: bool,
+    /// An instance of the head divides by zero there.
+    pub(crate) zero: bool,
+}
+
 /// Visit one rule's ordered delta variants under the same admitted guards.
 fn derive_variants<'source>(
     rule: &'source crate::formula_ir::RuleIr,
@@ -1863,6 +1872,64 @@ impl<'a, 'source> Join<'a, 'source> {
         self.head_slots = self.head_slots.start..self.head_slots.start;
     }
 
+    /// Whether this join's head stage has an instance under the condition
+    /// row `frame`, and whether an instance of it there divides by zero.
+    /// `frame` is a passing row of a condition stage over this join's
+    /// condition and slots, its own or that of another alternative of the
+    /// same condition. The head's generators run under that row alone, as
+    /// the staged traversal runs them for each of its rows: the condition's
+    /// own generators are not run again. One defined instance settles the
+    /// answer, so later instances are not visited; a fatal failure reached
+    /// before it is returned.
+    pub(crate) fn head_outcome(
+        &mut self,
+        frame: Binding<'static>,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<HeadOutcome, FormulaFailure> {
+        let mut pending = crate::formula_binding_cursor::Cursor::new(
+            self.literals,
+            frame,
+            self.support,
+            self.bindings,
+            self.head_slots.clone(),
+            Context::new(computation, limits, counters, location),
+        )?;
+        if let Some(families) = &self.families {
+            pending.share_families(std::rc::Rc::clone(families), limits, counters, location)?;
+        }
+        let mut outcome = HeadOutcome {
+            defined: false,
+            zero: false,
+        };
+        loop {
+            match pending.next(
+                &mut self.evaluation,
+                computation,
+                limits,
+                budget,
+                counters,
+                location,
+            ) {
+                Ok(Some(_)) => {
+                    outcome.defined = true;
+                    return Ok(outcome);
+                }
+                Ok(None) => return Ok(outcome),
+                Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. }))
+                    if self.evaluation.zero_divisor() =>
+                {
+                    outcome.zero = true;
+                    pending.reject(location)?;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
     fn stage_head(
         &mut self,
         slots: std::ops::Range<usize>,
@@ -2456,11 +2523,12 @@ impl<'a, 'source> Join<'a, 'source> {
             self.trail_bytes - old + self.changes[self.depth].capacity() * size_of::<usize>();
         result
     }
-    /// Evaluate `guard` beside every row no comparison excludes, so that a
-    /// fatal failure in it refuses and a zero divisor is recorded. A row whose
-    /// only failure is that zero divisor is still returned: the guard is the
-    /// consequent of a conditional literal, and its consumer reads an
-    /// undefined consequent as false.
+    /// Evaluate `guard` beside every row that holds, so that a fatal failure
+    /// in it refuses and a zero divisor is recorded. Such a row is still
+    /// returned: the guard is the consequent of a conditional literal, and
+    /// its consumer reads an undefined consequent as false. A row that fails
+    /// a check, or is omitted, does not reach the guard: the condition
+    /// comes before its consequent.
     pub(crate) fn check_guard(&mut self, guard: &'a crate::formula_guard::Guard) {
         if guard.expressions().any(family::expression) {
             self.coverage = Coverage::Complete;
@@ -2746,11 +2814,14 @@ impl<'a, 'source> Join<'a, 'source> {
                 self.family.zero.get_or_insert(error);
                 None
             }
-            // The row itself is defined: only the guard checked beside it
-            // divides by zero, and its consumer gives that guard a value.
-            filters::Selection::UndefinedGuard { passes, error } => {
+            // The row holds: only the guard checked beside it divides by
+            // zero, and its consumer gives that guard a value.
+            filters::Selection::UndefinedGuard(error) => {
                 self.family.zero.get_or_insert(error);
-                Some(Staged { frame, passes })
+                Some(Staged {
+                    frame,
+                    passes: true,
+                })
             }
         }
     }
@@ -2870,7 +2941,7 @@ impl<'a, 'source> Join<'a, 'source> {
             // Only support production passes the normal head projection.
             // Formula lowering retains every positive activation. The
             // previous completed continuation already published its heads
-            // and contributed its defined/first-error family evidence.
+            // and contributed its zero-divisor family evidence.
             if projected.is_some()
                 && let Some(inputs) = self
                     .bindings

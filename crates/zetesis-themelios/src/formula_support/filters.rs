@@ -17,12 +17,8 @@ pub(super) enum Selection {
     Defined(bool),
     Excluded,
     Zero(ExpansionFailure),
-    /// The row is defined and no comparison excludes it; only the guard
-    /// checked beside it divides by zero.
-    UndefinedGuard {
-        passes: bool,
-        error: ExpansionFailure,
-    },
+    /// The row holds; only the guard checked beside it divides by zero.
+    UndefinedGuard(ExpansionFailure),
 }
 
 impl Join<'_, '_> {
@@ -123,35 +119,37 @@ impl Join<'_, '_> {
                 &mut failure,
             )?;
         }
-        let undefined = consequent_zero(
-            self.checked_guard,
-            &mut self.evaluation,
-            &binding,
-            &mut failure,
-            super::Context::new(computation, limits, counters, location),
-        )?;
-        match (failure, undefined) {
-            (None, Some(error)) if !excluded => Ok(Selection::UndefinedGuard { passes, error }),
-            (None, _) => Ok(Selection::Defined(passes)),
-            (Some(_), _) if excluded => Ok(Selection::Excluded),
-            (Some((error, true)), _) => Ok(Selection::Zero(error)),
-            (Some((error, false)), _) => Err(error.into()),
+        match failure {
+            None if passes => {
+                // The guard is a consequent, read only under a row that
+                // holds: its condition comes first.
+                let undefined = consequent_zero(
+                    self.checked_guard,
+                    &mut self.evaluation,
+                    &binding,
+                    super::Context::new(computation, limits, counters, location),
+                )?;
+                Ok(undefined.map_or(Selection::Defined(true), Selection::UndefinedGuard))
+            }
+            None => Ok(Selection::Defined(false)),
+            Some(_) if excluded => Ok(Selection::Excluded),
+            Some((error, true)) => Ok(Selection::Zero(error)),
+            Some((error, false)) => Err(error.into()),
         }
     }
 }
 
-/// The zero divisor that `guard`, checked beside a row, meets under `binding`,
-/// if it leaves the guard undefined. The guard is a consequent, not part of
-/// the row, and is evaluated as its consumer evaluates it, so a chain that a
-/// false link decides is no zero divisor here either. Its fatal failure goes
-/// to `failure`, where it refuses as the row's own would and takes precedence
-/// over a zero divisor. Its zero divisor is returned apart: the row stays,
-/// and the consequent is read as false.
+/// The zero divisor that `guard`, checked beside a row that holds, meets
+/// under `binding`, if it leaves the guard undefined. The guard is a
+/// consequent, not part of the row, and is evaluated as its consumer
+/// evaluates it, so a chain that a false link decides is no zero divisor
+/// here either. Its fatal failure is returned and refuses as the row's own
+/// would. Its zero divisor is returned apart: the row stays, and the
+/// consequent is read as false.
 fn consequent_zero(
     guard: Option<&crate::formula_guard::Guard>,
     evaluation: &mut Evaluation,
     binding: &Binding,
-    failure: &mut Option<(ExpansionFailure, bool)>,
     context: super::Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<Option<ExpansionFailure>, FormulaFailure> {
     let super::Context {
@@ -168,14 +166,10 @@ fn consequent_zero(
     };
     match guard.evaluate_in(binding, evaluation, computation, limits, counters, location) {
         Ok(_) => Ok(None),
-        Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
-            if evaluation.zero_divisor() {
-                return Ok(Some(error));
-            }
-            if failure.as_ref().is_none_or(|(_, zero)| *zero) {
-                *failure = Some((error, false));
-            }
-            Ok(None)
+        Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. }))
+            if evaluation.zero_divisor() =>
+        {
+            Ok(Some(error))
         }
         Err(error) => Err(error),
     }

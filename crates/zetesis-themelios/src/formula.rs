@@ -1208,7 +1208,7 @@ pub(crate) struct Compiled {
 /// contribute no key after arithmetic validation. Weight, priority and tuple
 /// fields participate jointly in the source-family policy below, including
 /// when the weight is nonnumeric. Pooled fragments of one original objective
-/// element share its family; distinct elements cannot rescue each other.
+/// element share its family and its one warning.
 /// Dynamic priorities read ordinary bound positions or generated values with a
 /// completed source-carrier certificate. Eligibility precision is selected per
 /// objective: qualified positive dependencies can use a tighter carrier, while

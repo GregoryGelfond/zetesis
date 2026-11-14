@@ -77,7 +77,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   same instances with an informational message. Overflow, arithmetic on a
   value that is no number and an invalid exponent still refuse. So does an
   undefined closed term such as `p(1/0).`, which is checked as written before
-  any substitution exists and which clingo drops. See
+  any substitution exists and which clingo drops, and a zero divisor in a
+  `#show` term or its condition, which stays an observation refusal where
+  clingo leaves the shown tuple out. See
   [numeric boundaries](docs/book/reference/language.md#numeric-boundaries-and-refusal-meaning).
   - Programs refused for an entirely undefined family are now admitted.
   - **The answer sets of some admitted programs change.** A conditional
@@ -89,7 +91,16 @@ Notable changes by release. Versions follow Semantic Versioning.
     under it, as clingo grounds `#false : condition` and `#true : condition`.
     `d(0;1). q(1). p :- q(1/X) : d(X).` derived `p` and no longer does;
     `d(0;1). p(1/X) : d(X).` derived `p(1)` and no longer does. The earlier
-    answers disagreed with clingo.
+    answers disagreed with clingo. The alternatives of a pooled head are read
+    together under one binding: `{d(0)}. p(1/X;2) : d(X).` keeps `p(2)`, and
+    the head is true only where no alternative is defined. A value that the
+    condition binds by an interval is a binding of its own:
+    `{d(1)}. p(2/Y) : d(X), Y = 0..X.` has the answer set `{d(1)}`.
+  - A comparison consequent is read only under a binding whose condition
+    holds. It was evaluated beside every binding no comparison excluded, so
+    under a binding that failed another part of its condition a zero divisor
+    in it warned and an overflow in it refused:
+    `d(0;1). p :- 1/X=1 : d(X), (X,1)!=(0,1).` no longer warns.
   - **So do those of admitted programs with a comparison chain** that holds
     a link dividing by zero beside a link that is defined and false. The
     links are separate comparisons, as clingo grounds them, so the false link
@@ -97,7 +108,10 @@ Notable changes by release. Versions follow Semantic Versioning.
     omitted. `d(0;3). p(X) :- d(X), not 2<X<6/X.` now derives `p(0)` as well
     as `p(3)`, and `d(0;1). 1<=X<=5/X :- d(X).` has no answer set where it
     had one. A chain with no false link is undefined where a link divides by
-    zero, as before, and a fatal failure in any link still refuses.
+    zero, as before, and a fatal failure in any link still refuses. A chain
+    with an interval among its terms is read the same way under each value
+    of the interval: `d(0;1). p(X) :- d(X), not 3<2<(1..2)/X.` derives `p(0)`
+    and `p(1)`.
   - A source family's evidence records only whether a substitution divided
     by zero (`ArithmeticFamilies`).
 - A walk orders its splits by what its region has decided. A chain is a
@@ -194,6 +208,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Fixed
 
+- An overflow or an invalid exponent in an assignment aggregate refuses
+  whatever the rule's other arithmetic does. It was read as a zero divisor,
+  and its instance omitted with a warning, when the last operation evaluated
+  before it had divided by zero: in an earlier generator of the same row, or
+  in the head, a choice bound or a comparison head of the row before.
+  `d(0;1;2). {q}. h(2/(X-1),V) :- d(X), V = #sum{X*1073741824,a : q}.` was
+  admitted with a warning and is now refused for the overflow at `X = 2`.
 - Grounding finishes for a recursive assignment whose values a required tuple
   bounds. `f(3). {p(N)} :- N = #count{V : p(V); V : f(V)}.` did not finish
   grounding, and now has its one answer set, `f(3)`. A rule that reads the

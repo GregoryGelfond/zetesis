@@ -169,7 +169,7 @@ fn later_column_certificate_does_not_diagnose_an_incomplete_prefix() {
 }
 
 #[test]
-fn evidence_keeps_false_defined_rows_of_same_location_siblings() {
+fn evidence_of_same_location_siblings_keeps_the_zero_divisor() {
     testing::with_completed_source(
         "d(0). :- d(X),X/(1;X)=1.",
         |program, support, computation, counters| {
@@ -210,8 +210,9 @@ fn evidence_keeps_false_defined_rows_of_same_location_siblings() {
                 evidence.merge(join.take_family());
             }
             assert_eq!(certificates, 1);
-            // The total sibling's false row converts the zero-only sibling
-            // into a warning. Pruning that witness would cause an error.
+            // The total sibling divides nowhere and the other divides by zero
+            // at its one row. Their merged evidence keeps that zero divisor,
+            // which is what the statement warns for.
             assert!(evidence.finish());
         },
     );

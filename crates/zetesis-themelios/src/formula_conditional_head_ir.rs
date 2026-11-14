@@ -12,6 +12,11 @@ use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, FormulaResource
 
 pub(crate) struct ConditionalHeadIr {
     pub family: LocalFamily,
+    /// The position of this element's condition among the condition
+    /// alternatives of its source disjunct. Elements of one family and one
+    /// alternative are contiguous, share their condition and its slots, and
+    /// differ in the head alternative alone.
+    pub alternative: usize,
     pub head: HeadLiteral,
     pub condition: Vec<LiteralIr>,
     /// Only this prefix belongs to the enclosing rule, before head generation.
@@ -91,17 +96,17 @@ impl Compiler<'_> {
         elements: &mut Vec<ConditionalHeadIr>,
         family: LocalFamily,
     ) -> Result<(), FormulaFailure> {
-        for condition in self.condition_alternatives(source)? {
+        for (position, condition) in self.condition_alternatives(source)?.into_iter().enumerate() {
             if let LiteralInner::Atom(atom) = &literal.inner {
                 for alternative in self.conditional_atoms(atom.get())? {
                     let literal = Literal {
                         negation: literal.negation,
                         inner: LiteralInner::Atom(atom.clone().map(|_| alternative)),
                     };
-                    self.local_disjunct(&literal, &condition, outer, elements, family)?;
+                    self.local_disjunct(&literal, &condition, outer, elements, (family, position))?;
                 }
             } else {
-                self.local_disjunct(literal, &condition, outer, elements, family)?;
+                self.local_disjunct(literal, &condition, outer, elements, (family, position))?;
             }
         }
         Ok(())
@@ -113,7 +118,7 @@ impl Compiler<'_> {
         source: &Condition,
         outer: &Variables,
         elements: &mut Vec<ConditionalHeadIr>,
-        family: LocalFamily,
+        (family, alternative): (LocalFamily, usize),
     ) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::DisjunctionElements,
@@ -130,6 +135,7 @@ impl Compiler<'_> {
         local.safety(self.location)?;
         elements.push(ConditionalHeadIr {
             family,
+            alternative,
             head,
             condition,
             outer_variables: outer.count,
