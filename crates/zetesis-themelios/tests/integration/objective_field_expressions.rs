@@ -1,12 +1,13 @@
 //! Evaluated objective fields share one complete source binding.
 
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::resource_limits;
 
 use std::collections::BTreeSet;
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{FormulaLimits, FormulaWarning};
+use zetesis_themelios::FormulaLimits;
 
 const CASES: &str = include_str!("../fixtures/objective-field-expressions.jsonl");
 
@@ -48,17 +49,7 @@ fn eligible_field_zero_divisors_omit_their_rows() {
         let source = format!("d(0).{objective}");
         let input = reference::admit(&source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
-        let [FormulaWarning::ZeroDivisor { location }] = input.warnings() else {
-            panic!("{source}: one zero-divisor warning: {:?}", input.warnings());
-        };
-        assert_eq!(
-            input
-                .source()
-                .expect("source input")
-                .slice(location.location().expect("parsed source").span)
-                .unwrap(),
-            objective
-        );
+        assert_eq!(zero_divisor_statement(&input), objective);
         assert_eq!(
             reference::exhaustive(&input),
             Records::from([(BTreeSet::from(["d(0)".into()]), None)]),
@@ -94,17 +85,8 @@ fn mixed_field_carriers_preserve_complete_scored_answers() {
     ]);
     assert_eq!(reference::exhaustive(&input), expected);
     assert_eq!(input.objectives().priorities(), [0]);
-    let [warning] = input.warnings() else {
-        panic!("one omitted source-carrier instance");
-    };
-    assert!(
-        input
-            .source()
-            .expect("source input")
-            .slice(warning.location().expect("parsed source").span)
-            .unwrap()
-            .contains("#minimize")
-    );
+    // One source-carrier instance is omitted, at the objective.
+    assert!(zero_divisor_statement(&input).contains("#minimize"));
 }
 
 #[test]

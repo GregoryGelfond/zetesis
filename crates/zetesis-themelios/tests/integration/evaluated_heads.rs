@@ -5,13 +5,14 @@ use std::collections::BTreeSet;
 use crate::support::finite_bindings::{holds, values};
 use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement;
 use serde_json::{Value as Json, json};
 use zetesis_reference_support::{BundleFixture, admit, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
-    ProfileFeature, admit_bundle_formula,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -163,20 +164,7 @@ fn evaluated_zero_divisors_omit_their_head_instances() {
         let source = format!("d(0).{statement}");
         let admitted = admit(&source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
-        let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-            panic!(
-                "{source}: one zero-divisor warning: {:?}",
-                admitted.warnings()
-            );
-        };
-        assert_eq!(
-            admitted
-                .source()
-                .expect("source input")
-                .slice(location.location().expect("parsed source").span)
-                .unwrap(),
-            statement
-        );
+        assert_eq!(zero_divisor_statement(&admitted), statement);
         assert_eq!(
             complete(&admitted),
             BTreeSet::from([BTreeSet::from(["d(0)".to_owned()])]),

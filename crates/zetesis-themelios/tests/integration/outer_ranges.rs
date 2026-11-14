@@ -10,12 +10,13 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::CASES;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(151);
@@ -231,18 +232,7 @@ fn false_filters_cannot_hide_a_zero_divisor_endpoint() {
     // nothing: the interval's endpoint is still evaluated and divides by
     // zero. The instance is omitted, so no atom is supported, and the rule
     // keeps the warning.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        source
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), source);
     assert!(admitted.atoms().is_empty());
     assert_eq!(native(&admitted), Models::from([BTreeSet::new()]));
 }

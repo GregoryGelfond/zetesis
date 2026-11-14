@@ -11,12 +11,13 @@ use std::collections::BTreeSet;
 
 use crate::support::frozen_truth::Truth;
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::sources;
 use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, FormulaWarning, admit_formula, prepare_formula,
+    FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(173);
@@ -160,20 +161,14 @@ fn nonbinding_guards_cannot_supply_missing_inputs() {
 }
 
 #[test]
-fn defined_false_guards_complete_the_mixed_family() {
+fn a_defined_false_guard_does_not_hide_an_omitted_one() {
     let source = "{p}.q:-N=#count{1:p},1/N<=#count{}.";
     let admitted = input(source);
-    // N=1 gives a defined false guard, which witnesses definedness, not truth.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
+    // The guard divides by zero at the proposal N = 0 and is defined and
+    // false at N = 1. Neither proposal derives q, and the false one does not
+    // remove the warning the undefined one leaves on the rule.
     assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
+        zero_divisor_statement_in(SOURCE, &admitted),
         "q:-N=#count{1:p},1/N<=#count{}."
     );
     let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into()])]);

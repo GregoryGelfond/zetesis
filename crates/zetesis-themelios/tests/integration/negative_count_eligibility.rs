@@ -2,6 +2,7 @@
 
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
@@ -11,7 +12,7 @@ use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(139);
@@ -235,18 +236,7 @@ fn an_undefined_negative_argument_omits_its_element() {
     // binding. The element is omitted, not made eligible by the absence of
     // b: the count is empty, its bounds fail and no answer set remains. The
     // statement keeps the warning.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        source
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), source);
     assert!(native(&admitted).is_empty());
     assert!(exhaustive(&admitted).is_empty());
 }

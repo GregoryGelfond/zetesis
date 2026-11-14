@@ -6,13 +6,13 @@
 //! reached arithmetic failures refuse the program. Incomplete relational
 //! prefixes have no such duty.
 
+use crate::support::warnings::zero_divisor_statement;
 use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
-    ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
-    observation::EvaluationError,
+    ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, observation::EvaluationError,
 };
 
 fn refused(source: &str, expected: &EvaluationError) {
@@ -61,21 +61,7 @@ fn silent(source: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
 fn omitting(source: &str, statement: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
     let admitted = reference::admit(source, &FormulaLimits::default())
         .unwrap_or_else(|failure| panic!("{source}: {failure}"));
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!(
-            "{source}: one zero-divisor warning: {:?}",
-            admitted.warnings()
-        );
-    };
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        statement,
-        "{source}"
-    );
+    assert_eq!(zero_divisor_statement(&admitted), statement, "{source}");
     reference::exhaustive(&admitted)
 }
 
@@ -156,9 +142,15 @@ fn undefined_substitutions_do_not_discard_defined_ones() {
 }
 
 #[test]
-fn a_defined_false_substitution_keeps_the_rule_admissible() {
-    let source = "d(0;2). p(X,Y) :- d(X), 1/X=1, Y=X+1.";
-    assert_eq!(admitted(source), family(&["d(0)", "d(2)"]));
+fn a_defined_false_substitution_does_not_hide_an_omitted_one() {
+    // The comparison divides by zero at X = 0 and is defined and false at
+    // X = 2. Neither substitution derives an instance, and the false one does
+    // not remove the warning the undefined one leaves on the rule.
+    let rule = "p(X,Y) :- d(X), 1/X=1, Y=X+1.";
+    assert_eq!(
+        omitting(&format!("d(0;2). {rule}"), rule),
+        family(&["d(0)", "d(2)"])
+    );
 }
 
 #[test]
@@ -635,15 +627,18 @@ fn a_defined_local_element_does_not_hide_an_omitted_one() {
 }
 
 #[test]
-fn source_arithmetic_uses_complete_family_evidence() {
+fn a_binder_or_head_zero_divisor_omits_only_its_instance() {
+    // The binder and the head divide by zero at X = 0 alone: that instance
+    // is omitted with the rule's warning, and the instance at X = 1 remains.
     for (rule, expected) in [
         ("p(X,Y):-d(X),Y=1/X.", family(&["d(0)", "d(1)", "p(1,1)"])),
         ("p(1/X):-d(X).", family(&["d(0)", "d(1)", "p(1)"])),
     ] {
-        let source = format!("d(0;1).{rule}");
-        let result = reference::admit(&source, &FormulaLimits::default()).unwrap();
-        assert_eq!(result.warnings().len(), 1);
-        assert_eq!(reference::exhaustive(&result), expected);
+        assert_eq!(
+            omitting(&format!("d(0;1).{rule}"), rule),
+            expected,
+            "{rule}"
+        );
     }
 }
 
@@ -687,24 +682,26 @@ fn explicit_outer_guards_exclude_undefined_local_families() {
 }
 
 #[test]
-fn local_pool_alternatives_share_their_original_family() {
-    let source = "d(0).p:-1=#count{X:d(X),1/(X;1)>0}.";
-    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
-    assert_eq!(result.warnings().len(), 1);
-    assert_eq!(reference::exhaustive(&result), family(&["d(0)", "p"]));
+fn local_pool_alternatives_warn_once_for_their_statement() {
+    // The pool's alternative 1/X divides by zero at X = 0 and is omitted;
+    // its alternative 1/1 keeps the element, so the count is 1. The one
+    // warning is located at the rule as written, pool included.
+    let rule = "p:-1=#count{X:d(X),1/(X;1)>0}.";
+    assert_eq!(
+        omitting(&format!("d(0).{rule}"), rule),
+        family(&["d(0)", "p"])
+    );
 }
 
 #[test]
-fn pooled_choice_heads_share_their_original_local_family() {
-    let source = "d(0).{p(1/X;1):d(X)}.";
-    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
-    assert_eq!(result.warnings().len(), 1);
+fn pooled_choice_heads_warn_once_for_their_statement() {
+    // The pooled head's alternative p(1/X) divides by zero at X = 0 and is
+    // omitted; its alternative p(1) stays a choice. The one warning is
+    // located at the statement as written, pool included.
+    let choice = "{p(1/X;1):d(X)}.";
     assert_eq!(
-        reference::exhaustive(&result),
-        BTreeSet::from([
-            (BTreeSet::from(["d(0)".to_owned()]), None),
-            (BTreeSet::from(["d(0)".to_owned(), "p(1)".to_owned()]), None),
-        ])
+        omitting(&format!("d(0).{choice}"), choice),
+        answer_sets(&[&["d(0)"], &["d(0)", "p(1)"]])
     );
 }
 
@@ -717,7 +714,7 @@ fn an_independent_fatal_branch_survives_an_unavailable_generated_input() {
 }
 
 #[test]
-fn conditional_local_bindings_share_the_original_family() {
+fn an_undefined_consequent_is_false_beside_a_defined_binding() {
     // The consequent divides by zero under the binding X = 0 and is defined
     // under X = 1: one warning, for the rule. A conditional literal keeps the
     // undefined binding, with a false consequent, so p needs d(0) false.
@@ -729,12 +726,14 @@ fn conditional_local_bindings_share_the_original_family() {
 }
 
 #[test]
-fn conditional_condition_pool_alternatives_share_the_original_family() {
-    let source = "d(0).q(0).p:-q(X):d(X),1/(X;1)>0.";
-    let result = reference::admit(source, &FormulaLimits::default()).unwrap();
-    assert_eq!(result.warnings().len(), 1);
+fn pooled_conditional_conditions_warn_once_for_their_statement() {
+    // The condition's alternative 1/X>0 divides by zero at X = 0 and has no
+    // binding there; its alternative 1/1>0 keeps the binding, under which
+    // q(0) holds. The one warning is located at the rule as written, pool
+    // included.
+    let rule = "p:-q(X):d(X),1/(X;1)>0.";
     assert_eq!(
-        reference::exhaustive(&result),
+        omitting(&format!("d(0).q(0).{rule}"), rule),
         family(&["d(0)", "q(0)", "p"])
     );
 }
@@ -833,6 +832,23 @@ fn a_fatal_link_refuses_beside_a_false_one() {
         "d(1).p:-d(X),not 2<1<X+2147483647.",
         "d(1).p:-d(X),not X+2147483647<2<1.",
         "d(1).2<1<X+2147483647:-d(X).",
+    ] {
+        refused(source, &EvaluationError::Overflow);
+    }
+}
+
+#[test]
+fn a_fatal_link_refuses_beside_a_false_link_and_a_zero_divisor() {
+    // The false link 2<1 drops the zero divisor of 1/Y and must not make the
+    // overflow of X+2147483647 read as one, in whatever order the links
+    // stand. In the first two chains the link evaluated last divides by zero
+    // and holds no overflow.
+    for source in [
+        "d(1,0).p:-d(X,Y),not X+2147483647<2<1<1/Y.",
+        "d(1,0).X+2147483647<2<1<1/Y:-d(X,Y).",
+        "d(1,0).p:-d(X,Y),not 1/Y<2<1<X+2147483647.",
+        "d(1,0).p:-d(X,Y),not 2<1<X+2147483647<1/Y.",
+        "d(1,0).p:-d(X,Y),not 2<1<1/Y<X+2147483647.",
     ] {
         refused(source, &EvaluationError::Overflow);
     }

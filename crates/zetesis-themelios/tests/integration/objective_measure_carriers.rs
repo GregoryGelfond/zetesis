@@ -1,6 +1,7 @@
 //! Source priority carriers are distinct from realized aggregate values.
 
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::{admit, exhaustive, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
@@ -140,17 +141,8 @@ fn mixed_source_rows_retain_warnings_and_complete_costs() {
     ]);
     assert_eq!(exhaustive(&input), expected);
     assert_eq!(input.objectives().priorities(), [1, 0]);
-    let [warning] = input.warnings() else {
-        panic!("one omitted source-carrier instance");
-    };
-    assert!(
-        input
-            .source()
-            .expect("source input")
-            .slice(warning.location().expect("parsed source").span)
-            .unwrap()
-            .contains("#minimize")
-    );
+    // One source-carrier instance is omitted, at the objective.
+    assert!(zero_divisor_statement(&input).contains("#minimize"));
     let guarded = admit(
         "{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@(1/(N-2)):n(N),N!=2}.",
         &FormulaLimits::default(),

@@ -3,6 +3,7 @@
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::remap;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
@@ -11,7 +12,7 @@ use std::collections::BTreeSet;
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource, FormulaWarning,
+    FormulaLimits, FormulaResource,
 };
 
 use reference::{Models, exhaustive, holds, native, values};
@@ -209,18 +210,7 @@ fn an_active_undefined_endpoint_omits_its_instance() {
     // so the rule generates no value of X and keeps the warning.
     let rule = "p(X):-d(D),not not X=1..1/D.";
     let program = input(&format!("d(0).{rule}"));
-    let [FormulaWarning::ZeroDivisor { location }] = program.warnings() else {
-        panic!("one zero-divisor warning: {:?}", program.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        program
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        rule
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &program), rule);
     let expected = native(&input("d(0)."));
     assert_eq!(native(&program), expected);
     assert_eq!(exhaustive(&program), expected);

@@ -2,6 +2,7 @@
 
 use crate::support::admission;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
@@ -15,7 +16,7 @@ use reference::{Models, exhaustive, native};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(157);
@@ -210,20 +211,12 @@ fn unrelated_objectives_keep_their_priority() {
 #[test]
 fn mixed_proposals_keep_the_defined_family() {
     // The count's element is optional, so its zero proposal is realizable and
-    // divides by zero; the defined one-proposal keeps the family admitted with
-    // a warning, and the original equalities decide which rows hold.
+    // divides by zero: that instance is omitted with the rule's warning, and
+    // the original equalities decide which of the remaining rows hold.
     let source = "{p}.q(M):-N=#count{1:p},Y=1/N,M=#sum{Y}.";
     let admitted = input(source);
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
     assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
+        zero_divisor_statement_in(SOURCE, &admitted),
         "q(M):-N=#count{1:p},Y=1/N,M=#sum{Y}."
     );
     let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into(), "q(1)".into()])]);

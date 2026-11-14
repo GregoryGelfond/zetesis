@@ -13,6 +13,7 @@
 use crate::support::atom_models::atom;
 use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::warnings::zero_divisor_statements;
 use zetesis_reference_support::{admit, formula, resource_limits};
 
 use std::collections::BTreeSet;
@@ -24,7 +25,7 @@ use zetesis_core::{Atom, Model};
 use zetesis_ferraris::{AggregateErrorKind, Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,
-    FormulaResource, FormulaWarning, ProfileFeature,
+    FormulaResource, ProfileFeature,
 };
 
 struct Case {
@@ -161,23 +162,6 @@ fn expected_omission(name: &str) -> Option<&'static str> {
     }
 }
 
-/// The statements that keep `input`'s warnings, each a zero divisor omitted
-/// there.
-fn omissions(input: &AdmittedFormula) -> Vec<&str> {
-    input
-        .warnings()
-        .iter()
-        .map(|warning| {
-            let FormulaWarning::ZeroDivisor { location } = warning;
-            input
-                .source()
-                .expect("source input")
-                .slice(location.location().expect("parsed source").span)
-                .expect("original span")
-        })
-        .collect()
-}
-
 fn assert_refusal(error: &FormulaFailure, expected: Refusal) {
     assert!(!error.diagnostics().is_empty(), "located source refusal");
     match expected {
@@ -220,7 +204,7 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
         } else {
             let input = result.unwrap_or_else(|error| panic!("{}: {error}", case.name));
             assert_eq!(
-                omissions(&input),
+                zero_divisor_statements(&input),
                 expected_omission(&case.name)
                     .into_iter()
                     .collect::<Vec<_>>(),

@@ -10,13 +10,14 @@ mod logical;
 use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::sources;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
-    admit_formula, prepare_formula,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(179);
@@ -432,18 +433,7 @@ fn an_undefined_generated_value_omits_its_element() {
     let admitted = input(&format!("{statement}d(0)."));
     // The element's one value divides by zero, so the element is omitted
     // and a keeps no permission. The statement keeps the warning.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        statement
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), statement);
     assert_eq!(
         native(&admitted),
         Models::from([BTreeSet::from(["d(0)".into()])])

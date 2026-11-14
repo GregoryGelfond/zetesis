@@ -1,11 +1,11 @@
 //! An objective instance needs its condition and every scalar field defined:
 //! one that divides by zero is omitted, and its statement keeps a warning.
 
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_core::Value;
 use zetesis_reference_support::admit;
 use zetesis_themelios::{
-    AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaWarning,
-    observation::EvaluationError,
+    AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits, observation::EvaluationError,
 };
 
 fn refused(source: &str, expected: &EvaluationError) {
@@ -22,21 +22,7 @@ fn refused(source: &str, expected: &EvaluationError) {
 fn omitting(source: &str, objective: &str) -> AdmittedFormula {
     let admitted = admit(source, &FormulaLimits::default())
         .unwrap_or_else(|failure| panic!("{source}: {failure}"));
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!(
-            "{source}: one zero-divisor warning: {:?}",
-            admitted.warnings()
-        );
-    };
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        objective,
-        "{source}"
-    );
+    assert_eq!(zero_divisor_statement(&admitted), objective, "{source}");
     admitted
 }
 
@@ -92,25 +78,26 @@ fn an_objective_instance_needs_every_field_defined() {
 }
 
 #[test]
-fn pooled_objective_fragments_share_the_original_family() {
+fn pooled_objective_fragments_warn_once_for_their_statement() {
+    // One alternative of the pooled weight divides by zero at the one row
+    // and is omitted; the other keeps its instance. The one warning is
+    // located at the objective as written, pool included.
     for objective in [
         "#minimize{1/(X;X+1)@0,X:d(X)}.",
         "#minimize{1/(X+1;X)@0,X:d(X)}.",
         ":~d(X).[1/(X;X+1)@0,X]",
     ] {
-        let source = format!("d(0). {objective}");
-        let admitted = admit(&source, &FormulaLimits::default()).unwrap();
-        assert_eq!(admitted.warnings().len(), 1, "{source}");
+        let admitted = omitting(&format!("d(0). {objective}"), objective);
         assert_eq!(
             admitted.objectives().templates().len(),
             1,
-            "one defined pooled alternative: {source}"
+            "one defined pooled alternative: {objective}"
         );
         let template = admitted.objectives().templates().at(0).unwrap();
         assert_eq!(
             template.weight(),
             zetesis_core::TemplateTerm::Constant((&Value::Number(1)).into()),
-            "{source}"
+            "{objective}"
         );
     }
 }

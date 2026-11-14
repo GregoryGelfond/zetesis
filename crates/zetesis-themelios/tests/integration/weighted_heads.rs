@@ -10,6 +10,7 @@ mod alias_semantics;
 use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::CASES;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
@@ -17,7 +18,7 @@ use zetesis_algebra::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    FormulaWarning, admit_formula, prepare_formula,
+    admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(167);
@@ -401,18 +402,7 @@ fn negative_eligibility_cannot_hide_undefined_weights() {
     // zero at the one row. Ineligibility does not hide that: the element is
     // omitted, so a is not even supported, and the statement keeps the
     // warning.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        head
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), head);
     assert_eq!(
         admitted
             .atoms()

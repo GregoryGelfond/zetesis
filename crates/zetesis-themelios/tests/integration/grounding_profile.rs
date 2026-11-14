@@ -7,6 +7,7 @@ mod scalar_chains;
 mod support_demand;
 mod unchanged_visits;
 
+use crate::support::warnings::zero_divisor_statement;
 use std::cell::{Cell, RefCell};
 use zetesis_reference_support::resource_limits;
 
@@ -14,8 +15,8 @@ use zetesis_test_support::repository;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, FormulaWarning, GroundingObserver, GroundingOutcome,
-    GroundingPhase, GroundingWork, admit_formula_with_grounding_observer,
+    FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
+    GroundingWork, admit_formula_with_grounding_observer,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -366,17 +367,7 @@ fn undefined_family_validation_completes_its_phase() {
     let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
     let plain = compile(source, &FormulaLimits::default(), None).unwrap();
     assert_eq!(measured.warnings(), plain.warnings());
-    let [FormulaWarning::ZeroDivisor { location }] = measured.warnings() else {
-        panic!("one zero-divisor warning: {:?}", measured.warnings());
-    };
-    assert_eq!(
-        measured
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        ":- p(X), 1/X=0."
-    );
+    assert_eq!(zero_divisor_statement(&measured), ":- p(X), 1/X=0.");
     // The constraint's one instance is omitted, so the fact is the only root.
     assert_eq!(measured.atoms(), plain.atoms());
     assert_eq!(measured.theory().roots(), plain.theory().roots());

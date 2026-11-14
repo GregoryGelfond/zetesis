@@ -2,6 +2,7 @@
 use crate::support::finite_bindings as reference;
 use crate::support::formula_trees::{Formula, world};
 use crate::support::upstream;
+use crate::support::warnings::zero_divisor_statement;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
@@ -10,7 +11,7 @@ use zetesis_reference_support::{BundleFixture, canonical, formula, prepared, res
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmittedFormula, AnalysisBasis, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource, FormulaWarning, admit_formula,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 fn corpus_case() -> &'static zetesis_validation::curated::Case {
@@ -412,19 +413,6 @@ fn projection_inputs_require_outer_support() {
     }
 }
 
-/// The statement that keeps `admitted`'s one warning, a zero divisor
-/// reached in that statement.
-fn warned_statement(admitted: &AdmittedFormula) -> &str {
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    admitted
-        .source()
-        .expect("source input")
-        .slice(location.location().expect("parsed source").span)
-        .unwrap()
-}
-
 #[test]
 fn absent_witnesses_do_not_hide_undefined_values() {
     // No p atom exists, so a defined projection would be absent. The value
@@ -433,7 +421,7 @@ fn absent_witnesses_do_not_hide_undefined_values() {
     // keeps the warning.
     for source in ["q:-not p(f(_,1/X)):X=0.", "q:-not not p(f(_,1/X)):X=0."] {
         let admitted = formula(source);
-        assert_eq!(warned_statement(&admitted), source);
+        assert_eq!(zero_divisor_statement(&admitted), source);
         assert_eq!(
             native(&admitted),
             Models::from([BTreeSet::new()]),
@@ -552,7 +540,7 @@ fn entered_conditions_evaluate_undefined_values() {
     // and is false, so q is not derived. The rule keeps the warning.
     let source = "q:-p((1..2)/X):X=0.";
     let admitted = formula(source);
-    assert_eq!(warned_statement(&admitted), source);
+    assert_eq!(zero_divisor_statement(&admitted), source);
     assert_eq!(native(&admitted), Models::from([BTreeSet::new()]));
 }
 

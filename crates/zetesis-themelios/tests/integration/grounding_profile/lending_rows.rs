@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_algebra::Cancellation;
 use zetesis_core::Atom;
 use zetesis_stable::{Limits, StableModels};
@@ -185,10 +186,13 @@ fn generated_support_rows_keep_their_owned_continuation() {
 }
 
 #[test]
-fn selected_support_keeps_defined_false_witnesses() {
-    // A selected-row consumer yields no head, but the defined false instance
-    // still witnesses arithmetic admission for this source family.
-    let admitted = compile("d(0;1).p(X):-d(X),1/X<0.", &FormulaLimits::default(), None).unwrap();
+fn selected_support_derives_no_head_from_false_or_omitted_rows() {
+    // The comparison is defined and false at X = 1 and divides by zero at
+    // X = 0. A selected-row consumer yields no head from either row, and the
+    // rule keeps the warning for the row it omits.
+    let rule = "p(X):-d(X),1/X<0.";
+    let admitted = compile(&format!("d(0;1).{rule}"), &FormulaLimits::default(), None).unwrap();
+    assert_eq!(zero_divisor_statement(&admitted), rule);
     let expected = compile("d(0;1).", &FormulaLimits::default(), None).unwrap();
     assert_eq!(family(&admitted), family(&expected));
 }

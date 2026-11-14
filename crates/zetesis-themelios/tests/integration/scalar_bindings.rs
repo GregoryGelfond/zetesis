@@ -1,14 +1,13 @@
 //! Generative scalar instructions preserve scoped bindings and whole-model identity.
 
+use crate::support::warnings::zero_divisor_statement;
 use std::collections::BTreeSet;
 use zetesis_reference_support::{admit, formula, resource_limits};
 
 use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_stable::{Limits, StableModels};
-use zetesis_themelios::{
-    ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
-};
+use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
     let admitted = formula(source);
@@ -153,17 +152,7 @@ fn a_binder_that_divides_by_zero_generates_no_instance() {
     let rule = "p(Y):-d(X),Y=1/X.";
     let source = format!("d(0).{rule}");
     let admitted = formula(&source);
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        rule
-    );
+    assert_eq!(zero_divisor_statement(&admitted), rule);
     assert_eq!(models(&source), models("d(0)."));
 }
 

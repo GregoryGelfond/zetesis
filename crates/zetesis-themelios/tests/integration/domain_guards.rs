@@ -1,5 +1,6 @@
 //! Optional domains preserve complete theories while avoiding impossible prefixes.
 
+use crate::support::warnings::zero_divisor_statement;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
 use zetesis_reference_support::{prepare, resource_limits};
@@ -9,9 +10,8 @@ use zetesis_domain::numeric::Status;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaResource, FormulaWarning, GroundingObserver,
-    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy,
-    prepare_formula,
+    ExpansionLimits, FormulaFailure, FormulaResource, GroundingObserver, GroundingOptions,
+    GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy, prepare_formula,
 };
 
 #[derive(Default)]
@@ -74,19 +74,6 @@ fn ground(
         .with_grounding_options(GroundingOptions { joins: strategy })
         .with_domain_analysis(domains)
         .ground_with_observer(Some(observation))
-}
-
-/// The statement of `admitted`'s one warning, which reports a zero divisor
-/// omitted from an instance of that statement.
-fn omitted_statement(admitted: &AdmittedFormula) -> &str {
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    admitted
-        .source()
-        .expect("source input")
-        .slice(location.location().expect("parsed source").span)
-        .unwrap()
 }
 
 fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
@@ -423,7 +410,7 @@ fn optional_analysis_changes_no_arithmetic_verdict() {
             &Observation::default(),
         )
         .unwrap();
-        assert_eq!(omitted_statement(&admitted), "p:-d(X),1/X=1.");
+        assert_eq!(zero_divisor_statement(&admitted), "p:-d(X),1/X=1.");
         assert_eq!(
             zetesis_reference_support::exhaustive(&admitted),
             std::collections::BTreeSet::from([(["d(0)".to_owned()].into(), None)])
@@ -467,7 +454,7 @@ fn a_comparison_over_one_variable_narrows_its_candidates() {
 }
 
 #[test]
-fn domain_narrowing_preserves_undefined_family_evidence() {
+fn domain_narrowing_keeps_a_reached_zero_divisor_warning() {
     // 1/X = 1 is undefined at X = 0 and false at X = 2, so the analysis
     // excludes 2 alone; X != 0 then excludes 0. The same substitution is
     // reached, and omitted with a warning, when no comparison excludes it.
@@ -493,7 +480,7 @@ fn domain_narrowing_preserves_undefined_family_evidence() {
         &Observation::default(),
     )
     .unwrap();
-    assert_eq!(mixed.warnings().len(), 1);
+    assert_eq!(zero_divisor_statement(&mixed), "p(X) :- d(X), 1/X = 1.");
     // Different source spans are expected; emitted atoms and formulas agree.
     assert_eq!(mixed.atoms(), narrowed.atoms());
     assert_eq!(
@@ -724,7 +711,7 @@ fn objective_sources_keep_reached_zero_divisor_warnings() {
             equal(&complete, &narrowed);
             for admitted in [&complete, &narrowed] {
                 assert_eq!(
-                    omitted_statement(admitted),
+                    zero_divisor_statement(admitted),
                     "#minimize{1/X:p(X)}.",
                     "{source}"
                 );

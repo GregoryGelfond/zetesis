@@ -9,12 +9,13 @@ use crate::support::finite_bindings as reference;
 use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::CASES;
 use reference::{Models, native};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(149);
@@ -133,18 +134,7 @@ fn false_gates_cannot_hide_undefined_arguments() {
     // beside it divides by zero there. The false gate does not hide that:
     // the instance is omitted, so q(0) is not even supported, and the rule
     // keeps the warning.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        rule
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), rule);
     assert_eq!(
         admitted.atoms().iter().map(canonical).collect::<Vec<_>>(),
         ["p(0)"]

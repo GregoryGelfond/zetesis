@@ -3,6 +3,7 @@
 mod cases;
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
@@ -14,7 +15,7 @@ use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     AdmissionFailure, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, ProfileFeature,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
 };
 
 const SOURCE: SourceId = SourceId::new(317);
@@ -184,21 +185,6 @@ fn missing_extrema_retain_complete_key_limits() {
     }
 }
 
-/// The statement of `admitted`'s one warning, which reports under this
-/// module's source identity a zero divisor omitted from that statement.
-fn omitted_statement(admitted: &AdmittedFormula) -> &str {
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    let location = location.location().expect("parsed source");
-    assert_eq!(location.source, SOURCE);
-    admitted
-        .source()
-        .expect("source input")
-        .slice(location.span)
-        .unwrap()
-}
-
 #[test]
 fn neutral_rows_cannot_hide_closed_undefined_terms() {
     for source in ["#sum{1/0:a}.", "#min{1/0:a}.", "#max{1/0:a}=#inf:-#false."] {
@@ -234,7 +220,7 @@ fn neutral_rows_cannot_hide_omitted_bindings() {
         ("d(0).", "#sum+{-1:p(Y):d(X),Y=1/X}=0."),
     ] {
         let admitted = input(&format!("{facts}{head}"));
-        assert_eq!(omitted_statement(&admitted), head);
+        assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), head);
         let expected = native(&input(facts));
         assert_eq!(native(&admitted), expected, "{head}");
         assert_eq!(exhaustive(&admitted), expected, "{head}");
@@ -248,7 +234,7 @@ fn neutral_tuple_fields_do_not_hide_a_zero_divisor() {
     // statement's warning and a keeps no permission.
     let head = "#sum{word,1/X:a:d(X)}=0.";
     let admitted = input(&format!("d(0).{head}"));
-    assert_eq!(omitted_statement(&admitted), head);
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), head);
     let expected = native(&input("d(0)."));
     assert_eq!(native(&admitted), expected);
     assert_eq!(exhaustive(&admitted), expected);

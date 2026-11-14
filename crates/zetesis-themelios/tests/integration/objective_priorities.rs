@@ -1,12 +1,13 @@
 //! Finite priorities partition complete eligible objective rows.
 
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::{admit, exhaustive, resource_limits};
 
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
-    FormulaWarning, ProfileFeature,
+    ProfileFeature,
 };
 
 const CASES: &str = r##"
@@ -69,17 +70,7 @@ fn undefined_priorities_omit_their_rows() {
         let source = format!("p(0).{objective}");
         let input = admit(&source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
-        let [FormulaWarning::ZeroDivisor { location }] = input.warnings() else {
-            panic!("{source}: one zero-divisor warning: {:?}", input.warnings());
-        };
-        assert_eq!(
-            input
-                .source()
-                .expect("source input")
-                .slice(location.location().expect("parsed source").span)
-                .unwrap(),
-            objective
-        );
+        assert_eq!(zero_divisor_statement(&input), objective);
         assert_eq!(
             exhaustive(&input),
             Records::from([(["p(0)".to_owned()].into(), None)]),

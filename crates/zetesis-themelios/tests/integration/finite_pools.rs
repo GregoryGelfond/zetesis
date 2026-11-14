@@ -1,5 +1,6 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
@@ -7,7 +8,7 @@ use zetesis_reference_support::{BundleFixture, canonical, formula, resource_limi
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, FormulaWarning,
+    FormulaResource,
 };
 
 // Independently handwritten expansions. The Cartesian family remains a family
@@ -382,17 +383,7 @@ fn entirely_undefined_conditional_ranges_are_false() {
     // derived. The rule keeps the warning, located at its statement.
     let rule = "q:-1=(1..2)/X:d(X).";
     let program = formula(&format!("d(0).{rule}"));
-    let [FormulaWarning::ZeroDivisor { location }] = program.warnings() else {
-        panic!("one zero-divisor warning: {:?}", program.warnings());
-    };
-    assert_eq!(
-        program
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        rule
-    );
+    assert_eq!(zero_divisor_statement(&program), rule);
     let expected = native(&formula("d(0)."));
     assert_eq!(native(&program), expected);
     assert_eq!(exhaustive(&program), expected);

@@ -1,6 +1,7 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement_in;
 use reference::{Models, exhaustive, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -9,7 +10,7 @@ use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 use crate::support::objective_dependency_records as objective_dependencies;
@@ -309,18 +310,7 @@ fn an_undefined_consumer_omits_its_only_instance() {
     let admitted = input(source);
     // The count's one value divides by zero in the head, so the rule has no
     // instance and keeps the warning.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        source
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), source);
     let expected = Models::from([BTreeSet::new()]);
     assert_eq!(native(&admitted), expected);
     assert_eq!(exhaustive(&admitted), expected);
@@ -339,18 +329,7 @@ fn mixed_consumers_keep_the_defined_family() {
     let source = "{p}.q(Y):-N=#count{1:p},N>0,Y=1/N.";
     let admitted = input(source);
     // N is generated, so N>0 does not exclude the zero proposal from the family.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        &source[4..]
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), &source[4..]);
     let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into(), "q(1)".into()])]);
     assert_eq!(native(&admitted), expected);
     assert_eq!(exhaustive(&admitted), expected);

@@ -1,11 +1,12 @@
 //! Scalar data evaluation retains complete original and frozen source semantics.
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement_in;
 
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
 use zetesis_reference_support::formula;
-use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaWarning};
+use zetesis_themelios::{ExpansionFailure, FormulaFailure};
 
 const CASES: &[(&str, &str)] = &[
     (
@@ -155,17 +156,8 @@ fn a_zero_divisor_warning_retains_the_source_rule() {
     let admitted = admission::admitted(source_id, source);
     // The head divides by zero at the one row: the instance is omitted, and
     // the warning is located at exactly the rule.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    let location = location.location().expect("parsed source");
-    assert_eq!(location.source, source_id);
     assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.span)
-            .unwrap(),
+        zero_divisor_statement_in(source_id, &admitted),
         &source[source.find("p(").unwrap()..],
         "exact source rule location"
     );

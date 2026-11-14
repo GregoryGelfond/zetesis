@@ -8,6 +8,7 @@ use zetesis_reference_support::{BundleFixture, canonical, resource_limits};
 use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
 use crate::support::finite_bindings::{Models, exhaustive, native, values};
 use crate::support::formula_trees::{Formula, world};
+use crate::support::warnings::zero_divisor_statements;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_algebra::Cancellation;
@@ -15,8 +16,8 @@ use zetesis_clingo_support as oracle;
 use zetesis_ferraris::NodeView as Node;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
-    ProfileFeature, admit_bundle_formula, admit_formula,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_bundle_formula, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(97);
@@ -102,20 +103,8 @@ fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
             assert_eq!(row["valid"], true);
             let program = result.unwrap_or_else(|error| panic!("{}: {error}", row["name"]));
             assert_eq!(program.source().expect("source input").text(), source);
-            let warned: Vec<_> = program
-                .warnings()
-                .iter()
-                .map(|warning| {
-                    let FormulaWarning::ZeroDivisor { location } = warning;
-                    program
-                        .source()
-                        .expect("source input")
-                        .slice(location.location().expect("parsed source").span)
-                        .unwrap()
-                })
-                .collect();
             assert_eq!(
-                warned,
+                zero_divisor_statements(&program),
                 warned_rule(row["name"].as_str().unwrap())
                     .into_iter()
                     .collect::<Vec<_>>(),

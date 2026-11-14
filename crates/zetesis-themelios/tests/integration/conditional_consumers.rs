@@ -2,6 +2,7 @@
 
 use crate::support::admission;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
@@ -15,7 +16,7 @@ use reference::{Models, native};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, FormulaWarning, admit_formula, prepare_formula,
+    FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(163);
@@ -214,18 +215,7 @@ fn an_undefined_consequent_is_false_under_a_possible_condition() {
     // The consequent divides by zero at the count's one value, so it is
     // false wherever its condition d holds: q(0) needs d absent. A condition
     // that is merely possible hides neither that nor the rule's warning.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        &source[4..]
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), &source[4..]);
     assert_eq!(
         native(&admitted),
         Models::from([

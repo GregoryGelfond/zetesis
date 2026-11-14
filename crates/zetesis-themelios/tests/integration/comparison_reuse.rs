@@ -1,12 +1,13 @@
 //! A comparison certificate belongs to one completed nongenerative binding.
 
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const FIXTURE: &str = include_str!("../fixtures/comparison-reuse.jsonl");
 const FALSE_FILTER_SOURCE: &str = "d(0).p:-d(X),X!=0,1/X>0.";
@@ -52,17 +53,7 @@ fn a_complete_row_evaluates_every_inconclusive_comparison() {
         let source = format!("d(0).{rule}");
         let input = reference::admit(&source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error:?}"));
-        let [FormulaWarning::ZeroDivisor { location }] = input.warnings() else {
-            panic!("{source}: one zero-divisor warning: {:?}", input.warnings());
-        };
-        assert_eq!(
-            input
-                .source()
-                .expect("source input")
-                .slice(location.location().expect("parsed source").span)
-                .unwrap(),
-            rule
-        );
+        assert_eq!(zero_divisor_statement(&input), rule);
         assert_eq!(
             reference::exhaustive(&input),
             Records::from([(["d(0)".to_owned()].into(), None)]),

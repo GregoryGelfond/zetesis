@@ -51,18 +51,16 @@ fn false_bodies_do_not_evaluate_generated_heads() {
 }
 
 #[test]
-fn normal_siblings_keep_the_original_family_warning() {
+fn normal_siblings_warn_once_for_their_statement() {
+    // The pool's alternative X/X divides by zero at the one row and is
+    // omitted; its alternative X/Y is defined and false there. Both routes
+    // keep one warning, located at the rule as written, pool included.
     let source = include_str!("../../fixtures/column-totality/normal-sibling-warning.lp");
+    let rule = "p(X):-d(X),e(Y),X/(Y;X)=1.";
     let eager = prepared(source).ground().unwrap();
     let hybrid = hybrid(source);
-    assert_eq!(eager.warnings().len(), 1);
-    assert_eq!(hybrid.warnings().len(), 1);
-    for warning in eager.warnings().iter().chain(hybrid.warnings()) {
-        let span = warning.location().unwrap().span;
-        let start = usize::try_from(span.start().get()).unwrap();
-        let end = usize::try_from(span.end().get()).unwrap();
-        assert_eq!(source.get(start..end), Some("p(X):-d(X),e(Y),X/(Y;X)=1."));
-    }
+    assert_eq!(zero_divisor_statement(&eager), rule);
+    assert_eq!(zero_divisor_statement(&hybrid), rule);
     assert_eq!(
         full_family(&hybrid),
         BTreeSet::from([BTreeSet::from(["d(0)".to_owned(), "e(1)".to_owned()])])

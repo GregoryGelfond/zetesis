@@ -1,13 +1,13 @@
 //! Evaluated positive arguments consume bindings and retain actual source atoms.
 use crate::support::finite_bindings as reference;
 use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
+use crate::support::warnings::zero_divisor_statement;
 use reference::{Models, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use zetesis_reference_support::{admit, formula, prepare, prepared, resource_limits};
 use zetesis_themelios::{
-    AnalysisBasis, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
-    admit_formula,
+    AnalysisBasis, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
 // Explicit finite substitutions retain each whole supporting atom. Arithmetic
@@ -223,17 +223,7 @@ fn a_zero_divisor_warns_only_on_a_complete_row() {
     // rule keeps the warning.
     let rule = "q(X):-d(X),p(X/0).";
     let admitted = formula(&format!("d(1).p(1).{rule}"));
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        rule
-    );
+    assert_eq!(zero_divisor_statement(&admitted), rule);
     assert_eq!(native(&admitted), native(&formula("d(1).p(1).")));
 }
 

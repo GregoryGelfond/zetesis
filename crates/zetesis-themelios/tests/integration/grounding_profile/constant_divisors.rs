@@ -1,8 +1,9 @@
 //! Literal divisors defer only the redundant complete-family traversal.
 
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::prepare;
 use zetesis_themelios::{
-    ExpansionFailure, FormulaFailure, FormulaWarning, GroundingOutcome, GroundingPhase,
+    ExpansionFailure, FormulaFailure, GroundingOutcome, GroundingPhase,
     observation::EvaluationError,
 };
 
@@ -78,18 +79,9 @@ fn literal_divisors_omit_family_row_evaluation() {
     }
 }
 
-/// `warnings` is the one warning of `source`: a zero divisor omitted from
-/// an instance of its constraint.
-fn warned(source: &str, warnings: &[FormulaWarning]) {
-    let [FormulaWarning::ZeroDivisor { location }] = warnings else {
-        panic!("{source}: one zero-divisor warning: {warnings:?}");
-    };
-    let span = location.location().expect("parsed source").span;
-    assert_eq!(
-        &source[span.start().get() as usize..span.end().get() as usize],
-        &source[source.find(":-").unwrap()..],
-        "{source}"
-    );
+/// The constraint of `source`, its last statement.
+fn constraint(source: &str) -> &str {
+    &source[source.find(":-").unwrap()..]
 }
 
 /// Both routes admit `source`, one fact and a constraint: the final family
@@ -103,11 +95,19 @@ fn omission(source: &str) {
             let admitted = prepared
                 .ground_hybrid_with_observer(Some(&observer))
                 .unwrap();
-            warned(source, admitted.warnings());
+            assert_eq!(
+                zero_divisor_statement(&admitted),
+                constraint(source),
+                "{source}"
+            );
             assert_eq!(admitted.streamed_instances(), 0, "{source}");
         } else {
             let admitted = prepared.ground_with_observer(Some(&observer)).unwrap();
-            warned(source, admitted.warnings());
+            assert_eq!(
+                zero_divisor_statement(&admitted),
+                constraint(source),
+                "{source}"
+            );
             // The fact's root is the only one.
             assert_eq!(admitted.theory().roots().len(), 1, "{source}");
         }
@@ -255,18 +255,30 @@ fn empty_late_heads_preserve_reached_body_overflow() {
 }
 
 #[test]
-fn unsafe_pool_siblings_keep_shared_family_evidence() {
+fn unsafe_pool_siblings_retain_the_family_warning() {
+    // The pool sets the variable divisor X beside the literal divisor 1, so
+    // the family pass still reads the constraint's row, where X/X divides by
+    // zero. Both routes keep one warning, located at the constraint as
+    // written, pool included.
+    let source = "d(0). :- d(X),X/(1;X)=0.";
     for hybrid in [false, true] {
         let observer = Observer::default();
-        assert_eq!(
-            ground("d(0). :- d(X),X/(1;X)=0.", hybrid, &observer).unwrap(),
-            1
-        );
+        let prepared = prepare(source).unwrap();
+        if hybrid {
+            let admitted = prepared
+                .ground_hybrid_with_observer(Some(&observer))
+                .unwrap();
+            assert_eq!(zero_divisor_statement(&admitted), constraint(source));
+        } else {
+            let admitted = prepared.ground_with_observer(Some(&observer)).unwrap();
+            assert_eq!(zero_divisor_statement(&admitted), constraint(source));
+        }
         assert!(
             family_pass(&observer)
                 .work
                 .join_rows
-                .is_some_and(|count| count > 0)
+                .is_some_and(|count| count > 0),
+            "hybrid={hybrid}"
         );
     }
 }

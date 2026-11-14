@@ -2,13 +2,12 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support as reference;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::records::Records;
 use zetesis_test_support::thresholds::first_success;
-use zetesis_themelios::{
-    AdmittedFormula, FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-scopes.jsonl");
 
@@ -123,18 +122,7 @@ fn scoped_numeric_zero_retains_its_query() {
 fn omitting(source: &str, statement: &str, limits: &FormulaLimits) -> AdmittedFormula {
     let input =
         reference::admit(source, limits).unwrap_or_else(|error| panic!("{source}: {error}"));
-    let [FormulaWarning::ZeroDivisor { location }] = input.warnings() else {
-        panic!("{source}: one zero-divisor warning: {:?}", input.warnings());
-    };
-    assert_eq!(
-        input
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        statement,
-        "{source}"
-    );
+    assert_eq!(zero_divisor_statement(&input), statement, "{source}");
     input
 }
 

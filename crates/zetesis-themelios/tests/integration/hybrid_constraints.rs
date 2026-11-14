@@ -1,5 +1,6 @@
 //! Hybrid admission preserves original source validation and candidate identity.
 
+use crate::support::warnings::zero_divisor_statement;
 use std::cell::Cell;
 use std::fmt::Write;
 use zetesis_reference_support::{hybrid, prepare, prepared};
@@ -8,9 +9,9 @@ use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
 use zetesis_themelios::{
     ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
-    ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, FormulaWarning,
-    GroundingObserver, GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork,
-    HybridFeature, HybridFormula, JoinStrategy, ProgramSite,
+    ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, GroundingObserver,
+    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, HybridFeature,
+    HybridFormula, JoinStrategy, ProgramSite,
 };
 
 fn model(owner: &HybridFormula, selected: &[&str]) -> Model {
@@ -233,26 +234,17 @@ fn mixed_undefined_instances_warn_before_checking() {
 }
 
 #[test]
-fn defined_false_instances_witness_arithmetic_admission() {
+fn a_defined_false_instance_does_not_hide_an_omitted_one() {
+    // The constraint divides by zero at X = 0 and is defined and false at
+    // X = 2. The false instance rejects nothing and does not remove the
+    // warning the omitted one leaves on the constraint, so the candidate
+    // that holds both atoms satisfies it.
     let owner = hybrid("d(0;2). {p(X)}:-d(X). :-p(X),1/X=1.");
-    assert_eq!(owner.warnings().len(), 1);
+    assert_eq!(zero_divisor_statement(&owner), ":-p(X),1/X=1.");
     assert_eq!(
         verdict(&owner, &["d(0)", "d(2)", "p(0)", "p(2)"]),
         ConstraintVerdict::Satisfied
     );
-}
-
-/// The statement of `owner`'s one warning, which reports a zero divisor
-/// omitted from an instance of that statement.
-fn omitted_statement(owner: &HybridFormula) -> &str {
-    let [FormulaWarning::ZeroDivisor { location }] = owner.warnings() else {
-        panic!("one zero-divisor warning: {:?}", owner.warnings());
-    };
-    owner
-        .source()
-        .expect("source input")
-        .slice(location.location().expect("parsed source").span)
-        .unwrap()
 }
 
 /// The family of these answer sets, spelled.
@@ -272,7 +264,7 @@ fn candidate_gates_cannot_hide_a_zero_divisor() {
     // it is omitted with a warning at admission, so no candidate violates
     // the constraint.
     let owner = hybrid("d(0). {p(X)}:-d(X). :-p(X),1/X=1.");
-    assert_eq!(omitted_statement(&owner), ":-p(X),1/X=1.");
+    assert_eq!(zero_divisor_statement(&owner), ":-p(X),1/X=1.");
     assert_eq!(
         verdict(&owner, &["d(0)", "p(0)"]),
         ConstraintVerdict::Satisfied
@@ -307,7 +299,7 @@ fn an_independent_constraint_does_not_hide_an_omitted_one() {
     // separate statement: the first constraint's one instance is still
     // omitted under its own warning, and neither constraint rejects p(0).
     let owner = hybrid("d(0). {p(X)}:-d(X). :-p(X),1/X=1. :-p(X),X=1.");
-    assert_eq!(omitted_statement(&owner), ":-p(X),1/X=1.");
+    assert_eq!(zero_divisor_statement(&owner), ":-p(X),1/X=1.");
     assert_eq!(full_family(&owner), family(&[&["d(0)"], &["d(0)", "p(0)"]]));
 }
 

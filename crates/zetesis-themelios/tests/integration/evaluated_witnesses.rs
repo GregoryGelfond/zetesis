@@ -1,5 +1,6 @@
 //! Local witness rows distinguish captured inputs from closed evaluated values.
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement;
 use crate::support::witnesses::{self, limited};
 use zetesis_reference_support::{canonical, formula, prepare, prepared, resource_limits};
 
@@ -9,7 +10,7 @@ use std::fmt::Write as _;
 use reference::{Models, holds, native, values};
 use zetesis_themelios::{
     ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    FormulaWarning, admit_formula,
+    admit_formula,
 };
 
 // These independently written finite substitutions retain whole source atoms.
@@ -329,20 +330,7 @@ fn a_witness_row_that_divides_by_zero_is_no_witness() {
     let rule = "q:-p(X,X/0):#true.";
     for facts in ["p(1,2).", "p(2147483647,0)."] {
         let admitted = formula(&format!("{facts}{rule}"));
-        let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-            panic!(
-                "{facts}: one zero-divisor warning: {:?}",
-                admitted.warnings()
-            );
-        };
-        assert_eq!(
-            admitted
-                .source()
-                .expect("source input")
-                .slice(location.location().expect("parsed source").span)
-                .unwrap(),
-            rule
-        );
+        assert_eq!(zero_divisor_statement(&admitted), rule, "{facts}");
         assert_eq!(native(&admitted), native(&formula(facts)), "{facts}");
     }
 }

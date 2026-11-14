@@ -1,12 +1,13 @@
 //! Source grounding eligibility remains separate from complete-model truth.
 
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-source-completion.jsonl");
 
@@ -202,17 +203,7 @@ fn source_arithmetic_precedes_query_materialization() {
         );
         let input =
             reference::admit(&source, &limits).unwrap_or_else(|error| panic!("{source}: {error}"));
-        let [FormulaWarning::ZeroDivisor { location }] = input.warnings() else {
-            panic!("{source}: one zero-divisor warning: {:?}", input.warnings());
-        };
-        assert_eq!(
-            input
-                .source()
-                .expect("source input")
-                .slice(location.location().expect("parsed source").span)
-                .unwrap(),
-            objective
-        );
+        assert_eq!(zero_divisor_statement(&input), objective);
         assert!(input.objectives().templates().is_empty(), "{source}");
         assert_eq!(
             reference::exhaustive(&input),

@@ -7,11 +7,12 @@ use zetesis_reference_support::{BundleFixture, resource_limits};
 use crate::support::clingo_reports::{enumerated, expected};
 use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
 use crate::support::sourced_admission::{SOURCE, input, options};
+use crate::support::warnings::zero_divisor_statement_in;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource, FormulaWarning, admit_bundle_formula, admit_formula,
+    FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -176,18 +177,7 @@ fn undefined_guard_fields_omit_their_instances() {
         "p:-d(X),not not (1,2,1/X)!=(1,2).",
     ] {
         let program = input(&format!("d(0).{rule}")).unwrap();
-        let [FormulaWarning::ZeroDivisor { location }] = program.warnings() else {
-            panic!("{rule}: one zero-divisor warning: {:?}", program.warnings());
-        };
-        assert_eq!(location.location().expect("parsed source").source, SOURCE);
-        assert_eq!(
-            program
-                .source()
-                .expect("source input")
-                .slice(location.location().expect("parsed source").span)
-                .unwrap(),
-            rule
-        );
+        assert_eq!(zero_divisor_statement_in(SOURCE, &program), rule);
         let expected = native(&input("d(0).").unwrap());
         assert_eq!(native(&program), expected, "{rule}");
         assert_eq!(exhaustive(&program), expected, "{rule}");
