@@ -3654,6 +3654,13 @@ candidate is stable exactly when it equals the presentation's least consequences
 The original program need not be positive or acyclic. Recognizing all original
 roots, freezing negation, preserving atom identity and computing the least set
 from the empty interpretation remain executable correspondence obligations.
+A candidate whose reduct the Rust check does not cover is declined and left to
+the general check. An attempt tests first the root at which an earlier one
+declined for two live heads, and declines again for two distinct true head
+atoms before it classifies any node: that is the same absence of a
+certificate, reached sooner, and it asserts nothing about the candidate. An
+attempt at which that root does not decline pays for the test and proceeds as
+before.
 
 [`PossibleFoundedness`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PossibleFoundedness.lean)
 gives a separate candidate restriction. An upper relaxation must retain every
