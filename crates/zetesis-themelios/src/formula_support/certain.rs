@@ -347,7 +347,8 @@ pub(crate) fn negation_left_out() -> bool {
 ///
 /// The reference decided negation is compared against: a default negation
 /// removes its rule's head predicates, no row is tested against a negated
-/// atom, and emission keeps every negated atom as written.
+/// atom, and emission keeps every negated atom as written. Nothing being
+/// decided, no ordinary rule is held back for the atoms it negates.
 #[cfg(test)]
 pub(crate) mod testing {
     use std::cell::Cell;

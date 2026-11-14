@@ -207,9 +207,10 @@ completed support whatever the atom's predicate and component, so
 constraint's body decides a fixed atom only, and a constraint dropped that way
 still names the atoms of its other literals, so that a constraint grounded
 into the theory and one checked against the source name the same atoms. A
-negation whose atom is supported and belongs to an uncertain predicate is
-emitted as written, and so is every negation inside a conditional literal, a
-projection such as `not q(_, X)`, or an element of an aggregate or a choice.
+negation whose atom is supported, is no explicit fact and belongs to an
+uncertain predicate is emitted as written, and so is every negation inside a
+conditional literal, a projection such as `not q(_, X)`, or an element of an
+aggregate or a choice.
 
 clingo decides such negations while it grounds, component by component. It
 tracks facts atom by atom where this analysis decides by predicate, so a
@@ -305,7 +306,8 @@ start: `{h(X+1)} :- d(X), not blocked.` is admitted, and a zero divisor in
 such an element still keeps its warning. A growth that a
 decided negation stops ends: `stop. p(0). p(X+1) :- p(X), not stop.` has the
 answer set `{stop, p(0)}`. With a choice `{blocked}.` or `{stop}.` in place of
-the fact nothing is decided, and both programs are refused as before.
+the fact nothing is decided, and both programs are as before: the first is
+refused for the overflow, and the second does not finish.
 
 The substitution rests on the roots that derive each atom, so emission checks
 them on the theory it built rather than taking them from the analysis. Every
@@ -1726,13 +1728,21 @@ counted in `support_deferred_visits`.
 An ordinary producer that waits only for atoms it negates does not need them
 in the snapshot. It reads a negated atom over the snapshot and the round's
 pending atoms, so it can go as soon as the component is *settled*: decidable,
-with every other dependency at its fixed point, every waiting producer
-traversed, and either no atom gained this round or no producer that reads the
-component itself. What such a component gained this round feeds none of its
-own producers, so the snapshot and the pending atoms are its complete
-relation. A chain of strata, each negating the one before, is thereby
-traversed in one round, not in one round for each stratum. A rich producer
-joins what it waits for, and still waits for the fixed point.
+with every other dependency at its fixed point, and with nothing to gain
+beyond this round's atoms. That holds when every waiting producer of the
+component was traversed and it either gained no atom this round or has no
+producer that reads the component itself. It also holds when its waiting
+producers are queued by the same readiness test, ahead of the producer that
+asks, and none reads the component itself: they are traversed first. What
+such a component gains this round feeds none of its own producers, so the
+snapshot and the pending atoms are its complete relation. One test thereby
+queues a chain of strata, each negating the one before, in dependency order,
+and the chain is traversed in one round, not in one round for each stratum.
+A stratum that reads itself is complete only in a round in which it gains
+nothing, so strata of that kind follow one another: each begins when the one
+it negates has stopped growing, and their rounds add up where, with the
+negation ignored, they overlapped. A rich producer joins what it waits for,
+and still waits for the fixed point.
 
 Waiting for a negated atom pays only where the atom is decided: support
 completion reads a negated atom to decide it and for nothing else. An

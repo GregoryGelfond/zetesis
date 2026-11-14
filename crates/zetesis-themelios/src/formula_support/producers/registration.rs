@@ -266,7 +266,9 @@ impl<'source> Registration<'source> {
                         &self.inputs[inputs.clone()],
                         false,
                     )),
-                    // Never held, or released before the first round.
+                    // Never held. `Schedule::state` reports a released
+                    // producer as never held, so its state only completes
+                    // the match.
                     None | Some(components::State::Released) => Ok(delta::prepared_variants(
                         rule,
                         support,

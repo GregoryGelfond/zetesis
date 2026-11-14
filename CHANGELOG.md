@@ -94,8 +94,9 @@ Notable changes by release. Versions follow Semantic Versioning.
     `blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` was
     refused for the overflow in the rule of `k` and now answers with its two
     facts, as clingo does. A recursion that a decided negation stops ends:
-    `stop. p(0). p(X+1) :- p(X), not stop.` was refused for want of support
-    rounds and now answers `{stop, p(0)}`, and
+    `stop. p(0). p(X+1) :- p(X), not stop.` did not finish, and was refused
+    where a ceiling on support rounds is set; it now answers `{stop, p(0)}`,
+    and
     `stop. {p(N)} :- N = #count{V : p(V)}, not stop.` answers `{stop}`. An
     aggregate assignment over a predicate that a decided negation keeps
     certain takes its exact value, with the effects the entry on certain
@@ -122,7 +123,11 @@ Notable changes by release. Versions follow Semantic Versioning.
     after the component it negates is complete, so such a program can take a
     round more for each stratum of them; an ordinary rule is traversed in the
     round the component is complete. An ordinary rule none of whose negated
-    atoms has a certain predicate does not wait.
+    atoms has a certain predicate does not wait. A stratum that reads itself
+    is complete only in a round in which it gains nothing, so recursive
+    strata chained by negation follow one another and their rounds add up,
+    where they overlapped while the negation was ignored: twenty such strata
+    of forty rounds each take about 820 rounds where they took 43.
     Reported grounding work changes by the analysis and by one support lookup
     for each decided negation of each complete row.
 - An instance that divides by zero is always omitted, with a warning. A
