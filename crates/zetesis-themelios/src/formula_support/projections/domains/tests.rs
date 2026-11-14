@@ -13,6 +13,16 @@ fn with_join(
     source: &str,
     run: impl FnOnce(&mut Join<'_, '_>, &mut Computation<'_, '_>, &mut Counters, ProgramSite),
 ) {
+    with_selected_join(source, false, run);
+}
+
+/// The constraint's join under its totality witness and, when `numeric`,
+/// with the numeric probes eager emission selects as well.
+fn with_selected_join(
+    source: &str,
+    numeric: bool,
+    run: impl FnOnce(&mut Join<'_, '_>, &mut Computation<'_, '_>, &mut Counters, ProgramSite),
+) {
     with_completed_source(source, |program, support, computation, counters| {
         let rule = program
             .rules_without_facts()
@@ -27,6 +37,10 @@ fn with_join(
                 .unwrap()
         );
         assert!(join.certified_total);
+        if numeric {
+            join.select_numeric_probes(rule, &limits, counters).unwrap();
+            assert!(join.expression_keys.is_some());
+        }
         run(&mut join, computation, counters, rule.location);
     });
 }
@@ -37,19 +51,31 @@ fn collect(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> (Vec<Vec<Value>>, GroundingWork) {
+    collect_under(
+        join,
+        computation,
+        counters,
+        location,
+        &FormulaLimits::default(),
+    )
+}
+
+fn collect_under(
+    join: &mut Join<'_, '_>,
+    computation: &mut Computation<'_, '_>,
+    counters: &mut Counters,
+    location: ProgramSite,
+    limits: &FormulaLimits,
+) -> (Vec<Vec<Value>>, GroundingWork) {
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
     counters.observed = profile.work();
     let rows = profile
         .phase(GroundingPhase::RuleInstantiation, Some(location), || {
             let mut rows = Vec::new();
-            while let Some(row) = join.next_row(
-                computation,
-                &FormulaLimits::default(),
-                &mut budget(),
-                counters,
-                location,
-            )? {
+            while let Some(row) =
+                join.next_row(computation, limits, &mut budget(), counters, location)?
+            {
                 if row.passes {
                     rows.push(
                         (0..row.values.len())
@@ -126,6 +152,73 @@ fn a_column_without_postings_counts_a_value_for_each_row() {
         |join, computation, counters, location| {
             let (rows, work) = collect(join, computation, counters, location);
             assert_eq!(rows.len(), 1500);
+            assert_eq!(work.table_preparations, Some(0));
+        },
+    );
+}
+
+#[test]
+fn a_probe_repeated_for_outer_rows_gets_its_table_once_its_scans_repay_it() {
+    // The 3000 distinct values of `p` want 3000 masks of 94 words, 282000
+    // words, and a scanned row weighs eight: 35250 rows repay them, which
+    // twelve scans of `p` pass. The thirteenth row of `m` prepares the
+    // table and the seven after it use it.
+    with_join(
+        "p(1..3000).m(1..20). :-m(Y),p(X),X/3=Y.",
+        |join, computation, counters, location| {
+            let (rows, work) = collect(join, computation, counters, location);
+            assert_eq!(rows.len(), 60);
+            assert_eq!(work.table_inapplicable_probes, Some(12));
+            assert_eq!(work.table_preparations, Some(1));
+            assert_eq!(work.table_reuses, Some(7));
+        },
+    );
+}
+
+#[test]
+fn twelve_scans_do_not_repay_the_table() {
+    with_join(
+        "p(1..3000).m(1..12). :-m(Y),p(X),X/3=Y.",
+        |join, computation, counters, location| {
+            let (rows, work) = collect(join, computation, counters, location);
+            assert_eq!(rows.len(), 36);
+            assert_eq!(work.table_inapplicable_probes, Some(12));
+            assert_eq!(work.table_preparations, Some(0));
+        },
+    );
+}
+
+#[test]
+fn a_declined_selection_served_by_a_numeric_probe_counts_no_scan() {
+    // Eager emission also selects numeric probes. The equality's postings
+    // then serve each declined probe, no row is read in the table's place,
+    // and twenty outer rows prepare no table where thirteen scans would.
+    with_selected_join(
+        "p(1..3000).m(1..20). :-m(Y),p(X),X/3=Y.",
+        true,
+        |join, computation, counters, location| {
+            let (rows, work) = collect(join, computation, counters, location);
+            assert_eq!(rows.len(), 60);
+            assert_eq!(work.table_inapplicable_probes, Some(20));
+            assert_eq!(work.table_preparations, Some(0));
+        },
+    );
+}
+
+#[test]
+fn a_table_that_cannot_be_admitted_is_never_prepared() {
+    // The table wants 3000 support entries and at most 2999 are left:
+    // every probe scans, where an attempt would refuse the join.
+    with_join(
+        "p(1..3000).m(1..20). :-m(Y),p(X),X/3=Y.",
+        |join, computation, counters, location| {
+            let limits = FormulaLimits {
+                max_support_index_entries: 2_999,
+                ..FormulaLimits::default()
+            };
+            let (rows, work) = collect_under(join, computation, counters, location, &limits);
+            assert_eq!(rows.len(), 60);
+            assert_eq!(work.table_inapplicable_probes, Some(20));
             assert_eq!(work.table_preparations, Some(0));
         },
     );

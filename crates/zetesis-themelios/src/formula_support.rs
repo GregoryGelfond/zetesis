@@ -1399,6 +1399,10 @@ enum Resolution<'source> {
         /// A slot in this join's row filter, authenticated for these exact
         /// source occurrences. Absent without a filter or an offered source.
         filter_source: Option<usize>,
+        /// The rows this occurrence's probes read in place of a table
+        /// selection the snapshot declined, over every row of the outer
+        /// prefix so far ([`Support::select_domains_after`]).
+        scanned: u64,
     },
 }
 
@@ -1414,6 +1418,20 @@ impl<'source> Resolution<'source> {
         match self {
             Self::Unresolved => unreachable!("a prepared probe has resolved its filter"),
             Self::Resolved { filter_source, .. } => filter_source,
+        }
+    }
+
+    fn scanned(self) -> u64 {
+        match self {
+            Self::Unresolved => unreachable!("a prepared probe has resolved its relation"),
+            Self::Resolved { scanned, .. } => scanned,
+        }
+    }
+
+    /// Count the rows of a relation read in place of a declined selection.
+    fn scan(&mut self, rows: usize) {
+        if let Self::Resolved { scanned, .. } = self {
+            *scanned = scanned.saturating_add(rows as u64);
         }
     }
 }
@@ -3255,6 +3273,7 @@ impl<'a, 'source> Join<'a, 'source> {
             self.resolutions[self.depth] = Resolution::Resolved {
                 rows,
                 filter_source,
+                scanned: 0,
             };
         }
         Ok(())
@@ -3301,21 +3320,10 @@ impl<'a, 'source> Join<'a, 'source> {
                 )?);
                 return Ok(());
             }
-            // Covered computed domains may combine several restrictions. Keep
-            // their selection before the numeric fallback, whose ordinary
-            // posting can otherwise replace it with a broader candidate set.
-            if let Some(probe) = self.computed_probe(
-                pattern.pattern,
-                source,
-                Context::new(computation, limits, counters, location),
-            )? {
-                self.probes[self.depth] = Some(probe);
-                return Ok(());
-            }
-            if let Some(probe) = self.expression_key_probe(
+            if let Some(probe) = self.narrowed_probe(
                 pattern,
                 source,
-                Context::new(&*computation, limits, counters, location),
+                Context::new(computation, limits, counters, location),
             )? {
                 self.probes[self.depth] = Some(probe);
                 return Ok(());
@@ -3363,6 +3371,56 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         Ok(())
     }
+    /// The probe of a covered computed domain or, where its selection is
+    /// absent or declined, of a numeric index over the occurrence.
+    ///
+    /// Covered computed domains may combine several restrictions, so their
+    /// selection is kept before the numeric fallback, whose ordinary posting
+    /// can otherwise replace it with a broader candidate set. With neither,
+    /// the caller's own probe offers the rows a declined selection would
+    /// have excluded, and the occurrence counts its relation's rows for that
+    /// probe: one repeated for every outer row is weighed against the table
+    /// by all of them ([`Support::select_domains_after`]).
+    fn narrowed_probe(
+        &mut self,
+        pattern: PatternOccurrence<'a>,
+        source: Option<&'source relations::RelationRows<'source>>,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Option<Probe<'a, 'source>>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        let scanned = self.resolutions[self.depth].scanned();
+        let declined = match self.computed_probe(
+            pattern.pattern,
+            source,
+            scanned,
+            Context::new(computation, limits, counters, location),
+        )? {
+            projections::Computed::Probe(probe) => return Ok(Some(probe)),
+            projections::Computed::Declined => true,
+            projections::Computed::Absent => false,
+        };
+        let numeric = self.expression_key_probe(
+            pattern,
+            source,
+            Context::new(&*computation, limits, counters, location),
+        )?;
+        if numeric.is_none()
+            && declined
+            && let Some(source) = source
+        {
+            self.resolutions[self.depth].scan(source.relation.row_count());
+        }
+        Ok(numeric)
+    }
+
     /// Resolve an explicitly anchored occurrence after source/filter admission.
     /// Its original row identity is retained across backtracking.
     fn anchored_probe(

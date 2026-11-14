@@ -1278,11 +1278,22 @@ it, so the selector prepares one only while it is small: its row masks may
 take 65536 words of 32 bits. That admits a single column of distinct keys up
 to 1440 rows, and a larger relation only while its columns hold few distinct
 values; a column no join binds has no postings to count and is taken to hold
-a value for each row. Past that bound the derived domain is not used: the
-ordinary probe offers its rows and the comparison, which remains a residual
-check, selects among them. `d(0..199999). q(X) :- d(X), X \ 2 = 0.` is
-grounded that way; its table would need about ten gigabytes. Under the table
-strategy the caller asked for tables, and the bound does not apply.
+a value for each row. Past that bound the derived domain is not used at
+first: the ordinary probe offers its rows and the comparison, which remains a
+residual check, selects among them. `d(0..199999). q(X) :- d(X), X \ 2 = 0.`
+is grounded that way; its table would need about ten gigabytes.
+
+One probe is cheaper as a scan; a probe that a join repeats for every row of
+its outer prefix is not. `q(X,Y) :- m(Y), d(X), X / 3 = Y.` selects from `d`
+once for each row of `m`. Each body occurrence therefore counts the rows of
+its relation that its probes read in place of a declined selection, and the
+selector prepares the table once those rows, weighed at eight words of masks
+each, have cost what the masks would. It does so only if the masks and the
+table's entries are within what the support's limits leave: a table that
+cannot be admitted is never attempted, and the join keeps its scan. A probe
+that a numeric index serves instead, as in eager emission, reads no row in
+the table's place and counts none. Under the table strategy the caller asked
+for tables, and none of this applies.
 
 Domain derivation scans the existing input/result coordinates, without another
 value dictionary or reverse-result cache. The first scan locates a rejected

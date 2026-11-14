@@ -12,6 +12,8 @@
 
 mod domains;
 mod totality;
+
+pub(super) use domains::Computed;
 pub(crate) use totality::supports_column_totality;
 pub(super) use totality::{needed as needs_totality, positive_bounds, range_body};
 

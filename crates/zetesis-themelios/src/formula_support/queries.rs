@@ -455,7 +455,7 @@ impl<'source> Support<'source> {
     ///
     /// Declines, with `None`, a structural pattern, an absent relation and,
     /// when ordinary joins are indexed, a relation whose table is not yet
-    /// prepared and is not small ([`small_table`]). The
+    /// prepared and is not small ([`TableCost::small`]). The
     /// domains are necessary conditions the caller's residual checks state
     /// again, so a declined selection loses no row and admits none.
     pub(super) fn select_domains_at<'value>(
@@ -466,6 +466,31 @@ impl<'source> Support<'source> {
         finite: FiniteDomains<'value>,
         work: GroundingWork<'_>,
     ) -> Result<Option<Rows<'_, 'source>>, FormulaFailure> {
+        Ok(
+            match self.select_domains_after(rows, pattern, values, finite, 0, work)? {
+                DomainSelection::Rows(rows) => Some(rows),
+                DomainSelection::Inapplicable | DomainSelection::Declined => None,
+            },
+        )
+    }
+
+    /// [`Self::select_domains_at`] for a caller that repeats the selection
+    /// over one relation, as a join does for each row of its outer prefix.
+    /// `scanned` is the number of rows that caller has read in place of
+    /// this selection. Where ordinary joins are indexed, a table that is
+    /// not small is prepared once those rows have cost what its masks would
+    /// ([`TableCost::repaid`]) and it can be admitted ([`TableCost::fits`]):
+    /// one probe scans, and a probe repeated for many outer rows gets the
+    /// table that serves the rest of them.
+    pub(super) fn select_domains_after<'value>(
+        &self,
+        rows: Option<&'source RelationRows<'source>>,
+        pattern: PositivePattern<'value>,
+        values: BindingView<'value>,
+        finite: FiniteDomains<'value>,
+        scanned: u64,
+        work: GroundingWork<'_>,
+    ) -> Result<DomainSelection<'_, 'source>, FormulaFailure> {
         let GroundingWork {
             limits,
             counters,
@@ -473,11 +498,11 @@ impl<'source> Support<'source> {
         } = work;
         let PositivePattern::Flat(pattern) = pattern else {
             counters.record(Event::TableInapplicableProbe);
-            return Ok(None);
+            return Ok(DomainSelection::Inapplicable);
         };
         let Some(rows) = rows else {
             counters.record(Event::TableInapplicableProbe);
-            return Ok(None);
+            return Ok(DomainSelection::Inapplicable);
         };
         let relation = &rows.relation;
         Self::admit(self.live_bytes(), limits, counters, location)?;
@@ -494,10 +519,18 @@ impl<'source> Support<'source> {
         } else {
             // Under the table strategy the caller asked for tables. Otherwise
             // the table only narrows a probe the join can make without it.
-            if !self.table_strategy && !small_table(rows, &bound.scope, limits, counters, location)?
-            {
-                counters.record(Event::TableInapplicableProbe);
-                return Ok(None);
+            if !self.table_strategy {
+                let cost = TableCost::of(rows, &bound.scope, limits, counters, location)?;
+                if !cost.small() {
+                    let outer = self.live_bytes() - relation.storage().retained_bytes;
+                    let allowance = self.table_limits(limits, counters, outer, location)?;
+                    if !cost.repaid(scanned)
+                        || !cost.fits(relation.storage().retained_bytes, &allowance)
+                    {
+                        counters.record(Event::TableInapplicableProbe);
+                        return Ok(DomainSelection::Declined);
+                    }
+                }
             }
             self.reserve_tables(&mut tables, limits, counters, location)?;
             let outer = self.live_bytes() - relation.storage().retained_bytes;
@@ -547,7 +580,7 @@ impl<'source> Support<'source> {
         )?;
         let bytes = selection.statistics().retained_bytes + ROW_LEASE_BYTES;
         self.live.set(self.live.get() + bytes);
-        Ok(Some(Rows {
+        Ok(DomainSelection::Rows(Rows {
             selection,
             live: &self.live,
             bytes,
@@ -840,47 +873,98 @@ fn bind_domains<'value>(
     Ok(BoundDomains { scope, domains })
 }
 
+/// What [`Support::select_domains_after`] made of a selection by domains.
+pub(super) enum DomainSelection<'a, 'source> {
+    /// The rows the domains select.
+    Rows(Rows<'a, 'source>),
+    /// A structural pattern or an absent relation: no table applies.
+    Inapplicable,
+    /// A relation whose table is not small and not yet worth preparing. The
+    /// caller's own probe offers its rows; the caller counts the ones it
+    /// reads for the next selection.
+    Declined,
+}
+
 /// The words of 32 bits a table's row masks may take when the table only
 /// narrows a probe: 256 KiB.
 const TABLE_MASK_WORDS: u128 = 1 << 16;
 
-/// Whether a table over `rows` under `scope` is small enough to prepare for
-/// a probe the join can make without it.
+/// The mask words one scanned row is weighed as. A row a join reads and
+/// tests costs several times what one word of a mask costs to fill, so the
+/// rows scanned in place of a table repay it before they number its words.
+const SCANNED_ROW_MASK_WORDS: u128 = 8;
+
+/// What a table over one relation under one scope would hold, for the
+/// decision to prepare it where the join can probe without it.
 ///
 /// A table keeps one row mask for every distinct value of every labelled
 /// column (`zetesis_core::table`): `V` values over `R` rows cost `V` masks of
 /// `R` bits, so a column of distinct keys costs `R²` bits to hold and as
-/// much work to fill, where a scan of the relation reads `R` rows. The table
-/// is prepared while those masks take at most [`TABLE_MASK_WORDS`] words: a
-/// single column of distinct keys up to 1440 rows, and a larger relation
-/// only while its labelled columns hold few distinct values.
-///
-/// The count of a column's distinct values is its posting map's length. A
-/// column no join binds has no postings and is taken to hold a value for
-/// each row. One unit for each column.
-fn small_table(
-    rows: &RelationRows<'_>,
-    scope: &[usize],
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: ProgramSite,
-) -> Result<bool, FormulaFailure> {
-    let count = rows.relation.row_count() as u128;
-    let mut entries = 0_u128;
-    let mut labels = 0;
-    for (column, &label) in scope.iter().enumerate() {
-        counters.work(limits, location)?;
-        // A repeated label names a column the table has already indexed.
-        if label < labels {
-            continue;
+/// much work to fill, where one scan of the relation reads `R` rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TableCost {
+    /// The distinct values of its labelled columns: its support entries.
+    entries: u128,
+    /// The words of 32 bits its row masks take: one mask for each entry.
+    mask_words: u128,
+}
+
+impl TableCost {
+    /// The count of a column's distinct values is its posting map's length.
+    /// A column no join binds has no postings and is taken to hold a value
+    /// for each row. One unit for each column.
+    fn of(
+        rows: &RelationRows<'_>,
+        scope: &[usize],
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        let count = rows.relation.row_count() as u128;
+        let mut entries = 0_u128;
+        let mut labels = 0;
+        for (column, &label) in scope.iter().enumerate() {
+            counters.work(limits, location)?;
+            // A repeated label names a column the table has already indexed.
+            if label < labels {
+                continue;
+            }
+            labels = label + 1;
+            entries += match rows.postings(column) {
+                Postings::Indexed(values) => values.len() as u128,
+                Postings::Unindexed => count,
+            };
         }
-        labels = label + 1;
-        entries += match rows.postings(column) {
-            Postings::Indexed(values) => values.len() as u128,
-            Postings::Unindexed => count,
-        };
+        Ok(Self {
+            entries,
+            mask_words: entries * count.div_ceil(u128::from(u32::BITS)),
+        })
     }
-    Ok(entries * count.div_ceil(u128::from(u32::BITS)) <= TABLE_MASK_WORDS)
+
+    /// Whether the masks take at most [`TABLE_MASK_WORDS`] words, so that
+    /// the table is prepared for a single probe: a single column of distinct
+    /// keys up to 1440 rows, and a larger relation only while its labelled
+    /// columns hold few distinct values.
+    fn small(self) -> bool {
+        self.mask_words <= TABLE_MASK_WORDS
+    }
+
+    /// Whether `scanned` rows, offered in place of this table's selections,
+    /// have cost what its masks would: each row weighs
+    /// [`SCANNED_ROW_MASK_WORDS`] words.
+    fn repaid(self, scanned: u64) -> bool {
+        self.mask_words <= u128::from(scanned) * SCANNED_ROW_MASK_WORDS
+    }
+
+    /// Whether the entries, and the masks beside a relation of
+    /// `relation_bytes`, are within what `allowance` leaves a table. This is
+    /// necessary for the table to be admitted, not sufficient: a table that
+    /// fails it is never attempted, and the join keeps its scan.
+    fn fits(self, relation_bytes: usize, allowance: &table::Limits) -> bool {
+        self.entries <= allowance.max_entries as u128
+            && self.mask_words * u128::from(u32::BITS / u8::BITS) + relation_bytes as u128
+                <= allowance.max_bytes as u128
+    }
 }
 
 fn find_table(
