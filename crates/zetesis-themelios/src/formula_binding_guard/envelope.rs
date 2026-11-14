@@ -139,6 +139,7 @@ impl Capture<'_, '_> {
             LiteralIr::Guard(Guard::Comparisons {
                 negation: DefaultNegation::None | DefaultNegation::NotNot,
                 comparisons,
+                ..
             }) => {
                 for comparison in comparisons {
                     if let GuardComparison::Scalar(left, relation, right) = comparison {

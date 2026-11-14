@@ -98,8 +98,9 @@ Notable changes by release. Versions follow Semantic Versioning.
     `{d(1)}. p(2/Y) : d(X), Y = 0..X.` has the answer set `{d(1)}`.
   - A comparison consequent is read only under a binding whose condition
     holds. It was evaluated beside every binding no comparison excluded, so
-    under a binding that failed another part of its condition a zero divisor
-    in it warned and an overflow in it refused:
+    under a binding that failed another part of its condition, or whose
+    condition divided by zero, a zero divisor in it warned and an overflow
+    in it refused:
     `d(0;1). p :- 1/X=1 : d(X), (X,1)!=(0,1).` no longer warns.
   - **So do those of admitted programs with a comparison chain** that holds
     a link dividing by zero beside a link that is defined and false. The
@@ -112,6 +113,19 @@ Notable changes by release. Versions follow Semantic Versioning.
     with an interval among its terms is read the same way under each value
     of the interval: `d(0;1). p(X) :- d(X), not 3<2<(1..2)/X.` derives `p(0)`
     and `p(1)`.
+  - A comparison with an interval reads its terms as written, and no longer
+    through a generated value for each. Two things follow. It bounds an
+    unresolved variable through the interval where its terms are
+    integer-affine in the interval's value, and no longer through a term
+    that is not: `p(X) :- 0 < X < (1..3).` was refused as unsafe and has
+    the answer set `{p(1), p(2)}`, as in clingo, while
+    `p(X) :- 0 <= X <= (1..4)/2 <= 3.` and
+    `p(X) :- 0 <= X+0 = (2..4)/2 <= 3.` were admitted and are refused as
+    unsafe; clingo refuses the first and admits the second. And under a row
+    where the interval is empty, a fatal failure in another term of the
+    comparison refuses on whichever side of the interval the term stands:
+    `d(0). p :- d(X), (3..1) > X+2147483647+1.` was admitted and is refused,
+    as `d(0). p :- d(X), X+2147483647+1 < (3..1).` was and is.
   - A source family's evidence records only whether a substitution divided
     by zero (`ArithmeticFamilies`).
 - A walk orders its splits by what its region has decided. A chain is a

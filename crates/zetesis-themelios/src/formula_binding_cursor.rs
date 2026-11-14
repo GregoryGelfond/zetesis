@@ -51,6 +51,17 @@ enum Alternative {
     Exhausted,
 }
 
+/// One advance of a [`Cursor`].
+pub(super) enum Step {
+    /// A complete frame.
+    Frame(Binding<'static>),
+    /// The generator of this slot has no value under the values of the
+    /// generators before it.
+    Valueless(usize),
+    /// No frame remains.
+    Finished,
+}
+
 pub(super) struct Cursor<'a, 'source> {
     generators: Vec<Generator<'a, 'source>>,
     states: Vec<State<'source>>,
@@ -550,6 +561,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         &self.values
     }
 
+    /// The next complete frame, passing over generators without a value.
     pub(crate) fn next(
         &mut self,
         evaluation: &mut Evaluation,
@@ -559,6 +571,29 @@ impl<'a, 'source> Cursor<'a, 'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
+        loop {
+            match self.step(evaluation, computation, limits, budget, counters, location)? {
+                Step::Frame(frame) => return Ok(Some(frame)),
+                Step::Valueless(_) => {}
+                Step::Finished => return Ok(None),
+            }
+        }
+    }
+
+    /// Advance to the next complete frame, or to the next generator that has
+    /// no value under the values of the generators before it. At
+    /// [`Step::Valueless`] the binding holds those earlier values and none
+    /// from that generator on, so its owner can read the checks over that
+    /// generator's value, which no frame under them will reach.
+    pub(super) fn step(
+        &mut self,
+        evaluation: &mut Evaluation,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Step, FormulaFailure> {
         while !self.finished {
             counters.work(limits, location)?;
             if self.depth == self.generators.len() {
@@ -586,8 +621,16 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 return self
                     .values
                     .copied(computation, limits, counters, location)
-                    .map(Some);
+                    .map(Step::Frame);
             }
+            // A generator entered from the one before it has given no value
+            // yet: a fresh one, or a retained carrier at its first value.
+            let entered = match &self.states[self.depth] {
+                State::Fresh | State::Values { index: 0, .. } => {
+                    target(self.generators[self.depth].literal.get())
+                }
+                _ => None,
+            };
             if matches!(self.states[self.depth], State::Fresh) {
                 let initialized =
                     self.initialize(evaluation, computation, limits, budget, counters, location);
@@ -605,13 +648,18 @@ impl<'a, 'source> Cursor<'a, 'source> {
             }
             if self.advance(computation, limits, counters, location)? {
                 self.depth += 1;
-            } else if self.depth == 0 {
+                continue;
+            }
+            if self.depth == 0 {
                 self.finished = true;
             } else {
                 self.depth -= 1;
             }
+            if let Some(target) = entered {
+                return Ok(Step::Valueless(target));
+            }
         }
-        Ok(None)
+        Ok(Step::Finished)
     }
 
     fn advance(

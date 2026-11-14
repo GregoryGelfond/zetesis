@@ -966,6 +966,84 @@ fn a_fatal_link_refuses_beside_a_false_link_and_a_zero_divisor() {
     }
 }
 
+/// Comparisons that read an interval with no value under the row `X = 0`,
+/// an empty one or one whose bound divides by zero there, beside a term that
+/// overflows at that row. The term stands before the interval and after it.
+const VALUELESS_INTERVALS: &[&str] = &[
+    // A comparison and a chain in a body, positive and negated.
+    "d(0).p:-d(X),X+2147483647+1<(3..1).",
+    "d(0).p:-d(X),(3..1)>X+2147483647+1.",
+    "d(0).p:-d(X),2<X+2147483647+1<(3..1).",
+    "d(0).p:-d(X),(3..1)<2<X+2147483647+1.",
+    "d(0).p:-d(X),not X+2147483647+1<(3..1).",
+    "d(0).p:-d(X),not not (3..1)>X+2147483647+1.",
+    // The condition of a choice element and of an aggregate element.
+    "d(0).{q(X):d(X),X+2147483647+1<(3..1)}.",
+    "d(0).p:-0<#count{X:d(X),(3..1)>X+2147483647+1}.",
+    // A conditional consequent, which no row of its condition reads.
+    "d(0).p:-X+2147483647+1<(3..1):d(X).",
+    "d(0).p:-(3..1)>X+2147483647+1:d(X).",
+    "d(0).p:-X+2147483647+1<2<(1..2/X):d(X).",
+    "d(0).p:-(1..2/X)>2>X+2147483647+1:d(X).",
+    // The failing term reads a second interval, which has values.
+    "d(0).p:-d(X),(1..2)+X+2147483647<(3..1).",
+];
+
+#[test]
+fn a_fatal_term_refuses_beside_an_interval_without_a_value() {
+    // The comparison has no instance under the row, so no instance evaluates
+    // its other terms; their fatal failure refuses all the same, in either
+    // order.
+    for source in VALUELESS_INTERVALS {
+        refused(source, &EvaluationError::Overflow);
+    }
+}
+
+#[test]
+fn a_zero_divisor_beside_an_empty_interval_omits_nothing() {
+    // Where the comparison has no instance there is none to omit: no warning
+    // is kept, in either order.
+    for source in [
+        "d(0).p:-d(X),1/X<(3..1).",
+        "d(0).p:-d(X),(3..1)>1/X.",
+        "d(0).p:-1/X<(3..1):d(X).",
+    ] {
+        assert_eq!(silent(source), family(&["d(0)"]), "{source}");
+    }
+}
+
+#[test]
+fn an_excluded_row_reaches_no_term_beside_an_empty_interval() {
+    // X != 0 excludes the row, whichever side of the comparison it stands.
+    for source in [
+        "d(0).p:-d(X),X!=0,X+2147483647+1<(3..1).",
+        "d(0).p:-d(X),X+2147483647+1<(3..1),X!=0.",
+    ] {
+        assert_eq!(silent(source), family(&["d(0)"]), "{source}");
+    }
+}
+
+#[test]
+fn a_term_over_an_absent_interval_value_is_not_read() {
+    // The failing term itself reads the second interval, which is entered
+    // only under a value of the empty first one: it has no value to fail at.
+    let source = "d(0).p:-d(X),(3..1)>(1..2)+X+2147483647.";
+    assert_eq!(silent(source), family(&["d(0)"]));
+}
+
+#[test]
+fn a_comparison_without_an_interval_of_its_own_is_left_to_its_rows() {
+    // The interval stands in another literal. Neither a chain that reads
+    // nothing of it nor one that reads the variable it binds owns it: both
+    // are evaluated under complete rows alone, and the rule has none.
+    for source in [
+        "d(0).p:-d(X),Y=3..1,1<X+2147483647+1<5.",
+        "d(0).p:-d(X),Y=3..1,0<Y<X+2147483647+1.",
+    ] {
+        assert_eq!(silent(source), family(&["d(0)"]), "{source}");
+    }
+}
+
 #[test]
 #[ignore = "requires clingo: chains with an undefined link match clingo"]
 fn chains_with_an_undefined_link_match_clingo() {

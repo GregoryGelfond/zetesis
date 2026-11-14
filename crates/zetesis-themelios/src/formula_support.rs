@@ -2853,7 +2853,7 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         loop {
             if let Some(pending) = &mut self.pending {
-                match pending.next(
+                match pending.step(
                     &mut self.evaluation,
                     computation,
                     limits,
@@ -2861,7 +2861,7 @@ impl<'a, 'source> Join<'a, 'source> {
                     counters,
                     location,
                 ) {
-                    Ok(Some(binding)) => {
+                    Ok(crate::formula_binding_cursor::Step::Frame(binding)) => {
                         let binding = Frame::Owned(binding);
                         let selection = self.filters(
                             &binding,
@@ -2876,11 +2876,19 @@ impl<'a, 'source> Join<'a, 'source> {
                         }
                         continue;
                     }
-                    Ok(None) => {}
+                    Ok(crate::formula_binding_cursor::Step::Valueless(slot)) => {
+                        self.valueless(slot, computation, limits, counters, location)?;
+                        continue;
+                    }
+                    Ok(crate::formula_binding_cursor::Step::Finished) => {}
                     Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
                         let zero = self.evaluation.zero_divisor();
                         let excluded = filters::excludes(
-                            (self.literals.get(), &self.plan.decisions),
+                            (
+                                self.literals.get(),
+                                &self.plan.decisions,
+                                self.checked_guard,
+                            ),
                             &mut self.evaluation,
                             pending.binding(),
                             computation,
@@ -2918,6 +2926,32 @@ impl<'a, 'source> Join<'a, 'source> {
                 Context::new(computation, limits, counters, location),
             )?;
         }
+    }
+    /// The generator of `slot` in the proposal cursor has no value under the
+    /// values of those before it: read the comparisons over that value, which
+    /// no frame under them will reach (`filters::valueless`).
+    fn valueless(
+        &mut self,
+        slot: usize,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Some(pending) = &self.pending else {
+            return Ok(());
+        };
+        filters::valueless(
+            (
+                self.literals.get(),
+                &self.plan.decisions,
+                self.checked_guard,
+            ),
+            slot,
+            &mut self.evaluation,
+            pending.binding(),
+            Context::new(computation, limits, counters, location),
+        )
     }
     /// Reuse only a complete support continuation; otherwise restart its
     /// existing frame or initialize the first cursor. Both live input frames

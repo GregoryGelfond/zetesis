@@ -31,6 +31,12 @@ const CASES: &[(&str, &[&str])] = &[
     ),
     ("p(X,Y):-3>Y>X>0.", &["p(1,2)"]),
     ("p(X):-0<2*X<6.", &["p(1)", "p(2)"]),
+    // A bound through an interval, by a term that is affine in its value.
+    ("p(X):-0<X<(1..3).", &["p(1)", "p(2)"]),
+    (
+        "p(X):-0<=X<=(1..2)*2.",
+        &["p(0)", "p(1)", "p(2)", "p(3)", "p(4)"],
+    ),
     ("p(X):-0<-X<3.", &["p(-2)", "p(-1)"]),
     ("p(X,Y):-0<X<Y+1<3.", &["p(1,1)"]),
     ("p(X,Y):-0<2*X<3*Y<7.", &["p(1,1)", "p(1,2)", "p(2,2)"]),
@@ -197,6 +203,9 @@ const UNSAFE: &[&str] = &[
     "p(X,Y):-0<X*Y<5,0<Y<3.",
     "p(X):-0<X*X<5.",
     "p(X):-0<X/2<3.",
+    // A term that is not affine in an interval's value gives no bound.
+    "p(X):-0<=X<=(1..4)/2<=3.",
+    "p(X):-0<=X+0=(2..4)/2<=3.",
     "p(X,Y):-not 0<X<Y<3.",
     "p(X,Y):-0<X-X+Y<3,0<Y<3.",
     "p(X):-q(X,Y):0<X<Y<3.",

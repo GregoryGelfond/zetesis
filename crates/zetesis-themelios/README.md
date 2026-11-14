@@ -207,10 +207,11 @@ separate composition laws and their bounded resource contracts.
 
 Arithmetic uses checked `i32` operations. Overflow, nonnumeric arithmetic and
 invalid exponents refuse admission. In formula source families, an instance
-whose evaluated numeric division or remainder has a zero divisor is omitted with
-a warning, whatever else its family holds. A conditional literal keeps such an
-instance's condition and reads its consequent as false in a body and as true in
-a head. Independent faults in a reached phase remain fatal.
+whose evaluated numeric division or remainder has a zero divisor is omitted,
+whatever else its family holds, and its statement warns; the language
+reference names the one omission that keeps no warning. A conditional literal
+keeps such an instance's condition and reads its consequent as false in a body
+and as true in a head. Independent faults in a reached phase remain fatal.
 Closed-term preparation and post-solve observations retain strict checks. See
 [source-family evaluation](../../docs/book/architecture/grounding.md#source-instances-as-a-composition)
 for the binding and phase boundaries.

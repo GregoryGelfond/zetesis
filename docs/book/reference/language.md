@@ -891,6 +891,20 @@ the other links hold. An interval among a chain's terms gives one alternative
 for each of its values, and each is read by its links in the same way:
 `d(0;1). p(X) :- d(X), not 3<2<(1..2)/X.` derives `p(0)` and `p(1)`.
 
+Under a row where an interval of a comparison is empty the comparison has no
+alternative: nothing is omitted there and no warning is kept, so
+`d(0). p :- d(X), 1/X < (3..1).` answers silently. Its other terms are read
+all the same, and a fatal failure in one refuses on whichever side of the
+interval it stands: `d(0). p :- d(X), X+2147483647+1 < (3..1).` and
+`d(0). p :- d(X), (3..1) > X+2147483647+1.` are both refused. This holds for
+the interval the comparison itself contains; a comparison over a variable
+that another literal binds by an interval is evaluated under complete rows
+alone. A comparison bounds an unresolved variable through an interval where
+its terms are integer-affine in the interval's value:
+`p(X) :- 0 < X < (1..3).` has the answer set `{p(1), p(2)}`. A term that is
+not, such as `(1..4)/2`, gives no bound, and
+`p(X) :- 0 <= X <= (1..4)/2 <= 3.` is refused as unsafe.
+
 A binder, interval check, tuple comparison, aggregate guard or comparison over
 a generated value does not provide the relational exclusion described above.
 Negative gates remain formulas, so in `d(0). p(1/X) :- d(X), not d(X).` the
