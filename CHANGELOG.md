@@ -14,6 +14,16 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Ordering a model's atoms costs less when they are already in order. The
+  order of an answer's atoms is prepared by a stable merge sort over the
+  whole atom catalog, which compared half the atoms in every pass whatever
+  their order. Two runs whose last and first atoms are already in order are
+  now copied without comparing their cells, so a catalog in semantic order
+  costs fewer comparisons than it has atoms. The source-evaluation route
+  publishes its atoms nearly in that order: for a program of 160,000 atoms
+  the solving stage, which is this preparation, fell from 81 ms to 15 ms.
+  The order is unchanged, and so is every answer; `model_construction` work
+  is lower. Atom lookup preparation uses the same sort.
 - Grounding shares complete aggregate value families, term coordinates and tuple
   discovery between compatible consumers. Reusable join-plan keys retain only
   the inputs their planner inspects.
