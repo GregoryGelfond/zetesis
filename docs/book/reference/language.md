@@ -377,8 +377,10 @@ Within each rule, aggregate assignments may depend on earlier assignments
 through scalar and range values. The binding plan needs a finite dependency
 order. Recursive dependencies between producer rules are admitted when their
 possible-support construction completes within its bounds. A proposed value
-remains guarded by the original aggregate equality; support membership cannot
-replace model-relative truth.
+remains guarded by the original aggregate equality, and support membership does
+not replace model-relative truth, with one exception described below: an
+assignment every tuple of which is required has one value, which holds in every
+answer set, and its equality is emitted as true.
 
 For a finite selected tuple set `T`, let `V(T)` contain the first values of its
 nonempty tuples. An extremum head uses the least/greatest value in `V(T)`, or
@@ -552,8 +554,8 @@ unbounded choices supplies one such refinement. Let R be its required
 complete tuple keys and P its possible keys. The carrier is
 {measure(S) | R ⊆ S ⊆ P}. It includes invariant results as singleton carriers.
 Unique unary renamings preserve the carrier. Original aggregate equalities
-remain in the theory; carrier membership filters objective proposal rows before
-priority evaluation.
+remain in the theory, an exact assignment's as the true formula it is; carrier
+membership filters objective proposal rows before priority evaluation.
 
 The base predicate and each forwarding edge qualify independently. A filtered
 or multiply produced descendant uses its own source-support carrier; observing
@@ -778,7 +780,21 @@ outer binding, its *carrier*: the measure of every selection of its tuples that
 contains the *required* tuples and lies within the possible ones. A tuple is
 required when one of its elements' conditions consists only of comparisons,
 intervals and `#true`/`#false`, with no atom of either sign; such a condition
-holds for every binding its element yields. So
+holds for every binding its element yields. A positive atom of a
+[certain predicate](../architecture/grounding.md#certain-predicates), one the
+program derives from its facts by rules without negation, choice or disjunction,
+holds in every answer set and may stand in such a condition too, in a
+constraint and in a rule whose predicates all precede its head in dependency
+order: `c(1..3). n(N) :- N = #count{X : c(X)}.` substitutes `N = 3` alone. An
+objective's condition does not read certain predicates this way and substitutes
+every value its tuples allow. The arithmetic of
+such a rule is evaluated at that value and no other, which decides
+admission either way: `c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 6/(N-3).` is
+entirely undefined and refused, where a count over an uncertain condition
+also substitutes 0 to 2 and is admitted with a warning; and
+`c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 2000000000 * (4 - N).` is admitted
+with `p(2000000000)`, where the same uncertain count overflows at 0 and
+is refused. So
 `p(M+1) :- M = #min{1; 5}.` substitutes `M = 1` alone and answers `p(2)`
 without evaluating `#sup + 1`; `q :- N = #count{1}, 1/N <= #count{}.` evaluates
 only `N = 1` and retains no warning; and `q(Y) :- N = #count{1}, Y = 1/(N-1).`
@@ -786,11 +802,17 @@ has the single instance `N = 1`, which divides by zero, so its family is
 entirely undefined and refused. The heads an assignment publishes are taken over
 the same values, so the families of the rules that read them follow:
 `p(M) :- M = #count{1}. q(1/(X-1)) :- p(X).` is refused for the same reason, and
-`p(M) :- M = #min{1; 5}. r(X+1) :- p(X).` answers with `p(1)` and `r(2)`.
+`p(M) :- M = #min{1; 5}. r(X+1) :- p(X).` answers with `p(1)` and `r(2)`. So do
+those of everything else that reads the head, directly or through other rules:
+a constraint, a choice body, an aggregate element and a weak constraint. Over
+certain atoms, `c(1..3). n(N) :- N = #count{X : c(X)}. z(Y) :- n(N), Y = 6/(N-3).`
+is refused, where `n(0)` to `n(2)` were supported before and admitted it with a
+warning. An assignment with some tuples required and others not takes fewer
+values than it did, and a family undefined at each of them is refused as well.
 
 The required tuples under-approximate those present in every interpretation. In
 `{p}. q(Y) :- N = #count{1 : p; 1 : not p}, Y = 1/(N-1).` the tuple `1` is
-present through `p` or through `not p`, but neither condition is atom-free, so
+present through `p` or through `not p`, but neither condition qualifies, so
 `N = 0` is substituted too, divides by zero, and the program is admitted with a
 warning. A sum's values are checked as values:
 `{p; q}. x(V) :- V = #sum{-10,a; 2147483647,b : p; 1,c : q}.` is admitted,

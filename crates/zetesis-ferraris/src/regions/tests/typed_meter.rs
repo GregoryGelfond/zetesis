@@ -113,6 +113,7 @@ fn reused_preference_meter_reports_each_attempt_delta() {
     meter.tick().unwrap();
     for _ in 0..2 {
         let attempt = index.knowledge().preferred_atom_reserved(
+            &index,
             &region,
             &ChoiceHeads::default(),
             &Cancellation::default(),
@@ -136,6 +137,7 @@ fn initial_control_refunds_without_charging_an_attempt() {
     meter.tick().unwrap();
     cancellation.cancel();
     let attempt = index.knowledge().preferred_atom_reserved(
+        &index,
         &Region::all_open(1),
         &ChoiceHeads::default(),
         &cancellation,

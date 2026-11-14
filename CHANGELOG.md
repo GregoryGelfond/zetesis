@@ -34,6 +34,111 @@ Notable changes by release. Versions follow Semantic Versioning.
   postings keep that lookup; both select the same row
   (`ColumnRelations.accepts_exact`). Reported grounding work counts the
   comparisons performed, so it changes where this selection applies.
+- Grounding reads the atoms a program derives from its facts alone as true.
+  A predicate is certain when every rule deriving it has one ordinary head over
+  positive atoms of certain predicates and comparisons; its supported atoms
+  hold in every answer set, so a positive occurrence in a body, or in the
+  condition of a choice element or conditional disjunct, is emitted as true,
+  as an explicit fact's already was (`CertainAtoms.derived_stable`). An
+  aggregate assignment over such atoms, in a constraint or in a rule whose
+  predicates all precede its head in dependency order, takes one value and
+  supports that value alone instead of every value from none to all: a rank
+  `r(C,R) :- c(C), R = #count{D : c(D), D <= C}` over `n` facts supports `n`
+  atoms where it supported about `n * n / 2`. An objective's assignment still
+  substitutes every value. No admitted program's answer sets change. See
+  [certain predicates](docs/book/architecture/grounding.md#certain-predicates).
+  Observable effects other than time:
+  - Admission changes in both directions, because arithmetic is evaluated
+    only at the values such an assignment can still take: one when every
+    tuple is required, fewer than before when some are. That holds for the
+    assignment's own rule and for whatever reads its head, directly or
+    through other rules: a rule, a constraint, a choice body, an aggregate
+    element or a weak constraint. A family that is undefined at each of those
+    values is refused as entirely undefined, where a value that could not
+    occur had admitted it with a warning; clingo omits the instance with an
+    informational message and answers. So
+    `c(1..3). n(N) :- N = #count{D : c(D)}. z(X) :- n(N), X = 6/(N-3).` is
+    refused, as is `X = 60/((N-3)*(N-4)*(N-5))` over a count that can be 3, 4
+    or 5. A family that overflowed only at values that could not occur is
+    admitted.
+  - A warning that only an unrealized value raised is no longer given.
+  - The atoms and nodes a theory reports change, as do the objective
+    priorities it retains: a priority only an unrealized value would open is
+    no longer reported with cost zero.
+  - Reported grounding work changes by the analysis, one predicate lookup for
+    each atom a body names that is no explicit fact, one unit for each atom
+    in the check below, and one unit for each tuple of an assignment family.
+  - Before a theory is published, emission checks that every atom it read as
+    true is derived by unconditional ordinary roots, and refuses with the
+    source-activity failure otherwise.
+- A walk orders its splits by what its region has decided. A chain is a
+  conjunction or disjunction read over its operands; the region has shortened
+  it when an operand is settled without settling the chain and two or more of
+  its members, the open operands and its own truth while unknown, remain.
+  Under a prepared generator order a walk takes an open generating head of
+  least choice depth, the longest path of choosing components below the head,
+  and among those the head for which the shortened chains weigh the most; the
+  component order breaks ties as before. Walks without a generator order, the
+  countermodel walk of a frozen reduct among them, rank by shortened chains
+  before unknown-parent counts. Under a candidate restriction or an objective
+  bound the ranking is unchanged: its subject is the restriction's own
+  knowledge, so once an optimization holds an incumbent its splits are chosen
+  as before. Every answer set and every optimum is unchanged. The order in
+  which answers are found changes, and with it the regions visited and the
+  search work reported. Where a region has shortened a chain, a generator
+  order reads its eligible atoms a second time, and either ranking reads the
+  parents of the atoms it scores, one unit each. The generator order retains
+  one more word for each atom and its preparation holds nine more bytes for
+  each atom and node, so a theory at the edge of the preparation byte
+  allowance can now decline it. `GeneratorOrder::preferred_atom_reserved` and
+  `Knowledge::preferred_atom_reserved` now take the theory's `Narrower`, and
+  the former the region's closed `Knowledge`; see the
+  [library map](docs/book/rust/libraries.md). See
+  [shortened chains](docs/book/architecture/execution.md#shortened-chains).
+- The optional original-root arithmetic preparation's work allowance grows
+  with its theory: 256 operations for each node and each operand occurrence,
+  and never fewer than the 100,000,000 it was, which declined the preparation
+  of the largest theories, where its cuts decide the most. The operations
+  performed are charged to the search's work account as before. Under a work
+  limit the allowance above 100,000,000 is at most half of what the limit
+  leaves, so the optional preparation is exhausted before the limit is; it
+  may take up to that half where it took 100,000,000, and a walk that needs
+  more than the remainder is then stopped by the limit. A preparation that
+  exceeds its allowance is declined and the walk runs without it, as before.
+- The original-root arithmetic preparation keeps an equation over one atom as
+  a root decision and no longer writes a row of the theory's width for it: a
+  fact, an atom no rule defines and a constraint over one atom each give one.
+  It is checked against its source and decides its atom in the prepared root
+  as before, and it is added to the rows over its atom before elimination, so
+  two that disagree, or a row they contradict, still refute the root. The work
+  and storage of these equations now grow with their number, where they grew
+  with that number times the theory's atoms. A transitive closure over a chain
+  of 200 nodes, 20,099 derived facts, needed 103,734,645 operations and
+  104 MB, more than the default allowance, so its preparation was declined
+  after spending all of it; it now completes in 13,811,036 operations and
+  4 MB. No answer set changes. In the reported parity statistics `rank`
+  counts the atoms these equations decide with the echelon pivots of the
+  rest, `units` counts each decided atom once, a refuted root reports no
+  unit and counts none in its rank, and preparation work and peak bytes
+  fall. `ParitySystem::units` yields the recognized decisions first, then the
+  one-atom echelon rows. `ParitySystem::inspect_reserved` on an original
+  theory's system no longer forces the atom of a one-atom equation: such an
+  equation is no row, and the prepared root holds it, so a region that was
+  not narrowed from that root is not given it. `consistent_in_reserved` reads
+  these decisions against its region.
+- A theory no longer carries a support guard for an atom with an
+  unconditional producer: a fact, an atom the program derives from its facts,
+  or the head of a choice or disjunction whose body is true. Such a guard
+  requires truth itself, so every interpretation satisfies it and every
+  reduct keeps it true (`SupportTransposition.unconditional_guards_omitted`).
+  No answer set changes. Each such atom has three nodes and one root fewer:
+  the transitive closure above goes from 100,497 nodes and 40,198 roots to
+  40,200 and 20,099. The reported formula sizes fall, and with them the
+  search work that reads the roots. The work allowance of the optional
+  original-root arithmetic preparation is proportional to the theory's size,
+  so it falls too, and a preparation that needed nearly all of it can now be
+  declined. Grounding work rises by one read for each producer of an atom
+  that keeps its guard.
 - Candidate narrowing no longer counts a producer as support when its body
   requires its own head, or an atom that only that head can derive, as in the
   alias pair `a :- b.` `b :- a.` with one other rule for `a`

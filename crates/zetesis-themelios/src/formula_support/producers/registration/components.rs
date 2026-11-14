@@ -519,7 +519,7 @@ fn resolve(
 
 /// Every atom a rule's head can derive: the normal head, each disjunct, each
 /// conditional head and each choice element.
-fn rule_heads(
+pub(super) fn rule_heads(
     rule: &RuleIr,
 ) -> impl Iterator<Item = crate::formula_support::components::Pattern> + '_ {
     let normal = match &rule.head {

@@ -42,6 +42,17 @@ impl Masks {
         [sure, never, atom_sure, atom_never, seen, witnessed].map(Words::new)
     }
 
+    /// Whether a node is known, to hold or to fail.
+    pub(super) fn node_known(&self, node: usize) -> bool {
+        self.words.contains(node) || self.words.contains(self.node_words * 64 + node)
+    }
+
+    /// Whether an absorbing operand settled a chain's root.
+    pub(super) fn witnessed(&self, chain: usize) -> bool {
+        self.words
+            .contains((2 * self.node_words + 3 * self.atom_words) * 64 + chain)
+    }
+
     #[cfg(test)]
     pub(super) fn slices(&self) -> [&[u64]; 6] {
         let (sure, rest) = self.words.split_at(self.node_words);

@@ -35,7 +35,15 @@ The source adapter must justify the premise through complete typed rule
 instances, local bindings and aggregate-value proposals. Positive joins retain
 whole bindings; nonbinding aggregate and conditional truth does not prune
 possible producers. Aggregate assignments propose every covered value while
-retaining their original equalities in the formula theory. Head permissions
+retaining their original equalities in the formula theory; when every tuple is
+required there is one covered value, and its equality is emitted as true. A value is covered
+when some selection containing the required tuples and within the possible
+ones measures to it. A tuple yielded from positive atoms of certain predicates
+is required: those atoms hold in every answer set
+([CertainAtoms](../Zetesis/CertainAtoms.lean)), so the aggregate's value in an
+answer set is still the measure of such a selection, and the value it takes is
+still proposed. The proposal is made once, over the completed relations of the
+predicates the rule reads. Head permissions
 remain independent of measured contributions. The existing aggregate coverage
 laws are ingredients of this argument, not a verification of the Rust compiler.
 

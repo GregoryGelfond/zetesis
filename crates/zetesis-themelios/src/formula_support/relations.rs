@@ -104,6 +104,9 @@ pub(crate) struct SupportCatalog {
     /// The columns joins can bind; absent until support completion installs it,
     /// and then every column of a predicate it does not name is unindexed.
     demand: Option<super::demand::Demand>,
+    /// The certain predicates; absent until support completion installs them,
+    /// and when it finds none.
+    certainty: Option<super::certain::Certainty>,
     entries: usize,
     index_bytes: usize,
     prepared_bytes: usize,
@@ -120,6 +123,7 @@ impl Default for SupportCatalog {
             supported: Words::new(Vec::new()),
             growth: AtomicUsize::new(0),
             demand: None,
+            certainty: None,
             entries: 0,
             index_bytes: size_of::<Self>() - size_of::<AtomInterner>()
                 + SourceScope::shared_bytes(),
@@ -152,6 +156,31 @@ impl SupportCatalog {
         self.demand = Some(demand);
     }
 
+    /// Keep the certain predicates for every snapshot taken from now on. An
+    /// analysis that found none installs nothing. The retained bytes are
+    /// admitted with the catalog's.
+    pub(super) fn install_certainty(
+        &mut self,
+        certainty: super::certain::Certainty,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        if certainty.is_empty() {
+            return Ok(());
+        }
+        self.certainty = Some(certainty);
+        let bytes = self.bytes(location)?;
+        Memory::new(
+            bytes,
+            counters.accounting.workspace.bytes() as u128,
+            limits,
+            counters,
+            location,
+        )
+        .add(0)
+    }
+
     pub(in crate::formula_support) fn bytes(
         &self,
         location: ProgramSite,
@@ -168,6 +197,13 @@ impl SupportCatalog {
                     self.demand
                         .as_ref()
                         .map_or(0, super::demand::Demand::retained_bytes),
+                )
+            })
+            .and_then(|bytes| {
+                bytes.checked_add(
+                    self.certainty
+                        .as_ref()
+                        .map_or(0, super::certain::Certainty::retained_bytes),
                 )
             })
             .ok_or_else(|| failure(Failure::Overflow, location))
@@ -203,6 +239,7 @@ impl SupportCatalog {
         let relations = SnapshotSource {
             sources: &self.rows,
             components: self.components.as_ref(),
+            certainty: self.certainty.as_ref(),
             read: committed.read(),
             entries: self.entries,
             bytes,
@@ -314,6 +351,7 @@ impl SupportCatalog {
         SnapshotSource {
             sources: &self.rows,
             components: self.components.as_ref(),
+            certainty: self.certainty.as_ref(),
             read: self.owner.read(),
             entries: self.entries,
             bytes: self.bytes(location)?,
@@ -340,6 +378,7 @@ impl SupportCatalog {
 struct SnapshotSource<'a> {
     sources: &'a [CatalogRows],
     components: Option<&'a TemplateComponents>,
+    certainty: Option<&'a super::certain::Certainty>,
     read: CatalogRead<'a>,
     entries: usize,
     bytes: usize,
@@ -389,6 +428,7 @@ impl<'a> SnapshotSource<'a> {
         Ok(Relations {
             rows,
             components,
+            certainty: self.certainty,
             read: Some(self.read),
             entries: self.entries,
             bytes: memory.bytes,
@@ -715,6 +755,8 @@ fn catalog_failure(
 pub(crate) struct Relations<'source> {
     rows: Vec<RelationRows<'source>>,
     components: Option<TemplateComponentsRef<'source>>,
+    /// The certain predicates of the source this support completes.
+    certainty: Option<&'source super::certain::Certainty>,
     read: Option<CatalogRead<'source>>,
     growth: Option<&'source AtomicUsize>,
     pub(super) entries: usize,
@@ -758,6 +800,12 @@ impl<'source> RelationRows<'source> {
 }
 
 impl<'source> Relations<'source> {
+    /// The certain predicates of the source, when its support completion
+    /// found any ([`super::certain`]).
+    pub(crate) fn certainty(&self) -> Option<&'source super::certain::Certainty> {
+        self.certainty
+    }
+
     pub(super) fn components(&self) -> Option<TemplateComponentsRef<'source>> {
         self.components
     }

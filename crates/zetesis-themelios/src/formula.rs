@@ -1155,7 +1155,9 @@ pub(crate) struct Compiled {
 /// positive atom permissions are still validated and compiled separately.
 /// Conditional local joins inherit the complete
 /// outer binding; neither local witnesses nor vacuity establishes an aggregate
-/// equality. Every generated rule retains its original equalities.
+/// equality. Every generated rule retains its original equalities; an
+/// assignment every tuple of which is required over certain predicates has
+/// one value, and its equality is emitted as the true formula it is.
 /// Default-negated anonymous consequent positions project the complete finite
 /// witness family before applying `not` or `not not`. Anonymous positions may
 /// occur inside positive function or tuple constructors; named and evaluated

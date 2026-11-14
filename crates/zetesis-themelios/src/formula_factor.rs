@@ -300,7 +300,7 @@ fn emit<'plan, 'source>(
     let formula = builder.node(Node::Implies(body, head), rule.location)?;
     builder.root(formula, rule)?;
     if head != FALSUM {
-        builder.producer(head, body, rule)?;
+        builder.ordinary_producer(head, body, rule)?;
     }
     Ok(())
 }

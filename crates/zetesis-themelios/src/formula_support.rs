@@ -35,6 +35,7 @@ pub(crate) use buffer::Buffer;
 pub(crate) use term_selection::TermSelection;
 #[cfg(test)]
 mod captures;
+pub(crate) mod certain;
 #[cfg(test)]
 mod columnar;
 #[cfg(test)]
@@ -649,6 +650,16 @@ fn complete(
         location: fallback,
     } = work;
     catalog.prepared_bytes(producers.bytes());
+    // Certain predicates are read by assignment proposals from the first
+    // round on, so they are installed before the first snapshot.
+    if certain::every_predicate_assumed() {
+        catalog.install_certainty(certain::Certainty::all(), limits, counters, fallback)?;
+    } else if !certain::left_out()
+        && let Some(certainty) =
+            producers.certainty(prepared, &catalog, limits, counters, fallback)?
+    {
+        catalog.install_certainty(certainty, limits, counters, fallback)?;
+    }
     // Postings are kept only for columns a join can bind, decided before the
     // first relation is created, since a column cannot gain postings later.
     if let Some(view) = catalog.component_view(limits, counters, fallback)? {

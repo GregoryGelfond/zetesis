@@ -2532,10 +2532,12 @@ ranking the original theory's atomic choice heads first and then the unknown-par
 counts of the last subject: the active bound, latest permanent restriction, or
 original theory, in that precedence. With a restriction, the original theory's
 unknown-parent count breaks ties through `preferred_atom_with_secondary_reserved`;
-otherwise `preferred_atom_reserved` retains the original-only ranking. The two
+otherwise `preferred_atom_reserved` ranks by the original alone, and puts the
+weight of the chains its region has shortened before the counts. The two
 knowledge values must share atom identities and be closed for the same region.
 The ranking charges each inspected count, one per open atom without a
-restriction and two with one. It reads the choice mark in the primary charge,
+restriction and two with one, and each parent read for a shortened chain. It
+reads the choice mark in the primary charge,
 retains its charged prefix on refusal and installs no partial preference.
 Packed enumeration must exclude padding and preserve ascending ties. Selecting
 an open atom retains the split-partition obligation of `Search.CoverageTree`;
@@ -2796,6 +2798,7 @@ original program or the reduct used to check membership.
 | [The `split` constructor of `Search.CoverageTree`, `Region.split_partition`, `Region.split_disjoint`, `CoverageTree.mem_outputs_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Search.lean), [`Bounds.conflicting_atom_refutes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean) | `zetesis_algebra::walk::Walk`, the scalar walk used for candidates and proper-subset queries: a region is narrowed by the caller's narrowing, refuted, offered as one candidate when decided, split on the atom its narrowing preferred or else its highest open atom into the out and in regions, or counted as a flat interval when its narrowing decided nothing beyond the split and the caller counts; each caller supplies its original-theory or frozen-reduct narrowing. Under several workers the formula route walks the same tree in `zetesis_stable`'s parallel regions, a second implementation of the same law: each worker takes its newest region from a deque and idle workers steal older regions from peers | That the Rust split chooses a fresh atom and forms the two regions of the law, in the traversal and in the parallel walk alike, that the counted interval offers exactly the region's seeds, and that the leaf order is the counter's order when no atom is preferred and one worker walks are Rust obligations; with several workers, [`Pending.Step.perm`, `Pending.Walk.exhausted`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Frontier.lean) is the law: the frontier of pending regions, whoever holds each, and the leaves emitted are together a permutation of the tree's outputs after every step in any interleaving, so a walk that empties the frontier emits every accepted leaf once, in the schedule's order; that the workers' deque removals, transfers and active regions form one frontier of the tree is the Rust obligation; the tree's leaves are exactly the accepted seeds only because each leaf seed is checked in full. |
 | [`TightPlans.stable_supported`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TightPlans.lean) | A candidate the complete tight certificate finds with an unsupported present atom is rejected as `Check::Unsupported` without a reduct query; the candidate without that atom is the law's witness | The plan's coverage of the theory's producers is established by its construction, not yet by a proved refinement of that construction; the Rust check's evaluation of producer bodies remains executable evidence. |
 | [`DisjunctiveSupport.answer_set_supported`, `answer_set_supported_with_choices`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean) | Necessary ordinary sole-head support and enabled atomic-choice support | Extraction must cover every asserted root, coalesce repeated ordinary head atoms and recognize exact atomic choices in either operand order using semantic atom identity. Choice bodies remain arbitrary original formulas; they supply permission, not a self-premise. The original theory remains the reduct subject. This is necessary support, not ranked sufficiency. The retained binary recognizer is refined by `AtomicChoice.atom_meaning_iff`; native recognizer refinement, complete Rust DAG extraction, Boolean encoding and bounded failure remain unproved. |
+| [`CertainAtoms.fixed_satisfies`, `fixed_reduct`, `fixed_stable`, `top_conj`, `top_disj`, `derived_forced`, `derived_kept`, `derived_stable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CertainAtoms.lean) | `zetesis_themelios::formula_support::certain`: the certain predicates of a prepared program, installed in the support catalog before its first snapshot. `formula_ground::fixed_facts` emits a positive occurrence of a supported atom of a certain predicate as true in a body and in the condition of a choice element or conditional disjunct, as it does an explicit fact; a true conjunct is left out and a true disjunct settles its disjunction. Before a theory is sealed, `fixed_atoms_are_derived` requires every producer of an atom read as true through its certain predicate to be an unconditional ordinary root, and an explicit fact to have one. `formula_assignment::collect` and final grounding treat as required the tuples of a listed assignment element, one whose condition holds certain atoms and decided literals only in a producer traversed once over complete relations | `derived_stable` is the law the substitution uses: a theory that derives the fixed atoms and an emitted theory that keeps its atom formulas and, for each rule, an implication with the same consequent over some of the same atoms, have the same answer sets. The laws cover binary formulas, a derivation through implications whose antecedent is a conjunction of derived atoms, and substitution at any occurrence. Three premises are Rust obligations. That each atom read as true is derived in the original theory: the root check establishes this for rules without aggregates, given that an unconditional root stands for an instance whose positive body atoms were all read as true and that support completion derives an atom after the atoms its first derivation reads; neither is proved. That emission keeps a rule for every rule: the retained roots. That completed support, the classification and the component schedule's single traversal are as the module states: argued and tested. Aggregates are outside the formula language, so the required tuples, the exact assignment emitted as its one value, the rule instances it no longer emits and the certainty of its head rest on the argument in the module and on tests; the emitted theory then names fewer atoms than the theory before it, which no law relates. Negative occurrences, heads and objective queries are not substituted. |
 | [`ExternalSupport.answer_set_externally_supported`, `answer_set_noncircular_support`, `noncircular_unsupported_cut`, `noncircular_sole_rule_forces`, `noncircular_sole_choice_forces`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ExternalSupport.lean) | `zetesis_ferraris::regions::circular`: a sole-head producer whose body requires its head, or an atom every producer of which requires that head, is marked circular. The support scan passes over it, concluding the cut and the sole body by the three region laws. In the closure of possible founded support, a dependency component whose every cycle passes through a marked producer is released to the support scan; a component with a surviving cycle is kept whole and closed over every producer, marked ones included | The laws cover bodies of any formula shape; the recognition reads only a body that is an atom or its operands that are atoms, so it marks no more than the laws grant, and a native aggregate operand is covered only through its formula translation, which this library does not state. That each marked producer satisfies the premise is established by the marking pass and its tests, not by a proved refinement. Producers with several heads are never marked. The marking pass may spend at most four times the extraction's own visits and no more than the extraction's ceiling leaves; one that would exceed either marks nothing, which leaves the inventory as it was before producers were marked. Releasing a component only adds seeds to the closure, which stays an upper bound without a law; that the released atoms are then decided as the closure decided them is argued in `regions/founded.rs` and tested against the inventory without marks, not proved. The theory, its roots and the reduct subject are unchanged. |
 | [`PackedQueryLiterals.decode_encode`, `packed_truth`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean) | None: the removed clause search's packed classical literals in `Cnf` and borrowed clause views | No current Rust correspondence; the law remains as a statement. |
 | [`IndexedCandidates.index_equals_all_blocks`, `failed_literal_forced`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IndexedCandidates.lean) | None: the removed clause search's semantic-projection exclusion index and its independently checked completed assignments | No current Rust correspondence; the law remains as a statement. |
@@ -3387,6 +3390,10 @@ the whole guard family, with arbitrary outer and tested interpretations.
 `answer_sets_in_context` preserves membership in any unchanged surrounding
 theory. These laws replace equivalent guard families; they require neither a
 necessary-support entailment premise nor equivalence between individual roots.
+`unconditional_guards_omitted` leaves out the guards whose requirement is the
+canonical true formula; that the compiler omits a guard exactly when one of the
+atom's recorded producers is that formula is a Rust obligation, tested against
+a construction that publishes every guard.
 
 The Rust [guard builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/support_guards.rs)
 selects heads with exactly one recorded producer. A conjunction contributes its
@@ -4077,7 +4084,13 @@ check each proposed equation before `arithmetic::parity` eliminates rows.
 `equation_of_agreement`, `parity_measure_odd` and `parity_equation_of_xor`
 connect the packed XOR representation to `equation_add`. Root units and
 contradictions use the consequences stated by `parity_forces`,
-`equation_excludes_given` and `excludes_region`.
+`equation_excludes_given` and `excludes_region`. An equation over one atom is
+kept as a root unit and has no row. Adding it to a row over its atom is
+`equation_add` of two checked equations; that the Rust reads each unit against
+its re-read source by the unit's own atom, drops a repeat, refutes on a
+disagreement and clears exactly the decided atoms of every row are Rust
+obligations, tested exhaustively on small systems placed within one mask word
+and across three.
 
 Completion tables compose packed intersections of signed atom columns, unions
 over all producers, and XOR with the head column. `AxisFolds.all_fold_true_iff`,
@@ -5390,10 +5403,14 @@ laws from the unproved transport, epoch and completion correspondences.
 formula, held/cut consequence, root-satisfaction test or frozen-reduct query.
 Complete `Producers` supply generator marks and body-to-head dependencies. Both
 signs of every formula operand participate in the temporary graph; its component
-order is a preference, not a foundedness or normal-program certificate. Every
+order and choice depths are a preference, not a foundedness or normal-program
+certificate. Among heads of one depth the order reads the region's closed
+knowledge for the chains the region has shortened; that read changes no
+knowledge and decides no atom. Every
 selected atom is checked against the region's open mask. The existing
 `Search.CoverageTree.split` and `Region.split_partition`/`Region.split_disjoint` laws
 therefore supply the semantic coverage obligation. Rust refinement separately
-owes exact theory ownership, valid graph incidences, correct component ordering,
-open-only selection and preservation of both children on every execution route.
+owes exact theory ownership, valid graph incidences, correct component ordering
+and depths, open-only selection and preservation of both children on every
+execution route.
 No Lean claim here certifies the component implementation or measured behavior.

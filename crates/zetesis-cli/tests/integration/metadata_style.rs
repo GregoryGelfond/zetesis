@@ -88,7 +88,7 @@ fn plain_metadata_describes_the_execution_policy() {
         "Source: 1 original file ({} bytes)\n\
          Comparisons: with_form=0; long_operand=0; wide_slot=0; constructor=0; nonnumeric_constant=0; argument_position=0\n\
          Grounding: requested=lazy, effective=hybrid (eager retained core; streamed constraints: 0 templates, 0 admitted instances; grounded in the core: 1 templates, 1 instances)\n\
-         Retained core formula: 12 atoms, 74 nodes, 27 roots; 122 operand occurrences; 0 constraints asked by key; streamed constraints checked separately\n\
+         Retained core formula: 12 atoms, 53 nodes, 20 roots; 80 operand occurrences; 0 constraints asked by key; streamed constraints checked separately\n\
          Core membership: checked tight support certificate; original constraints still pending\n\
          Backend: cpu; retained-core oracle: Ferraris reduct membership; core grounding: eager\n",
         bundle().total_bytes()

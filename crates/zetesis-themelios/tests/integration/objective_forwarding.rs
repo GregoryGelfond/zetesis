@@ -232,8 +232,10 @@ fn recursive_count_forwarding_matches_clingo() {
 
 #[test]
 fn preparation_defers_carrier_presence_to_grounding() {
+    // A bounded choice keeps `b` in every answer without making it certain,
+    // so the numeric proposal `n(2)` stays possible and its priority present.
     let source =
-        "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).m(M):-M=#max{Y:p(Y)}.#minimize{M@7:m(M)}.";
+        "1{b}1.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).m(M):-M=#max{Y:p(Y)}.#minimize{M@7:m(M)}.";
     let prepared = prepared(source);
     let input = prepared.ground().unwrap();
     assert_eq!(input.objectives().priorities(), &[7]);

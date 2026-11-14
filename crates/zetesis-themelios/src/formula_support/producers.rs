@@ -105,6 +105,36 @@ impl<'source> Producers<'source> {
         matches!(self, Self::Planned(_))
     }
 
+    /// The certain predicates of the source ([`super::certain`]), or `None`
+    /// when no component view resolves its predicates. A plan certifies a
+    /// positive flat source, every rule of which is definite: all of its
+    /// predicates are certain, and it holds no aggregate.
+    pub(super) fn certainty(
+        &self,
+        prepared: &'source Prepared,
+        catalog: &SupportCatalog,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<super::certain::Certainty>, FormulaFailure> {
+        match self {
+            Self::Planned(_) => {
+                counters.work(limits, location)?;
+                Ok(Some(super::certain::Certainty::all()))
+            }
+            Self::Registered(registration) => {
+                let Some(view) = catalog.component_view(limits, counters, location)? else {
+                    return Ok(None);
+                };
+                let external = catalog.bytes(location)? as u128
+                    + counters.accounting.workspace.bytes() as u128;
+                registration
+                    .certainty(prepared, view, external, (limits, counters, location))
+                    .map(Some)
+            }
+        }
+    }
+
     /// Mark ready the deferred rich producers whose read components reached
     /// their fixed point, given this round's pending atoms. A plan has none.
     pub(super) fn mark_ready(

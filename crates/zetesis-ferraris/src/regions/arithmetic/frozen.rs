@@ -81,7 +81,9 @@ pub struct FrozenPreparationLimits {
 }
 
 impl FrozenPreparationLimits {
-    /// The root preparation's work allowance, per candidate, with `bytes`.
+    /// The default preparation work allowance, per candidate, with `bytes`.
+    /// The original theory's own preparation scales its allowance with the
+    /// theory; a candidate's does not.
     #[must_use]
     pub const fn per_candidate(bytes: usize) -> Self {
         Self {

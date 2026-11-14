@@ -671,6 +671,7 @@ mod composition;
 mod generator_order;
 mod ordering;
 mod preference;
+mod preparation_allowance;
 mod typed_meter;
 
 /// A free choice `e` (atom 0) and atoms `a_1 … a_k`, each with the rule
