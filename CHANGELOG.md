@@ -123,9 +123,12 @@ Notable changes by release. Versions follow Semantic Versioning.
     `p(X) :- 0 <= X+0 = (2..4)/2 <= 3.` were admitted and are refused as
     unsafe; clingo refuses the first and admits the second. And under a row
     where the interval is empty, a fatal failure in another term of the
-    comparison refuses on whichever side of the interval the term stands:
-    `d(0). p :- d(X), (3..1) > X+2147483647+1.` was admitted and is refused,
-    as `d(0). p :- d(X), X+2147483647+1 < (3..1).` was and is.
+    comparison, where the row and the values generated before the interval
+    determine that term, refuses on whichever side of the interval the term
+    stands: `d(0). p :- d(X), (3..1) > X+2147483647+1.` was admitted and is
+    refused, as `d(0). p :- d(X), X+2147483647+1 < (3..1).` was and is. A
+    positive equality with an interval in a body takes another route and is
+    unchanged.
   - A source family's evidence records only whether a substitution divided
     by zero (`ArithmeticFamilies`).
 - A walk orders its splits by what its region has decided. A chain is a

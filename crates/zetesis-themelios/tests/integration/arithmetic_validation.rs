@@ -1041,6 +1041,32 @@ fn an_excluded_row_reaches_no_term_beside_an_empty_interval() {
 }
 
 #[test]
+fn a_plain_consequent_is_not_read_under_a_binding_a_generator_omits() {
+    // The consequent has no interval of its own. A generator of its
+    // condition divides by zero under X = 1, which omits that binding with
+    // the rule's warning, and no consequent is read under an omitted
+    // binding: the overflow there is not reached.
+    for rule in [
+        "p:-2147483647+X=1:d(X),Y=1/(X-1).",
+        "p:-2147483647+X=1:d(X),Y=0..2/(1-X).",
+        "p:-2147483647+X=1:d(X),0<(1..2/(1-X)).",
+    ] {
+        assert_eq!(
+            omitting(&format!("d(0;1).{rule}"), rule),
+            family(&["d(0)", "d(1)"]),
+            "{rule}"
+        );
+    }
+    // One frame of the condition divides by zero and the other fails Z > 5,
+    // so no frame holds and the conditional literal requires nothing.
+    let rule = "p:-X+2147483647+1=1:d(X),Y=0..1,Z=1/Y,Z>5.";
+    assert_eq!(
+        omitting(&format!("d(0).{rule}"), rule),
+        family(&["d(0)", "p"])
+    );
+}
+
+#[test]
 fn a_consequent_with_an_interval_is_read_under_the_frames_that_hold() {
     // The interval has values, so the consequent is read under the complete
     // frames of its condition and nowhere else. No frame holds where Y > 5

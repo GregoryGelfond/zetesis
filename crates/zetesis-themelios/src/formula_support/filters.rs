@@ -186,9 +186,12 @@ pub(super) type Checks<'a> = (
 
 /// Available checks may exclude a failed generator. A failed check never
 /// excludes, and an unavailable generated input is not read here. `checked`
-/// is the consequent guard checked beside the row: no row will read it, so
-/// its terms are read with the row's own checks, and a fatal failure in one
-/// refuses as theirs does.
+/// is the consequent guard checked beside the row. It is read here only when
+/// the failed generator is an interval of its own: no frame will then read
+/// it, so its terms are read with the row's checks, and a fatal failure in
+/// one refuses as theirs does. A guard that owns no failed interval is a
+/// consequent beside its condition's rows, and a row that a failed
+/// generator omits does not reach its consequent.
 pub(super) fn excludes(
     (literals, decisions, checked): Checks<'_>,
     evaluation: &mut Evaluation,
@@ -220,6 +223,7 @@ pub(super) fn excludes(
         }
     }
     if let Some(guard) = checked
+        && lacks_interval(guard, binding, location)?
         && let Some(error) = fatal_term(
             guard,
             binding,
@@ -298,6 +302,20 @@ pub(super) fn valueless(
         return Ok(());
     }
     Err(error.into())
+}
+
+/// Whether an interval among `guard`'s own terms has no value in `binding`.
+fn lacks_interval(
+    guard: &crate::formula_guard::Guard,
+    binding: &Binding,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    for &slot in guard.intervals() {
+        if partial_input(binding, slot, location)?.is_none() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// The fatal failure of a term of `guard` under `binding`, an absent
