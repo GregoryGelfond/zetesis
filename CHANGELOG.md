@@ -128,7 +128,11 @@ Notable changes by release. Versions follow Semantic Versioning.
     stands: `d(0). p :- d(X), (3..1) > X+2147483647+1.` was admitted and is
     refused, as `d(0). p :- d(X), X+2147483647+1 < (3..1).` was and is. A
     positive equality with an interval in a body takes another route and is
-    unchanged.
+    unchanged. Where an empty interval of another comparison is generated
+    first, the comparison is not read:
+    `d(0). p :- d(X), (3..1) < 4, (1..2) > X+2147483647+1.` was refused for
+    the overflow and has the answer set `{d(0)}`, as in clingo. The order
+    among the intervals of different comparisons is not specified.
   - A source family's evidence records only whether a substitution divided
     by zero (`ArithmeticFamilies`).
 - A walk orders its splits by what its region has decided. A chain is a

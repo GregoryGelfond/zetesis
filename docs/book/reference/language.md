@@ -899,12 +899,31 @@ determine them, and a fatal failure met there refuses on whichever side of
 the interval the term stands: `d(0). p :- d(X), X+2147483647+1 < (3..1).` and
 `d(0). p :- d(X), (3..1) > X+2147483647+1.` are both refused. A term that
 needs a value generated after the empty interval has none to fail at:
-`d(0). p :- d(X), (3..1) > (1..2)+X+2147483647.` answers. This holds for the
-interval the comparison itself contains. A comparison over a variable that
-another literal binds by an interval is evaluated under complete rows alone,
-and so is a positive equality with an interval in a body, which binds its
-variable or tests membership: `d(0). p :- d(X), X+2147483647+1 = (3..1).`
-answers. A comparison bounds an unresolved variable through an interval where
+`d(0). p :- d(X), (3..1) > (1..2)+X+2147483647.` answers.
+
+Generated before is not written before. A value that another literal of the
+body binds is generated before a comparison's intervals wherever that literal
+stands, so `d(0). p :- d(X), (3..1) > Y+2147483647, Y = X+1.` is refused. The
+intervals of one comparison are generated in the order written. A value that
+an aggregate assigns is generated after them wherever the aggregate stands,
+so `d(0). p :- d(X), N = #count{1 : d(X)}, (3..1) > N+X+2147483647.` answers.
+The order among the intervals of different comparisons is not specified, and
+a comparison's terms are read only where its interval is the first one found
+without a value. A comparison is therefore left unread beside an empty
+interval of another comparison that is generated before its own:
+`d(0). p :- d(X), (3..1) < 4, (1..2) > X+2147483647+1.` answers, and so does
+`d(0). p :- d(X), (3..1) > X+2147483647+1, (3..1) < 4.`
+
+This holds for the interval the comparison itself contains. A comparison over
+a variable that another literal binds by an interval is evaluated under
+complete rows alone. So are a positive equality with an interval in a body,
+which binds its variable or tests membership, and a doubly negated equality
+whose interval has an interval in a bound:
+`d(0). p :- d(X), X+2147483647+1 = (3..1).` and
+`d(0). p :- d(X), not not X+2147483647+1 = ((3..1)..5).` answer, while
+`d(0). p :- d(X), not not X+2147483647+1 = (3..1).` is refused.
+
+A comparison bounds an unresolved variable through an interval where
 its terms are integer-affine in the interval's value:
 `p(X) :- 0 < X < (1..3).` has the answer set `{p(1), p(2)}`. A term that is
 not, such as `(1..4)/2`, gives no bound, and
