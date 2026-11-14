@@ -325,6 +325,30 @@ fn a_root_that_declined_for_two_heads_declines_again_unclassified() {
 }
 
 #[test]
+fn the_position_remembered_is_the_declining_roots() {
+    // The fact `c` is the first root and `a | b` the second. The second
+    // attempt tests the second root alone: its three units, where a test of
+    // the first root would say nothing and leave the theory to classify.
+    let owner = theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::or_pair([0, 1]),
+        ],
+        vec![2, 3],
+    );
+    let mut workspace = FrozenPositiveWorkspace::default();
+    let limits = EvaluationLimits::default();
+    let first = attempt(&mut workspace, &world(&owner, 7), limits);
+    assert!(matches!(first.result, Ok(FrozenPositiveOutcome::Declined)));
+    let second = attempt(&mut workspace, &world(&owner, 7), limits);
+    assert!(matches!(second.result, Ok(FrozenPositiveOutcome::Declined)));
+    assert_eq!(second.work, 3);
+}
+
+#[test]
 fn a_decline_for_another_shape_is_not_remembered() {
     // `(a -> b) -> a` declines for its body, a live implication that negates
     // nothing; the root `a & b` declines for its head, a conjunction. Neither
