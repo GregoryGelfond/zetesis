@@ -17,7 +17,10 @@
 //!
 //! A rich producer whose reads all lie in dependency components before its
 //! heads' is instead traversed once, when those components reach their fixed
-//! point ([`components`]).
+//! point ([`components`]). Any other rich producer that proposes an
+//! assignment's values from elements over earlier decidable components is
+//! held back until those reach their fixed point, and traversed per change
+//! from then on.
 
 mod certain;
 mod components;
@@ -48,7 +51,8 @@ pub(in crate::formula_support) struct Registration<'source> {
     producers: Vec<Producer>,
     inputs: Vec<usize>,
     reads: Vec<Occurrence>,
-    /// The component schedule, when some rich producer can wait for its reads.
+    /// The component schedule, when some rich producer can wait for its
+    /// reads or for the elements its assignments propose from.
     schedule: Option<Box<components::Schedule<'source>>>,
     bytes: usize,
 }
@@ -219,8 +223,10 @@ impl<'source> Registration<'source> {
     /// certified producer takes its registered occurrences' delta variants. A
     /// rich producer is traversed in the first round, and later exactly when
     /// one of its read predicates gained rows in `support`; a visit that ends
-    /// at that test is recorded as unchanged. The owner check is a pointer
-    /// comparison, covered by the visit's own charge.
+    /// at that test is recorded as unchanged. A deferred producer is never
+    /// traversed here, and a gated one only after the schedule traversed it,
+    /// and then by the same test. The owner check is a pointer comparison,
+    /// covered by the visit's own charge.
     pub(in crate::formula_support) fn variants<'a, 'rows>(
         &'a self,
         index: usize,
@@ -245,13 +251,15 @@ impl<'source> Registration<'source> {
                 first,
             )),
             Producer::Rich(_)
-                if let Some(state) = self
-                    .schedule
-                    .as_ref()
-                    .and_then(|schedule| schedule.state(index)) =>
+                if let Some(state) = self.schedule.as_ref().and_then(|schedule| {
+                    schedule
+                        .state(index)
+                        .filter(|&state| !schedule.resumed(index, state))
+                }) =>
             {
                 // A deferred producer is traversed only by the component
-                // schedule, after its round's other producers.
+                // schedule, after its round's other producers, and so is a
+                // gated one until that traversal.
                 counters.record(if state == components::State::Traversed {
                     Event::SupportUnchangedVisit
                 } else {
@@ -260,6 +268,9 @@ impl<'source> Registration<'source> {
                 Ok(delta::traversal(rule, support, false))
             }
             Producer::Rich(reads) => {
+                // A gated producer reaches this arm only after the schedule
+                // traversed it in full, which follows its round's last visit
+                // here: never in the first round.
                 let traversed = first
                     || every_round_traversed()
                     || affected(&self.reads[reads.clone()], rule, support, limits, counters)?;

@@ -177,11 +177,38 @@ a relation that still grows would give too few required tuples. The requirement
 is therefore read only where the relations are complete: by a rule whose
 predicates all lie in dependency components before its heads', which support
 completion [traverses once](#completed-possible-support), after those
-components reached their fixed point, and by a constraint, which is grounded
-after completion. `c(1..3). n(N) :- N = #count{X : c(X)}.` supports `n(3)`
-alone, where a count over an uncertain condition supports each of `n(0)` to
-`n(3)`. An assignment is *exact* when every element of it is required in this
-way. Its one value is then the aggregate's value in every interpretation, the
+components reached their fixed point; by any other rule with a head, for the
+elements support completion holds it back for; and by a constraint, which is
+grounded after completion. `c(1..3). n(N) :- N = #count{X : c(X)}.`
+supports `n(3)` alone, where a count over an uncertain condition supports each
+of `n(0)` to `n(3)`.
+
+A required tuple can decide whether a recursive assignment reaches a fixed
+point. In `f(3). {p(N)} :- N = #count{V : p(V); V : f(V)}.` the count is at
+least one, because the fact's tuple is required, and its values end at 3, whose
+head adds no tuple: the program has the one answer set `f(3)`. If that tuple
+were optional the count would propose 0, `p(0)` would add a tuple, and every
+round would propose one value more.
+
+A tuple is required through the predicates of its element, never through one
+row, and only through certain predicates. clingo tracks facts atom by atom and
+simplifies as it grounds, so it finishes some programs of this shape that
+still propose without end here:
+
+- a seed of the recursive predicate itself, as a fact or through a rule over
+  facts: `p(1). {p(N)} :- N = #count{V : p(V)}.`, where clingo stops at
+  `p(1)`. A choice or an assignment that also derives the predicate leaves it
+  uncertain;
+- an element over a predicate that a choice also derives, or that the facts
+  decide only through a negation, a guard aggregate or a conditional literal;
+- an element whose own condition holds a default negation.
+
+Support completion reads no negation either, so a negated fact in such a
+rule's body does not stop its proposals. Counting the seed through a predicate
+of its own, `s(1). p(X) :- s(X). {p(N)} :- N = #count{V : p(V); V : s(V)}.`,
+makes its tuple required.
+
+An assignment is *exact* when every element of it is required in this way. Its one value is then the aggregate's value in every interpretation, the
 rule supports exactly the heads that hold, and its head predicate is certain as
 well: a rank `r(C,R) :- c(C), R = #count{D : c(D), D <= C}` over `n` facts
 supports `n` atoms and feeds certain predicates in turn. An objective's
@@ -208,7 +235,12 @@ through other rules, has only those instances: after
 `n(N) :- N = #count{X : c(X)}.` the rule `z(Y) :- n(N), Y = 6/(N-3).` is
 refused too. An assignment need not be exact for this: when some of its tuples
 are required and others are not, it takes fewer values than it did, and a
-family undefined at each of them is refused.
+family undefined at each of them is refused. That includes a rule held back
+for its required tuples. `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)},
+N < 2, Y = 6/(N-1).` has the one value 1, which divides by zero, and is
+refused, where the count from 0 had admitted it with a warning.
+`f(3). {p(N+1)} :- N = #max{V : p(V); V : f(V)}, N < 6.` is admitted with its
+one answer set `f(3)`, where the empty maximum had refused it at `#inf + 1`.
 
 The substitution rests on the roots that derive each atom, so emission checks
 them on the theory it built rather than taking them from the analysis. Every
@@ -1591,10 +1623,27 @@ in component order and repeats until no producer is ready; when a round
 proposes nothing, the earliest waiting producer always reads only components
 that reached their fixed point, so completion never ends with one untraversed.
 It costs one visit per pending atom, a signature search per run of one
-predicate, and one visit per component, dependency and deferred read each round,
-until every such producer was traversed.
+predicate, and one visit per component, dependency and waited read each round,
+until every producer that waits was traversed.
 
-Every other rich producer, one that reads its own component or a later one, is
+A rich producer that is not scheduled this way, because it reads its own
+component, a later one or one whose fixed point is not decidable, cannot wait
+for everything it reads, but it is held back for the part an assignment needs
+complete. When one of its assignment aggregates has an element with a tuple key
+and a condition of positive atoms and comparisons, each atom in a decidable
+component before the producer's heads, the producer is not traversed until the
+components those elements read reach their fixed point. It is then traversed
+in full, in that round, as a component-scheduled producer is, and from the
+next round on it is traversed as any other rich producer. Its head components
+wait for that first traversal, so a producer scheduled on them cannot run
+before it. Each traversal therefore reads those elements over final rows: the
+tuples they make required are the same in every one. With the required tuples
+fixed, the values the assignment proposes only grow as the support the rule
+reads grows, whether through its own component or through another relation
+that is still gaining rows, and final grounding's family has a root for each.
+Its visits before the first traversal are counted in `support_deferred_visits`.
+
+Every other rich producer, and a held-back one after that traversal, is
 traversed after the first round exactly when one of its read predicates gained
 rows at the last publication. Otherwise every relation it reads is the one its
 last traversal read, and support membership only grows, so another traversal
