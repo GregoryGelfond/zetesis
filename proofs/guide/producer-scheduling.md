@@ -54,15 +54,26 @@ catalog/query snapshot. Full final formula emission is separate and unchanged.
 
 Richer source registers each producer, through the
 [producer registration](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers/registration.rs).
-A producer whose body holds only positive, negated and scalar literals
-registers its positive occurrences as the plan does, with the same reverse
-postings and packed set. The first round visits every producer, which is the
-law's bootstrap; a later round visits such a producer only after a predicate of
-one of those occurrences gained rows. That is `selective_step_exact` again:
-the registration of positive inputs is complete, a default negation is no
-input, and the heads proposed earlier are published. A producer with an
-occurrence whose predicate the dependency graph does not name is outside those
-postings and is visited in every round.
+An ordinary producer (a normal or disjunctive head, or a choice without
+element conditions, over positive, negated and scalar body literals) registers
+its positive occurrences as the plan does, with the same reverse postings and
+packed set. The first round visits every producer; a later round visits an
+ordinary producer only after a predicate of one of those occurrences gained
+rows. For an ordinary producer none of whose negations is decided while
+grounding, that is `selective_step_exact` again: the registration of positive
+inputs is complete, the first round is its bootstrap, a default negation is no
+input of its proposals, and the heads proposed earlier are published.
+
+An ordinary producer held back for the atoms it negates is outside that law
+until the component schedule has traversed it. A decided negation drops rows,
+so its proposals read the negated relation; its first-round visit takes no
+variant, and its first traversal is the schedule's, once that relation is
+complete, by the decomposition stated below for a producer held back for an
+assignment's elements. From then on the negated relation cannot change, the
+producer's proposals depend on its positive occurrences alone, and it is
+visited like the others. A producer with an occurrence whose predicate the
+dependency graph does not name is outside the postings and is visited in every
+round.
 
 A rich producer is visited in every round and registers its read set: every
 atom occurrence in its body and head element conditions, at every depth. After

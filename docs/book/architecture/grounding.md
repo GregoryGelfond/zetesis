@@ -1808,7 +1808,9 @@ the per-change schedule. The
 [scheduling law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md)
 covers both registrations: its rule-level form the ordinary producers, which
 their positive occurrences wake, and its general form the rich producers'
-read sets.
+read sets. An ordinary producer held back for the atoms it negates is first
+traversed by the component schedule, as described above, and falls under the
+rule-level form only after that traversal.
 Structural occurrences use the original whole-row capture and the same nested
 constructor, constant, repeated-variable and anonymous-pattern checks. Bound
 structural postings intersect the old/new interval by actual relation row position.
