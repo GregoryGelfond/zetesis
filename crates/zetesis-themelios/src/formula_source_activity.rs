@@ -475,12 +475,10 @@ impl SourceEligibility {
                 rule.location,
             )?
         } {
-            let mut body = self.producer_activity(
-                &rule.body,
-                &rule.body_binding(&binding),
-                &mut bodies,
-                rule.location,
-            )?;
+            // Support completion derived no head from a row under which a
+            // decided negation is false. The row is passed over here as it
+            // was there, before its body is read or its head is named: the
+            // head lies outside the completed support.
             if let Some(certainty) = support.certainty() {
                 let context = bodies.context(rule.location);
                 if !formula_support::decided_negations_hold(
@@ -491,9 +489,15 @@ impl SourceEligibility {
                     context.limits,
                     context.counters,
                 )? {
-                    body = Activity::Absent;
+                    continue;
                 }
             }
+            let body = self.producer_activity(
+                &rule.body,
+                &rule.body_binding(&binding),
+                &mut bodies,
+                rule.location,
+            )?;
             match &rule.head {
                 HeadIr::Normal(Some(head)) => {
                     self.retain(

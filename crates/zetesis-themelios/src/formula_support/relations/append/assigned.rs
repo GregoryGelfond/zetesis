@@ -52,6 +52,36 @@ impl SupportAppend<'_> {
         workspace: usize,
         work: GroundingWork<'_>,
     ) -> Result<bool, FormulaFailure> {
+        self.supported_position(pattern, values, workspace, work)
+            .map(|position| position.is_some())
+    }
+
+    /// The identity of the atom `pattern` names under `values` when it is
+    /// supported, published or pending: the lookup of
+    /// [`Self::contains_pattern`], with the same charges, keeping what it
+    /// found.
+    pub(in crate::formula_support) fn supported_pattern(
+        &self,
+        pattern: PatternRef<'_>,
+        values: AssignmentSlice<'_>,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<SourceAtom>, FormulaFailure> {
+        Ok(self
+            .supported_position(pattern, values, workspace, work)?
+            .map(|position| SourceAtom {
+                scope: self.scope.clone(),
+                position,
+            }))
+    }
+
+    fn supported_position(
+        &self,
+        pattern: PatternRef<'_>,
+        values: AssignmentSlice<'_>,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<usize>, FormulaFailure> {
         let GroundingWork {
             limits,
             counters,
@@ -77,7 +107,7 @@ impl SupportAppend<'_> {
                 }
             })?;
         counters.work(limits, location)?;
-        Ok(position.is_some_and(|position| self.is_supported(position)))
+        Ok(position.filter(|&position| self.is_supported(position)))
     }
 
     pub(in crate::formula_support) fn signed(

@@ -14,7 +14,7 @@ mod family_replay;
 mod canonical_suffix;
 mod extremum_guards;
 mod decided_negation;
-use decided_negation::Decide;
+use decided_negation::{Decide, Negated};
 mod fixed_facts;
 mod matched_nodes;
 mod metadata;
@@ -1715,21 +1715,24 @@ impl<'source> Builder<'_, '_, 'source> {
         )
     }
 
-    /// Emit the same body while borrowing this selected continuation's carriers.
-    /// The assignment-family consumer still checks exact IR, support and inputs.
-    pub(super) fn body_ir_with_carriers<'literal>(
+    /// Emit these literals of `rule`'s own body while borrowing a selected
+    /// continuation's carriers. The assignment-family consumer still checks
+    /// exact IR, support and inputs. They decide their default-negated atoms
+    /// as the rule's body does: support completion derived the rule's head
+    /// from the rows whose decided negations hold, whichever route emits it.
+    pub(super) fn rule_body_with_carriers<'literal>(
         &mut self,
+        rule: &RuleIr,
         literals: impl IntoIterator<Item = Ir<'literal, 'source, LiteralIr>>,
         assignment: &Binding,
-        location: ProgramSite,
         support: &Support<'source>,
         carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
     ) -> Result<usize, FormulaFailure> {
         self.body_matched(
             literals,
             assignment,
-            location,
-            (support, Decide::Nothing),
+            rule.location,
+            (support, Decide::of(rule)),
             None,
             carriers,
         )
@@ -1768,7 +1771,14 @@ impl<'source> Builder<'_, '_, 'source> {
         location: ProgramSite,
         support: &Support<'source>,
     ) -> Result<usize, FormulaFailure> {
-        self.body_ir_with_carriers(literals, assignment, location, support, None)
+        self.body_matched(
+            literals,
+            assignment,
+            location,
+            (support, Decide::Nothing),
+            None,
+            None,
+        )
     }
 
     /// The conjunction of `literals` under `assignment`, read over `support`.
@@ -1789,18 +1799,22 @@ impl<'source> Builder<'_, '_, 'source> {
         let mut result = VERUM;
         for (index, source_literal) in literals.into_iter().enumerate() {
             let literal = source_literal.get();
-            let named = match &mut matched {
+            let mut named = match &mut matched {
                 Some((nodes, row)) => nodes.literal(index, row, self, location)?,
                 None => None,
             };
             if let LiteralIr::Atom(negation, pattern) = literal {
-                if *negation != DefaultNegation::None
-                    && named.is_none()
-                    && let Some(decided) =
-                        self.decided_negation(decide, *negation, *pattern, assignment, location)?
-                {
-                    result = self.and(result, decided, location)?;
-                    continue;
+                if *negation != DefaultNegation::None && named.is_none() {
+                    match self
+                        .decided_negation(decide, *negation, *pattern, assignment, location)?
+                    {
+                        Negated::Decided(value) => {
+                            result = self.and(result, value, location)?;
+                            continue;
+                        }
+                        Negated::Named(node) => named = Some(node),
+                        Negated::Written => {}
+                    }
                 }
                 let mut atom = match named {
                     Some(node) => node,

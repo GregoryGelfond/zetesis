@@ -199,6 +199,28 @@ impl Computation<'_, '_> {
         }
     }
 
+    /// The atom `pattern` names under `binding` when it is supported,
+    /// published or pending, without admitting an identity when it is not:
+    /// one lookup for the test and the atom.
+    pub(crate) fn supported_atom(
+        &self,
+        pattern: PatternRef<'_>,
+        binding: &Binding<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<SourceAtom>, FormulaFailure> {
+        match &self.terms {
+            Terms::Append(append) => append.supported_pattern(
+                pattern,
+                binding.slots(),
+                self.support.workspace_bytes(),
+                GroundingWork::new(limits, counters, location),
+            ),
+            Terms::Frozen(_) => Err(owner_failure(location)),
+        }
+    }
+
     pub(crate) fn source_scope(
         &self,
         location: ProgramSite,

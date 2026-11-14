@@ -73,11 +73,13 @@ Notable changes by release. Versions follow Semantic Versioning.
   default negation at the top level of a rule's body, over a flat atom of a
   certain predicate in an earlier dependency component, is read while
   grounding: it is false where the atom is supported and true otherwise. A
-  rule with a head waits until the components of the atoms it negates are
-  complete, a row under which such a negation is false derives no head, and a
+  rule with a head that negates an atom of a certain predicate waits until
+  the components of the atoms it negates are complete, a row under which such
+  a negation is false derives no head, and a
   rule whose other literals are definite keeps its head predicate certain. The
-  certain predicates are therefore the stratified part of a program, no longer
-  only the part without negation. When the theory is emitted, the body of a
+  certain predicates therefore include what a program's flat rules and plain
+  assignments derive through stratified negation, no longer only the part
+  without negation. When the theory is emitted, the body of a
   rule with a head also reads `not a` as true for an atom `a` outside the
   completed support, which no rule can derive
   (`DecidedNegation.absent_stable`), and drops the instance where `a` is a
@@ -94,16 +96,33 @@ Notable changes by release. Versions follow Semantic Versioning.
     facts, as clingo does. A recursion that a decided negation stops ends:
     `stop. p(0). p(X+1) :- p(X), not stop.` was refused for want of support
     rounds and now answers `{stop, p(0)}`, and
-    `stop. {p(N)} :- N = #count{V : p(V)}, not stop.` answers `{stop}`. The
-    instance a decided negation excludes is itself still validated as
-    written: an overflow in it refuses and a zero divisor in it warns.
+    `stop. {p(N)} :- N = #count{V : p(V)}, not stop.` answers `{stop}`. An
+    aggregate assignment over a predicate that a decided negation keeps
+    certain takes its exact value, with the effects the entry on certain
+    predicates describes:
+    `c(1). d(5). r(X,Y) :- c(X), d(Y), not u(Y). k(X,M) :- c(X), N = #min{Y : r(X,Y)}, M = N+1, not z.`
+    was refused for the arithmetic on an empty minimum and now answers with
+    `k(1,6)`. Of the instance a decided negation excludes, the body and an
+    ordinary or disjunctive head are still validated as written: an overflow
+    there refuses. The elements of a choice, of a head aggregate and of a
+    conditional disjunct are a later stage, which an excluded instance does
+    not start: `blocked. d(2147483647). {h(X+1)} :- d(X), not blocked.` was
+    refused for the overflow and is admitted. A zero divisor anywhere in the
+    excluded instance keeps its warning.
   - A warning that only an instance downstream of such a rule raised is no
     longer given.
   - The atoms and nodes a theory reports change: an atom that only decided
-    negations read is no atom of the theory.
+    negations read is no atom of the theory, and the direct evaluation of an
+    acyclic normal source publishes no atom for a row such a negation
+    excludes.
   - Support completion's visits change. A rule waiting for the atoms it
     negates is counted in `support_deferred_visits` until the round of its
-    first traversal, and that traversal in `support_rich_traversals`.
+    first traversal, and that traversal in `support_rich_traversals`. A rule
+    with an assignment aggregate that waits this way is traversed one round
+    after the component it negates is complete, so such a program can take a
+    round more for each stratum of them; an ordinary rule is traversed in the
+    round the component is complete. An ordinary rule none of whose negated
+    atoms has a certain predicate does not wait.
     Reported grounding work changes by the analysis and by one support lookup
     for each decided negation of each complete row.
 - An instance that divides by zero is always omitted, with a warning. A

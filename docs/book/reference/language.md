@@ -862,10 +862,14 @@ A [decided default negation](../architecture/grounding.md#certain-predicates)
 narrows what a head supports in the same way. In
 `blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` no answer
 set satisfies `not blocked`, so the rule of `h` supports nothing, the rule of
-`k` has no instance, and the program is admitted with its two facts. The
-instance the negation excludes is itself still validated as written: an
-overflow in the rule of `h` refuses, and a zero divisor there keeps its
-warning. A negation over a chosen atom decides nothing, so with `{blocked}.`
+`k` has no instance, and the program is admitted with its two facts. Of the
+instance the negation excludes, the body and an ordinary or disjunctive head
+are still validated as written: an overflow in the rule of `h` refuses, and a
+zero divisor there keeps its warning. The elements of a choice, of a head
+aggregate and of a conditional disjunct are a later stage, which an excluded
+instance does not start, so `{h(X+1)} :- d(X), not blocked.` in place of the
+rule of `h` is admitted; a zero divisor in such an element keeps its warning.
+A negation over a chosen atom decides nothing, so with `{blocked}.`
 in place of the fact the overflow in the rule of `k` is reached.
 
 The required tuples under-approximate those present in every interpretation. In
@@ -958,8 +962,9 @@ consequent or objective-field phase; defined false body selection likewise does
 not evaluate a head or consequent. Independent-error checking does not cross
 that boundary. Row-dependent head atom arguments are a later stage: `d(0;1).
 p((X+1)**31):-d(X),X=0.` evaluates the head only for `X=0`. The same
-distinction applies to local choice elements. A default negation, decided or
-not, and aggregate truth do not prune that stage. Aggregate-head tuple
+distinction applies to local choice elements. A default negation that is not
+decided, and aggregate truth, do not prune that stage; a decided one that
+excludes the instance does, as stated above. Aggregate-head tuple
 contribution checks retain their own scopes.
 The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/arithmetic_validation.rs)
 check defined complete families, incomplete joins, required failures and

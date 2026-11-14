@@ -39,12 +39,13 @@ language reference's
 and a sound sharpening of `R` redefines it in the same way. A default negation
 that support completion has [decided](#certain-predicates) narrows support in
 the same direction. A rule whose body contains `not p` contributes no
-answer-set atom when `p` is a fact, and it then supports no head: in
+answer-set atom when `p` is a fact of a certain predicate, and it then supports
+no head: in
 `p. d(2147483647). h(X) :- d(X), not p. k(X+1) :- h(X).` the rule of `k` has no
 instance, so nothing overflows and the program is admitted with its two facts.
-The excluded instance itself is still validated as written, and a negation
-that is not decided prunes nothing: with `{p}.` in place of the fact, `h` stays
-possible and the overflow is reached.
+The excluded instance's own body and ordinary head are still validated as
+written, and a negation that is not decided prunes nothing: with `{p}.` in
+place of the fact, `h` stays possible and the overflow is reached.
 
 The [checked source-preparation example](../rust/source.md) follows
 `prepare_formula`, the retained analysis basis, `ground` and a complete CPU
@@ -174,19 +175,24 @@ written, and so is a default negation that is not decided.
 A default negation over a flat atom, at the top level of a rule's body, is
 *decided* when the atom's predicate is certain and its relation is complete
 whenever the rule is read. Support completion
-[waits for that](#completed-possible-support): a rule with a head is not
-traversed until the dependency components of the atoms it negates, where they
-come before its heads', have reached their fixed point. Over a complete
+[waits for that](#completed-possible-support): a rule with a head that
+negates an atom of a certain predicate is not traversed until the dependency
+components of the atoms it negates, where they come before its heads', are
+complete. Over a complete
 relation of a certain predicate a supported atom holds in every answer set and
 an unsupported one in none, so `not a` is false for a supported `a` and true
 otherwise, and `not not a` the reverse. A row of the rule under which such a
 literal is false derives no head, and a rule whose other literals are definite
-keeps its head predicate certain. In
+keeps its head predicate certain. The direct evaluation of a complete acyclic
+normal source passes over the same rows, so the atoms it publishes are those
+of the completed support. In
 `c(1..3). e(1). d(X) :- c(X), not e(X). {p}. q :- d(2), p.` the support of `d`
 is `d(2)` and `d(3)`, both hold in every answer set, and the last rule is
-emitted as `q :- p`. The certain predicates are thus the stratified part of a
-program: what follows from its facts through rules that negate only what
-earlier components have settled.
+emitted as `q :- p`. The certain predicates thus include what follows from a
+program's facts through flat rules and plain assignments that negate only what
+earlier components have settled. A rule with a conditional literal, or an
+aggregate that is no plain assignment, is not definite, so the stratified
+part of a program can be larger than its certain part.
 
 Emission reads the completed support, where it decides a little more. In the
 body of a rule with a head, `not a` is false when `a` is an explicit fact or a
@@ -194,12 +200,16 @@ supported atom of a certain predicate, and true when `a` is outside the
 support, whatever its predicate, since no rule can derive it
 ([`DecidedNegation.absent_stable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DecidedNegation.lean)).
 A false literal drops its instance and a true one leaves the body; in neither
-case does the occurrence name its atom. A constraint's body decides a fixed
-atom only, so that a constraint grounded into the theory and one checked
-against the source name the same atoms. A negation whose atom lies in the
-rule's own component, or is supported and belongs to an uncertain predicate,
-is emitted as written, and so is every negation inside a conditional literal,
-a projection such as `not q(_, X)`, or an element of an aggregate or a choice.
+case does the occurrence name its atom. Emission therefore drops every
+instance support completion omitted, and may drop more: it reads the
+completed support whatever the atom's predicate and component, so
+`p :- not q. q :- p, r.` is emitted without `q`, which nothing supports. A
+constraint's body decides a fixed atom only, and a constraint dropped that way
+still names the atoms of its other literals, so that a constraint grounded
+into the theory and one checked against the source name the same atoms. A
+negation whose atom is supported and belongs to an uncertain predicate is
+emitted as written, and so is every negation inside a conditional literal, a
+projection such as `not q(_, X)`, or an element of an aggregate or a choice.
 
 clingo decides such negations while it grounds, component by component. It
 tracks facts atom by atom where this analysis decides by predicate, so a
@@ -285,10 +295,14 @@ warning.
 A decided negation has the same effect on what reads its rule's head. In
 `blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` the rule
 of `h` supports nothing, so the rule of `k` has no instance to overflow in,
-and the program is admitted with its facts as its one answer set. The instance
-the negation excludes is itself still validated as written:
-`h(X+1) :- d(X), not blocked.` in its place overflows and is refused, and
-`h(1/X) :- d(X), not blocked.` over `d(0)` keeps its warning. A growth that a
+and the program is admitted with its facts as its one answer set. Of the
+instance the negation excludes, the body and an ordinary or disjunctive head
+are still validated as written: `h(X+1) :- d(X), not blocked.` in its place
+overflows and is refused, and `h(1/X) :- d(X), not blocked.` over `d(0)` keeps
+its warning. The elements of a choice, of a head aggregate and of a
+conditional disjunct are a later stage, which an excluded instance does not
+start: `{h(X+1)} :- d(X), not blocked.` is admitted, and a zero divisor in
+such an element still keeps its warning. A growth that a
 decided negation stops ends: `stop. p(0). p(X+1) :- p(X), not stop.` has the
 answer set `{stop, p(0)}`. With a choice `{blocked}.` or `{stop}.` in place of
 the fact nothing is decided, and both programs are refused as before.
@@ -1698,7 +1712,7 @@ Its visits before the first traversal are counted in `support_deferred_visits`.
 A producer that is not scheduled by component also waits for the atoms it
 negates. When a default-negated flat atom at the top level of its body lies in
 a decidable component before the producer's heads, the producer is not
-traversed until that component reaches its fixed point. It is then traversed
+traversed until that component is complete. It is then traversed
 in full, in that round, and afterwards an ordinary producer takes its delta
 variants, whose new rows are the ones published since that traversal's
 snapshot, and a rich one is traversed as any other rich producer. Each of its
@@ -1708,6 +1722,25 @@ ordinary producer never revisits a row it has joined. Its head components wait
 for that first traversal, and the components it waits for precede its heads,
 so the argument above covers it. Its visits before the first traversal are
 counted in `support_deferred_visits`.
+
+An ordinary producer that waits only for atoms it negates does not need them
+in the snapshot. It reads a negated atom over the snapshot and the round's
+pending atoms, so it can go as soon as the component is *settled*: decidable,
+with every other dependency at its fixed point, every waiting producer
+traversed, and either no atom gained this round or no producer that reads the
+component itself. What such a component gained this round feeds none of its
+own producers, so the snapshot and the pending atoms are its complete
+relation. A chain of strata, each negating the one before, is thereby
+traversed in one round, not in one round for each stratum. A rich producer
+joins what it waits for, and still waits for the fixed point.
+
+Waiting for a negated atom pays only where the atom is decided: support
+completion reads a negated atom to decide it and for nothing else. An
+ordinary producer none of whose negated atoms has a certain predicate would
+keep every row whatever those atoms' support, in whatever round it is
+traversed. The analysis of certain predicates runs before the first round and
+releases such a producer, which is then visited as one that negates nothing:
+`{u(X)} :- c(X). d(X) :- c(X), not u(X).` holds no rule back.
 
 Every other rich producer, and a held-back one after that traversal, is
 traversed after the first round exactly when one of its read predicates gained

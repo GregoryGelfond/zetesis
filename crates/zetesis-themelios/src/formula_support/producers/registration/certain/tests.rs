@@ -144,20 +144,21 @@ fn a_negation_removes_its_head_where_no_producer_is_held_back() {
 
 #[test]
 fn the_decided_negations_are_the_awaited_ones_over_certain_predicates() {
-    // The rules of `d` and `f` each negate `e` at body position 1, in a
-    // component before their heads, so both atoms are awaited and, `e` being
-    // certain, decided. The rule of `d` also negates `u` at position 2: it is
-    // awaited too, but `u` is not certain, so it is not decided. The choice
-    // and the rule of `e` negate nothing.
+    // The rule of `d` negates `e` at body position 1 and the rule of `f` at
+    // position 2, in a component before their heads, so both atoms are
+    // awaited and, `e` being certain, decided. The rule of `d` also negates
+    // `u` at position 2: it is awaited too, but `u` is not certain, so it is
+    // not decided. The choice and the rule of `e` negate nothing. The rules
+    // are numbered `d`, `e`, `f`, then the choice, and the two decided
+    // positions differ: each list belongs to its own rule.
     let certainty = certainty(
-        "c(1). {u(1)}. e(1) :- c(1). d(1) :- c(1), not e(1), not u(1). \
-         f(1) :- c(1), not not e(1).",
+        "b(1). c(1). {u(1)}. e(1) :- c(1). d(1) :- c(1), not e(1), not u(1). \
+         f(1) :- c(1), b(1), not not e(1).",
     );
-    let mut decided: Vec<Vec<usize>> = (0..4)
+    let decided: Vec<Vec<usize>> = (0..4)
         .map(|rule| certainty.decided(rule).collect())
         .collect();
-    decided.sort();
-    assert_eq!(decided, [vec![], vec![], vec![1], vec![1]]);
+    assert_eq!(decided, [vec![1], vec![], vec![2], vec![]]);
 }
 
 #[test]

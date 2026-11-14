@@ -72,10 +72,50 @@
 //! complete relations, of either sign. The occurrences so read are listed as
 //! *awaited*.
 //!
-//! Per round the test costs one visit per pending atom, a binary search for each
-//! run of atoms of one predicate, and one visit per component, dependency and
-//! waited read. It is skipped once every deferred, gated and held-back
-//! producer was traversed.
+//! Waiting for a negated atom pays only where the atom is decided. Support
+//! completion reads a negated atom to decide it and for nothing else, so a
+//! producer none of whose awaited atoms has a certain predicate keeps every
+//! row whatever those atoms' support, in whatever round it is traversed.
+//! The analysis of certain predicates runs before the first round and
+//! *releases* each certified producer held back for such atoms alone
+//! ([`Schedule::release_undecided`]): it is visited from the first round as
+//! a producer the schedule never held. A rich producer stays held: its
+//! traversals are in full, and waiting spares it some.
+//!
+//! A component that gained atoms this round can be complete all the same. It
+//! is *settled* when it is decidable, every other dependency has reached its
+//! fixed point, every waiting producer of its predicates has been traversed,
+//! and it either gained no atom this round or is not among its own
+//! dependencies. Its producers then ran over inputs that are complete and in
+//! the snapshot: an ordinary one has joined every row published before this
+//! round, a waiting one was traversed in full over them, and none reads the
+//! component itself, so what it gained this round feeds no producer of its
+//! own and no later round derives anything for it. A settled component's
+//! atoms are not all in the snapshot, so a producer that joins them must
+//! still wait for the fixed point. A certified producer held back for negated
+//! atoms alone does not join them: it reads each over the snapshot and the
+//! round's pending atoms (`Computation::contains_pattern`), which together
+//! are the complete relation of a settled component. Such a producer is
+//! ready as soon as the components it waits for are settled. The rows it
+//! joins positively may still be pending; it meets them in later rounds
+//! through its delta variants, whose negated atoms are complete by then as
+//! well.
+//!
+//! One test settles a whole chain. It visits the components in order and
+//! meets each waiting producer at its first head, after every component the
+//! producer waits for, and it queues the ready ones in that order. A
+//! component whose waiting producers are all traversed or queued, and which
+//! is not among its own dependencies, is settled for the producers queued
+//! after them: those producers are traversed first, and once they are, the
+//! component has gained all it ever will. So a chain of strata, each negating
+//! the one before, is queued by one test and traversed in one round, in
+//! dependency order.
+//!
+//! A test costs one visit per pending atom, a binary search for each run of
+//! atoms of one predicate, and one visit per component, dependency, waiting
+//! producer and waited read. A round runs it once after its other producers
+//! and once more after each batch it queued. It is skipped once every
+//! deferred, gated and held-back producer was traversed.
 
 use std::cell::{Cell, RefCell};
 use std::mem::size_of;
@@ -98,6 +138,10 @@ pub(super) enum State {
     Waiting,
     Ready,
     Traversed,
+    /// Held back for atoms none of which is decided, and so let go before
+    /// the first round: the producer is visited as one the schedule never
+    /// held.
+    Released,
 }
 
 /// Which deferred, gated and held-back producers wait for which components,
@@ -117,6 +161,11 @@ pub(super) struct Schedule<'source> {
     /// resumes its ordinary visits after the traversal the schedule gives
     /// it.
     resumes: Vec<bool>,
+    /// Per registered producer: whether it waits for negated atoms alone,
+    /// which it reads over the snapshot and the round's pending atoms. It is
+    /// ready once the components it waits for are settled; every other
+    /// waiting producer joins what it waits for and needs them published.
+    cascades: Vec<bool>,
     /// The assignment elements gated producers wait for, as sorted
     /// `(aggregate, element)` coordinates.
     elements: Vec<(usize, usize)>,
@@ -126,7 +175,17 @@ pub(super) struct Schedule<'source> {
     negations: Vec<(usize, usize)>,
     state: Vec<Cell<State>>,
     changed: RefCell<Vec<bool>>,
+    /// Per component: complete, with every atom in the snapshot.
     reached: RefCell<Vec<bool>>,
+    /// Per component: complete once this round's pending atoms are counted,
+    /// those its queued producers are about to derive among them.
+    settled: RefCell<Vec<bool>>,
+    /// The producers the last test marked ready, in the order it met them:
+    /// by first head component, so each comes after the producers of the
+    /// components it waits for.
+    ready: RefCell<Vec<usize>>,
+    /// How many of them were taken.
+    taken: Cell<usize>,
 }
 
 /// Scratch for one preparation: (head, input) and (head, producer) pairs, per
@@ -162,6 +221,7 @@ struct Waiting {
     waits: Vec<Option<Range<usize>>>,
     reads: Vec<usize>,
     resumes: Vec<bool>,
+    cascades: Vec<bool>,
     elements: Vec<(usize, usize)>,
     negations: Vec<(usize, usize)>,
 }
@@ -210,6 +270,7 @@ impl<'source> Schedule<'source> {
             waits,
             reads,
             resumes,
+            cascades,
             elements,
             negations,
         } = classify(
@@ -239,10 +300,15 @@ impl<'source> Schedule<'source> {
         state.extend(waits.iter().map(|_| Cell::new(State::Waiting)));
         let mut changed = Vec::new();
         let mut reached = Vec::new();
+        let mut settled = Vec::new();
         memory.reserve(&mut changed, count)?;
         memory.reserve(&mut reached, count)?;
+        memory.reserve(&mut settled, count)?;
         changed.resize(count, false);
         reached.resize(count, false);
+        settled.resize(count, false);
+        let mut ready = Vec::new();
+        memory.reserve(&mut ready, waits.iter().flatten().count())?;
         Ok(Some(Self {
             nodes,
             decidable: dependencies.decidable,
@@ -253,20 +319,59 @@ impl<'source> Schedule<'source> {
             reads,
             waits,
             resumes,
+            cascades,
             elements,
             negations,
             state,
             changed: RefCell::new(changed),
             reached: RefCell::new(reached),
+            settled: RefCell::new(settled),
+            ready: RefCell::new(ready),
+            taken: Cell::new(0),
         }))
     }
 
-    /// The producer's state, when it is deferred, gated or held back.
+    /// The producer's state, when it is deferred, gated or held back and
+    /// was not released.
     pub(super) fn state(&self, index: usize) -> Option<State> {
         self.waits
             .get(index)
             .and_then(Option::as_ref)
             .map(|_| self.state[index].get())
+            .filter(|&state| state != State::Released)
+    }
+
+    /// Release every certified producer held back for negated atoms none of
+    /// which is decided. `decided` lists the decided atoms as sorted
+    /// `(producer, occurrence)` coordinates. Holding such a producer back
+    /// buys nothing: support completion reads a negated atom only to decide
+    /// it, so the producer keeps every row whatever those atoms' support,
+    /// at whatever round it is traversed. Released before the first round,
+    /// it takes its variants as a producer the schedule never held. Its
+    /// atoms stay listed as awaited: the analysis that asks has run, and
+    /// none of them is decided. One unit per registered producer, with a
+    /// binary search of `decided` for each held one.
+    pub(super) fn release_undecided(
+        &self,
+        decided: &[(usize, usize)],
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        for (producer, wait) in self.waits.iter().enumerate() {
+            counters.work(limits, location)?;
+            if wait.is_none()
+                || !self.cascades[producer]
+                || self.state[producer].get() != State::Waiting
+            {
+                continue;
+            }
+            let first = decided.partition_point(|&(listed, _)| listed < producer);
+            if decided.get(first).is_none_or(|&(listed, _)| listed != producer) {
+                self.state[producer].set(State::Released);
+            }
+        }
+        Ok(())
     }
 
     /// Whether the producer at `index` is gated or held back: once the
@@ -290,17 +395,20 @@ impl<'source> Schedule<'source> {
         self.elements.binary_search(&(aggregate, position)).is_ok()
     }
 
-    /// Whether every traversal of the producer at `producer` reads the
-    /// relation of the default-negated atom at body position `occurrence`
-    /// complete: the atom is awaited.
+    /// Whether the schedule was prepared so that every traversal of the
+    /// producer at `producer` reads the relation of the default-negated atom
+    /// at body position `occurrence` complete: the atom is awaited. That
+    /// holds of a producer the schedule still holds or has traversed; the
+    /// atoms of one released since stay listed, and none of them is decided.
     pub(super) fn awaits(&self, producer: usize, occurrence: usize) -> bool {
         self.negations
             .binary_search(&(producer, occurrence))
             .is_ok()
     }
 
-    /// The awaited default-negated atoms, as sorted `(producer, occurrence)`
-    /// coordinates.
+    /// The default-negated atoms the schedule was prepared to await, as
+    /// sorted `(producer, occurrence)` coordinates: those of a producer
+    /// released since are among them.
     pub(super) fn awaited(&self) -> &[(usize, usize)] {
         &self.negations
     }
@@ -308,14 +416,16 @@ impl<'source> Schedule<'source> {
     /// Whether a deferred, gated or held-back producer has not yet been
     /// traversed.
     pub(super) fn pending(&self) -> bool {
-        self.state
-            .iter()
-            .zip(&self.waits)
-            .any(|(state, wait)| wait.is_some() && state.get() != State::Traversed)
+        self.state.iter().zip(&self.waits).any(|(state, wait)| {
+            wait.is_some() && !matches!(state.get(), State::Traversed | State::Released)
+        })
     }
 
-    /// Mark ready every waiting producer whose read components reached their
-    /// fixed point, given this round's pending atoms in `delta`. Returns
+    /// Mark ready every waiting producer whose read components are complete,
+    /// given this round's pending atoms in `delta`: published for a producer
+    /// that joins them, settled for one that only negates their atoms. The
+    /// producers are queued in the order [`Self::take_ready`] returns them,
+    /// and the caller traverses every one before it asks again. Returns
     /// whether any producer became ready.
     pub(super) fn mark_ready(
         &self,
@@ -359,6 +469,10 @@ impl<'source> Schedule<'source> {
             }
         }
         let mut reached = self.reached.borrow_mut();
+        let mut settled = self.settled.borrow_mut();
+        let mut queue = self.ready.borrow_mut();
+        debug_assert!(queue.is_empty(), "the last batch was traversed");
+        self.taken.set(0);
         for component in 0..reached.len() {
             let dependencies = &self.dependencies[self.dependency_ranges[component].clone()];
             let producers = &self.producers_of[self.producer_ranges[component].clone()];
@@ -367,37 +481,67 @@ impl<'source> Schedule<'source> {
                 limits,
                 location,
             )?;
-            reached[component] = !changed[component]
-                && self.decidable[component]
+            // A waiting producer is met first at its first head, and every
+            // component it waits for comes before that one.
+            for &producer in producers {
+                if self.state[producer].get() != State::Waiting {
+                    continue;
+                }
+                let reads = self.waits[producer]
+                    .clone()
+                    .expect("a producer listed under its heads waits");
+                counters.charge_work(1 + reads.len() as u128, limits, location)?;
+                let complete = if self.cascades[producer] {
+                    &*settled
+                } else {
+                    &*reached
+                };
+                if self.reads[reads].iter().all(|&read| complete[read]) {
+                    self.state[producer].set(State::Ready);
+                    queue.push(producer);
+                }
+            }
+            // Every other producer of the component has run over inputs that
+            // are complete and in the snapshot.
+            let fed = self.decidable[component]
                 && dependencies
                     .iter()
-                    .all(|&other| other == component || reached[other])
-                && producers
-                    .iter()
-                    .all(|&producer| self.state[producer].get() == State::Traversed);
+                    .all(|&other| other == component || reached[other]);
+            // A released producer is an ordinary one: the component's
+            // dependencies cover what it joins.
+            let traversed = producers.iter().all(|&producer| {
+                matches!(
+                    self.state[producer].get(),
+                    State::Traversed | State::Released
+                )
+            });
+            let queued = producers
+                .iter()
+                .all(|&producer| self.state[producer].get() != State::Waiting);
+            let recursive = dependencies.contains(&component);
+            reached[component] = fed && traversed && !changed[component];
+            // What the component gains this round feeds none of its own
+            // producers, whether it has gained it or its queued producers
+            // are about to.
+            settled[component] = fed
+                && if traversed {
+                    !changed[component] || !recursive
+                } else {
+                    queued && !recursive
+                };
         }
-        let mut any = false;
-        for (index, reads) in self.waits.iter().enumerate() {
-            let Some(reads) = reads else {
-                continue;
-            };
-            counters.charge_work(1 + reads.len() as u128, limits, location)?;
-            if self.state[index].get() == State::Waiting
-                && self.reads[reads.clone()].iter().all(|&read| reached[read])
-            {
-                self.state[index].set(State::Ready);
-                any = true;
-            }
-        }
-        Ok(any)
+        Ok(!queue.is_empty())
     }
 
-    /// The next ready producer, which the caller traverses now.
+    /// The next ready producer, in the order [`Self::mark_ready`] queued
+    /// them, which the caller traverses now.
     pub(super) fn take_ready(&self) -> Option<usize> {
-        let index = self
-            .state
-            .iter()
-            .position(|state| state.get() == State::Ready)?;
+        let mut ready = self.ready.borrow_mut();
+        let Some(&index) = ready.get(self.taken.get()) else {
+            ready.clear();
+            return None;
+        };
+        self.taken.set(self.taken.get() + 1);
         self.state[index].set(State::Traversed);
         Some(index)
     }
@@ -489,11 +633,10 @@ fn dependencies(
 /// every head. A rich producer that is not deferred is gated when [`gate`]
 /// finds an assignment element it can wait for, and a producer that is not
 /// deferred is held back when [`hold`] finds a negated atom it can wait for.
-/// Returns each
-/// such producer's range of waited components and those components, whether
-/// it resumes its ordinary visits, the gates' elements and the awaited
-/// negated atoms; records each producer's (head, producer) pairs in the
-/// scratch.
+/// Returns each such producer's range of waited components and those
+/// components, whether it resumes its ordinary visits, whether it waits for
+/// negated atoms alone, the gates' elements and the awaited negated atoms;
+/// records each producer's (head, producer) pairs in the scratch.
 fn classify(
     (registration, nodes, view): (&Registration<'_>, &[Node<'_>], TemplateComponentsRef<'_>),
     decidable: &[bool],
@@ -504,10 +647,12 @@ fn classify(
     let mut waits = Vec::new();
     let mut reads = Vec::new();
     let mut resumes = Vec::new();
+    let mut cascades = Vec::new();
     let mut elements = Vec::new();
     let mut negations = Vec::new();
     memory.reserve(&mut waits, registration.producers.len())?;
     memory.reserve(&mut resumes, registration.producers.len())?;
+    memory.reserve(&mut cascades, registration.producers.len())?;
     for (index, producer) in registration.producers.iter().enumerate() {
         counters.work(limits, location)?;
         let rule = &registration.rules[index];
@@ -518,6 +663,7 @@ fn classify(
             Producer::Certified(_) | Producer::Constraint => {
                 waits.push(None);
                 resumes.push(false);
+                cascades.push(false);
                 continue;
             }
         };
@@ -574,10 +720,13 @@ fn classify(
         if !deferred && reads.len() == start {
             waits.push(None);
             resumes.push(false);
+            cascades.push(false);
             continue;
         }
         waits.push(Some(start..reads.len()));
         resumes.push(!deferred);
+        // A certified producer waits only for the atoms it negates.
+        cascades.push(!rich);
         memory.reserve(&mut scratch.owners, scratch.heads.len())?;
         scratch
             .owners
@@ -592,6 +741,7 @@ fn classify(
         waits,
         reads,
         resumes,
+        cascades,
         elements,
         negations,
     })
@@ -728,7 +878,8 @@ fn gate(
     Ok(())
 }
 
-/// The deferred and gated producers of each component, as ranges into one list.
+/// The waiting producers of each component (deferred, gated or held back), as
+/// ranges into one list.
 fn by_component(
     owners: &mut [(usize, usize)],
     count: usize,

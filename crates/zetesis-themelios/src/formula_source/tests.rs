@@ -95,6 +95,23 @@ fn complete_source_scan_matches_original_ferraris_membership() {
 }
 
 #[test]
+fn a_row_a_decided_negation_blocks_names_no_head() {
+    // `q` is certain and complete when the rule of `r` is read, so the row
+    // `X = 1` is passed over as support completion passed over it: `r(1)`
+    // is no atom of the published catalog, whose four atoms all hold. The
+    // row `X = 2` derives `r(2)`.
+    let owner = admitted("p(1). p(2). q(1). r(X) :- p(X), not q(X).");
+    let published: BTreeSet<Atom> = owner
+        .atom_catalog()
+        .atoms()
+        .iter()
+        .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+        .collect();
+    assert_eq!(published.len(), 4);
+    assert_eq!(Some(published), interpretation(&owner));
+}
+
+#[test]
 fn alternative_producers_publish_only_after_their_dependencies() {
     // Authored order deliberately disagrees with dependency order; a false
     // alternative may not erase a true one, and a negative read sees them all.

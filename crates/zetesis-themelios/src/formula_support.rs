@@ -747,11 +747,12 @@ fn complete(
         };
         if !changed {
             // An unchanged round decides every component no waiting producer
-            // still feeds, so the earliest waiting producer was traversed.
-            debug_assert!(
-                !producers.pending(),
-                "a producer the schedule holds was not traversed"
-            );
+            // still feeds, so the earliest waiting producer was traversed. A
+            // producer left waiting would mean heads the support lacks, and
+            // every decision read from it: refuse instead of publishing it.
+            if producers.pending() {
+                return Err(FormulaFailure::SourceActivity { location: fallback });
+            }
             return finish(
                 (catalog, producers, retained),
                 GroundingWork::new(limits, counters, fallback),
@@ -2790,7 +2791,9 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(None)
     }
     /// Body data and scalar/range filters complete before head-only generation.
-    /// Negative gates and aggregate truth remain formulas, never row selection.
+    /// Negative gates and aggregate truth remain formulas here and select no
+    /// row; a negation support completion decides omits its row afterwards
+    /// (`decided_negations_hold`).
     fn next_staged(
         &mut self,
         ownership: Ownership,

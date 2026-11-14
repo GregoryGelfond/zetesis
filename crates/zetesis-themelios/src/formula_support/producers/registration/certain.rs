@@ -169,7 +169,11 @@ impl<'source> Registration<'source> {
     /// The certain predicates of the registered rules, and the assignment
     /// aggregate elements they make required. Scratch is admitted beside the
     /// registration's own bytes and `external` and released before returning;
-    /// the returned value's bytes are its owner's to admit.
+    /// the returned value's bytes are its owner's to admit. The schedule
+    /// then lets go of each certified producer it held back for negated
+    /// atoms none of which is decided
+    /// ([`components::Schedule::release_undecided`]), so this runs before
+    /// the first round.
     pub(in crate::formula_support) fn certainty(
         &self,
         prepared: &'source Prepared,
@@ -191,6 +195,11 @@ impl<'source> Registration<'source> {
             self.required_elements(&resolver, &classified.certain, &mut memory, counters)?;
         let negations =
             self.decided_negations(&resolver, &classified.certain, &mut memory, counters)?;
+        // A certified producer held back for atoms none of which is decided
+        // waits for nothing it can use.
+        if let Some(schedule) = &self.schedule {
+            schedule.release_undecided(&negations, limits, counters, location)?;
+        }
         let mut predicates = Vec::new();
         for (index, _) in classified
             .certain

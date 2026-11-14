@@ -1159,25 +1159,76 @@ fn a_doubly_negated_absent_atom_blocks_its_producer() {
 
 #[test]
 fn a_blocked_instance_keeps_its_own_overflow() {
-    // The instance a negated fact excludes is still validated as written,
-    // in its head and in its body.
+    // Of the instance a negated fact excludes, the body and an ordinary or
+    // disjunctive head are still validated as written.
     for source in [
         "blocked. d(2147483647). h(X+1):-d(X),not blocked.",
         "blocked. d(2147483647). h(X):-d(X),not blocked,X+1>0.",
+        "blocked. d(2147483647). h(X+1);g:-d(X),not blocked.",
     ] {
         refused(source, &EvaluationError::Overflow);
     }
 }
 
 #[test]
+fn a_blocked_instance_starts_no_element_stage() {
+    // The elements of a choice, of a head aggregate and of a conditional
+    // disjunct are a later stage, which an excluded instance does not start:
+    // their overflow is not reached, and the program answers with its facts.
+    for (facts, rule) in [
+        ("blocked. d(2147483647).", "{h(X+1)}:-d(X),not blocked."),
+        (
+            "blocked. d(2147483647). c(2147483647).",
+            "{h(Y+1):c(Y)}:-d(X),not blocked.",
+        ),
+        (
+            "blocked. d(2147483647). c(2147483647).",
+            "1<=#count{Y:h(Y+1):c(Y)}:-d(X),not blocked.",
+        ),
+        (
+            "blocked. d(2147483647). c(2147483647).",
+            "h(Y+1):c(Y);g:-d(X),not blocked.",
+        ),
+    ] {
+        let expected: Vec<&str> = facts
+            .split(". ")
+            .map(|fact| fact.trim_end_matches('.'))
+            .collect();
+        assert_eq!(
+            silent(&format!("{facts} {rule}")),
+            family(&expected),
+            "{rule}"
+        );
+    }
+}
+
+#[test]
 fn a_blocked_instance_keeps_its_own_zero_divisor_warning() {
-    for rule in ["h(1/X):-d(X),not blocked.", "h(X):-d(X),not blocked,1/X>0."] {
+    // In its body, in an ordinary head and in a choice's element alike.
+    for rule in [
+        "h(1/X):-d(X),not blocked.",
+        "h(X):-d(X),not blocked,1/X>0.",
+        "{h(1/X)}:-d(X),not blocked.",
+    ] {
         assert_eq!(
             omitting(&format!("blocked. d(0). {rule}"), rule),
             family(&["blocked", "d(0)"]),
             "{rule}"
         );
     }
+}
+
+#[test]
+fn an_assignment_over_a_predicate_a_decided_negation_keeps_certain_is_exact() {
+    // `r` is certain through the decided `not u(Y)`, so its one tuple is
+    // required and the minimum takes its one value. Read as possible, the
+    // empty minimum was substituted too, and `N+1` was undefined on it.
+    let source = "c(1). d(5). r(X,Y):-c(X),d(Y),not u(Y). \
+                  k(X,M):-c(X),N=#min{Y:r(X,Y)},M=N+1,not z.";
+    assert_eq!(
+        silent(source),
+        family(&["c(1)", "d(5)", "r(1,5)", "k(1,6)"])
+    );
 }
 
 #[test]

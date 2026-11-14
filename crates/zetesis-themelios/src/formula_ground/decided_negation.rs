@@ -25,19 +25,24 @@
 //! `not a` is then false for a fixed `a` and true for an absent one, and
 //! `not not a` the reverse. A false literal makes its body false, and the
 //! instance is not emitted: it has no root and is no producer of its head.
-//! A true literal leaves the body. In neither case is the atom named for
-//! this occurrence. A supported atom that is not fixed keeps its literal.
+//! A true literal leaves the body. In neither case does the occurrence add
+//! the atom to the theory: an absent atom is never interned, and a fixed one
+//! is, to read its fixing, but has a root of its own already. A supported
+//! atom that is not fixed keeps its literal.
 //!
 //! What is decided depends on whose body it is ([`Decide`]):
 //!
-//! - A producer's body decides both kinds. Support completion derives a head
-//!   from exactly the rows whose decided negated atoms hold
-//!   (`formula_support::decided_negations_hold`), and this drops the same
-//!   instances, so no emitted head lies outside the support.
+//! - A producer's body decides both kinds, on every route that emits it: the
+//!   complete join, its components and its continuations. Support completion
+//!   derives a head from exactly the rows whose decided negated atoms hold
+//!   (`formula_support::decided_negations_hold`), and this drops those
+//!   instances and any other whose negated atom the completed support
+//!   decides, so no emitted head lies outside the support.
 //! - A constraint's body decides a fixed atom alone. An atom outside the
-//!   support keeps its literal there, and so stays named: a constraint that
-//!   is streamed instead of emitted names every atom its instances read, and
-//!   both routes publish the same atoms.
+//!   support keeps its literal there, and so stays named, and a constraint
+//!   dropped for a fixed atom still names the atoms of its other literals:
+//!   a constraint that is streamed instead of emitted names every atom its
+//!   rows read, and both routes publish the same atoms.
 //! - A local scope decides nothing: a conditional literal's parts, a
 //!   projection, an aggregate's or a choice's element condition and a head
 //!   are emitted as written.
@@ -83,11 +88,24 @@ impl Decide {
     }
 }
 
+/// What the emission of one default-negated body atom found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Negated {
+    /// The completed support decides the literal: its value.
+    Decided(usize),
+    /// The atom is supported and not fixed, so its literal stays: the atom's
+    /// node, named by the lookup that found it supported.
+    Named(usize),
+    /// Nothing was read, or an absent atom keeps its literal: the caller
+    /// names the atom as written.
+    Written,
+}
+
 impl Builder<'_, '_, '_> {
-    /// The value of the body occurrence `negation pattern` under `assignment`
-    /// when `decide` and the completed support decide its atom, as the module
-    /// header states, or `None` when they do not. `negation` is `Not` or
-    /// `NotNot`.
+    /// What `decide` and the completed support make of the body occurrence
+    /// `negation pattern` under `assignment`, as the module header states.
+    /// `negation` is `Not` or `NotNot`. One lookup serves the support test
+    /// and names a supported atom.
     pub(super) fn decided_negation(
         &mut self,
         decide: Decide,
@@ -95,10 +113,10 @@ impl Builder<'_, '_, '_> {
         pattern: AtomPattern,
         assignment: &Binding,
         location: ProgramSite,
-    ) -> Result<Option<usize>, FormulaFailure> {
+    ) -> Result<Negated, FormulaFailure> {
         debug_assert_ne!(negation, DefaultNegation::None);
         if decide == Decide::Nothing || certain::negation_left_out() {
-            return Ok(None);
+            return Ok(Negated::Written);
         }
         // A rule's own body is emitted by the theory's builder alone.
         debug_assert!(matches!(self.purpose, Purpose::Theory));
@@ -106,23 +124,26 @@ impl Builder<'_, '_, '_> {
         let prepared =
             self.computation
                 .static_pattern(pattern, self.limits, self.counters, location)?;
-        let supported = self.computation.contains_pattern(
+        let supported = self.computation.supported_atom(
             prepared,
             assignment,
             self.limits,
             self.counters,
             location,
         )?;
-        if supported {
-            let atom = self.atom(pattern, assignment, location)?;
-            if self.fixed_body_atom(atom, location)? != VERUM {
-                return Ok(None);
-            }
-        } else if decide != Decide::Supported {
-            return Ok(None);
+        let Some(source) = supported else {
+            return Ok(if decide == Decide::Supported {
+                Negated::Decided(boolean(negation != DefaultNegation::NotNot))
+            } else {
+                Negated::Written
+            });
+        };
+        let atom = self.atom_identity(&source, location)?;
+        if self.fixed_body_atom(atom, location)? != VERUM {
+            return Ok(Negated::Named(atom));
         }
-        Ok(Some(boolean(
-            supported == (negation == DefaultNegation::NotNot),
+        Ok(Negated::Decided(boolean(
+            negation == DefaultNegation::NotNot,
         )))
     }
 }

@@ -58,6 +58,11 @@ const CASES: &[&str] = &[
     "d(1;2). q(1). p :- d(X), not q(X). r :- p.",
     "d(1). q(1). p :- d(X), not q(X). r :- p.",
     "d(1;2). q(1). p :- d(X), not not q(X). r :- p.",
+    // An assignment aggregate beside the negation and a positive atom: the
+    // rule is emitted by its continuations, which decide as its body does.
+    "c(1). e(1,1). k(X,N) :- c(X), N = #count{Y : e(X,Y)}, not q(X). t :- k(X,N).",
+    "c(1). e(1,1). q(1). k(X,N) :- c(X), N = #count{Y : e(X,Y)}, not q(X). t :- k(X,N).",
+    "c(1). e(1,1). q(1). k(X,N) :- c(X), N = #count{Y : e(X,Y)}, not not q(X). {t} :- k(X,N).",
     // Two independent body components: the body is emitted by its
     // components, each of which decides as the rule's own body does.
     "{c(1;2)}. {b(1;2)}. q(1). p :- c(X), not q(X), b(Y).",
@@ -264,6 +269,43 @@ fn a_body_component_decides_as_the_rules_body_does() {
     assert_eq!(instances_deriving(&actual, "p"), 1);
     assert_eq!(atoms_named(&actual, "q").len(), 1);
     assert_eq!(atoms_named(&reference(source), "q").len(), 2);
+}
+
+#[test]
+fn a_continuation_decides_as_the_rules_body_does() {
+    // A positive atom, an assignment aggregate and a decided negation: the
+    // rule is emitted by continuation factoring. Its head predicate is
+    // certain, so the reader's occurrence is read as true, which the emitted
+    // theory must bear out: the instance under q(2) is dropped and the other
+    // is an unconditional root.
+    let source = "c(1..2). e(1,1). e(1,2). e(2,1). q(2). \
+                  k(X,N) :- c(X), N = #count{Y : e(X,Y)}, not q(X). \
+                  t(X) :- k(X,N), N >= 2.";
+    let (actual, counts) = crate::formula_factor::testing::scoped(true, || compile(source));
+    assert!(counts.continuations > 0, "emitted by its continuations");
+    assert_eq!(atoms_named(&actual, "k").len(), 1);
+    assert_eq!(atoms_named(&reference(source), "k").len(), 2);
+    assert_eq!(
+        answer_sets(&actual.theory, &actual.atoms),
+        answer_sets(&reference(source).theory, &reference(source).atoms),
+    );
+}
+
+#[test]
+fn a_dropped_factored_constraint_names_its_other_components() {
+    // The constraint has two independent components. The facts c(1) and
+    // c(2) decide every row of the first false, so the constraint has no
+    // instance; the second still names u(1) and u(2), as the complete join
+    // names every atom of a row that passes.
+    let source = "d(1..2). c(1..2). {p(X)} :- d(X). r(X) :- p(X). \
+                  :- not c(X), r(X), d(Y), X <= Y, d(Z), not u(Z).";
+    let actual = compile(source);
+    let reference = reference(source);
+    assert_eq!(atoms_named(&actual, "u").len(), 2);
+    let named =
+        |compiled: &Compiled| -> BTreeSet<Atom> { compiled_atoms(compiled).into_iter().collect() };
+    assert_eq!(named(&actual), named(&reference));
+    assert!(actual.theory.roots().len() < reference.theory.roots().len());
 }
 
 #[test]

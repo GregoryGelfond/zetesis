@@ -275,10 +275,19 @@ fn emit<'plan, 'source>(
                 builder.body_from_row((rule, &component.literals), &row, &mut matched, support)?;
             alternatives = builder.or(alternatives, conjunction, rule.location)?;
         }
-        if alternatives == FALSUM {
+        if alternatives == FALSUM && !matches!(rule.head, HeadIr::Normal(None)) {
             return Ok(());
         }
+        // Every component is inhabited, so a constraint's component without
+        // an alternative had its rows decided false. The instance is dropped
+        // below, after the other components have named their atoms: the
+        // complete join names every atom of every row that passes, as a
+        // streamed constraint's capture does, and the routes publish the
+        // same atoms.
         body = builder.and(body, alternatives, rule.location)?;
+    }
+    if body == FALSUM {
+        return Ok(());
     }
     let HeadIr::Normal(head) = &rule.head else {
         unreachable!("only normal rules have a component plan");

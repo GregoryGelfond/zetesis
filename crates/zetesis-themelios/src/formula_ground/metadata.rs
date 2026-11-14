@@ -33,7 +33,8 @@ struct Entry<T> {
     next: Link,
 }
 
-/// How a positive body occurrence of an atom is emitted.
+/// How a body occurrence of an atom is read: a positive one, or one under a
+/// default negation that emission decides.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Fixing {
     /// As written.
@@ -53,8 +54,8 @@ impl Fixing {
 
 struct Atom {
     first_origin: NonZeroUsize,
-    /// How a positive body occurrence of the atom is emitted; unknown until
-    /// its first such occurrence asks.
+    /// How a body occurrence of the atom is read; unknown until the first
+    /// positive or decided occurrence asks.
     fixing: Option<Fixing>,
     /// The ordinary roots that assert the atom under no condition, one for
     /// each such producer recorded.
@@ -102,7 +103,7 @@ impl Metadata {
         Ok(())
     }
 
-    /// How `atom`'s positive body occurrences are emitted, once one has asked.
+    /// How `atom`'s body occurrences are read, once one has asked.
     pub(super) fn fixing(&self, atom: usize) -> Option<Fixing> {
         self.atoms[atom].fixing
     }

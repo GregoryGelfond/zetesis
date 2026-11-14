@@ -552,6 +552,30 @@ fn a_reader_of_a_held_back_producers_head_waits_for_it() {
 }
 
 #[test]
+fn a_rule_negating_no_decided_atom_is_not_held_back() {
+    // `u` is chosen, so no negation of it can be decided. The rule of `d`
+    // would wait for `u`'s component and gain nothing by it: it is released
+    // before the first round and visited as any certified rule, with no
+    // deferred visit and no traversal by the schedule.
+    let source = "c(1). {u(1)}. d(X) :- c(X), not u(X).";
+    agrees_with_reference(source);
+    assert_eq!(rich_visits(source), (0, 0));
+}
+
+#[test]
+fn a_rule_negating_a_decided_atom_is_held_back_beside_an_undecided_one() {
+    // `e` is certain, so the rule of `d` waits to decide its negation, and
+    // waits for `u` with it: it is visited without a traversal while the
+    // facts and `e` enter, and the schedule then traverses it once. No row
+    // is blocked, so the support is the reference's.
+    let source = "c(1). f(2). {u(1)}. e(X) :- f(X). d(X) :- c(X), not e(X), not u(X).";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert_eq!(traversals, 1);
+    assert!(deferred >= 1, "{deferred}");
+}
+
+#[test]
 fn the_readiness_test_charges_nothing_once_no_producer_waits() {
     // `m` waits for the fact's component. `q` is certified, so the schedule
     // never holds it, and it must not keep the test running.

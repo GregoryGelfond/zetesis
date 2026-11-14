@@ -20,7 +20,8 @@
 //! point ([`components`]). Any other rich producer that proposes an
 //! assignment's values from elements over earlier decidable components is
 //! held back until those reach their fixed point, and traversed per change
-//! from then on.
+//! from then on. A producer of either kind is also held back for the atoms
+//! it negates in earlier decidable components, until those are complete.
 
 mod certain;
 mod components;
@@ -265,7 +266,8 @@ impl<'source> Registration<'source> {
                         &self.inputs[inputs.clone()],
                         false,
                     )),
-                    None => Ok(delta::prepared_variants(
+                    // Never held, or released before the first round.
+                    None | Some(components::State::Released) => Ok(delta::prepared_variants(
                         rule,
                         support,
                         &self.inputs[inputs.clone()],

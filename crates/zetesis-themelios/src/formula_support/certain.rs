@@ -140,8 +140,15 @@ pub(crate) struct Certainty {
     /// `(aggregate, element)` coordinates, sorted and distinct.
     elements: Vec<(usize, usize)>,
     /// `(rule, occurrence)` coordinates of the decided default-negated body
-    /// atoms, sorted and distinct.
+    /// atoms, sorted and distinct. A rule's coordinate is its position among
+    /// the prepared rules as support completion saw them. Emission compacts
+    /// that vector as it retires materialized rules, so these coordinates are
+    /// read while a rule is completed, staged or emitted, never after.
     negations: Vec<(usize, usize)>,
+    /// The owned payload's bytes: the vectors' capacities and the names.
+    /// Nothing changes them after construction, and the catalog reads them
+    /// at every admission, so they are summed once.
+    retained: usize,
 }
 
 impl Certainty {
@@ -149,9 +156,7 @@ impl Certainty {
     pub(super) fn all() -> Self {
         Self {
             all: true,
-            predicates: Vec::new(),
-            elements: Vec::new(),
-            negations: Vec::new(),
+            ..Self::default()
         }
     }
 
@@ -168,11 +173,18 @@ impl Certainty {
         elements.dedup();
         negations.sort_unstable();
         negations.dedup();
+        let retained = predicates.capacity() * size_of::<Signature>()
+            + predicates
+                .iter()
+                .map(|signature| signature.name.len())
+                .sum::<usize>()
+            + (elements.capacity() + negations.capacity()) * size_of::<(usize, usize)>();
         Self {
             all: false,
             predicates,
             elements,
             negations,
+            retained,
         }
     }
 
@@ -277,15 +289,9 @@ impl Certainty {
         self.all
     }
 
-    /// Owned payload: the vectors' capacities and the names.
+    /// Owned payload: the vectors' capacities and the names. One read.
     pub(super) fn retained_bytes(&self) -> usize {
-        self.predicates.capacity() * size_of::<Signature>()
-            + self
-                .predicates
-                .iter()
-                .map(|signature| signature.name.len())
-                .sum::<usize>()
-            + (self.elements.capacity() + self.negations.capacity()) * size_of::<(usize, usize)>()
+        self.retained
     }
 }
 
