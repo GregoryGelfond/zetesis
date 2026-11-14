@@ -5,11 +5,11 @@
 //! operand therefore preserves every matching complete row. The maps remain
 //! the sole expression results; this operation owns only transient borrowed
 //! domain lists for the existing finite-table selector. That selector
-//! declines a relation whose table would not be small until the rows it
-//! left to the join's scans have cost what the table would
-//! (`Support::select_domains_after`); a declined probe falls to the join's
-//! ordinary one, and the equality that supplied the domain is checked on
-//! each row.
+//! declines a relation whose table would not be small until the rows its
+//! snapshot's joins have read in the table's place have cost what the table
+//! would (`Support::select_domains_after`); a declined probe falls to the
+//! join's ordinary one, and the equality that supplied the domain is checked
+//! on each row.
 
 use std::ops::Range;
 
@@ -57,18 +57,16 @@ pub(in crate::formula_support) enum Computed<'a, 'source> {
     /// The domains' selection, or no row where one of them is empty.
     Probe(Probe<'a, 'source>),
     /// The domains restrict the pattern, and the snapshot left its relation
-    /// to the join's own probe ([`queries::DomainSelection::Declined`]).
-    Declined,
+    /// to the join's own probe, whose rows count under this ticket
+    /// ([`queries::DomainSelection::Declined`]).
+    Declined(usize),
 }
 
 impl<'a, 'source> Join<'a, 'source> {
-    /// `scanned` is the number of rows this occurrence has read in place of
-    /// a declined selection.
     pub(in crate::formula_support) fn computed_probe(
         &self,
         pattern: PositivePattern<'_>,
         source: Option<&'source RelationRows<'source>>,
-        scanned: u64,
         mut context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Computed<'a, 'source>, FormulaFailure> {
         if !self.certified_total || source.is_none() {
@@ -106,12 +104,11 @@ impl<'a, 'source> Join<'a, 'source> {
                 pattern,
                 binding,
                 domains.borrowed(),
-                scanned,
                 context.work,
             )? {
                 queries::DomainSelection::Rows(rows) => Computed::Probe(Probe::Table(rows)),
                 queries::DomainSelection::Inapplicable => Computed::Absent,
-                queries::DomainSelection::Declined => Computed::Declined,
+                queries::DomainSelection::Declined(ticket) => Computed::Declined(ticket),
             },
         )
     }

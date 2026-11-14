@@ -1391,6 +1391,13 @@ enum Probe<'a, 'source> {
     Owned(Buffer<usize>),
 }
 
+/// A probe that narrows an occurrence, if any, and the count to add its
+/// replacement's rows to when a table selection was declined.
+struct Narrowed<'a, 'source> {
+    probe: Option<Probe<'a, 'source>>,
+    declined: Option<usize>,
+}
+
 #[derive(Clone, Copy)]
 enum Resolution<'source> {
     Unresolved,
@@ -1399,10 +1406,6 @@ enum Resolution<'source> {
         /// A slot in this join's row filter, authenticated for these exact
         /// source occurrences. Absent without a filter or an offered source.
         filter_source: Option<usize>,
-        /// The rows this occurrence's probes read in place of a table
-        /// selection the snapshot declined, over every row of the outer
-        /// prefix so far ([`Support::select_domains_after`]).
-        scanned: u64,
     },
 }
 
@@ -1420,22 +1423,20 @@ impl<'source> Resolution<'source> {
             Self::Resolved { filter_source, .. } => filter_source,
         }
     }
-
-    fn scanned(self) -> u64 {
-        match self {
-            Self::Unresolved => unreachable!("a prepared probe has resolved its relation"),
-            Self::Resolved { scanned, .. } => scanned,
-        }
-    }
-
-    /// Count the rows of a relation read in place of a declined selection.
-    fn scan(&mut self, rows: usize) {
-        if let Self::Resolved { scanned, .. } = self {
-            *scanned = scanned.saturating_add(rows as u64);
-        }
-    }
 }
 impl Probe<'_, '_> {
+    /// The rows this probe offers, for the count of rows read in place of
+    /// a declined table selection. A table selection is never such a probe
+    /// and counts none.
+    fn offered(&self) -> usize {
+        match self {
+            Self::Indexed(rows) => rows.len(),
+            Self::Owned(rows) | Self::Range(rows) => rows.slice().len(),
+            Self::Expression(rows) => rows.len(),
+            Self::Table(_) => 0,
+        }
+    }
+
     fn next(
         &self,
         position: &mut usize,
@@ -3273,7 +3274,6 @@ impl<'a, 'source> Join<'a, 'source> {
             self.resolutions[self.depth] = Resolution::Resolved {
                 rows,
                 filter_source,
-                scanned: 0,
             };
         }
         Ok(())
@@ -3320,73 +3320,43 @@ impl<'a, 'source> Join<'a, 'source> {
                 )?);
                 return Ok(());
             }
-            if let Some(probe) = self.narrowed_probe(
+            let narrowed = self.narrowed_probe(
                 pattern,
                 source,
                 Context::new(computation, limits, counters, location),
-            )? {
-                self.probes[self.depth] = Some(probe);
-                return Ok(());
+            )?;
+            let probe = match narrowed.probe {
+                Some(probe) => probe,
+                None => self.broad_probe(
+                    pattern,
+                    source,
+                    Context::new(computation, limits, counters, location),
+                )?,
+            };
+            // The rows this probe offers are read in place of a selection
+            // the snapshot declined, and count towards preparing its table.
+            if let Some(ticket) = narrowed.declined {
+                self.support.count_scanned(ticket, probe.offered());
             }
-            let binding = self
-                .values
-                .view(computation.read(), limits, counters, location)?;
-            self.probes[self.depth] = Some(
-                if let Some(rows) = self.support.select_at(
-                    source,
-                    pattern.pattern,
-                    binding,
-                    limits,
-                    counters,
-                    location,
-                )? {
-                    Probe::Table(rows)
-                } else if let Some(probe) = self.multiples_probe(
-                    source,
-                    Context::new(&*computation, limits, counters, location),
-                )? {
-                    probe
-                } else {
-                    match self.support.indexed_selection_at(
-                        source,
-                        pattern.pattern,
-                        binding,
-                        (self.delta, pattern.source),
-                        GroundingWork::new(limits, counters, location),
-                    )? {
-                        queries::IndexedSelection::Exact(range) => {
-                            Probe::Indexed(delta::Rows::Interval(range))
-                        }
-                        queries::IndexedSelection::Posting(posting) => self.indexed_probe(
-                            posting,
-                            source,
-                            pattern.source,
-                            limits,
-                            counters,
-                            location,
-                        )?,
-                    }
-                },
-            );
+            self.probes[self.depth] = Some(probe);
         }
         Ok(())
     }
+
     /// The probe of a covered computed domain or, where its selection is
     /// absent or declined, of a numeric index over the occurrence.
     ///
     /// Covered computed domains may combine several restrictions, so their
     /// selection is kept before the numeric fallback, whose ordinary posting
-    /// can otherwise replace it with a broader candidate set. With neither,
-    /// the caller's own probe offers the rows a declined selection would
-    /// have excluded, and the occurrence counts its relation's rows for that
-    /// probe: one repeated for every outer row is weighed against the table
-    /// by all of them ([`Support::select_domains_after`]).
+    /// can otherwise replace it with a broader candidate set. A declined
+    /// selection names the count that the probe taking its place adds to
+    /// ([`Support::count_scanned`]).
     fn narrowed_probe(
         &mut self,
         pattern: PatternOccurrence<'a>,
         source: Option<&'source relations::RelationRows<'source>>,
         context: Context<'_, &mut Computation<'_, '_>>,
-    ) -> Result<Option<Probe<'a, 'source>>, FormulaFailure> {
+    ) -> Result<Narrowed<'a, 'source>, FormulaFailure> {
         let Context {
             computation,
             work:
@@ -3396,29 +3366,86 @@ impl<'a, 'source> Join<'a, 'source> {
                     location,
                 },
         } = context;
-        let scanned = self.resolutions[self.depth].scanned();
         let declined = match self.computed_probe(
             pattern.pattern,
             source,
-            scanned,
             Context::new(computation, limits, counters, location),
         )? {
-            projections::Computed::Probe(probe) => return Ok(Some(probe)),
-            projections::Computed::Declined => true,
-            projections::Computed::Absent => false,
+            projections::Computed::Probe(probe) => {
+                return Ok(Narrowed {
+                    probe: Some(probe),
+                    declined: None,
+                });
+            }
+            projections::Computed::Declined(ticket) => Some(ticket),
+            projections::Computed::Absent => None,
         };
-        let numeric = self.expression_key_probe(
+        let probe = self.expression_key_probe(
             pattern,
             source,
             Context::new(&*computation, limits, counters, location),
         )?;
-        if numeric.is_none()
-            && declined
-            && let Some(source) = source
-        {
-            self.resolutions[self.depth].scan(source.relation.row_count());
-        }
-        Ok(numeric)
+        Ok(Narrowed { probe, declined })
+    }
+
+    /// The probe of an occurrence that neither a computed domain nor a
+    /// numeric index narrows: a table selection under the table strategy, a
+    /// posting of multiples, or the indexed selection by its bound columns.
+    fn broad_probe(
+        &mut self,
+        pattern: PatternOccurrence<'a>,
+        source: Option<&'source relations::RelationRows<'source>>,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Probe<'a, 'source>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        let binding = self
+            .values
+            .view(computation.read(), limits, counters, location)?;
+        Ok(
+            if let Some(rows) = self.support.select_at(
+                source,
+                pattern.pattern,
+                binding,
+                limits,
+                counters,
+                location,
+            )? {
+                Probe::Table(rows)
+            } else if let Some(probe) = self.multiples_probe(
+                source,
+                Context::new(&*computation, limits, counters, location),
+            )? {
+                probe
+            } else {
+                match self.support.indexed_selection_at(
+                    source,
+                    pattern.pattern,
+                    binding,
+                    (self.delta, pattern.source),
+                    GroundingWork::new(limits, counters, location),
+                )? {
+                    queries::IndexedSelection::Exact(range) => {
+                        Probe::Indexed(delta::Rows::Interval(range))
+                    }
+                    queries::IndexedSelection::Posting(posting) => self.indexed_probe(
+                        posting,
+                        source,
+                        pattern.source,
+                        limits,
+                        counters,
+                        location,
+                    )?,
+                }
+            },
+        )
     }
 
     /// Resolve an explicitly anchored occurrence after source/filter admission.

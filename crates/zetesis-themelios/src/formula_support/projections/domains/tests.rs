@@ -67,33 +67,41 @@ fn collect_under(
     location: ProgramSite,
     limits: &FormulaLimits,
 ) -> (Vec<Vec<Value>>, GroundingWork) {
+    try_collect_under(join, computation, counters, location, limits).unwrap()
+}
+
+fn try_collect_under(
+    join: &mut Join<'_, '_>,
+    computation: &mut Computation<'_, '_>,
+    counters: &mut Counters,
+    location: ProgramSite,
+    limits: &FormulaLimits,
+) -> Result<(Vec<Vec<Value>>, GroundingWork), FormulaFailure> {
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
     counters.observed = profile.work();
-    let rows = profile
-        .phase(GroundingPhase::RuleInstantiation, Some(location), || {
-            let mut rows = Vec::new();
-            while let Some(row) =
-                join.next_row(computation, limits, &mut budget(), counters, location)?
-            {
-                if row.passes {
-                    rows.push(
-                        (0..row.values.len())
-                            .map(|slot| {
-                                row.values
-                                    .read(slot, computation.read(), location)
-                                    .unwrap()
-                                    .to_value(ValueLimits::default())
-                                    .unwrap()
-                            })
-                            .collect(),
-                    );
-                }
+    let rows = profile.phase(GroundingPhase::RuleInstantiation, Some(location), || {
+        let mut rows = Vec::new();
+        while let Some(row) =
+            join.next_row(computation, limits, &mut budget(), counters, location)?
+        {
+            if row.passes {
+                rows.push(
+                    (0..row.values.len())
+                        .map(|slot| {
+                            row.values
+                                .read(slot, computation.read(), location)
+                                .unwrap()
+                                .to_value(ValueLimits::default())
+                                .unwrap()
+                        })
+                        .collect(),
+                );
             }
-            Ok::<_, FormulaFailure>(rows)
-        })
-        .unwrap();
-    (rows, observer.0.get())
+        }
+        Ok::<_, FormulaFailure>(rows)
+    })?;
+    Ok((rows, observer.0.get()))
 }
 
 #[test]
@@ -203,6 +211,153 @@ fn a_declined_selection_served_by_a_numeric_probe_counts_no_scan() {
             assert_eq!(work.table_preparations, Some(0));
         },
     );
+}
+
+#[test]
+fn joins_of_one_snapshot_repay_one_table_together() {
+    // Twelve scans of `p` do not repay its table, and one join makes twelve.
+    // The snapshot keeps the count, so a second join over it finds the table
+    // repaid at its first probe, prepares it, and uses it for the other
+    // eleven.
+    with_completed_source(
+        "p(1..3000).m(1..12). :-m(Y),p(X),X/3=Y.",
+        |program, support, computation, counters| {
+            let rule = program
+                .rules_without_facts()
+                .iter()
+                .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
+                .unwrap();
+            let limits = FormulaLimits::default();
+            let mut declined = Vec::new();
+            let mut prepared = Vec::new();
+            let mut reused = Vec::new();
+            for _ in 0..2 {
+                let mut join =
+                    Join::rule(rule, support, computation, &limits, &mut budget(), counters)
+                        .unwrap();
+                assert!(
+                    join.select_total_body(rule, computation, &limits, counters)
+                        .unwrap()
+                );
+                let (rows, work) = collect(&mut join, computation, counters, rule.location);
+                assert_eq!(rows.len(), 36);
+                declined.push(work.table_inapplicable_probes);
+                prepared.push(work.table_preparations);
+                reused.push(work.table_reuses);
+            }
+            assert_eq!(declined, [Some(12), Some(0)]);
+            assert_eq!(prepared, [Some(0), Some(1)]);
+            assert_eq!(reused, [Some(0), Some(11)]);
+        },
+    );
+}
+
+#[test]
+fn rows_read_over_one_relation_repay_no_table_of_another() {
+    // Eleven scans of `e` read 33000 rows, short of the 35250 its table
+    // costs. `f` has a table of the same cost and a count of its own: three
+    // probes read 9000 rows and prepare nothing. One count for both would
+    // prepare the table of `f` at its second probe.
+    with_completed_source(
+        "e(1..3000).f(1..3000).m(1..11).n(1..3). :-m(Y),e(X),X/3=Y. :-n(Y),f(X),X/3=Y.",
+        |program, support, computation, counters| {
+            let limits = FormulaLimits::default();
+            let mut declined = Vec::new();
+            let mut prepared = Vec::new();
+            for rule in program
+                .rules_without_facts()
+                .iter()
+                .filter(|rule| matches!(rule.head, HeadIr::Normal(None)))
+            {
+                let mut join =
+                    Join::rule(rule, support, computation, &limits, &mut budget(), counters)
+                        .unwrap();
+                assert!(
+                    join.select_total_body(rule, computation, &limits, counters)
+                        .unwrap()
+                );
+                let (_, work) = collect(&mut join, computation, counters, rule.location);
+                declined.push(work.table_inapplicable_probes);
+                prepared.push(work.table_preparations);
+            }
+            assert_eq!(declined, [Some(11), Some(3)]);
+            assert_eq!(prepared, [Some(0), Some(0)]);
+        },
+    );
+}
+
+#[test]
+fn a_declined_probe_counts_the_rows_its_replacement_offers() {
+    // `e` holds 4000 rows and 2002 values in its two columns: 2002 masks of
+    // 125 words, which 31282 rows repay. Each probe has the first column
+    // bound, and the posting that replaces a declined selection offers the
+    // 2000 rows of that value: sixteen probes repay the table and the
+    // seventeenth of forty prepares it. Counting the relation's 4000 rows
+    // for each would prepare it at the ninth.
+    with_join(
+        "e(1..2,1..2000).m(1..20,1..2). :-m(Z,W),e(W,X),X/3=Z.",
+        |join, computation, counters, location| {
+            let (rows, work) = collect(join, computation, counters, location);
+            assert_eq!(rows.len(), 120);
+            assert_eq!(work.table_inapplicable_probes, Some(16));
+            assert_eq!(work.table_preparations, Some(1));
+            assert_eq!(work.table_reuses, Some(23));
+        },
+    );
+}
+
+#[test]
+fn no_byte_ceiling_turns_a_repaid_table_into_a_refusal() {
+    // Six scans of `p` repay its table, whose 1500 masks of 47 words take
+    // 282000 bytes. The table's preparation grows them by doubling to 2048
+    // masks and is charged 577536 bytes at the last growth, the buffer it
+    // replaces still live. A ceiling that leaves room for the masks and not
+    // for that growth must leave the join to its scans, not refuse it.
+    let run = |max_support_bytes: usize| {
+        let mut outcome = None;
+        with_join(
+            "p(1..1500).m(1..8). :-m(Y),p(X),X/3=Y.",
+            |join, computation, counters, location| {
+                let limits = FormulaLimits {
+                    max_support_bytes,
+                    ..FormulaLimits::default()
+                };
+                outcome = Some(
+                    try_collect_under(join, computation, counters, location, &limits)
+                        .map(|(rows, work)| (rows.len(), work.table_preparations)),
+                );
+            },
+        );
+        outcome.unwrap()
+    };
+    // The least ceiling, to a kibibyte, under which the join completes.
+    let (mut refused, mut admitted) = (0_usize, 64 << 20);
+    assert!(run(admitted).is_ok());
+    while refused + 1024 < admitted {
+        let middle = refused + (admitted - refused) / 2;
+        if run(middle).is_ok() {
+            admitted = middle;
+        } else {
+            refused = middle;
+        }
+    }
+    for room in [300_000, 430_000, 560_000] {
+        assert!(
+            matches!(run(admitted + room), Ok((24, Some(0)))),
+            "room {room}"
+        );
+    }
+    // Around what the preparation is weighed at, the table comes to be
+    // prepared, and is never refused on the way.
+    let mut prepared = false;
+    for room in (640_000..=1_280_000).step_by(64_000) {
+        match run(admitted + room) {
+            Ok((24, Some(0))) => assert!(!prepared, "room {room}"),
+            Ok((24, Some(1))) => prepared = true,
+            other => panic!("room {room}: {other:?}"),
+        }
+    }
+    assert!(prepared);
 }
 
 #[test]

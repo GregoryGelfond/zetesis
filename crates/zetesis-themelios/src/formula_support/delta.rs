@@ -172,6 +172,14 @@ impl<'a> Rows<'a> {
             Self::Posting(posting) => posting.get(position).copied(),
         }
     }
+
+    /// The number of rows offered.
+    pub(super) fn len(&self) -> usize {
+        match self {
+            Self::Interval(range) => range.len(),
+            Self::Posting(posting) => posting.len(),
+        }
+    }
 }
 
 fn lower_bound(

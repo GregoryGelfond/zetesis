@@ -350,12 +350,15 @@ Notable changes by release. Versions follow Semantic Versioning.
   ordinary joins are indexed, that selection is now made at once only while
   the table is small (its masks may take 65536 words of 32 bits); past that
   the join offers its rows and the equality is checked on each, as it always
-  was. A join that repeats the probe for each row of another relation, as
-  `q(X,Y) :- m(Y), d(X), X / 3 = Y.` does, prepares the table once the rows
-  it has read in its place have cost what the table would, a row weighed as
-  eight words of masks, provided the table is within what the support's
-  limits leave; a table that is not is never attempted. The answer sets do
-  not change. `table_preparations` and `table_index_bytes` are lower for a
+  was. Joins that repeat the probe, as `q(X,Y) :- m(Y), d(X), X / 3 = Y.`
+  does for each row of `m`, prepare the table once the rows they have read in
+  its place have cost what the table would, a row weighed as eight words of
+  masks. The count is kept for the round, so several rules that probe one
+  relation repay its table together. The table is prepared only if its
+  preparation is within what the support's limits leave, weighed as the
+  table's own accounting charges it; otherwise the joins keep their scans.
+  The answer sets do not change. `table_preparations` and
+  `table_index_bytes` are lower for a
   rule that probes once, and its reported work changes with them. Under
   `--formula-joins table` nothing changes.
 - An overflow or an invalid exponent in an assignment aggregate refuses

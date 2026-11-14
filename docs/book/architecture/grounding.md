@@ -1285,14 +1285,19 @@ is grounded that way; its table would need about ten gigabytes.
 
 One probe is cheaper as a scan; a probe that a join repeats for every row of
 its outer prefix is not. `q(X,Y) :- m(Y), d(X), X / 3 = Y.` selects from `d`
-once for each row of `m`. Each body occurrence therefore counts the rows of
-its relation that its probes read in place of a declined selection, and the
-selector prepares the table once those rows, weighed at eight words of masks
-each, have cost what the masks would. It does so only if the masks and the
-table's entries are within what the support's limits leave: a table that
-cannot be admitted is never attempted, and the join keeps its scan. A probe
-that a numeric index serves instead, as in eager emission, reads no row in
-the table's place and counts none. Under the table strategy the caller asked
+once for each row of `m`. The snapshot therefore counts, for each relation,
+the rows its joins read in place of a declined selection: the rows that the
+probe which took its place offered, whether a scan, a posting of another
+bound column or a numeric index. The selector prepares the table once
+those rows, weighed at eight words of masks each, have cost what the masks
+would. Every join of the round adds to the one count, so several rules that
+each probe a few times repay the table together, and the table then serves
+them all. It is prepared only if its preparation is within what the support's
+limits leave, weighed as the table's accounting charges it: the masks grow by
+doubling, and a growth is charged with the buffer it replaces still live.
+Otherwise it is not attempted, and the joins keep their scans. A numeric
+index, as in eager emission, offers a handful of rows for each probe, so its
+joins do not come to repay a table. Under the table strategy the caller asked
 for tables, and none of this applies.
 
 Domain derivation scans the existing input/result coordinates, without another

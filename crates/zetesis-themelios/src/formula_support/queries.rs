@@ -8,11 +8,11 @@
 mod tests;
 
 use std::cell::{Cell, OnceCell, RefCell};
-use std::mem::size_of;
+use std::mem::{size_of, size_of_val};
 use std::ops::{Deref, Range};
 
 use crate::ProgramSite;
-use zetesis_core::catalog::TermRef;
+use zetesis_core::catalog::{PredicateRef, TermRef};
 use zetesis_core::table::{self, Cause, Domain, Resource, Selection, Table};
 use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
 
@@ -61,6 +61,19 @@ pub(crate) struct Support<'source> {
 
 struct TableWorkspace<'source> {
     indices: RefCell<Vec<Table<'source, 'source>>>,
+    /// What this snapshot's joins have read in place of the table selections
+    /// it declined, by relation ([`Declined`]).
+    declined: RefCell<Vec<Declined<'source>>>,
+}
+
+/// The rows read in place of the declined table selections over one
+/// relation. Every join of the snapshot adds to it, so probes spread over
+/// several rules repay a table as probes repeated by one rule do, and the
+/// table they repay serves them all. A relation selected under two scopes
+/// has one count for both.
+struct Declined<'source> {
+    predicate: PredicateRef<'source>,
+    rows: u64,
 }
 
 impl<'source> Deref for Support<'source> {
@@ -467,28 +480,27 @@ impl<'source> Support<'source> {
         work: GroundingWork<'_>,
     ) -> Result<Option<Rows<'_, 'source>>, FormulaFailure> {
         Ok(
-            match self.select_domains_after(rows, pattern, values, finite, 0, work)? {
+            match self.select_domains_after(rows, pattern, values, finite, work)? {
                 DomainSelection::Rows(rows) => Some(rows),
-                DomainSelection::Inapplicable | DomainSelection::Declined => None,
+                DomainSelection::Inapplicable | DomainSelection::Declined(_) => None,
             },
         )
     }
 
-    /// [`Self::select_domains_at`] for a caller that repeats the selection
-    /// over one relation, as a join does for each row of its outer prefix.
-    /// `scanned` is the number of rows that caller has read in place of
-    /// this selection. Where ordinary joins are indexed, a table that is
-    /// not small is prepared once those rows have cost what its masks would
-    /// ([`TableCost::repaid`]) and it can be admitted ([`TableCost::fits`]):
-    /// one probe scans, and a probe repeated for many outer rows gets the
-    /// table that serves the rest of them.
+    /// [`Self::select_domains_at`] for a caller that reports what it read
+    /// in place of a declined selection ([`Self::count_scanned`]). Where
+    /// ordinary joins are indexed, a table that is not small is prepared
+    /// once the rows this snapshot's joins have read in its place have cost
+    /// what its masks would ([`TableCost::repaid`]), if its preparation is
+    /// within what the limits leave ([`TableCost::fits`]): one probe scans,
+    /// and probes repeated for many outer rows, by one rule or by several,
+    /// get the table that serves the rest of them.
     pub(super) fn select_domains_after<'value>(
         &self,
         rows: Option<&'source RelationRows<'source>>,
         pattern: PositivePattern<'value>,
         values: BindingView<'value>,
         finite: FiniteDomains<'value>,
-        scanned: u64,
         work: GroundingWork<'_>,
     ) -> Result<DomainSelection<'_, 'source>, FormulaFailure> {
         let GroundingWork {
@@ -510,6 +522,7 @@ impl<'source> Support<'source> {
         let bound = bind_domains(pattern, values, finite, &mut scratch, counters)?;
         let workspace = self.tables.get_or_init(|| TableWorkspace {
             indices: RefCell::new(Vec::new()),
+            declined: RefCell::new(Vec::new()),
         });
         let mut tables = workspace.indices.borrow_mut();
         let found = find_table(&tables, pattern, &bound.scope, limits, counters, location)?;
@@ -522,13 +535,19 @@ impl<'source> Support<'source> {
             if !self.table_strategy {
                 let cost = TableCost::of(rows, &bound.scope, limits, counters, location)?;
                 if !cost.small() {
+                    let ticket = self.declined_slot(
+                        &mut workspace.declined.borrow_mut(),
+                        relation.predicate(),
+                        GroundingWork::new(limits, counters, location),
+                    )?;
+                    let read = workspace.declined.borrow()[ticket].rows;
                     let outer = self.live_bytes() - relation.storage().retained_bytes;
                     let allowance = self.table_limits(limits, counters, outer, location)?;
-                    if !cost.repaid(scanned)
+                    if !cost.repaid(read)
                         || !cost.fits(relation.storage().retained_bytes, &allowance)
                     {
                         counters.record(Event::TableInapplicableProbe);
-                        return Ok(DomainSelection::Declined);
+                        return Ok(DomainSelection::Declined(ticket));
                     }
                 }
             }
@@ -585,6 +604,50 @@ impl<'source> Support<'source> {
             live: &self.live,
             bytes,
         }))
+    }
+
+    /// The count this snapshot keeps for `predicate`, entered at zero when
+    /// it has none. One unit for each count compared; a new count's bytes
+    /// are admitted beside the workspace's and stay live with it.
+    fn declined_slot(
+        &self,
+        declined: &mut Vec<Declined<'source>>,
+        predicate: PredicateRef<'source>,
+        work: GroundingWork<'_>,
+    ) -> Result<usize, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        for (ticket, entry) in declined.iter().enumerate() {
+            counters.work(limits, location)?;
+            if entry.predicate == predicate {
+                return Ok(ticket);
+            }
+        }
+        let bytes = size_of::<Declined<'_>>();
+        let peak = self
+            .live_bytes()
+            .checked_add(bytes)
+            .ok_or_else(|| allocation(Cause::Overflow, location))?;
+        Self::admit(peak, limits, counters, location)?;
+        declined
+            .try_reserve_exact(1)
+            .map_err(|_| allocation(Cause::Allocation, location))?;
+        declined.push(Declined { predicate, rows: 0 });
+        self.live.set(self.live.get() + bytes);
+        Ok(declined.len() - 1)
+    }
+
+    /// Count `rows` read in place of the declined selection `ticket` names
+    /// ([`DomainSelection::Declined`]).
+    pub(super) fn count_scanned(&self, ticket: usize, rows: usize) {
+        if let Some(workspace) = self.tables.get()
+            && let Some(entry) = workspace.declined.borrow_mut().get_mut(ticket)
+        {
+            entry.rows = entry.rows.saturating_add(rows as u64);
+        }
     }
 
     fn table_limits(
@@ -879,10 +942,11 @@ pub(super) enum DomainSelection<'a, 'source> {
     Rows(Rows<'a, 'source>),
     /// A structural pattern or an absent relation: no table applies.
     Inapplicable,
-    /// A relation whose table is not small and not yet worth preparing. The
-    /// caller's own probe offers its rows; the caller counts the ones it
-    /// reads for the next selection.
-    Declined,
+    /// A relation whose table is not small and not yet worth preparing, or
+    /// not within the limits. The caller's own probe offers its rows, and
+    /// the caller reports how many under this ticket
+    /// ([`Support::count_scanned`]).
+    Declined(usize),
 }
 
 /// The words of 32 bits a table's row masks may take when the table only
@@ -907,12 +971,29 @@ struct TableCost {
     entries: u128,
     /// The words of 32 bits its row masks take: one mask for each entry.
     mask_words: u128,
+    /// An upper bound on the bytes its preparation is charged beside its
+    /// relation's ([`TableCost::of`]).
+    preparation_bytes: u128,
 }
+
+/// More than a table's own header and the headers of its preparation's
+/// vectors take.
+const TABLE_FRAME_BYTES: u128 = 1024;
 
 impl TableCost {
     /// The count of a column's distinct values is its posting map's length.
     /// A column no join binds has no postings and is taken to hold a value
     /// for each row. One unit for each column.
+    ///
+    /// The preparation's bytes follow `zetesis_core::table`'s accounting,
+    /// which admits every growth with the buffer it replaces still live.
+    /// The masks and the values grow by doubling, so with `P` the least
+    /// power of two not below the entries, the last growth of the masks is
+    /// charged half as much again as the `P` masks kept, and the values at
+    /// most two buffers of `P`. Beside them stand one mask of coherent rows,
+    /// one column's rows with the scratch of their sort, the scope and the
+    /// variables, and the table's frame. The sum is charged at no moment;
+    /// it bounds each.
     fn of(
         rows: &RelationRows<'_>,
         scope: &[usize],
@@ -935,9 +1016,29 @@ impl TableCost {
                 Postings::Unindexed => count,
             };
         }
+        let mask = count.div_ceil(u128::from(u32::BITS));
+        let word = u128::from(u32::BITS / u8::BITS);
+        let capacity = entries.checked_next_power_of_two().unwrap_or(u128::MAX);
+        let masks = mask.saturating_mul(capacity).saturating_mul(word);
+        let preparation_bytes = masks
+            .saturating_add(masks / 2)
+            .saturating_add(mask.saturating_mul(word))
+            .saturating_add(
+                count
+                    .saturating_mul(2)
+                    .saturating_mul(size_of::<(usize, TermRef<'_>)>() as u128),
+            )
+            .saturating_add(
+                capacity
+                    .saturating_mul(2)
+                    .saturating_mul(size_of::<TermRef<'_>>() as u128),
+            )
+            .saturating_add(4 * size_of_val(scope) as u128)
+            .saturating_add(TABLE_FRAME_BYTES);
         Ok(Self {
             entries,
-            mask_words: entries * count.div_ceil(u128::from(u32::BITS)),
+            mask_words: entries.saturating_mul(mask),
+            preparation_bytes,
         })
     }
 
@@ -956,13 +1057,15 @@ impl TableCost {
         self.mask_words <= u128::from(scanned) * SCANNED_ROW_MASK_WORDS
     }
 
-    /// Whether the entries, and the masks beside a relation of
-    /// `relation_bytes`, are within what `allowance` leaves a table. This is
-    /// necessary for the table to be admitted, not sufficient: a table that
-    /// fails it is never attempted, and the join keeps its scan.
+    /// Whether the entries, and the preparation's bytes beside a relation
+    /// of `relation_bytes`, are within what `allowance` leaves a table. A
+    /// table that fails this is not attempted, and the join keeps its scan;
+    /// one that passes it is charged no more than was weighed here.
     fn fits(self, relation_bytes: usize, allowance: &table::Limits) -> bool {
         self.entries <= allowance.max_entries as u128
-            && self.mask_words * u128::from(u32::BITS / u8::BITS) + relation_bytes as u128
+            && self
+                .preparation_bytes
+                .saturating_add(relation_bytes as u128)
                 <= allowance.max_bytes as u128
     }
 }

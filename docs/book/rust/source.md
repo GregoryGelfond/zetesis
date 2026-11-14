@@ -606,8 +606,8 @@ constraint establishes finite arithmetic totality, a computed equality may
 supply a necessary input domain to the shared table selector under either
 strategy. Under `Indexed` the selector prepares a table at once only while
 its row masks are small. It leaves a larger relation to the ordinary probe
-and the residual comparison, and prepares its table once the rows a join's
-repeated probes have read in its place have cost what the table would
+and the residual comparison, and prepares its table once the rows the
+round's joins have read in its place have cost what the table would
 ([source instances](../architecture/grounding.md#source-instances-as-a-composition)).
 Unrestricted probes still follow the requested strategy. `Table`
 reuses support masks for all applicable flat positive patterns over completed
