@@ -129,9 +129,10 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
     let mut admitted = 0;
     let mut refused = 0;
     for case in cases {
-        // A growing positive upper relation must refuse, despite clingo pruning
-        // this particular source by a mandatory negative gate. Four rounds make
-        // the resource regression small and independent of default work tuning.
+        // A growing positive upper relation must refuse. Four rounds make
+        // the resource regression small and independent of default work
+        // tuning. The one such source whose growth a negated fact blocks is
+        // answered within them: that negation is decided while grounding.
         let limits = if case.native == "SupportRounds" {
             resource_limits::formula(FormulaResource::SupportRounds, 4)
         } else {
@@ -157,6 +158,7 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
                     | "range_sup_lower_empty"
                     | "interval_body_positive"
                     | "interval_body_negative"
+                    | "negative_fact_blocks_generative_recursion"
             )
         {
             assert!(case.valid);
@@ -189,7 +191,7 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
             refused += 1;
         }
     }
-    assert_eq!((admitted, refused), (95, 23));
+    assert_eq!((admitted, refused), (96, 22));
 }
 
 fn clingo(case: &Case) -> Models {

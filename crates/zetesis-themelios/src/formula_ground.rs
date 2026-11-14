@@ -13,6 +13,8 @@ pub(crate) mod families;
 mod family_replay;
 mod canonical_suffix;
 mod extremum_guards;
+mod decided_negation;
+use decided_negation::Decide;
 mod fixed_facts;
 mod matched_nodes;
 mod metadata;
@@ -1723,28 +1725,37 @@ impl<'source> Builder<'_, '_, 'source> {
         support: &Support<'source>,
         carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
     ) -> Result<usize, FormulaFailure> {
-        self.body_matched(literals, assignment, location, support, None, carriers)
+        self.body_matched(
+            literals,
+            assignment,
+            location,
+            (support, Decide::Nothing),
+            None,
+            carriers,
+        )
     }
 
     /// Name a selected component row through the ordinary body implementation.
     /// The node owner belongs to this literal slice and this cursor alone;
     /// rejected rows must be skipped before calling. Borrowed positive rows
-    /// establish atom identities, not the truth of their body literals.
+    /// establish atom identities, not the truth of their body literals. The
+    /// literals are a component of `rule`'s own body, which decides its
+    /// default-negated atoms as that rule's body does.
     pub(super) fn body_from_row(
         &mut self,
-        literals: &[LiteralIr],
+        (rule, literals): (&RuleIr, &[LiteralIr]),
         row: &formula_support::witnesses::MatchedBinding<'_, 'source>,
         nodes: &mut Option<MatchedNodes>,
         support: &Support<'source>,
-        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         debug_assert!(row.passes);
+        let location = rule.location;
         let view = self.matched_view(nodes, row.witnesses.as_ref(), literals.len(), location)?;
         self.body_matched(
             literals.iter().map(Ir::Temporary),
             &row.values,
             location,
-            support,
+            (support, Decide::of(rule)),
             nodes.as_mut().zip(view),
             row.carriers,
         )
@@ -1760,12 +1771,15 @@ impl<'source> Builder<'_, '_, 'source> {
         self.body_ir_with_carriers(literals, assignment, location, support, None)
     }
 
+    /// The conjunction of `literals` under `assignment`, read over `support`.
+    /// `decide` says which default-negated flat atoms the completed support
+    /// decides for this body (`decided_negation`).
     fn body_matched<'literal>(
         &mut self,
         literals: impl IntoIterator<Item = Ir<'literal, 'source, LiteralIr>>,
         assignment: &Binding,
         location: ProgramSite,
-        support: &Support<'source>,
+        (support, decide): (&Support<'source>, Decide),
         mut matched: Option<(
             &mut MatchedNodes,
             &formula_support::witnesses::WitnessRow<'_, 'source>,
@@ -1780,6 +1794,14 @@ impl<'source> Builder<'_, '_, 'source> {
                 None => None,
             };
             if let LiteralIr::Atom(negation, pattern) = literal {
+                if *negation != DefaultNegation::None
+                    && named.is_none()
+                    && let Some(decided) =
+                        self.decided_negation(decide, *negation, *pattern, assignment, location)?
+                {
+                    result = self.and(result, decided, location)?;
+                    continue;
+                }
                 let mut atom = match named {
                     Some(node) => node,
                     None => self.atom(*pattern, assignment, location)?,
@@ -1977,7 +1999,7 @@ impl<'source> Builder<'_, '_, 'source> {
             Ir::Source(rule.body.as_slice()).iter(),
             &rule.body_binding(assignment),
             rule.location,
-            support,
+            (support, Decide::of(rule)),
             matched,
             carriers,
         )?;

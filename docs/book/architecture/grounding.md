@@ -36,14 +36,15 @@ required. Source validation checks the families that read those heads over the
 carrier's values; that is the definition of the proposal family (see the
 language reference's
 [arithmetic families](../reference/language.md#numeric-boundaries-and-refusal-meaning)),
-and a sound sharpening of `R` redefines it in the same way. Pruning below a
-producer's closure is different. A rule whose body contains `not p` cannot
-contribute an answer-set atom when `p` is a fact, but removing that rule from
-support can hide a later arithmetic error. For example,
-`p. d(2147483647). h(X) :- d(X), not p. k(X+1) :- h(X).` still reaches overflow
-during admission. Such pruning requires a certificate preserving admission
-throughout the affected consumers, not only answer-set equivalence. The current
-grounder retains those support rows.
+and a sound sharpening of `R` redefines it in the same way. A default negation
+that support completion has [decided](#certain-predicates) narrows support in
+the same direction. A rule whose body contains `not p` contributes no
+answer-set atom when `p` is a fact, and it then supports no head: in
+`p. d(2147483647). h(X) :- d(X), not p. k(X+1) :- h(X).` the rule of `k` has no
+instance, so nothing overflows and the program is admitted with its two facts.
+The excluded instance itself is still validated as written, and a negation
+that is not decided prunes nothing: with `{p}.` in place of the fact, `h` stays
+possible and the overflow is reached.
 
 The [checked source-preparation example](../rust/source.md) follows
 `prepare_formula`, the retained analysis basis, `ground` and a complete CPU
@@ -149,13 +150,13 @@ separate the mathematical equality from Rust correspondence obligations.
 The substitution of explicit facts at the head of this section applies also to
 atoms the program derives from its facts alone. A rule is *definite* when it
 has one ordinary head atom and its body holds only positive atoms, comparisons,
-argument checks, guards, binders, intervals and the exact assignments defined
-below. A predicate is *certain* when every rule that can derive one of its
-atoms is definite and reads only certain predicates; a predicate only facts
-define is certain. A default negation, a projection, a conditional literal, any
-other aggregate, a head guard or any disjunctive, conditional or choice head
-removes the predicates the rule derives, and a predicate that reads a removed
-one is removed with it.
+argument checks, guards, binders, intervals, and the decided negations and
+exact assignments defined below. A predicate is *certain* when every rule that
+can derive one of its atoms is definite and reads only certain predicates; a
+predicate only facts define is certain. Any other default negation, a
+projection, a conditional literal, any other aggregate, a head guard or any
+disjunctive, conditional or choice head removes the predicates the rule
+derives, and a predicate that reads a removed one is removed with it.
 
 The rules of the certain predicates are a definite program, and completed
 support derives a head from exactly the rows their positive atoms and
@@ -167,8 +168,42 @@ true
 ([`CertainAtoms.derived_stable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CertainAtoms.lean)).
 In `c(1..3). d(X) :- c(X). {p}. q :- d(1), p.` the last rule is emitted as
 `q :- p`. The condition of a choice element or of a conditional disjunct is a
-body and is read the same way. Negative occurrences, heads and objective
-queries are emitted as written.
+body and is read the same way. Heads and objective queries are emitted as
+written, and so is a default negation that is not decided.
+
+A default negation over a flat atom, at the top level of a rule's body, is
+*decided* when the atom's predicate is certain and its relation is complete
+whenever the rule is read. Support completion
+[waits for that](#completed-possible-support): a rule with a head is not
+traversed until the dependency components of the atoms it negates, where they
+come before its heads', have reached their fixed point. Over a complete
+relation of a certain predicate a supported atom holds in every answer set and
+an unsupported one in none, so `not a` is false for a supported `a` and true
+otherwise, and `not not a` the reverse. A row of the rule under which such a
+literal is false derives no head, and a rule whose other literals are definite
+keeps its head predicate certain. In
+`c(1..3). e(1). d(X) :- c(X), not e(X). {p}. q :- d(2), p.` the support of `d`
+is `d(2)` and `d(3)`, both hold in every answer set, and the last rule is
+emitted as `q :- p`. The certain predicates are thus the stratified part of a
+program: what follows from its facts through rules that negate only what
+earlier components have settled.
+
+Emission reads the completed support, where it decides a little more. In the
+body of a rule with a head, `not a` is false when `a` is an explicit fact or a
+supported atom of a certain predicate, and true when `a` is outside the
+support, whatever its predicate, since no rule can derive it
+([`DecidedNegation.absent_stable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DecidedNegation.lean)).
+A false literal drops its instance and a true one leaves the body; in neither
+case does the occurrence name its atom. A constraint's body decides a fixed
+atom only, so that a constraint grounded into the theory and one checked
+against the source name the same atoms. A negation whose atom lies in the
+rule's own component, or is supported and belongs to an uncertain predicate,
+is emitted as written, and so is every negation inside a conditional literal,
+a projection such as `not q(_, X)`, or an element of an aggregate or a choice.
+
+clingo decides such negations while it grounds, component by component. It
+tracks facts atom by atom where this analysis decides by predicate, so a
+negation over a predicate that a choice also derives stays in the theory here.
 
 An aggregate assignment reads certainty through its elements. A tuple that an
 element yields from certain atoms and comparisons alone is in every
@@ -200,13 +235,15 @@ still propose without end here:
   `p(1)`. A choice or an assignment that also derives the predicate leaves it
   uncertain;
 - an element over a predicate that a choice also derives, or that the facts
-  decide only through a negation, a guard aggregate or a conditional literal;
+  decide only through a guard aggregate, a conditional literal or a negation
+  that is not decided;
 - an element whose own condition holds a default negation.
 
-Support completion reads no negation either, so a negated fact in such a
-rule's body does not stop its proposals. Counting the seed through a predicate
-of its own, `s(1). p(X) :- s(X). {p(N)} :- N = #count{V : p(V); V : s(V)}.`,
-makes its tuple required.
+A decided negation in the rule's body does stop its proposals:
+`stop. {p(N)} :- N = #count{V : p(V)}, not stop.` has the one answer set
+`stop`. Counting the seed through a predicate of its own,
+`s(1). p(X) :- s(X). {p(N)} :- N = #count{V : p(V); V : s(V)}.`, makes its
+tuple required.
 
 An assignment is *exact* when every element of it is required in this way. Its one value is then the aggregate's value in every interpretation, the
 rule supports exactly the heads that hold, and its head predicate is certain as
@@ -214,13 +251,15 @@ well: a rank `r(C,R) :- c(C), R = #count{D : c(D), D <= C}` over `n` facts
 supports `n` atoms and feeds certain predicates in turn. An objective's
 assignment is not read this way and substitutes every value its tuples allow.
 
-Certainty changes which atoms an assignment supports, and so which atoms and
-objective priorities a theory names. It changes the answer sets of no admitted
-program. A positive flat source has only certain predicates.
+Certainty changes which atoms an assignment or a rule with a decided negation
+supports, and so which atoms and objective priorities a theory names. It
+changes the answer sets of no admitted program. A positive flat source has
+only certain predicates.
 
 It does decide which programs are admitted, in one direction, because
-arithmetic is evaluated at the values an assignment can still take and no
-other (the [language reference](../reference/language.md) states the rule).
+arithmetic is evaluated at the values an assignment can still take, and in the
+instances a decided negation leaves, and no other (the
+[language reference](../reference/language.md) states the rule).
 `c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 2000000000 * (4 - N).` is admitted
 with `p(2000000000)`; over an uncertain condition it overflows at the count 0
 and is refused. A zero divisor decides nothing: `Y = 6/(N-3)` in its place has
@@ -243,14 +282,26 @@ In `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)}, N < 2, Y = 6/(N-1).` the
 one value 1 divides by zero, so the rule has no instance and keeps its
 warning.
 
+A decided negation has the same effect on what reads its rule's head. In
+`blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` the rule
+of `h` supports nothing, so the rule of `k` has no instance to overflow in,
+and the program is admitted with its facts as its one answer set. The instance
+the negation excludes is itself still validated as written:
+`h(X+1) :- d(X), not blocked.` in its place overflows and is refused, and
+`h(1/X) :- d(X), not blocked.` over `d(0)` keeps its warning. A growth that a
+decided negation stops ends: `stop. p(0). p(X+1) :- p(X), not stop.` has the
+answer set `{stop, p(0)}`. With a choice `{blocked}.` or `{stop}.` in place of
+the fact nothing is decided, and both programs are refused as before.
+
 The substitution rests on the roots that derive each atom, so emission checks
 them on the theory it built rather than taking them from the analysis. Every
 instance that derives an atom of a certain predicate has one ordinary head and
 a body read as true, so each of its producers is an unconditional ordinary
 root; an explicit fact has at least its own. Once no further body will be read,
-emission requires exactly that of every atom it read as true, and publishes
-nothing otherwise. A choice, a disjunct, a negation or an atom left as written
-in any producer of a wrongly certain atom fails the check. It does not examine
+emission requires exactly that of every atom it read as true, at a positive
+occurrence or under a decided negation, and publishes nothing otherwise. A
+choice, a disjunct, or a negation or an atom left as written in any producer
+of a wrongly certain atom fails the check. It does not examine
 why an exact assignment was emitted as its one value, which rests on the
 listing of its required elements, nor a predicate no body reads. A constraint
 that a hybrid schedule grounds into the core once every producer is emitted
@@ -1537,9 +1588,10 @@ source-to-Rust semantic refinement. Richer programs keep the existing schedule.
 `GroundingWork.support_producer_visits` counts charged producer visits, including
 those skipped by registration. Its disjoint subsets `support_rich_traversals`,
 `support_unchanged_visits` and `support_deferred_visits` count rich visits
-selected for traversal (including the first round), those skipped because no
+selected for traversal (including the first round) with the one traversal the
+component schedule gives each producer that waited, those skipped because no
 registered input changed or a component-scheduled producer was already
-traversed, and those of a component-scheduled producer still waiting;
+traversed, and those of a producer still waiting;
 `support_snapshot_preparations` counts charged growing
 snapshot attempts, including attempts that subsequently fail. These optional
 fields do not retroactively turn missing historical observations into zeros.
@@ -1642,6 +1694,20 @@ fixed, the values the assignment proposes only grow as the support the rule
 reads grows, whether through its own component or through another relation
 that is still gaining rows, and final grounding's family has a root for each.
 Its visits before the first traversal are counted in `support_deferred_visits`.
+
+A producer that is not scheduled by component also waits for the atoms it
+negates. When a default-negated flat atom at the top level of its body lies in
+a decidable component before the producer's heads, the producer is not
+traversed until that component reaches its fixed point. It is then traversed
+in full, in that round, and afterwards an ordinary producer takes its delta
+variants, whose new rows are the ones published since that traversal's
+snapshot, and a rich one is traversed as any other rich producer. Each of its
+traversals therefore reads those negated atoms over final rows, which is what
+lets a [decided negation](#certain-predicates) omit a row for good: an
+ordinary producer never revisits a row it has joined. Its head components wait
+for that first traversal, and the components it waits for precede its heads,
+so the argument above covers it. Its visits before the first traversal are
+counted in `support_deferred_visits`.
 
 Every other rich producer, and a held-back one after that traversal, is
 traversed after the first round exactly when one of its read predicates gained
@@ -1749,8 +1815,9 @@ provenance. Positive body occurrences are still named and validated, then those
 of recorded facts and of supported atoms of
 [certain predicates](#certain-predicates) become true; other possible support
 rows do not. The same
-replacement applies inside shared positive producer groups. Negative occurrences,
-heads and objective queries keep their existing representation. Retained facts
+replacement applies inside shared positive producer groups. Heads and objective
+queries keep their existing representation, and so does a negative occurrence
+unless it is [decided](#certain-predicates). Retained facts
 force their atoms into every original model and every tested reduct model, which
 justifies the replacement in the enclosing formula; a candidate omitting a fact
 fails its unchanged root.

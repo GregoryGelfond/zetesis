@@ -140,6 +140,7 @@ import Zetesis.BindingScopes
 import Zetesis.DisjunctiveSupport
 import Zetesis.ExternalSupport
 import Zetesis.CertainAtoms
+import Zetesis.DecidedNegation
 import Zetesis.PossibleFoundedness
 import Zetesis.PossibleFoundednessPublication
 import Zetesis.LearnedRegions

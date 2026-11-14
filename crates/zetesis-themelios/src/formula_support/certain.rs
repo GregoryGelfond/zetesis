@@ -2,14 +2,15 @@
 //!
 //! A rule is *definite* when it has one ordinary head atom and its body holds
 //! only positive atoms, literals its own join decides (comparisons, argument
-//! checks, guards, binders and intervals) and exact assignment aggregates,
-//! described below. A predicate is *certain* when every rule that can derive
-//! one of its atoms is definite and reads only certain predicates. The certain
-//! predicates are the greatest such set: a default negation, a projection, a
-//! conditional literal, any other aggregate or a head guard in a body, and any
-//! disjunctive, conditional or choice head, removes the rule's head
-//! predicates, and a predicate that reads a removed one is removed in turn. A
-//! predicate that only facts define is certain.
+//! checks, guards, binders and intervals), decided default negations and
+//! exact assignment aggregates, both described below. A predicate is
+//! *certain* when every rule that can derive one of its atoms is definite and
+//! reads only certain predicates. The certain predicates are the greatest
+//! such set: any other default negation, a projection, a conditional literal,
+//! any other aggregate or a head guard in a body, and any disjunctive,
+//! conditional or choice head, removes the rule's head predicates, and a
+//! predicate that reads a removed one is removed in turn. A predicate that
+//! only facts define is certain.
 //!
 //! The rules of the certain predicates form a definite program closed under
 //! what it reads. Support completion derives a head from exactly the rows a
@@ -22,6 +23,30 @@
 //! whose body atoms are forced forces its head. A supported atom of a certain
 //! predicate is therefore a premise wherever an explicit fact is one
 //! (`formula_ground::fixed_facts`): a positive occurrence may be read as true.
+//!
+//! A default negation is *decided* when it stands at the top level of a
+//! rule's body, over a flat atom of a certain predicate, and every traversal
+//! of the rule reads that atom's relation complete. The component schedule
+//! supplies the last condition (`producers::registration::components`): the
+//! atom is *awaited* when its component is decidable and precedes the rule's
+//! heads, and the rule's producer is then held back until that component
+//! reaches its fixed point, or is deferred for everything it reads. A
+//! certain predicate lies in such a component: were it in its reader's own,
+//! the reader's undecided negation would remove the reader's head and with it
+//! every predicate of the component. Over a complete relation of a certain
+//! predicate, a supported atom holds in every answer set, as above, and an
+//! unsupported one holds in none, since no rule can derive it. So `not a` is
+//! false for a supported `a` and true otherwise, and `not not a` the reverse.
+//! Support completion derives no head from a row under which a decided
+//! negation is false ([`super::decided_negations_hold`]): no answer set
+//! satisfies that row's body. The rule then supports exactly the heads its
+//! other literals admit under true negations, as a definite rule does, and
+//! emission reads each such negation as true and drops each instance whose
+//! negation is false (`formula_ground::decided_negation`), so the root that
+//! remains is unconditional. The certain predicates therefore still form a
+//! program whose completed support is its one model: stratified along the
+//! component order, each component's rules reading the components before it
+//! complete.
 //!
 //! An assignment aggregate reads this through its elements. A tuple that an
 //! element yields from certain atoms and decided literals alone is present in
@@ -114,6 +139,9 @@ pub(crate) struct Certainty {
     predicates: Vec<Signature>,
     /// `(aggregate, element)` coordinates, sorted and distinct.
     elements: Vec<(usize, usize)>,
+    /// `(rule, occurrence)` coordinates of the decided default-negated body
+    /// atoms, sorted and distinct.
+    negations: Vec<(usize, usize)>,
 }
 
 impl Certainty {
@@ -123,19 +151,28 @@ impl Certainty {
             all: true,
             predicates: Vec::new(),
             elements: Vec::new(),
+            negations: Vec::new(),
         }
     }
 
-    /// From the predicates and elements an analysis found, in any order.
-    pub(super) fn new(mut predicates: Vec<Signature>, mut elements: Vec<(usize, usize)>) -> Self {
+    /// From the predicates, elements and negated atoms an analysis found, in
+    /// any order.
+    pub(super) fn new(
+        mut predicates: Vec<Signature>,
+        mut elements: Vec<(usize, usize)>,
+        mut negations: Vec<(usize, usize)>,
+    ) -> Self {
         predicates.sort_unstable_by(|left, right| left.order(right.sign, &right.name, right.arity));
         predicates.dedup();
         elements.sort_unstable();
         elements.dedup();
+        negations.sort_unstable();
+        negations.dedup();
         Self {
             all: false,
             predicates,
             elements,
+            negations,
         }
     }
 
@@ -200,6 +237,19 @@ impl Certainty {
         element.required || certainty.is_some_and(|certainty| certainty.lists(aggregate, position))
     }
 
+    /// The body positions of the default-negated atoms that every traversal
+    /// of the rule at `rule` decides, in order: the atom's predicate is
+    /// certain and its relation complete whenever the rule is traversed, so
+    /// the atom holds in every answer set when it is supported and in none
+    /// otherwise. A binary search of the listed coordinates.
+    pub(crate) fn decided(&self, rule: usize) -> impl Iterator<Item = usize> + '_ {
+        let start = self.negations.partition_point(|&(listed, _)| listed < rule);
+        self.negations[start..]
+            .iter()
+            .take_while(move |&&(listed, _)| listed == rule)
+            .map(|&(_, occurrence)| occurrence)
+    }
+
     /// The certain predicates listed, by name and arity; none when all are.
     #[cfg(test)]
     pub(super) fn predicates(&self) -> impl Iterator<Item = (&str, usize)> + '_ {
@@ -235,7 +285,7 @@ impl Certainty {
                 .iter()
                 .map(|signature| signature.name.len())
                 .sum::<usize>()
-            + self.elements.capacity() * size_of::<(usize, usize)>()
+            + (self.elements.capacity() + self.negations.capacity()) * size_of::<(usize, usize)>()
     }
 }
 
@@ -265,7 +315,21 @@ pub(super) fn every_predicate_assumed() -> bool {
     }
 }
 
-/// Two scoped, thread-local switches, each restored after an unwind and
+/// Whether no default-negated atom is decided, as the test-only reference
+/// has it: the analysis admits none in a definite rule and lists none, and
+/// emission keeps each as written. Always false outside tests.
+pub(crate) fn negation_left_out() -> bool {
+    #[cfg(test)]
+    {
+        testing::negation_left_out()
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
+
+/// Three scoped, thread-local switches, each restored after an unwind and
 /// confined to its thread, as the registration's switch is.
 ///
 /// The reference certainty is compared against: support completion installs
@@ -274,6 +338,10 @@ pub(super) fn every_predicate_assumed() -> bool {
 ///
 /// The fault emission must refuse: support completion calls every predicate
 /// certain, whatever derives it.
+///
+/// The reference decided negation is compared against: a default negation
+/// removes its rule's head predicates, no row is tested against a negated
+/// atom, and emission keeps every negated atom as written.
 #[cfg(test)]
 pub(crate) mod testing {
     use std::cell::Cell;
@@ -281,6 +349,7 @@ pub(crate) mod testing {
     thread_local! {
         static LEFT_OUT: Cell<bool> = const { Cell::new(false) };
         static ASSUMED: Cell<bool> = const { Cell::new(false) };
+        static NEGATION_LEFT_OUT: Cell<bool> = const { Cell::new(false) };
     }
 
     pub(super) fn left_out() -> bool {
@@ -289,6 +358,16 @@ pub(crate) mod testing {
 
     pub(super) fn every_predicate_assumed() -> bool {
         ASSUMED.get()
+    }
+
+    pub(super) fn negation_left_out() -> bool {
+        NEGATION_LEFT_OUT.get()
+    }
+
+    /// Run `action` with no default-negated atom decided.
+    pub(crate) fn without_decided_negation<T>(action: impl FnOnce() -> T) -> T {
+        let _restore = Restore(&NEGATION_LEFT_OUT, NEGATION_LEFT_OUT.replace(true));
+        action()
     }
 
     /// Restores a switch when its scope ends.

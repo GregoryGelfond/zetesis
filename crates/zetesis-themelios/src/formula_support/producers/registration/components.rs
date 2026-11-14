@@ -1,4 +1,4 @@
-//! The component schedule of rich producers.
+//! The component schedule: producers that wait for components they read.
 //!
 //! A rich producer is traversed in full whenever a predicate it reads gains
 //! rows. When every predicate it reads lies in a dependency component before
@@ -52,10 +52,30 @@
 //! above holds with gated producers among the waiting ones: a gate's
 //! components precede the producer's heads.
 //!
+//! A producer cannot read a default-negated atom before that atom's relation
+//! is complete: a row kept because the atom was absent would stay kept after
+//! the atom was derived, and a certified producer never revisits a row. When
+//! one of a producer's top-level negated flat atoms lies in a decidable
+//! component before its heads, the producer is *held back* for those
+//! components: it is not traversed until they reach their fixed point and is
+//! then traversed in full over that round's snapshot. From the next round on
+//! a certified producer takes its delta variants, whose new rows are exactly
+//! those published since that snapshot, and a rich one is traversed whenever
+//! a predicate it reads gains rows, as a gated producer is; a rich producer
+//! may be gated and held back at once. Every traversal of a held-back
+//! producer therefore reads those negated atoms over complete relations,
+//! which is what lets support completion decide them where their predicate
+//! is certain (`formula_support::certain`). Its head components wait for that
+//! first traversal as they do for a gated producer's, and the components it
+//! waits for precede its heads, so the argument above holds with it among the
+//! waiting producers. A deferred producer reads every one of its atoms over
+//! complete relations, of either sign. The occurrences so read are listed as
+//! *awaited*.
+//!
 //! Per round the test costs one visit per pending atom, a binary search for each
 //! run of atoms of one predicate, and one visit per component, dependency and
-//! waited read. It is skipped once every deferred and gated producer was
-//! traversed.
+//! waited read. It is skipped once every deferred, gated and held-back
+//! producer was traversed.
 
 use std::cell::{Cell, RefCell};
 use std::mem::size_of;
@@ -69,6 +89,7 @@ use super::super::{Node, lookup};
 use super::{Producer, Registration, positive, predicate};
 use crate::formula_ir::{AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr, decided};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
+use themelios_program::program::DefaultNegation;
 
 use super::super::super::Counters;
 
@@ -79,8 +100,8 @@ pub(super) enum State {
     Traversed,
 }
 
-/// Which deferred and gated producers wait for which components, and the
-/// scratch the per-round test fills.
+/// Which deferred, gated and held-back producers wait for which components,
+/// and the scratch the per-round test fills.
 pub(super) struct Schedule<'source> {
     nodes: Vec<Node<'source>>,
     decidable: Vec<bool>,
@@ -90,14 +111,19 @@ pub(super) struct Schedule<'source> {
     producer_ranges: Vec<Range<usize>>,
     reads: Vec<usize>,
     /// Per registered producer: the components it waits for, when it is
-    /// deferred or gated.
+    /// deferred, gated or held back.
     waits: Vec<Option<Range<usize>>>,
-    /// Per registered producer: whether it is gated, and so resumes the
-    /// per-change traversal after the one the schedule gives it.
+    /// Per registered producer: whether it is gated or held back, and so
+    /// resumes its ordinary visits after the traversal the schedule gives
+    /// it.
     resumes: Vec<bool>,
     /// The assignment elements gated producers wait for, as sorted
     /// `(aggregate, element)` coordinates.
     elements: Vec<(usize, usize)>,
+    /// The awaited default-negated body atoms, as sorted `(producer,
+    /// occurrence)` coordinates: every traversal of the producer reads the
+    /// atom's relation complete.
+    negations: Vec<(usize, usize)>,
     state: Vec<Cell<State>>,
     changed: RefCell<Vec<bool>>,
     reached: RefCell<Vec<bool>>,
@@ -129,13 +155,15 @@ impl Scratch {
 }
 
 /// Per registered producer the range of the components it waits for, when it
-/// is deferred or gated, with those components; per producer whether it is
-/// gated; and the assignment elements the gates wait for.
+/// is deferred, gated or held back, with those components; per producer
+/// whether it resumes its ordinary visits after the schedule's traversal; the
+/// assignment elements the gates wait for; and the awaited negated atoms.
 struct Waiting {
     waits: Vec<Option<Range<usize>>>,
     reads: Vec<usize>,
     resumes: Vec<bool>,
     elements: Vec<(usize, usize)>,
+    negations: Vec<(usize, usize)>,
 }
 
 /// A component's dependencies, as ranges into one list, and whether its fixed
@@ -147,8 +175,8 @@ struct Dependencies {
 }
 
 impl<'source> Schedule<'source> {
-    /// The schedule of `registration`'s rich producers, or `None` when none
-    /// can be deferred or gated. Retained vectors are admitted through
+    /// The schedule of `registration`'s producers, or `None` when none can
+    /// be deferred, gated or held back. Retained vectors are admitted through
     /// `memory`; the scratch is released before returning.
     pub(super) fn prepare(
         registration: &Registration<'source>,
@@ -183,6 +211,7 @@ impl<'source> Schedule<'source> {
             reads,
             resumes,
             elements,
+            negations,
         } = classify(
             inputs,
             &dependencies.decidable,
@@ -225,13 +254,14 @@ impl<'source> Schedule<'source> {
             waits,
             resumes,
             elements,
+            negations,
             state,
             changed: RefCell::new(changed),
             reached: RefCell::new(reached),
         }))
     }
 
-    /// The producer's state, when it is deferred or gated.
+    /// The producer's state, when it is deferred, gated or held back.
     pub(super) fn state(&self, index: usize) -> Option<State> {
         self.waits
             .get(index)
@@ -239,14 +269,16 @@ impl<'source> Schedule<'source> {
             .map(|_| self.state[index].get())
     }
 
-    /// Whether the producer at `index` is gated: once the schedule traversed
-    /// it, it is traversed whenever a predicate it reads gains rows.
+    /// Whether the producer at `index` is gated or held back: once the
+    /// schedule traversed it, it is visited as any other producer of its
+    /// kind.
     pub(super) fn resumes(&self, index: usize) -> bool {
         self.resumes.get(index).copied().unwrap_or(false)
     }
 
-    /// Whether the producer at `index`, in `state`, is a gated producer the
-    /// schedule already traversed: it is visited as any other rich producer.
+    /// Whether the producer at `index`, in `state`, is a gated or held-back
+    /// producer the schedule already traversed: it is visited as any other
+    /// producer of its kind.
     pub(super) fn resumed(&self, index: usize, state: State) -> bool {
         state == State::Traversed && self.resumes(index)
     }
@@ -258,7 +290,23 @@ impl<'source> Schedule<'source> {
         self.elements.binary_search(&(aggregate, position)).is_ok()
     }
 
-    /// Whether a deferred or gated producer has not yet been traversed.
+    /// Whether every traversal of the producer at `producer` reads the
+    /// relation of the default-negated atom at body position `occurrence`
+    /// complete: the atom is awaited.
+    pub(super) fn awaits(&self, producer: usize, occurrence: usize) -> bool {
+        self.negations
+            .binary_search(&(producer, occurrence))
+            .is_ok()
+    }
+
+    /// The awaited default-negated atoms, as sorted `(producer, occurrence)`
+    /// coordinates.
+    pub(super) fn awaited(&self) -> &[(usize, usize)] {
+        &self.negations
+    }
+
+    /// Whether a deferred, gated or held-back producer has not yet been
+    /// traversed.
     pub(super) fn pending(&self) -> bool {
         self.state
             .iter()
@@ -439,9 +487,12 @@ fn dependencies(
 
 /// The deferred producers: rich, with every read decidable and earlier than
 /// every head. A rich producer that is not deferred is gated when [`gate`]
-/// finds an assignment element it can wait for. Returns each such producer's
-/// range of waited components and those components, whether it is gated, and
-/// the gates' elements; records each producer's (head, producer) pairs in the
+/// finds an assignment element it can wait for, and a producer that is not
+/// deferred is held back when [`hold`] finds a negated atom it can wait for.
+/// Returns each
+/// such producer's range of waited components and those components, whether
+/// it resumes its ordinary visits, the gates' elements and the awaited
+/// negated atoms; records each producer's (head, producer) pairs in the
 /// scratch.
 fn classify(
     (registration, nodes, view): (&Registration<'_>, &[Node<'_>], TemplateComponentsRef<'_>),
@@ -454,16 +505,22 @@ fn classify(
     let mut reads = Vec::new();
     let mut resumes = Vec::new();
     let mut elements = Vec::new();
+    let mut negations = Vec::new();
     memory.reserve(&mut waits, registration.producers.len())?;
     memory.reserve(&mut resumes, registration.producers.len())?;
     for (index, producer) in registration.producers.iter().enumerate() {
         counters.work(limits, location)?;
-        let Producer::Rich(_) = producer else {
-            waits.push(None);
-            resumes.push(false);
-            continue;
-        };
         let rule = &registration.rules[index];
+        let rich = match producer {
+            Producer::Rich(_) => true,
+            // A certified producer waits only for an atom it negates.
+            Producer::Certified(_) if negates(rule, limits, counters)? => false,
+            Producer::Certified(_) | Producer::Constraint => {
+                waits.push(None);
+                resumes.push(false);
+                continue;
+            }
+        };
         scratch.inputs.clear();
         scratch.heads.clear();
         resolve(
@@ -476,7 +533,8 @@ fn classify(
             (limits, counters, rule.location),
         )?;
         let first = scratch.first_heads[index];
-        let deferred = scratch.known_producers[index]
+        let deferred = rich
+            && scratch.known_producers[index]
             && first.is_some_and(|first| {
                 scratch
                     .inputs
@@ -487,12 +545,29 @@ fn classify(
         if deferred {
             memory.reserve(&mut reads, scratch.inputs.len())?;
             reads.extend_from_slice(&scratch.inputs);
+            // Every read is awaited, the negated atoms among them.
+            for (occurrence, literal) in rule.body.iter().enumerate() {
+                counters.work(limits, rule.location)?;
+                if negated(literal).is_some() {
+                    memory.reserve(&mut negations, 1)?;
+                    negations.push((index, occurrence));
+                }
+            }
         } else if let Some(first) = first {
-            gate(
-                rule,
+            if rich {
+                gate(
+                    rule,
+                    first,
+                    (nodes, view, decidable),
+                    (&mut reads, &mut elements, memory),
+                    (limits, counters, rule.location),
+                )?;
+            }
+            hold(
+                (index, rule),
                 first,
                 (nodes, view, decidable),
-                (&mut reads, &mut elements, memory),
+                (&mut reads, &mut negations, memory),
                 (limits, counters, rule.location),
             )?;
         }
@@ -509,15 +584,80 @@ fn classify(
             .extend(scratch.heads.iter().map(|&head| (head, index)));
     }
     // Aggregates are numbered in rule order, so this confirms an order the
-    // elements already have.
+    // elements already have; the negated atoms were appended in order.
     counters.charge_work(1 + elements.len() as u128, limits, location)?;
     elements.sort_unstable();
+    debug_assert!(negations.is_sorted());
     Ok(Waiting {
         waits,
         reads,
         resumes,
         elements,
+        negations,
     })
+}
+
+/// Whether `rule`'s body holds a default-negated flat atom at its top level.
+/// One unit per literal read, up to the first such atom.
+fn negates(
+    rule: &RuleIr,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    for literal in &rule.body {
+        counters.work(limits, rule.location)?;
+        if negated(literal).is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The pattern of a default-negated flat body atom, under either negation.
+fn negated(literal: &LiteralIr) -> Option<crate::formula_support::components::Pattern> {
+    match literal {
+        LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, atom) => Some(*atom),
+        _ => None,
+    }
+}
+
+/// The default-negated atoms the rule at `index` can wait for, appended to
+/// `negations` as `(index, occurrence)`, with their components, appended to
+/// `reads`: each top-level negated flat atom in a decidable component before
+/// `first`, the producer's first head. A negated atom in the producer's own
+/// component, or in one that is not decidable, is not awaited and keeps its
+/// literal. One unit per body literal, with each negated atom's resolution.
+fn hold(
+    (index, rule): (usize, &RuleIr),
+    first: usize,
+    (nodes, view, decidable): (&[Node<'_>], TemplateComponentsRef<'_>, &[bool]),
+    (reads, negations, memory): (&mut Vec<usize>, &mut Vec<(usize, usize)>, &mut Memory<'_>),
+    (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+) -> Result<(), FormulaFailure> {
+    for (occurrence, literal) in rule.body.iter().enumerate() {
+        counters.work(limits, location)?;
+        let Some(pattern) = negated(literal) else {
+            continue;
+        };
+        let predicate = pattern.get(view, limits, counters, location)?.predicate();
+        let component = lookup(
+            nodes.len(),
+            |index| nodes[index].signature,
+            predicate,
+            limits,
+            counters,
+            location,
+        )?
+        .and_then(|index| nodes[index].component)
+        .filter(|&component| component < first && decidable[component]);
+        if let Some(component) = component {
+            memory.reserve(reads, 1)?;
+            reads.push(component);
+            memory.reserve(negations, 1)?;
+            negations.push((index, occurrence));
+        }
+    }
+    Ok(())
 }
 
 /// The assignment elements of `rule` a gated producer waits for, appended to

@@ -51,21 +51,113 @@ fn a_recursive_definite_predicate_is_certain() {
 }
 
 #[test]
-fn a_default_negation_removes_the_head_it_guards() {
+fn a_negation_over_an_earlier_certain_predicate_keeps_its_head() {
+    // `e` is complete before the rule of `d` is first traversed, and its
+    // supported atoms are the ones that hold.
     assert_eq!(
         certain(&format!(
             "c(1). e(1) :- c(1). d(1) :- c(1), not e(1). {CHOICE}"
         )),
-        ["c/1", "e/1"]
+        ["c/1", "d/1", "e/1"]
     );
 }
 
 #[test]
-fn a_double_negation_removes_the_head_it_guards() {
+fn a_double_negation_over_an_earlier_certain_predicate_keeps_its_head() {
     assert_eq!(
         certain(&format!("c(1). d(1) :- c(1), not not c(1). {CHOICE}")),
+        ["c/1", "d/1"]
+    );
+}
+
+#[test]
+fn a_negation_over_an_uncertain_predicate_removes_its_head() {
+    assert_eq!(certain("c(1). {e(1)}. d(1) :- c(1), not e(1)."), ["c/1"]);
+}
+
+#[test]
+fn a_negation_within_its_own_component_removes_its_head() {
+    // Neither rule can wait for the predicate the other derives, and a rule
+    // cannot wait for its own head.
+    assert_eq!(
+        certain(&format!(
+            "c(1). d(1) :- c(1), not e(1). e(1) :- c(1), not d(1). {CHOICE}"
+        )),
         ["c/1"]
     );
+    assert_eq!(
+        certain(&format!("c(1). d(1) :- c(1), not d(1). {CHOICE}")),
+        ["c/1"]
+    );
+}
+
+#[test]
+fn a_negation_keeps_its_head_through_a_chain_of_components() {
+    assert_eq!(
+        certain(&format!(
+            "c(1..3). e(X) :- c(X), X < 2. d(X) :- c(X), not e(X). \
+             f(X) :- c(X), not d(X). {CHOICE}"
+        )),
+        ["c/1", "d/1", "e/1", "f/1"]
+    );
+}
+
+#[test]
+fn a_recursive_rule_keeps_its_head_over_an_earlier_negated_predicate() {
+    // The rule reads its own head, so it is traversed in every round after
+    // the one it is held back for: `b` is complete by then.
+    assert_eq!(
+        certain(&format!(
+            "e(1,2). e(2,3). b(3). p(1). p(Y) :- p(X), e(X,Y), not b(Y). {CHOICE}"
+        )),
+        ["b/1", "e/2", "p/1"]
+    );
+}
+
+#[test]
+fn a_deferred_rule_keeps_its_head_over_a_negated_certain_predicate() {
+    // The count's rule reads `c` and `e` alone, both before its head, so it
+    // is traversed once over complete relations: its assignment is exact
+    // and its negated atom awaited.
+    assert_eq!(
+        certain(&format!(
+            "c(1..2). e(1). n(N) :- N = #count {{ X : c(X) }}, not e(N). {CHOICE}"
+        )),
+        ["c/1", "e/1", "n/1"]
+    );
+}
+
+#[test]
+fn a_negation_removes_its_head_where_no_producer_is_held_back() {
+    // The reference traverses every producer in every round, so no negated
+    // atom is read over a complete relation.
+    use crate::formula_support::producers::testing::with_every_round_traversed;
+    with_every_round_traversed(|| {
+        assert_eq!(
+            certain(&format!(
+                "c(1). e(1) :- c(1). d(1) :- c(1), not e(1). {CHOICE}"
+            )),
+            ["c/1", "e/1"]
+        );
+    });
+}
+
+#[test]
+fn the_decided_negations_are_the_awaited_ones_over_certain_predicates() {
+    // The rules of `d` and `f` each negate `e` at body position 1, in a
+    // component before their heads, so both atoms are awaited and, `e` being
+    // certain, decided. The rule of `d` also negates `u` at position 2: it is
+    // awaited too, but `u` is not certain, so it is not decided. The choice
+    // and the rule of `e` negate nothing.
+    let certainty = certainty(
+        "c(1). {u(1)}. e(1) :- c(1). d(1) :- c(1), not e(1), not u(1). \
+         f(1) :- c(1), not not e(1).",
+    );
+    let mut decided: Vec<Vec<usize>> = (0..4)
+        .map(|rule| certainty.decided(rule).collect())
+        .collect();
+    decided.sort();
+    assert_eq!(decided, [vec![], vec![], vec![1], vec![1]]);
 }
 
 #[test]

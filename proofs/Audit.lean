@@ -708,6 +708,17 @@ import Zetesis
 #print axioms Zetesis.DagSharing.exact_choice_graph_sharing
 #print axioms Zetesis.DagSharing.findNode_stable_under_extension
 #print axioms Zetesis.DagSharing.intern_stable_under_extension
+#print axioms Zetesis.DecidedNegation.without_sub
+#print axioms Zetesis.DecidedNegation.reduct_holds
+#print axioms Zetesis.DecidedNegation.headless_reduct
+#print axioms Zetesis.DecidedNegation.absent_false
+#print axioms Zetesis.DecidedNegation.emptied_satisfies
+#print axioms Zetesis.DecidedNegation.emptied_reduct
+#print axioms Zetesis.DecidedNegation.emptied_headless
+#print axioms Zetesis.DecidedNegation.emptiedTheory_models
+#print axioms Zetesis.DecidedNegation.emptiedTheory_reduct
+#print axioms Zetesis.DecidedNegation.emptiedTheory_headless
+#print axioms Zetesis.DecidedNegation.absent_stable
 #print axioms Zetesis.DeltaJoins.first_true
 #print axioms Zetesis.DeltaJoins.partition_complete
 #print axioms Zetesis.DeltaJoins.partition_disjoint

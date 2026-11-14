@@ -3541,6 +3541,61 @@
       "name": "Zetesis.DagSharing.intern_stable_under_extension"
     },
     {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 55,
+      "name": "Zetesis.DecidedNegation.without_sub"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 61,
+      "name": "Zetesis.DecidedNegation.reduct_holds"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 79,
+      "name": "Zetesis.DecidedNegation.headless_reduct"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 106,
+      "name": "Zetesis.DecidedNegation.absent_false"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 132,
+      "name": "Zetesis.DecidedNegation.emptied_satisfies"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 149,
+      "name": "Zetesis.DecidedNegation.emptied_reduct"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 186,
+      "name": "Zetesis.DecidedNegation.emptied_headless"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 209,
+      "name": "Zetesis.DecidedNegation.emptiedTheory_models"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 218,
+      "name": "Zetesis.DecidedNegation.emptiedTheory_reduct"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 228,
+      "name": "Zetesis.DecidedNegation.emptiedTheory_headless"
+    },
+    {
+      "file": "Zetesis/DecidedNegation.lean",
+      "line": 246,
+      "name": "Zetesis.DecidedNegation.absent_stable"
+    },
+    {
       "file": "Zetesis/DeltaJoins.lean",
       "line": 33,
       "name": "Zetesis.DeltaJoins.first_true"
@@ -11619,6 +11674,7 @@
     "Zetesis/CountermodelReplay.lean",
     "Zetesis/CountermodelReuse.lean",
     "Zetesis/DagSharing.lean",
+    "Zetesis/DecidedNegation.lean",
     "Zetesis/DeltaJoins.lean",
     "Zetesis/DeltaRounds.lean",
     "Zetesis/DependencySchedule.lean",
@@ -11785,8 +11841,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "7b52f16e8ffb7580ad8b6cb436f4924f6917409677c448120e210bf1b30d8944",
-    "Zetesis.lean": "1713f09ed28b6885e8eb20ecbaf2463a35f956f529366118d6021bc366df5b82",
+    "Audit.lean": "62942d99665d3fa6e010c113f39c896a2611197a74b2c59bdb79263dd1e73b22",
+    "Zetesis.lean": "b412fcfb8100cb20a69fe3a351993c0297abed3f66843098d9cf983ad721334f",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -11844,6 +11900,7 @@
     "Zetesis/CountermodelReplay.lean": "338d3e56473c43fa775c40afb16230be70409aaf49a19aa9627ec491ad5a6e10",
     "Zetesis/CountermodelReuse.lean": "f65f5f1dca7e85c40088798c920f572e9a5b9d8e704d1b5814bbad70978f420a",
     "Zetesis/DagSharing.lean": "3ab6ee2ed129b98c326e85ef46a3828449d5f82c076fa6b6d4159baef9703e11",
+    "Zetesis/DecidedNegation.lean": "eede45901905f59dc94a1ba0375e4fda50374704bcf12b78ed9c6a3df0626e61",
     "Zetesis/DeltaJoins.lean": "fc76708d9b7d8eb3c8c1222496329824bb25ea76428c61afbf4864ce144b3f9c",
     "Zetesis/DeltaRounds.lean": "55c43f1f5c546648dff7e0c073fd6097edc38af37f8319e3bfb423f12e8e86c5",
     "Zetesis/DependencySchedule.lean": "c60bd62d45d5e0af661b0b850c92c0e4495346a8a153587cd22509cd53279c46",

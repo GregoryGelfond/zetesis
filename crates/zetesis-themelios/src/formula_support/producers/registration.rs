@@ -52,7 +52,8 @@ pub(in crate::formula_support) struct Registration<'source> {
     inputs: Vec<usize>,
     reads: Vec<Occurrence>,
     /// The component schedule, when some rich producer can wait for its
-    /// reads or for the elements its assignments propose from.
+    /// reads or for the elements its assignments propose from, or some
+    /// certified producer for the atoms it negates.
     schedule: Option<Box<components::Schedule<'source>>>,
     bytes: usize,
 }
@@ -157,8 +158,8 @@ impl<'source> Registration<'source> {
         })
     }
 
-    /// Schedule by dependency component every rich producer whose reads all
-    /// precede its heads. Its vectors are admitted beside the registration's
+    /// Schedule by dependency component every producer that can wait for
+    /// components it reads. Its vectors are admitted beside the registration's
     /// own bytes and `external`, and counted with them.
     pub(in crate::formula_support) fn schedule(
         &mut self,
@@ -176,7 +177,7 @@ impl<'source> Registration<'source> {
             &mut memory,
             (limits, counters, location),
         )?;
-        // Without a deferred producer every vector was scratch and is gone.
+        // Without a waiting producer every vector was scratch and is gone.
         if let Some(schedule) = schedule {
             memory.add(size_of::<components::Schedule<'_>>())?;
             self.schedule = Some(Box::new(schedule));
@@ -225,8 +226,11 @@ impl<'source> Registration<'source> {
     /// one of its read predicates gained rows in `support`; a visit that ends
     /// at that test is recorded as unchanged. A deferred producer is never
     /// traversed here, and a gated one only after the schedule traversed it,
-    /// and then by the same test. The owner check is a pointer comparison,
-    /// covered by the visit's own charge.
+    /// and then by the same test. A held-back certified producer takes no
+    /// variant before the schedule traversed it and its delta variants
+    /// after: that traversal read every row of its round's snapshot, so the
+    /// rows published since are the new ones. The owner check is a pointer
+    /// comparison, covered by the visit's own charge.
     pub(in crate::formula_support) fn variants<'a, 'rows>(
         &'a self,
         index: usize,
@@ -244,12 +248,31 @@ impl<'source> Registration<'source> {
             return Err(invalid(Failure::Owner, rule.location));
         }
         match producer {
-            Producer::Certified(inputs) => Ok(delta::prepared_variants(
-                rule,
-                support,
-                &self.inputs[inputs.clone()],
-                first,
-            )),
+            Producer::Certified(inputs) => {
+                let held = self
+                    .schedule
+                    .as_ref()
+                    .and_then(|schedule| schedule.state(index));
+                match held {
+                    Some(components::State::Waiting | components::State::Ready) => {
+                        counters.record(Event::SupportDeferredVisit);
+                        Ok(delta::traversal(rule, support, false))
+                    }
+                    // The schedule's traversal stood for the first round's.
+                    Some(components::State::Traversed) => Ok(delta::prepared_variants(
+                        rule,
+                        support,
+                        &self.inputs[inputs.clone()],
+                        false,
+                    )),
+                    None => Ok(delta::prepared_variants(
+                        rule,
+                        support,
+                        &self.inputs[inputs.clone()],
+                        first,
+                    )),
+                }
+            }
             Producer::Rich(_)
                 if let Some(state) = self.schedule.as_ref().and_then(|schedule| {
                     schedule
@@ -318,7 +341,8 @@ fn classify(
         match literal {
             LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::PatternAtom(_) => inputs += 1,
             // Join::new collects only positive inputs. Flat negative atoms
-            // neither generate bindings nor filter possible heads; any argument
+            // generate no bindings and are no join filters: a decided one is
+            // tested against each complete row after the join. Any argument
             // evaluation is a separate, retained scalar operation in the IR.
             LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
             | LiteralIr::Compare(..)

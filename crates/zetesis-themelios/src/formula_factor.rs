@@ -271,13 +271,8 @@ fn emit<'plan, 'source>(
             if components.arithmetic {
                 arithmetic::testing::record(arithmetic::testing::Point::Witness);
             }
-            let conjunction = builder.body_from_row(
-                &component.literals,
-                &row,
-                &mut matched,
-                support,
-                rule.location,
-            )?;
+            let conjunction =
+                builder.body_from_row((rule, &component.literals), &row, &mut matched, support)?;
             alternatives = builder.or(alternatives, conjunction, rule.location)?;
         }
         if alternatives == FALSUM {

@@ -145,11 +145,49 @@ fn observed(
 }
 
 #[test]
-fn negative_noninputs_preserve_positive_delta_work() {
+fn undecided_negative_atoms_preserve_positive_delta_work() {
+    // The negated atoms lie in the rule's own component, so no traversal
+    // reads them over a complete relation: they are no inputs and restrict
+    // no support.
+    let positive = SupportObservation::default();
+    let negative = SupportObservation::default();
+    let prefix = "p(0). p(1):-p(0).";
+    let full = observed(
+        &format!("{prefix}r(X,Y):-p(X),p(Y)."),
+        &FormulaLimits::default(),
+        &positive,
+    )
+    .unwrap();
+    let gated = observed(
+        &format!("{prefix}r(X,Y):-not r(Y,X),p(X),not not r(X,X),p(Y)."),
+        &FormulaLimits::default(),
+        &negative,
+    )
+    .unwrap();
+    assert_eq!(negative.outcome.get(), Some(GroundingOutcome::Completed));
+    let positive = positive.work.get().unwrap();
+    let negative = negative.work.get().unwrap();
+    assert!(positive.join_rows.unwrap() > 0);
+    assert_eq!(negative.support_rounds, positive.support_rounds);
+    assert_eq!(negative.support_atoms, positive.support_atoms);
+    assert_eq!(negative.join_probes, positive.join_probes);
+    assert_eq!(negative.join_rows, positive.join_rows);
+    assert_eq!(negative.binding_snapshots, positive.binding_snapshots);
+    assert_eq!(negative.support_deferred_visits, Some(0));
+    // The same possible support does not mean the original formulas agree.
+    assert_ne!(reference::exhaustive(&gated), reference::exhaustive(&full));
+}
+
+#[test]
+fn decided_negations_filter_the_rows_of_a_held_back_producer() {
+    // `blocked` and `picked` are facts in components before `r`, so the rule
+    // waits for them and is then traversed once over the complete `p`. It
+    // joins the rows the positive rule joins and derives a head from the one
+    // its negated atoms admit: X is not blocked and Y is picked.
     let positive = SupportObservation::default();
     let negative = SupportObservation::default();
     let prefix = "p(0). p(1):-p(0). blocked(1). picked(0).";
-    let full = observed(
+    observed(
         &format!("{prefix}r(X,Y):-p(X),p(Y)."),
         &FormulaLimits::default(),
         &positive,
@@ -164,14 +202,21 @@ fn negative_noninputs_preserve_positive_delta_work() {
     assert_eq!(negative.outcome.get(), Some(GroundingOutcome::Completed));
     let positive = positive.work.get().unwrap();
     let negative = negative.work.get().unwrap();
-    assert!(positive.join_rows.unwrap() > 0);
-    assert_eq!(negative.support_rounds, positive.support_rounds);
-    assert_eq!(negative.support_atoms, positive.support_atoms);
-    assert_eq!(negative.join_probes, positive.join_probes);
+    assert!(negative.support_deferred_visits.unwrap() > 0);
+    assert_eq!(negative.support_rich_traversals, Some(1));
     assert_eq!(negative.join_rows, positive.join_rows);
-    assert_eq!(negative.binding_snapshots, positive.binding_snapshots);
-    // The same possible support does not mean the original formulas agree.
-    assert_ne!(reference::exhaustive(&gated), reference::exhaustive(&full));
+    assert_eq!(positive.support_atoms, Some(8));
+    assert_eq!(negative.support_atoms, Some(5));
+    let written = observed(
+        &format!("{prefix}r(0,0)."),
+        &FormulaLimits::default(),
+        &SupportObservation::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        reference::exhaustive(&gated),
+        reference::exhaustive(&written)
+    );
 }
 
 #[test]

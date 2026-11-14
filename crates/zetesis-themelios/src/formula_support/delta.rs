@@ -5,8 +5,11 @@
 //! that occurrence uses new rows, and later occurrences use all current rows.
 //! Flat and structural positive occurrences use the same row partition.
 //! Scalar checks and generators remain with the complete existing matcher.
-//! Ordinary negative atoms are non-inputs: their truth remains in the emitted
-//! formula, while their already-bound arguments supply no support restriction.
+//! Ordinary negative atoms are non-inputs: they partition no rows. An
+//! undecided one leaves its truth to the emitted formula and restricts no
+//! support; a decided one (`certain`) is tested against each complete row
+//! after the join, and its producer takes these variants only once the
+//! component schedule has traversed it in full.
 //! A rich producer takes one full traversal when it is traversed at all, which
 //! its registration decides. This scheduling certificate is not a certificate
 //! of authored-body validation during final formula emission.

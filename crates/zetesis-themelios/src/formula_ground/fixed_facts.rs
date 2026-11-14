@@ -1,4 +1,4 @@
-//! Substitute explicit facts and certain atoms only at positive body occurrences.
+//! Substitute explicit facts and certain atoms at positive body occurrences.
 //!
 //! Complete source support has already admitted every fact identity. This pass
 //! records the facts before any dependent rule is emitted, independently of
@@ -11,7 +11,9 @@
 //! model I and every model J of its frozen reduct. Replacing a positive occurrence
 //! of p in F by true therefore preserves both evaluations, by induction through
 //! the enclosing formula. Candidates omitting a fact fail its retained root in
-//! both theories. Heads, negative occurrences and objective queries are unchanged.
+//! both theories. Heads and objective queries are unchanged. A default-negated
+//! occurrence in a rule's own body is decided by the same fixing
+//! (`decided_negation`); every other negative occurrence is unchanged.
 //!
 //! The supported atoms of a certain predicate (`formula_support::certain`) are
 //! fixed in the same way. A named body atom was read from the completed

@@ -48,11 +48,11 @@ fn interpretations(compiled: &Compiled) -> Vec<Interpretation> {
         .collect()
 }
 
+/// Sources that read a fact at a positive occurrence. A fact under default
+/// negation is decided, which `decided_negation` tests on its own sources.
 const CASES: &[&str] = &[
     "{p}. q :- d,p. d.",
     "{p}. q :- d,p,not r. r :- not p. d.",
-    "{p}. q :- not d,p. d.",
-    "{p}. q :- not not d,p. d.",
     "{p}. q|r :- d,p. d.",
     "{-p}. -q :- -d,-p. -d.",
     "{p(1);p(2)}. q(X) :- d(X),p(X). d(1;2).",
@@ -161,10 +161,6 @@ fn explicit_facts_alone_preserve_arbitrary_frozen_truth() {
 #[test]
 fn explicit_facts_alone_shrink_the_bodies_that_read_them() {
     for source in CASES {
-        if source.contains("not d") {
-            // A fact under negation is emitted as written.
-            continue;
-        }
         let actual = facts_alone(|| compile(source));
         let reference = without(|| compile(source));
         assert!(

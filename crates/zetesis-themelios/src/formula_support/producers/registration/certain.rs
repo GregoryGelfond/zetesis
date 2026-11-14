@@ -7,7 +7,9 @@
 //! assignment aggregate elements whose conditions hold certain atoms and
 //! decided literals only, in the rules whose every traversal reads those
 //! elements' relations complete: a deferred producer, a gated producer for
-//! the elements of its gate, and a constraint.
+//! the elements of its gate, and a constraint. A fourth lists the awaited
+//! default-negated atoms of certain predicates, which those traversals
+//! decide.
 //!
 //! A deferred producer may itself be definite through an exact assignment
 //! aggregate. The schedule traverses it once, after every predicate it reads
@@ -73,24 +75,30 @@ fn plain(
 }
 
 /// Whether `rule` has one ordinary head atom over positive atoms, literals
-/// its join decides and, when the component schedule traverses it once over
-/// complete relations (`deferred`), plain assignment aggregates, which are
-/// exact once the predicates they read prove certain. One unit per body
-/// literal, with an aggregate's own.
+/// its join decides, default-negated atoms every traversal reads over
+/// complete relations (`awaited`, by body position) and, when the component
+/// schedule traverses it once over complete relations (`deferred`), plain
+/// assignment aggregates. An awaited negated atom is decided, and a plain
+/// assignment exact, once the predicates they read prove certain. One unit
+/// per body literal, with an aggregate's own.
 fn definite(
     rule: &RuleIr,
     deferred: bool,
+    awaited: impl Fn(usize) -> bool,
     limits: &FormulaLimits,
     counters: &mut Counters,
 ) -> Result<bool, FormulaFailure> {
     if !matches!(rule.head, HeadIr::Normal(Some(_))) {
         return Ok(false);
     }
-    for literal in &rule.body {
+    for (occurrence, literal) in rule.body.iter().enumerate() {
         counters.work(limits, rule.location)?;
         let admitted = match literal {
             LiteralIr::Aggregate(aggregate) => {
                 deferred && plain(aggregate, limits, counters, rule.location)?
+            }
+            LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _) => {
+                awaited(occurrence)
             }
             other => positive(other).is_some() || decided(other),
         };
@@ -101,12 +109,13 @@ fn definite(
     Ok(true)
 }
 
-/// The positive atoms a definite rule reads: its body's, then those of each
-/// plain assignment's element conditions.
+/// The atoms a definite rule reads: its body's flat atoms of either sign,
+/// then the positive atoms of each plain assignment's element conditions.
 fn atoms_read(rule: &RuleIr) -> impl Iterator<Item = Pattern> + '_ {
     rule.body.iter().flat_map(|literal| {
         let (own, elements): (Option<Pattern>, &[AggregateElementIr]) = match literal {
             LiteralIr::Aggregate(aggregate) => (None, aggregate.elements.as_slice()),
+            LiteralIr::Atom(_, atom) => (Some(*atom), &[]),
             other => (positive(other), &[]),
         };
         own.into_iter().chain(
@@ -180,6 +189,8 @@ impl<'source> Registration<'source> {
         remove_readers(&mut classified, limits, counters, location)?;
         let elements =
             self.required_elements(&resolver, &classified.certain, &mut memory, counters)?;
+        let negations =
+            self.decided_negations(&resolver, &classified.certain, &mut memory, counters)?;
         let mut predicates = Vec::new();
         for (index, _) in classified
             .certain
@@ -202,13 +213,13 @@ impl<'source> Registration<'source> {
                 })?,
             });
         }
-        // The sort and deduplication of the two lists.
+        // The sort and deduplication of the three lists.
         counters.charge_work(
-            1 + predicates.len() as u128 + elements.len() as u128,
+            1 + predicates.len() as u128 + elements.len() as u128 + negations.len() as u128,
             limits,
             location,
         )?;
-        Ok(Certainty::new(predicates, elements))
+        Ok(Certainty::new(predicates, elements, negations))
     }
 
     /// Classify every rule and resolve what it derives and reads. A rule that
@@ -232,7 +243,13 @@ impl<'source> Registration<'source> {
         for (index, rule) in self.rules.iter().enumerate() {
             counters.work(limits, rule.location)?;
             let start = reads.len();
-            let definite = definite(rule, self.deferred(index), limits, counters)?;
+            let definite = definite(
+                rule,
+                self.deferred(index),
+                |occurrence| self.awaits(index, occurrence),
+                limits,
+                counters,
+            )?;
             let mut head = None;
             for pattern in components::rule_heads(rule) {
                 let found = resolver.node(pattern, counters, rule.location)?;
@@ -273,6 +290,53 @@ impl<'source> Registration<'source> {
         self.schedule
             .as_ref()
             .is_some_and(|schedule| schedule.state(index).is_some() && !schedule.resumes(index))
+    }
+
+    /// Whether every traversal of the producer at `index` reads the relation
+    /// of the default-negated atom at body position `occurrence` complete.
+    fn awaits(&self, index: usize, occurrence: usize) -> bool {
+        !crate::formula_support::certain::negation_left_out()
+            && self
+                .schedule
+                .as_ref()
+                .is_some_and(|schedule| schedule.awaits(index, occurrence))
+    }
+
+    /// The awaited default-negated atoms whose predicate is certain, as
+    /// `(rule, occurrence)` coordinates in the schedule's order: every
+    /// traversal of the rule's producer reads the atom's relation complete,
+    /// and a supported atom of that relation holds in every answer set, an
+    /// unsupported one in none. One unit per awaited atom, with its
+    /// resolution.
+    fn decided_negations(
+        &self,
+        resolver: &Resolver<'_, '_, '_>,
+        certain: &[bool],
+        memory: &mut Memory<'_>,
+        counters: &mut Counters,
+    ) -> Result<Vec<(usize, usize)>, FormulaFailure> {
+        let mut negations = Vec::new();
+        let Some(schedule) = &self.schedule else {
+            return Ok(negations);
+        };
+        if crate::formula_support::certain::negation_left_out() {
+            return Ok(negations);
+        }
+        for &(index, occurrence) in schedule.awaited() {
+            let rule = &self.rules[index];
+            counters.work(resolver.limits, rule.location)?;
+            let LiteralIr::Atom(_, pattern) = &rule.body[occurrence] else {
+                unreachable!("an awaited occurrence is a negated flat atom");
+            };
+            if resolver
+                .node(*pattern, counters, rule.location)?
+                .is_some_and(|read| certain[read])
+            {
+                memory.reserve(&mut negations, 1)?;
+                negations.push((index, occurrence));
+            }
+        }
+        Ok(negations)
     }
 
     /// Whether the producer at `index` is gated, and waits for the element at

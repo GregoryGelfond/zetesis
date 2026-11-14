@@ -3540,6 +3540,61 @@
     "line": 428
   },
   {
+    "name": "Zetesis.DecidedNegation.without_sub",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 55
+  },
+  {
+    "name": "Zetesis.DecidedNegation.reduct_holds",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.DecidedNegation.headless_reduct",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 79
+  },
+  {
+    "name": "Zetesis.DecidedNegation.absent_false",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 106
+  },
+  {
+    "name": "Zetesis.DecidedNegation.emptied_satisfies",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 132
+  },
+  {
+    "name": "Zetesis.DecidedNegation.emptied_reduct",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 149
+  },
+  {
+    "name": "Zetesis.DecidedNegation.emptied_headless",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 186
+  },
+  {
+    "name": "Zetesis.DecidedNegation.emptiedTheory_models",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 209
+  },
+  {
+    "name": "Zetesis.DecidedNegation.emptiedTheory_reduct",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 218
+  },
+  {
+    "name": "Zetesis.DecidedNegation.emptiedTheory_headless",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 228
+  },
+  {
+    "name": "Zetesis.DecidedNegation.absent_stable",
+    "file": "Zetesis/DecidedNegation.lean",
+    "line": 246
+  },
+  {
     "name": "Zetesis.DeltaJoins.first_true",
     "file": "Zetesis/DeltaJoins.lean",
     "line": 33

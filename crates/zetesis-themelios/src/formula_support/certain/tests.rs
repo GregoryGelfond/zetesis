@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use super::testing::{with_every_predicate_assumed, without_certainty};
+use super::testing::{with_every_predicate_assumed, without_certainty, without_decided_negation};
 use crate::formula::Compiled;
 use crate::formula_ground::ground;
 use crate::formula_support::testing;
@@ -173,8 +173,9 @@ const BODIES: &[&str] = &[
     "c(1;2). d(1;2). f(X) :- c(X), d(Y). {p}. q :- f(1), p.",
 ];
 
-/// Sources that read a certain atom under default negation only, where it is
-/// left as written.
+/// Sources that read a certain atom under default negation only. The
+/// negation is decided, so certainty names fewer atoms and the answer sets
+/// are compared.
 const NEGATED: &[&str] = &[
     "c. d :- c. {p}. q :- not d, p.",
     "c. d :- c. {p}. q :- not not d, p.",
@@ -190,7 +191,7 @@ const CONDITIONS: &[&str] = &[
 
 /// Every source whose atoms certainty keeps.
 fn kept() -> impl Iterator<Item = &'static &'static str> {
-    BODIES.iter().chain(NEGATED).chain(CONDITIONS)
+    BODIES.iter().chain(CONDITIONS)
 }
 
 /// Sources whose assignment aggregates read certain atoms. Certainty supports
@@ -296,13 +297,39 @@ fn a_certain_atom_in_a_condition_is_read_as_true() {
 }
 
 #[test]
-fn a_negated_certain_atom_is_emitted_as_written() {
+fn a_negated_certain_atom_is_decided() {
+    // `d` holds in every answer set. Under `not` the rule has no instance,
+    // so `q` is never named; under `not not` the literal leaves the body.
+    let [dropped, kept] = NEGATED else {
+        panic!("two negated sources");
+    };
+    let reference = without_certainty(|| compile(dropped));
+    assert!(names(&reference).contains(&"q".to_owned()));
+    assert!(!names(&compile(dropped)).contains(&"q".to_owned()));
+    let actual = compile(kept);
+    let reference = without_certainty(|| compile(kept));
+    assert_eq!(names(&actual), names(&reference));
+    assert!(actual.theory.nodes().len() < reference.theory.nodes().len());
+}
+
+#[test]
+fn negated_certain_atoms_preserve_the_answer_sets() {
+    for source in NEGATED {
+        let expected = answer_sets(&without_certainty(|| compile(source)));
+        assert!(!expected.is_empty(), "{source}");
+        assert_eq!(answer_sets(&compile(source)), expected, "{source}");
+    }
+}
+
+#[test]
+fn negated_certain_atoms_agree_with_every_round_traversal() {
+    // The reference holds no producer back, so it decides no negated atom
+    // while completing the support; the answer sets are the same.
+    use crate::formula_support::producers::testing::with_every_round_traversed;
     for source in NEGATED {
         let actual = compile(source);
-        let reference = without_certainty(|| compile(source));
-        assert_eq!(names(&actual), names(&reference), "{source}");
-        assert_eq!(actual.theory.nodes(), reference.theory.nodes(), "{source}");
-        assert_eq!(actual.theory.roots(), reference.theory.roots(), "{source}");
+        let reference = with_every_round_traversed(|| compile(source));
+        assert_eq!(answer_sets(&actual), answer_sets(&reference), "{source}");
     }
 }
 
@@ -431,6 +458,62 @@ fn a_count_whose_required_tuple_is_its_own_value_reaches_its_fixed_point() {
     let compiled = compile_within(source, 16).unwrap();
     assert_eq!(heads(&compiled, "p("), ["p(1)"]);
     assert_eq!(answer_sets(&compiled), sets(&["f(1)", "f(1) p(1)"]));
+}
+
+#[test]
+fn a_count_bounded_by_a_tuple_decided_through_negation_reaches_its_fixed_point() {
+    // No rule derives `h`, so `not h(X)` holds and `f` is certain: its tuple
+    // is required, as a fact's is.
+    let source = "g(3). f(X) :- g(X), not h(X). {p(N)} :- N = #count { V : p(V); V : f(V) }.";
+    let compiled = compile_within(source, 16).unwrap();
+    assert_eq!(heads(&compiled, "p("), ["p(1)", "p(2)", "p(3)"]);
+    assert_eq!(answer_sets(&compiled), sets(&["f(3) g(3)"]));
+    // Without the decision `f` is not certain and the count proposes 0.
+    assert!(out_of_rounds(&without_decided_negation(|| {
+        compile_within(source, 16)
+    })));
+}
+
+#[test]
+fn a_negated_fact_stops_a_recursive_count() {
+    // The count's rule waits for `stop`, which then holds in every answer
+    // set: no row of the rule derives a head, so the count proposes nothing.
+    let source = "stop. {p(N)} :- N = #count { V : p(V) }, not stop.";
+    let compiled = compile_within(source, 16).unwrap();
+    assert!(heads(&compiled, "p(").is_empty());
+    assert_eq!(answer_sets(&compiled), sets(&["stop"]));
+    assert!(out_of_rounds(&without_decided_negation(|| {
+        compile_within(source, 16)
+    })));
+}
+
+#[test]
+fn a_deferred_assignment_is_omitted_where_its_decided_negation_fails() {
+    // The count is 2. `not e(2)` fails where `e(2)` is a fact, so the rule
+    // supports no head; with `e(1)` it supports `n(2)`, which is certain.
+    assert!(
+        heads(
+            &compile("c(1..2). e(2). n(N) :- N = #count { X : c(X) }, not e(N)."),
+            "n("
+        )
+        .is_empty()
+    );
+    assert_eq!(
+        heads(
+            &compile("c(1..2). e(1). n(N) :- N = #count { X : c(X) }, not e(N)."),
+            "n("
+        ),
+        ["n(2)"]
+    );
+}
+
+#[test]
+fn a_possible_blocker_does_not_stop_a_recursive_count() {
+    // A chosen atom decides nothing: the count still proposes without end.
+    assert!(out_of_rounds(&compile_within(
+        "{stop}. {p(N)} :- N = #count { V : p(V) }, not stop.",
+        16
+    )));
 }
 
 #[test]

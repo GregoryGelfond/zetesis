@@ -831,8 +831,9 @@ required when one of its elements' conditions consists only of comparisons,
 intervals and `#true`/`#false`, with no atom of either sign; such a condition
 holds for every binding its element yields. A positive atom of a
 [certain predicate](../architecture/grounding.md#certain-predicates), one the
-program derives from its facts by rules without negation, choice or disjunction,
-holds in every answer set and may stand in such a condition too: in a
+program derives from its facts by rules without choice or disjunction that
+negate only what earlier dependency components have settled, holds in every
+answer set and may stand in such a condition too: in a
 constraint, in a rule whose predicates all precede its head in dependency
 order, and in any other rule for the elements support completion
 [holds it back](../architecture/grounding.md#completed-possible-support) for.
@@ -856,6 +857,16 @@ the same values, so the families of the rules that read them follow:
 `p(M) :- M = #min{1; 5}. r(X+1) :- p(X).` answers with `p(1)` and `r(2)`. So do
 those of everything else that reads the head, directly or through other rules:
 a constraint, a choice body, an aggregate element and a weak constraint.
+
+A [decided default negation](../architecture/grounding.md#certain-predicates)
+narrows what a head supports in the same way. In
+`blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` no answer
+set satisfies `not blocked`, so the rule of `h` supports nothing, the rule of
+`k` has no instance, and the program is admitted with its two facts. The
+instance the negation excludes is itself still validated as written: an
+overflow in the rule of `h` refuses, and a zero divisor there keeps its
+warning. A negation over a chosen atom decides nothing, so with `{blocked}.`
+in place of the fact the overflow in the rule of `k` is reached.
 
 The required tuples under-approximate those present in every interpretation. In
 `{p}. q(Y) :- N = #count{1 : p; 1 : not p}, Y = 1/(N-1).` the tuple `1` is
@@ -931,8 +942,9 @@ not, such as `(1..4)/2`, gives no bound, and
 
 A binder, interval check, tuple comparison, aggregate guard or comparison over
 a generated value does not provide the relational exclusion described above.
-Negative gates remain formulas, so in `d(0). p(1/X) :- d(X), not d(X).` the
-instance `X = 0` is reached, divides by zero and is omitted with a warning.
+Nor does a default negation, decided or not: in
+`d(0). p(1/X) :- d(X), not d(X).` the instance `X = 0` is validated, divides by
+zero and is omitted with a warning.
 Closed-term arithmetic is validated as written during source preparation,
 before any substitution exists: `p :- 1 = 2, 1/0 = 1.` is refused, and so are
 `p(1/0).` and `p(a..(1/0)).`, where clingo drops the statement with its
@@ -946,8 +958,8 @@ consequent or objective-field phase; defined false body selection likewise does
 not evaluate a head or consequent. Independent-error checking does not cross
 that boundary. Row-dependent head atom arguments are a later stage: `d(0;1).
 p((X+1)**31):-d(X),X=0.` evaluates the head only for `X=0`. The same
-distinction applies to local choice elements. Negative gates and aggregate
-truth remain formulas and do not prune that stage. Aggregate-head tuple
+distinction applies to local choice elements. A default negation, decided or
+not, and aggregate truth do not prune that stage. Aggregate-head tuple
 contribution checks retain their own scopes.
 The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/arithmetic_validation.rs)
 check defined complete families, incomplete joins, required failures and

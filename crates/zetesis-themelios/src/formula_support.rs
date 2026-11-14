@@ -79,7 +79,7 @@ pub(crate) use local_plans::{Certificate as LocalPlanCertificate, Ir};
 use crate::ProgramSite;
 use components::Pattern as AtomPattern;
 use relations::SupportAppend;
-use themelios_program::program::Relation;
+use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::EvalError;
 use zetesis_core::catalog::{Atoms, PredicateRef, TermRef};
 use zetesis_core::{PatternRef, TemplateTerm};
@@ -750,7 +750,7 @@ fn complete(
             // still feeds, so the earliest waiting producer was traversed.
             debug_assert!(
                 !producers.pending(),
-                "a deferred or gated producer was not traversed"
+                "a producer the schedule holds was not traversed"
             );
             return finish(
                 (catalog, producers, retained),
@@ -762,7 +762,7 @@ fn complete(
 }
 
 /// The round's next producer: the schedule's, then, once it is exhausted and
-/// the facts are in, each deferred or gated rich producer whose waited
+/// the facts are in, each producer the component schedule holds whose waited
 /// components reached their fixed point, flagged so its caller traverses it
 /// in full.
 fn next_producer<'source>(
@@ -818,7 +818,7 @@ fn produce<'source>(
         None => None,
     };
     derive_variants(
-        rule,
+        (index, rule),
         variants,
         (guards.as_ref(), totality),
         support,
@@ -890,8 +890,9 @@ pub(crate) struct HeadOutcome {
 }
 
 /// Visit one rule's ordered delta variants under the same admitted guards.
+/// `index` is the rule's position among the producers.
 fn derive_variants<'source>(
-    rule: &'source crate::formula_ir::RuleIr,
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     variants: &mut delta::Variants<'_, '_>,
     (guards, totality): (
         Option<&queries::Guards<'_, 'source>>,
@@ -929,7 +930,7 @@ fn derive_variants<'source>(
                 outer.select_static_total_body(rule, totality, limits, counters)?;
             }
             derive_rule(
-                rule,
+                (index, rule),
                 &mut outer,
                 support,
                 computation,
@@ -954,7 +955,7 @@ fn derive_variants<'source>(
             outer.select_static_total_body(rule, totality, limits, counters)?;
         }
         derive_rule(
-            rule,
+            (index, rule),
             &mut outer,
             support,
             computation,
@@ -976,8 +977,12 @@ fn derive_variants<'source>(
     Ok(())
 }
 
+/// Derive the heads of every complete row of `outer`, a join of the rule at
+/// position `index` among the producers. A row under which a decided
+/// default-negated atom fails derives nothing
+/// ([`Derivation::negations_hold`]).
 fn derive_rule<'source>(
-    rule: &'source crate::formula_ir::RuleIr,
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     outer: &mut Join<'_, 'source>,
     support: &Support<'source>,
     computation: &mut Computation<'_, '_>,
@@ -1003,7 +1008,13 @@ fn derive_rule<'source>(
         HeadIr::Normal(head) => *head,
         _ => None,
     };
+    let certainty = support.certainty();
     while let Some(binding) = derivation.next(outer, projected, rule.location)? {
+        if let Some(certainty) = certainty
+            && !derivation.negations_hold(rule, certainty.decided(index), &binding)?
+        {
+            continue;
+        }
         match &rule.head {
             HeadIr::Normal(Some(head)) => {
                 derivation.normal_head(*head, &binding, rule.location)?;
@@ -1049,6 +1060,38 @@ fn derive_rule<'source>(
     Ok(())
 }
 
+/// Whether every default-negated atom of `rule` at the body positions
+/// `decided` has the value its literal requires under `binding`: `not a`
+/// requires `a` outside the support `computation` reads, `not not a` inside.
+/// The positions are those [`certain::Certainty::decided`] lists for the
+/// rule, so each atom's predicate is certain and its relation complete: the
+/// atom holds in every answer set when it is supported and in none otherwise.
+/// Support completion and source activity both ask here, so they omit the
+/// same rows. One unit per atom tested, with the pattern's read and the
+/// support lookup.
+pub(crate) fn decided_negations_hold(
+    rule: &crate::formula_ir::RuleIr,
+    decided: impl Iterator<Item = usize>,
+    binding: &Binding<'_>,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    for occurrence in decided {
+        let LiteralIr::Atom(negation, pattern) = &rule.body[occurrence] else {
+            unreachable!("a decided occurrence is a default-negated flat atom");
+        };
+        counters.work(limits, rule.location)?;
+        let pattern = computation.static_pattern(*pattern, limits, counters, rule.location)?;
+        let supported =
+            computation.contains_pattern(pattern, binding, limits, counters, rule.location)?;
+        if supported != (*negation == DefaultNegation::NotNot) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// A support round publishes newly derived heads after complete checked binding.
 /// Existing support and the current delta share one borrowed atom identity.
 struct Derivation<'a, 'source, 'round> {
@@ -1084,6 +1127,30 @@ impl Derivation<'_, '_, '_> {
                     .expect("prepared normal head")
                     .derive(binding, self.computation, self.limits, counters, location)
             })
+    }
+
+    /// Whether every default-negated atom of `rule` at the body positions
+    /// `decided` has the value its literal requires under `binding`. Each
+    /// such atom's predicate is certain and its relation complete whenever
+    /// this rule is traversed (`certain::Certainty::decided`), so the atom
+    /// holds in every answer set when it is supported and in none otherwise:
+    /// `not a` requires it unsupported, `not not a` supported. A row that
+    /// fails derives no head, as no answer set satisfies its body. One unit
+    /// per atom tested, with the pattern's read and the support lookup.
+    fn negations_hold(
+        &mut self,
+        rule: &crate::formula_ir::RuleIr,
+        decided: impl Iterator<Item = usize>,
+        binding: &Binding<'_>,
+    ) -> Result<bool, FormulaFailure> {
+        decided_negations_hold(
+            rule,
+            decided,
+            binding,
+            self.computation,
+            self.limits,
+            self.counters,
+        )
     }
 
     /// Select a complete support binding before the consumer borrows its frame.

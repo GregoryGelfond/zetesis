@@ -69,6 +69,43 @@ Notable changes by release. Versions follow Semantic Versioning.
   - Before a theory is published, emission checks that every atom it read as
     true is derived by unconditional ordinary roots, and refuses with the
     source-activity failure otherwise.
+- Grounding decides a default negation over what the program has settled. A
+  default negation at the top level of a rule's body, over a flat atom of a
+  certain predicate in an earlier dependency component, is read while
+  grounding: it is false where the atom is supported and true otherwise. A
+  rule with a head waits until the components of the atoms it negates are
+  complete, a row under which such a negation is false derives no head, and a
+  rule whose other literals are definite keeps its head predicate certain. The
+  certain predicates are therefore the stratified part of a program, no longer
+  only the part without negation. When the theory is emitted, the body of a
+  rule with a head also reads `not a` as true for an atom `a` outside the
+  completed support, which no rule can derive
+  (`DecidedNegation.absent_stable`), and drops the instance where `a` is a
+  fact or a supported atom of a certain predicate; a constraint's body drops
+  its instance in the second case only. A program whose rules negate only
+  settled predicates is emitted as its facts and the roots that derive them.
+  No admitted program's answer sets change. See
+  [certain predicates](docs/book/architecture/grounding.md#certain-predicates).
+  Observable effects other than time:
+  - **Programs that were refused are admitted.** Arithmetic downstream of a
+    rule that a decided negation leaves without instances is not reached:
+    `blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` was
+    refused for the overflow in the rule of `k` and now answers with its two
+    facts, as clingo does. A recursion that a decided negation stops ends:
+    `stop. p(0). p(X+1) :- p(X), not stop.` was refused for want of support
+    rounds and now answers `{stop, p(0)}`, and
+    `stop. {p(N)} :- N = #count{V : p(V)}, not stop.` answers `{stop}`. The
+    instance a decided negation excludes is itself still validated as
+    written: an overflow in it refuses and a zero divisor in it warns.
+  - A warning that only an instance downstream of such a rule raised is no
+    longer given.
+  - The atoms and nodes a theory reports change: an atom that only decided
+    negations read is no atom of the theory.
+  - Support completion's visits change. A rule waiting for the atoms it
+    negates is counted in `support_deferred_visits` until the round of its
+    first traversal, and that traversal in `support_rich_traversals`.
+    Reported grounding work changes by the analysis and by one support lookup
+    for each decided negation of each complete row.
 - An instance that divides by zero is always omitted, with a warning. A
   rule, constraint, choice element, aggregate element or objective element
   whose every instance divides by zero was refused as an entirely undefined

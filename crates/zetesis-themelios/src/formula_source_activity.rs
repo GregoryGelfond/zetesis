@@ -401,11 +401,11 @@ impl SourceEligibility {
             for item in prepared.items().iter() {
                 context.work()?;
                 match item {
-                    Item::Rule(_, rule) => {
+                    Item::Rule(index, rule) => {
                         if !context.produces(rule, predicate)? {
                             continue;
                         }
-                        self.rule(rule, predicate, support, temporary, context)?;
+                        self.rule((index, rule), predicate, support, temporary, context)?;
                     }
                     Item::Facts(block) => {
                         context.location = block.location();
@@ -431,9 +431,13 @@ impl SourceEligibility {
         Ok(())
     }
 
+    /// Stage the heads of the rule at position `index` among the rules. A
+    /// row under which a decided default-negated atom fails has an absent
+    /// body: support completion derived no head from it
+    /// (`formula_support::decided_negations_hold`), so none is staged here.
     fn rule<'source>(
         &mut self,
-        rule: &'source RuleIr,
+        (index, rule): (usize, &'source RuleIr),
         predicate: &Signature,
         support: &Support<'source>,
         temporary: usize,
@@ -471,12 +475,25 @@ impl SourceEligibility {
                 rule.location,
             )?
         } {
-            let body = self.producer_activity(
+            let mut body = self.producer_activity(
                 &rule.body,
                 &rule.body_binding(&binding),
                 &mut bodies,
                 rule.location,
             )?;
+            if let Some(certainty) = support.certainty() {
+                let context = bodies.context(rule.location);
+                if !formula_support::decided_negations_hold(
+                    rule,
+                    certainty.decided(index),
+                    &binding,
+                    context.computation,
+                    context.limits,
+                    context.counters,
+                )? {
+                    body = Activity::Absent;
+                }
+            }
             match &rule.head {
                 HeadIr::Normal(Some(head)) => {
                     self.retain(

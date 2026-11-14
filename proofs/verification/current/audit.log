@@ -724,6 +724,17 @@
 'Zetesis.DagSharing.exact_choice_graph_sharing' depends on axioms: [propext]
 'Zetesis.DagSharing.findNode_stable_under_extension' depends on axioms: [propext, Quot.sound]
 'Zetesis.DagSharing.intern_stable_under_extension' depends on axioms: [propext, Quot.sound]
+'Zetesis.DecidedNegation.without_sub' does not depend on any axioms
+'Zetesis.DecidedNegation.reduct_holds' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DecidedNegation.headless_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DecidedNegation.absent_false' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DecidedNegation.emptied_satisfies' depends on axioms: [propext]
+'Zetesis.DecidedNegation.emptied_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DecidedNegation.emptied_headless' does not depend on any axioms
+'Zetesis.DecidedNegation.emptiedTheory_models' depends on axioms: [propext]
+'Zetesis.DecidedNegation.emptiedTheory_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DecidedNegation.emptiedTheory_headless' depends on axioms: [propext]
+'Zetesis.DecidedNegation.absent_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DeltaJoins.first_true' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DeltaJoins.partition_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DeltaJoins.partition_disjoint' depends on axioms: [propext, Quot.sound]

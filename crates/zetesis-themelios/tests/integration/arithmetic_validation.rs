@@ -1129,31 +1129,78 @@ fn chains_with_an_undefined_link_match_clingo() {
 }
 
 #[test]
-fn fact_blocked_producers_preserve_downstream_overflow() {
-    // Support is a source-admission carrier. The locally total h producer
-    // remains in it even though no answer set can contain its head.
-    refused(
-        "blocked. d(2147483647). h(X):-d(X),not blocked. k(X+1):-h(X).",
-        &EvaluationError::Overflow,
+fn a_fact_blocked_producer_reaches_no_downstream_overflow() {
+    // `blocked` is a fact, so no answer set satisfies `not blocked`: the
+    // rule of `h` supports no head, and the rule that reads `h` has no
+    // instance to overflow in.
+    assert_eq!(
+        silent("blocked. d(2147483647). h(X):-d(X),not blocked. k(X+1):-h(X)."),
+        family(&["blocked", "d(2147483647)"])
     );
 }
 
 #[test]
-fn a_fact_blocked_producer_does_not_hide_a_zero_divisor() {
-    // As with the overflow above, h(0) stays in the support that admission
-    // reads, so the division downstream is reached: its instance is omitted
-    // and its rule keeps the warning.
+fn a_fact_blocked_producer_reaches_no_downstream_zero_divisor() {
     assert_eq!(
-        omitting(
-            "blocked. d(0). h(X):-d(X),not blocked. k(1/X):-h(X).",
-            "k(1/X):-h(X)."
-        ),
+        silent("blocked. d(0). h(X):-d(X),not blocked. k(1/X):-h(X)."),
         family(&["blocked", "d(0)"])
     );
 }
 
 #[test]
-fn removing_a_blocked_producer_changes_overflow_admission() {
+fn a_doubly_negated_absent_atom_blocks_its_producer() {
+    // No rule derives `blocked`, so no answer set satisfies
+    // `not not blocked`.
+    assert_eq!(
+        silent("d(2147483647). h(X):-d(X),not not blocked. k(X+1):-h(X)."),
+        family(&["d(2147483647)"])
+    );
+}
+
+#[test]
+fn a_blocked_instance_keeps_its_own_overflow() {
+    // The instance a negated fact excludes is still validated as written,
+    // in its head and in its body.
+    for source in [
+        "blocked. d(2147483647). h(X+1):-d(X),not blocked.",
+        "blocked. d(2147483647). h(X):-d(X),not blocked,X+1>0.",
+    ] {
+        refused(source, &EvaluationError::Overflow);
+    }
+}
+
+#[test]
+fn a_blocked_instance_keeps_its_own_zero_divisor_warning() {
+    for rule in ["h(1/X):-d(X),not blocked.", "h(X):-d(X),not blocked,1/X>0."] {
+        assert_eq!(
+            omitting(&format!("blocked. d(0). {rule}"), rule),
+            family(&["blocked", "d(0)"]),
+            "{rule}"
+        );
+    }
+}
+
+#[test]
+fn a_possibly_blocked_producer_preserves_downstream_overflow() {
+    // A chosen atom decides nothing: `h` stays possible, and the overflow
+    // downstream of it is reached.
+    refused(
+        "{blocked}. d(2147483647). h(X):-d(X),not blocked. k(X+1):-h(X).",
+        &EvaluationError::Overflow,
+    );
+}
+
+#[test]
+fn an_unblocked_producer_preserves_downstream_overflow() {
+    // No rule derives `blocked`, so `not blocked` holds and `h` is derived.
+    refused(
+        "d(2147483647). h(X):-d(X),not blocked. k(X+1):-h(X).",
+        &EvaluationError::Overflow,
+    );
+}
+
+#[test]
+fn a_reader_of_an_underived_predicate_has_no_instance() {
     assert_eq!(
         admitted("blocked. d(2147483647). k(X+1):-h(X)."),
         family(&["blocked", "d(2147483647)"]),
