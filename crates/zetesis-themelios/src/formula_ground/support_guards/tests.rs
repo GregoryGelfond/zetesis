@@ -444,82 +444,120 @@ fn fixture(
 ) -> Attempt {
     let observer = Peak::default();
     let profile = Profile::new(Some(&observer));
-    let defaults = crate::FormulaLimits::default();
-    let (result, work) =
-        testing::Fixture::default().with(location(0), |_, computation, counters| {
-            *counters = Counters::resume(std::mem::take(&mut counters.accounting), profile.work())
-                .with_cancellation(cancellation);
-            let mut budget = Budget::new(ExpansionLimits::default(), 0);
-            let mut builder = Builder::empty(
-                computation,
-                &defaults,
-                &mut budget,
-                counters,
-                Purpose::Theory,
-                None,
-                location(0),
+    let (result, work) = built(limits, shape, (&profile, cancellation), |builder, atoms| {
+        let workspace = builder.counters.workspace_bytes();
+        let result = profile.phase(GroundingPhase::SupportGuards, None, || {
+            builder.support_guards()
+        });
+        assert_eq!(
+            builder.counters.workspace_bytes(),
+            workspace,
+            "plan scratch must release its sole leases on every outcome"
+        );
+        let work = builder.counters.accounting.work;
+        let result = result.map(|()| {
+            let theory = Theory::new(
+                atoms.len(),
+                std::mem::take(&mut builder.nodes).into_parts(),
+                std::mem::take(&mut builder.roots),
+                limits.theory,
             )
             .unwrap();
-            builder.initialize(location(0)).unwrap();
-            let mut atoms = Vec::new();
-            for (index, name) in shape.names().iter().enumerate() {
-                let atom = zetesis_core::Atom::new(
-                    zetesis_core::Predicate::new(*name, 0).unwrap(),
-                    vec![],
-                )
-                .unwrap();
-                atoms.push(
-                    builder
-                        .atom_ref((&atom).into(), location(u32::try_from(index).unwrap()))
-                        .unwrap(),
-                );
-            }
-            let row = shape.row(&atoms);
-            let body = if row.is_empty() {
-                builder.group(&row, true, location(0)).unwrap()
-            } else {
-                builder.node(Node::And(&row), location(0)).unwrap()
-            };
-            for (index, &head) in atoms.iter().enumerate().skip(shape.head_start()) {
-                let rule = RuleIr {
-                    head: HeadIr::Normal(None),
-                    body: vec![],
-                    body_variables: 0,
-                    bindings: None,
-                    variables: 0,
-                    location: location(10),
-                    origins: vec![location(10), location(20 + u32::try_from(index).unwrap())],
-                };
-                builder.producer(head, body, &rule).unwrap();
-            }
-            builder.limits = limits;
-            let workspace = builder.counters.workspace_bytes();
-            let result = profile.phase(GroundingPhase::SupportGuards, None, || {
-                builder.support_guards()
-            });
-            assert_eq!(
-                builder.counters.workspace_bytes(),
-                workspace,
-                "plan scratch must release its sole leases on every outcome"
-            );
-            let work = builder.counters.accounting.work;
-            let result = result.map(|()| {
-                let theory = Theory::new(
-                    atoms.len(),
-                    std::mem::take(&mut builder.nodes).into_parts(),
-                    std::mem::take(&mut builder.roots),
-                    limits.theory,
-                )
-                .unwrap();
-                (theory, std::mem::take(&mut builder.origins))
-            });
-            (result, work)
+            (theory, std::mem::take(&mut builder.origins))
         });
+        (result, work)
+    });
     Attempt {
         result,
         work,
         peak: observer.0.get(),
     }
+}
+
+/// Run `action` on a builder holding `shape`'s atoms, each head with one
+/// producer over the shape's body, under `limits`, with the atoms' nodes.
+fn built<T>(
+    limits: &crate::FormulaLimits,
+    shape: Shape,
+    (profile, cancellation): (&Profile<'_>, Option<&Cancellation>),
+    action: impl FnOnce(&mut Builder<'_, '_, '_>, &[usize]) -> T,
+) -> T {
+    let defaults = crate::FormulaLimits::default();
+    testing::Fixture::default().with(location(0), |_, computation, counters| {
+        *counters = Counters::resume(std::mem::take(&mut counters.accounting), profile.work())
+            .with_cancellation(cancellation);
+        let mut budget = Budget::new(ExpansionLimits::default(), 0);
+        let mut builder = Builder::empty(
+            computation,
+            &defaults,
+            &mut budget,
+            counters,
+            Purpose::Theory,
+            None,
+            location(0),
+        )
+        .unwrap();
+        builder.initialize(location(0)).unwrap();
+        let mut atoms = Vec::new();
+        for (index, name) in shape.names().iter().enumerate() {
+            let atom =
+                zetesis_core::Atom::new(zetesis_core::Predicate::new(*name, 0).unwrap(), vec![])
+                    .unwrap();
+            atoms.push(
+                builder
+                    .atom_ref((&atom).into(), location(u32::try_from(index).unwrap()))
+                    .unwrap(),
+            );
+        }
+        let row = shape.row(&atoms);
+        let body = if row.is_empty() {
+            builder.group(&row, true, location(0)).unwrap()
+        } else {
+            builder.node(Node::And(&row), location(0)).unwrap()
+        };
+        for (index, &head) in atoms.iter().enumerate().skip(shape.head_start()) {
+            let rule = RuleIr {
+                head: HeadIr::Normal(None),
+                body: vec![],
+                body_variables: 0,
+                bindings: None,
+                variables: 0,
+                location: location(10),
+                origins: vec![location(10), location(20 + u32::try_from(index).unwrap())],
+            };
+            builder.producer(head, body, &rule).unwrap();
+        }
+        builder.limits = limits;
+        action(&mut builder, &atoms)
+    })
+}
+
+/// The work `support_guard` charges for the atom at `index` of `shape`, and
+/// whether it published a guard for it.
+fn guard_charge(shape: Shape, index: usize) -> (u64, bool) {
+    let defaults = crate::FormulaLimits::default();
+    let profile = Profile::new(None);
+    built(&defaults, shape, (&profile, None), |builder, _| {
+        let metadata = std::mem::take(&mut builder.metadata);
+        let (work, roots) = (builder.counters.accounting.work, builder.roots.len());
+        builder.support_guard(&metadata, index).unwrap();
+        (
+            builder.counters.accounting.work - work,
+            builder.roots.len() > roots,
+        )
+    })
+}
+
+#[test]
+fn the_producer_that_ends_the_scan_is_charged() {
+    // Each head of the empty shape has one producer, whose body is true. The
+    // scan reads it, finds it unconditional and publishes nothing: that read
+    // is the one unit charged.
+    let head = Shape::Empty.head_start();
+    assert_eq!(
+        scoped(false, None, || guard_charge(Shape::Empty, head)).0,
+        (1, false)
+    );
 }
 
 #[test]
