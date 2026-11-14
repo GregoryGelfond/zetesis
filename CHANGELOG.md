@@ -14,6 +14,28 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Writing an answer reads only the atoms it shows. A model view found an
+  answer's shown atoms by testing every atom of the model against the `#show`
+  selection, and a human record is written twice, once to measure it and once
+  to fill it. A model keeps its atoms in order of signed predicate and a
+  selection keeps its signatures in the same order, so the atoms of each shown
+  signature are one run of the model, which two binary searches find. A view
+  reads them that way when the searches compare fewer atoms than the model
+  holds, and tests every atom otherwise. The atoms shown and their order do
+  not change. An enumeration of 24,412 answer sets that each show 14 of 1,330
+  atoms retires 54.7 G instructions where it retired 64.2 G; a program that
+  shows most of what it holds, or has few answers, gains nothing.
+- The frozen-positive certificate declines at once where it declined for the
+  candidate before. It decides a candidate by the least consequences of its
+  frozen reduct and needs every live rule to have one live head. A candidate
+  with two true head atoms in one rule declined it only after every node of
+  the theory had been classified, and the general check then decided; most
+  candidates of a disjunctive program are of that kind. An attempt now
+  remembers the rule at which it declined for two live heads, and the next
+  one tests that rule first. No verdict changes: a decline is the absence of
+  the certificate. The enumeration above retires 46.9 G instructions where
+  the first entry left 54.7 G, and the same instance with its facts given
+  directly 8.6 G where it retired 9.9 G.
 - A support round visits the rules it can affect. Where a program has no
   whole-program producer plan, which is every program with a choice, a
   negation, an aggregate or an objective, each round of support completion
