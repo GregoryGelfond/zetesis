@@ -367,7 +367,10 @@ impl<'source> Schedule<'source> {
                 continue;
             }
             let first = decided.partition_point(|&(listed, _)| listed < producer);
-            if decided.get(first).is_none_or(|&(listed, _)| listed != producer) {
+            if decided
+                .get(first)
+                .is_none_or(|&(listed, _)| listed != producer)
+            {
                 self.state[producer].set(State::Released);
             }
         }

@@ -19,6 +19,45 @@ fn reference(source: &str) -> Compiled {
     without_decided_negation(|| compile(source))
 }
 
+/// The atom lookups grounding `source` records.
+fn atom_lookups(source: &str) -> u64 {
+    use crate::grounding_observer::{GroundingOutcome, GroundingPhase, GroundingWork};
+    use crate::{GroundingObserver, ProgramSite};
+    #[derive(Default)]
+    struct Lookups(std::cell::Cell<u64>);
+    impl GroundingObserver for Lookups {
+        fn enter(&self) {}
+        fn exit(&self) {}
+        fn details_enabled(&self) -> bool {
+            true
+        }
+        fn phase_exit(
+            &self,
+            _: GroundingPhase,
+            _: Option<ProgramSite>,
+            _: GroundingOutcome,
+            work: GroundingWork,
+        ) {
+            self.0.set(self.0.get() + work.atom_lookups.unwrap());
+        }
+    }
+    let observer = Lookups::default();
+    ground(testing::prepare(source), Some(&observer), None).unwrap();
+    observer.0.get()
+}
+
+#[test]
+fn an_undecided_negated_atom_is_looked_up_once() {
+    // `q(1)` is supported and chosen, so its literal stays. The lookup that
+    // finds the atom supported also names it: grounding looks up as many
+    // atoms as it does with every negated atom kept as written.
+    let source = "d(1). {q(1)}. p(X) :- d(X), not q(X).";
+    assert_eq!(
+        atom_lookups(source),
+        without_decided_negation(|| atom_lookups(source))
+    );
+}
+
 /// Sources whose bodies negate an atom outside the support, a fact, an atom
 /// of a certain predicate and an atom that is supported and not fixed, under
 /// `not` and `not not`, in rules, constraints, choices and disjunctions.

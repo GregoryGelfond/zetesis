@@ -3,6 +3,7 @@
 //! nothing new.
 
 use std::cell::Cell;
+use std::fmt::Write as _;
 
 use super::{Producer, Registration, testing};
 use crate::formula::{Compiled, Preparation};
@@ -549,6 +550,22 @@ fn a_reader_of_a_held_back_producers_head_waits_for_it() {
             vec![zetesis_core::Value::Number(1)]
         ]
     );
+}
+
+#[test]
+fn a_chain_of_strata_is_traversed_in_one_round() {
+    // Each rule negates the head of the one before. A rule reads the atoms
+    // it negates over the snapshot and the round's pending atoms, so one
+    // test queues the whole chain in dependency order: the rounds that
+    // publish atoms do not grow with the chain's length.
+    let rounds = |length: usize| {
+        let mut source = String::from("d(1..2). p0(X) :- d(X), X < 2.");
+        for stratum in 1..=length {
+            write!(source, " p{stratum}(X) :- d(X), not p{}(X).", stratum - 1).unwrap();
+        }
+        ground(&source).1.len()
+    };
+    assert_eq!(rounds(2), rounds(8));
 }
 
 #[test]

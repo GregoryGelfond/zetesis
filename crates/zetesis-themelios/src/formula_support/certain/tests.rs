@@ -16,6 +16,27 @@ fn compile(source: &str) -> Compiled {
     ground(testing::prepare(source), None, None).unwrap()
 }
 
+#[test]
+fn the_retained_bytes_are_the_vectors_and_the_names() {
+    // One signature, one listed element and two decided atoms: each vector's
+    // capacity at its element size, and the name's bytes. The catalog admits
+    // this sum beside its own bytes at every admission.
+    let certainty = super::Certainty::new(
+        vec![super::Signature {
+            sign: Sign::Positive,
+            name: "abc".into(),
+            arity: 1,
+        }],
+        vec![(0, 0)],
+        vec![(1, 2), (3, 4)],
+    );
+    assert_eq!(
+        certainty.retained_bytes(),
+        size_of::<super::Signature>() + 3 + 3 * size_of::<(usize, usize)>()
+    );
+    assert_eq!(super::Certainty::all().retained_bytes(), 0);
+}
+
 /// `source` grounded with certainty and without it, in that order. Either way
 /// it must be admitted with one zero-divisor warning, for `statement`, and
 /// have exactly the answer sets `expected`. Certainty changes neither; it
@@ -310,6 +331,61 @@ fn a_negated_certain_atom_is_decided() {
     let reference = without_certainty(|| compile(kept));
     assert_eq!(names(&actual), names(&reference));
     assert!(actual.theory.nodes().len() < reference.theory.nodes().len());
+}
+
+/// `source` has one answer set, which holds `held` and none of `absent`, and
+/// grounding it with certainty keeps exactly that answer set.
+fn keeps_its_one_answer_set(source: &str, held: &str, absent: &[&str]) {
+    let expected = answer_sets(&without_certainty(|| compile(source)));
+    assert_eq!(expected.len(), 1, "{source}");
+    let answer = expected.first().expect("one answer set");
+    assert!(answer.contains(held), "{source}");
+    assert!(
+        absent.iter().all(|atom| !answer.contains(*atom)),
+        "{source}"
+    );
+    assert_eq!(answer_sets(&compile(source)), expected, "{source}");
+}
+
+#[test]
+fn a_negation_over_a_relation_still_growing_is_not_read() {
+    // `p` gains an atom a round along the path, and its rule reads `p`
+    // itself, so the component is not complete while it gains atoms, nor
+    // when a rule of it that waited has only been queued. A rule negating
+    // `p(3)` or `p(4)` reads it once `p` has stopped growing: a round
+    // earlier `not p(3)` would hold. In the third source the rule of `c`
+    // waits for the rule of `b`, which itself still waits for `p`.
+    for (source, held, absent) in [
+        (
+            "e(1,2). e(2,3). p(1). p(Y) :- p(X), e(X,Y). q :- not p(3). r :- q.",
+            "p(3)",
+            ["q", "r"],
+        ),
+        // The seed of `p` waits for `g`, which a rule derives a round after
+        // the facts: it is queued when everything else `p` reads is
+        // complete, and `p` has not begun to grow.
+        (
+            "f(1). g(1) :- f(1). e(1,2). e(2,3). p(1) :- not g(2). \
+             p(Y) :- p(X), e(X,Y). q :- not p(3). r :- q.",
+            "p(3)",
+            ["q", "r"],
+        ),
+        (
+            "e(1,2). e(2,3). p(1). p(Y) :- p(X), e(X,Y). b :- not p(4). c :- not b. d :- c.",
+            "b",
+            ["c", "d"],
+        ),
+    ] {
+        keeps_its_one_answer_set(source, held, &absent);
+    }
+}
+
+#[test]
+fn rules_queued_by_one_test_are_traversed_in_dependency_order() {
+    // The rules of `a` and of `b` become ready in one test. The rule of
+    // `b` negates `a`, so it is traversed after the rule of `a` has derived
+    // its head: before, `not a` would hold.
+    keeps_its_one_answer_set("f(1). a :- not f(2). b :- not a. c :- b.", "a", &["b", "c"]);
 }
 
 #[test]
