@@ -997,6 +997,9 @@ fn a_fatal_term_refuses_beside_an_interval_without_a_value() {
     for source in VALUELESS_INTERVALS {
         refused(source, &EvaluationError::Overflow);
     }
+    // The failing term reads a value a binder gave before the interval was
+    // found empty.
+    refused("p:-X=2147483647,X+1<(3..1).", &EvaluationError::Overflow);
 }
 
 #[test]
@@ -1021,6 +1024,36 @@ fn an_excluded_row_reaches_no_term_beside_an_empty_interval() {
     ] {
         assert_eq!(silent(source), family(&["d(0)"]), "{source}");
     }
+    // A join that divides visits an excluded row too, for its family's
+    // evidence, and finds the interval empty under it. The exclusion holds
+    // there as well; without it the overflow refuses.
+    for source in [
+        "d(0).p:-d(X),X!=0,X+2147483647+1<(3..1)/2.",
+        "d(0).p:-d(X),X+2147483647+1<(3..1)/2,X!=0.",
+        "d(0).p:-d(X),1=2,X+2147483647+1<(3..1)/2.",
+    ] {
+        assert_eq!(silent(source), family(&["d(0)"]), "{source}");
+    }
+    refused(
+        "d(0).p:-d(X),X+2147483647+1<(3..1)/2.",
+        &EvaluationError::Overflow,
+    );
+}
+
+#[test]
+fn a_consequent_with_an_interval_is_read_under_the_frames_that_hold() {
+    // The interval has values, so the consequent is read under the complete
+    // frames of its condition and nowhere else. No frame holds where Y > 5
+    // fails for every Y, and the overflow is not reached; one holds under
+    // Y > 1, and it refuses.
+    assert_eq!(
+        silent("d(0).p:-X+2147483647+1<(1..2):d(X),Y=1..2,Y>5."),
+        family(&["d(0)", "p"])
+    );
+    refused(
+        "d(0).p:-X+2147483647+1<(1..2):d(X),Y=1..2,Y>1.",
+        &EvaluationError::Overflow,
+    );
 }
 
 #[test]
