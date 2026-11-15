@@ -249,8 +249,16 @@ fn the_growth_of_the_table_list_is_weighed_with_the_table() {
     let preparation = usize::try_from(cost.preparation_bytes).unwrap();
     // The seventeen tables may take half of the room: twice the preparation,
     // with what the sixteen hold and the list of 32, beside the list's
-    // growth.
-    let held = workspace.held.get() + growth.next;
+    // growth. What the sixteen hold is what each retains beside its entry
+    // in the list.
+    let tables: usize = workspace
+        .indices
+        .borrow()
+        .iter()
+        .map(|table| table.statistics().retained_bytes - size_of::<Table<'_, '_>>())
+        .sum();
+    assert_eq!(workspace.held.get(), tables);
+    let held = tables + growth.next;
     let fitting = live + growth.kept() + 2 * preparation + held;
     for ceiling in [
         live + 2 * preparation + held,
