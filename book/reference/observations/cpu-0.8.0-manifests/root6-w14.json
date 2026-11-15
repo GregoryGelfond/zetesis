@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "root": "../../../../../examples",
+  "cases": [
+    {
+      "entry": "alternatives.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": null,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Satisfiability established by the private source-based reduct argument. Count intentionally unspecified. Fresh complete clingo qualification is mandatory."
+        ]
+      },
+      "files": [
+        {
+          "path": "alternatives.lp",
+          "sha256": "4f2b0139243c54ea73ca92fbcba4bc768f8194dea67d8822102f1009649f4b35",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "choices.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": null,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Satisfiability established by the private source-based reduct argument. Count intentionally unspecified. Fresh complete clingo qualification is mandatory."
+        ]
+      },
+      "files": [
+        {
+          "path": "choices.lp",
+          "sha256": "64edc2316a171ba088703d604435f194d2a64513d41394a71e5471d4f1ec1cf7",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "lazy-reachability.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": null,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Satisfiability established by the private source-based reduct argument. Count intentionally unspecified. Fresh complete clingo qualification is mandatory."
+        ]
+      },
+      "files": [
+        {
+          "path": "lazy-reachability.lp",
+          "sha256": "69170ea6d83d7cda0412dc6808137eb9e689fb643bbfef048dbf2a19a6141257",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "network-repair.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": null,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Satisfiability established by the private source-based reduct argument. Count intentionally unspecified. Fresh complete clingo qualification is mandatory."
+        ]
+      },
+      "files": [
+        {
+          "path": "network-repair.lp",
+          "sha256": "898e4d9044a241250faff4815262d93c56014d0a0c659a8c7804cf523f0fa738",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "reachability.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": null,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Satisfiability established by the private source-based reduct argument. Count intentionally unspecified. Fresh complete clingo qualification is mandatory."
+        ]
+      },
+      "files": [
+        {
+          "path": "reachability.lp",
+          "sha256": "edfd704b69a9c5f612a754868a15120ccf1b1c3c228b2516ef3245c2a847619d",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "unsatisfiable.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": null,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Satisfiability established by the private source-based reduct argument. Count intentionally unspecified. Fresh complete clingo qualification is mandatory."
+        ]
+      },
+      "files": [
+        {
+          "path": "unsatisfiable.lp",
+          "sha256": "65330626e030a68931e1ba00f58308737f869d1324c59a7701b952942f4c623e",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

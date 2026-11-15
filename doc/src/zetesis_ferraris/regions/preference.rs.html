@@ -1,107 +1,260 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-ferraris/src/regions/preference.rs`."><title>preference.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="zetesis_ferraris" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_ferraris/regions/</div>preference.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Split ordering over already-maintained unknown-parent counts.
-<a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>zetesis_algebra::{Failure, Quota};
-<a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use super</span>::{ChoiceHeads, Knowledge, Meter, PreferenceAttempt, Region, Width};
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>zetesis_algebra::Cancellation;
-<a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">impl</span>&lt;C: zetesis_algebra::Class&gt; Knowledge&lt;C&gt; {
-<a href=#9 id=9 data-nosnippet>9</a>    <span class="kw">fn </span>unknown_count(<span class="kw-2">&amp;</span><span class="self">self</span>, atom: usize) -&gt; usize {
-<a href=#10 id=10 data-nosnippet>10</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.width {
-<a href=#11 id=11 data-nosnippet>11</a>            Width::Compact16(known) =&gt; known.unknown.get(atom),
-<a href=#12 id=12 data-nosnippet>12</a>            Width::Compact32(known) =&gt; known.unknown.get(atom),
-<a href=#13 id=13 data-nosnippet>13</a>            Width::Native(known) =&gt; known.unknown.get(atom),
-<a href=#14 id=14 data-nosnippet>14</a>        }
-<a href=#15 id=15 data-nosnippet>15</a>    }
-<a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a>    <span class="doccomment">/// Select by original choice marks, this subject's unknown-parent count,
-<a href=#18 id=18 data-nosnippet>18</a>    /// then `secondary`'s count; remaining ties select the lowest atom. Both
-<a href=#19 id=19 data-nosnippet>19</a>    /// knowledge values must use the region's atom identities and be closed
-<a href=#20 id=20 data-nosnippet>20</a>    /// for it. This only orders an exhaustive split and changes neither value.
-<a href=#21 id=21 data-nosnippet>21</a>    ///
-<a href=#22 id=22 data-nosnippet>22</a>    /// The scan takes `O(A / 64 + E)` time for `A` atoms and `E` eligible atoms,
-<a href=#23 id=23 data-nosnippet>23</a>    /// with constant additional space. Eligible atoms are the open choice heads
-<a href=#24 id=24 data-nosnippet>24</a>    /// when any remain, otherwise all open atoms. Each primary count is charged
-<a href=#25 id=25 data-nosnippet>25</a>    /// once; a secondary count is read at most once, only when a primary tie
-<a href=#26 id=26 data-nosnippet>26</a>    /// requires it. An uncontested winner needs no secondary read. Packed mask
-<a href=#27 id=27 data-nosnippet>27</a>    /// traversal is not separately charged.
-<a href=#28 id=28 data-nosnippet>28</a>    /// Cancellation and quota reservations follow
-<a href=#29 id=29 data-nosnippet>29</a>    /// [`Self::preferred_atom_reserved`]; every failure retains its exact work
-<a href=#30 id=30 data-nosnippet>30</a>    /// prefix and returns no partial preference.
-<a href=#31 id=31 data-nosnippet>31</a>    ///
-<a href=#32 id=32 data-nosnippet>32</a>    /// # Errors
-<a href=#33 id=33 data-nosnippet>33</a>    /// Retains cancellation, a quota refusal or a zero-grant work refusal.
-<a href=#34 id=34 data-nosnippet>34</a>    ///
-<a href=#35 id=35 data-nosnippet>35</a>    /// # Panics
-<a href=#36 id=36 data-nosnippet>36</a>    /// Panics if an open atom is outside either knowledge's universe.
-<a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">pub fn </span>preferred_atom_with_secondary_reserved&lt;Q: Quota + <span class="question-mark">?</span>Sized&gt;(
-<a href=#38 id=38 data-nosnippet>38</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#39 id=39 data-nosnippet>39</a>        region: <span class="kw-2">&amp;</span>Region,
-<a href=#40 id=40 data-nosnippet>40</a>        choices: <span class="kw-2">&amp;</span>ChoiceHeads,
-<a href=#41 id=41 data-nosnippet>41</a>        secondary: <span class="kw-2">&amp;</span><span class="self">Self</span>,
-<a href=#42 id=42 data-nosnippet>42</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
-<a href=#43 id=43 data-nosnippet>43</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
-<a href=#44 id=44 data-nosnippet>44</a>    ) -&gt; PreferenceAttempt&lt;Failure&lt;Q::Error&gt;&gt; {
-<a href=#45 id=45 data-nosnippet>45</a>        <span class="kw">let </span>before = work.charged();
-<a href=#46 id=46 data-nosnippet>46</a>        <span class="kw">let </span>result = cancellation
-<a href=#47 id=47 data-nosnippet>47</a>            .poll()
-<a href=#48 id=48 data-nosnippet>48</a>            .map_err(Failure::from)
-<a href=#49 id=49 data-nosnippet>49</a>            .and_then(|()| <span class="self">self</span>.preferred_with_secondary(region, choices, secondary, work));
-<a href=#50 id=50 data-nosnippet>50</a>        work.refund();
-<a href=#51 id=51 data-nosnippet>51</a>        PreferenceAttempt {
-<a href=#52 id=52 data-nosnippet>52</a>            result,
-<a href=#53 id=53 data-nosnippet>53</a>            work: work.charged() - before,
-<a href=#54 id=54 data-nosnippet>54</a>        }
-<a href=#55 id=55 data-nosnippet>55</a>    }
-<a href=#56 id=56 data-nosnippet>56</a>
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">fn </span>read_unknown&lt;Q: Quota + <span class="question-mark">?</span>Sized&gt;(
-<a href=#58 id=58 data-nosnippet>58</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#59 id=59 data-nosnippet>59</a>        atom: usize,
-<a href=#60 id=60 data-nosnippet>60</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
-<a href=#61 id=61 data-nosnippet>61</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, Failure&lt;Q::Error&gt;&gt; {
-<a href=#62 id=62 data-nosnippet>62</a>        work.tick()<span class="question-mark">?</span>;
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.unknown_count(atom))
-<a href=#64 id=64 data-nosnippet>64</a>    }
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-ferraris/src/regions/preference.rs`."><title>preference.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="zetesis_ferraris" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_ferraris/regions/</div>preference.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Split ordering over already-maintained unknown-parent counts, and over the
+<a href=#2 id=2 data-nosnippet>2</a>//! chains a region has shortened.
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//! A chain is a conjunction or disjunction read as one node over its
+<a href=#5 id=5 data-nosnippet>5</a>//! operands. In a region it has *members* still to be decided: its open
+<a href=#6 id=6 data-nosnippet>6</a>//! operands, and its own truth while that is not yet known. A disjunction
+<a href=#7 id=7 data-nosnippet>7</a>//! known to hold needs one of its open operands to hold, and a conjunction
+<a href=#8 id=8 data-nosnippet>8</a>//! known to fail needs one to fail; while the chain's truth is open it is one
+<a href=#9 id=9 data-nosnippet>9</a>//! more thing the operands decide, as the body of `h :- a, b` with `a` held
+<a href=#10 id=10 data-nosnippet>10</a>//! leaves `b` and `h`.
+<a href=#11 id=11 data-nosnippet>11</a>//!
+<a href=#12 id=12 data-nosnippet>12</a>//! The region has *shortened* a chain when its decisions settled an operand
+<a href=#13 id=13 data-nosnippet>13</a>//! without settling the chain and two or more members remain. Its members are
+<a href=#14 id=14 data-nosnippet>14</a>//! where the next decision does the most: one more settled the same way
+<a href=#15 id=15 data-nosnippet>15</a>//! brings the chain to the single member the closure decides. A chain with
+<a href=#16 id=16 data-nosnippet>16</a>//! every operand open says nothing the program's structure does not already
+<a href=#17 id=17 data-nosnippet>17</a>//! say, so it counts nothing here; that structure is read by the generator
+<a href=#18 id=18 data-nosnippet>18</a>//! order ([`super::GeneratorOrder`]) where one is prepared, and by the
+<a href=#19 id=19 data-nosnippet>19</a>//! unknown-parent counts otherwise.
+<a href=#20 id=20 data-nosnippet>20</a>//!
+<a href=#21 id=21 data-nosnippet>21</a>//! An atom's score adds, for each occurrence of the atom in a shortened chain,
+<a href=#22 id=22 data-nosnippet>22</a>//! the chain's weight now less its weight with every operand open. A weight
+<a href=#23 id=23 data-nosnippet>23</a>//! is a quarter for each member, so one chain down to two members outweighs
+<a href=#24 id=24 data-nosnippet>24</a>//! three down to three, and a chain's first settled operand counts least. The
+<a href=#25 id=25 data-nosnippet>25</a>//! atom is found as an operand of the chain, or under at most two enclosing
+<a href=#26 id=26 data-nosnippet>26</a>//! implications whose truth is not yet known, which reaches the chains that
+<a href=#27 id=27 data-nosnippet>27</a>//! hold its negation or double negation and a conditional it is part of.
+<a href=#28 id=28 data-nosnippet>28</a>//!
+<a href=#29 id=29 data-nosnippet>29</a>//! The closure marks a region's knowledge when it shortens a chain
+<a href=#30 id=30 data-nosnippet>30</a>//! ([`Knowledge::shortened`]), and descendants inherit the mark. Without it
+<a href=#31 id=31 data-nosnippet>31</a>//! every score is zero and no ranking reads one. The score is read where no
+<a href=#32 id=32 data-nosnippet>32</a>//! restriction is active: under a generator order among the heads of least
+<a href=#33 id=33 data-nosnippet>33</a>//! choice depth, otherwise among the eligible atoms before their
+<a href=#34 id=34 data-nosnippet>34</a>//! unknown-parent counts. Under a candidate restriction or an objective bound
+<a href=#35 id=35 data-nosnippet>35</a>//! the ranking subject is the restriction's own knowledge, whose chains are
+<a href=#36 id=36 data-nosnippet>36</a>//! not the original's, and the degree ranking is unchanged. The score orders
+<a href=#37 id=37 data-nosnippet>37</a>//! an exhaustive split and is no part of any membership decision.
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">use </span>zetesis_algebra::{Cancellation, Class, Failure, Quota};
+<a href=#40 id=40 data-nosnippet>40</a>
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use super</span>::{
+<a href=#42 id=42 data-nosnippet>42</a>    ChoiceHeads, Count, Knowledge, Known, Meter, Narrower, PreferenceAttempt, Region, Width,
+<a href=#43 id=43 data-nosnippet>43</a>    chain_position,
+<a href=#44 id=44 data-nosnippet>44</a>};
+<a href=#45 id=45 data-nosnippet>45</a>
+<a href=#46 id=46 data-nosnippet>46</a><span class="doccomment">/// Members beyond which every chain weighs the same. A chain that long is far
+<a href=#47 id=47 data-nosnippet>47</a>/// from deciding anything, and sixteen quarters keep the heaviest weight at
+<a href=#48 id=48 data-nosnippet>48</a>/// `2^40`, so the weights of a million chains still add without saturating.
+<a href=#49 id=49 data-nosnippet>49</a></span><span class="kw">const </span>WEIGHED_MEMBERS: usize = <span class="number">16</span>;
+<a href=#50 id=50 data-nosnippet>50</a>
+<a href=#51 id=51 data-nosnippet>51</a><span class="doccomment">/// Enclosing implications, not yet known, an occurrence is read through: two
+<a href=#52 id=52 data-nosnippet>52</a>/// reach an atom under `not` and under `not not`.
+<a href=#53 id=53 data-nosnippet>53</a></span><span class="kw">const </span>ENCLOSING_IMPLICATIONS: u8 = <span class="number">2</span>;
+<a href=#54 id=54 data-nosnippet>54</a>
+<a href=#55 id=55 data-nosnippet>55</a><span class="doccomment">/// A chain's weight with `members` members: a quarter for each, down to 256
+<a href=#56 id=56 data-nosnippet>56</a>/// for [`WEIGHED_MEMBERS`] or more.
+<a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">const fn </span>weight(members: usize) -&gt; u64 {
+<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">let </span>members = <span class="kw">if </span>members &lt; WEIGHED_MEMBERS {
+<a href=#59 id=59 data-nosnippet>59</a>        members
+<a href=#60 id=60 data-nosnippet>60</a>    } <span class="kw">else </span>{
+<a href=#61 id=61 data-nosnippet>61</a>        WEIGHED_MEMBERS
+<a href=#62 id=62 data-nosnippet>62</a>    };
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="number">1 </span>&lt;&lt; (<span class="number">8 </span>+ <span class="number">2 </span>* (WEIGHED_MEMBERS - members))
+<a href=#64 id=64 data-nosnippet>64</a>}
 <a href=#65 id=65 data-nosnippet>65</a>
-<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">fn </span>preferred_with_secondary&lt;Q: Quota + <span class="question-mark">?</span>Sized&gt;(
-<a href=#67 id=67 data-nosnippet>67</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#68 id=68 data-nosnippet>68</a>        region: <span class="kw-2">&amp;</span>Region,
-<a href=#69 id=69 data-nosnippet>69</a>        choices: <span class="kw-2">&amp;</span>ChoiceHeads,
-<a href=#70 id=70 data-nosnippet>70</a>        secondary: <span class="kw-2">&amp;</span><span class="self">Self</span>,
-<a href=#71 id=71 data-nosnippet>71</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
-<a href=#72 id=72 data-nosnippet>72</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;, Failure&lt;Q::Error&gt;&gt; {
-<a href=#73 id=73 data-nosnippet>73</a>        <span class="kw">let </span><span class="kw-2">mut </span>best: <span class="prelude-ty">Option</span>&lt;(usize, usize, <span class="prelude-ty">Option</span>&lt;usize&gt;)&gt; = <span class="prelude-val">None</span>;
-<a href=#74 id=74 data-nosnippet>74</a>        choices.try_for_each_eligible(region, |atom| -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&lt;Q::Error&gt;&gt; {
-<a href=#75 id=75 data-nosnippet>75</a>            <span class="kw">let </span>primary = <span class="self">self</span>.read_unknown(atom, work)<span class="question-mark">?</span>;
-<a href=#76 id=76 data-nosnippet>76</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((previous, degree, cached)) = best.as_mut() <span class="kw">else </span>{
-<a href=#77 id=77 data-nosnippet>77</a>                best = <span class="prelude-val">Some</span>((atom, primary, <span class="prelude-val">None</span>));
-<a href=#78 id=78 data-nosnippet>78</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#79 id=79 data-nosnippet>79</a>            };
-<a href=#80 id=80 data-nosnippet>80</a>            <span class="kw">match </span>primary.cmp(degree) {
-<a href=#81 id=81 data-nosnippet>81</a>                std::cmp::Ordering::Greater =&gt; {
-<a href=#82 id=82 data-nosnippet>82</a>                    <span class="kw-2">*</span>previous = atom;
-<a href=#83 id=83 data-nosnippet>83</a>                    <span class="kw-2">*</span>degree = primary;
-<a href=#84 id=84 data-nosnippet>84</a>                    <span class="kw-2">*</span>cached = <span class="prelude-val">None</span>;
-<a href=#85 id=85 data-nosnippet>85</a>                }
-<a href=#86 id=86 data-nosnippet>86</a>                std::cmp::Ordering::Equal =&gt; {
-<a href=#87 id=87 data-nosnippet>87</a>                    <span class="kw">let </span>previous_count = <span class="kw">if let </span><span class="prelude-val">Some</span>(count) = <span class="kw-2">*</span>cached {
-<a href=#88 id=88 data-nosnippet>88</a>                        count
-<a href=#89 id=89 data-nosnippet>89</a>                    } <span class="kw">else </span>{
-<a href=#90 id=90 data-nosnippet>90</a>                        <span class="kw">let </span>count = secondary.read_unknown(<span class="kw-2">*</span>previous, work)<span class="question-mark">?</span>;
-<a href=#91 id=91 data-nosnippet>91</a>                        <span class="kw-2">*</span>cached = <span class="prelude-val">Some</span>(count);
-<a href=#92 id=92 data-nosnippet>92</a>                        count
-<a href=#93 id=93 data-nosnippet>93</a>                    };
-<a href=#94 id=94 data-nosnippet>94</a>                    <span class="kw">let </span>count = secondary.read_unknown(atom, work)<span class="question-mark">?</span>;
-<a href=#95 id=95 data-nosnippet>95</a>                    <span class="kw">if </span>count &gt; previous_count {
-<a href=#96 id=96 data-nosnippet>96</a>                        <span class="kw-2">*</span>previous = atom;
-<a href=#97 id=97 data-nosnippet>97</a>                        <span class="kw-2">*</span>cached = <span class="prelude-val">Some</span>(count);
-<a href=#98 id=98 data-nosnippet>98</a>                    }
-<a href=#99 id=99 data-nosnippet>99</a>                }
-<a href=#100 id=100 data-nosnippet>100</a>                std::cmp::Ordering::Less =&gt; {}
-<a href=#101 id=101 data-nosnippet>101</a>            }
-<a href=#102 id=102 data-nosnippet>102</a>            <span class="prelude-val">Ok</span>(())
-<a href=#103 id=103 data-nosnippet>103</a>        })<span class="question-mark">?</span>;
-<a href=#104 id=104 data-nosnippet>104</a>        <span class="prelude-val">Ok</span>(best.map(|(atom, <span class="kw">_</span>, <span class="kw">_</span>)| atom))
-<a href=#105 id=105 data-nosnippet>105</a>    }
-<a href=#106 id=106 data-nosnippet>106</a>}
+<a href=#66 id=66 data-nosnippet>66</a><span class="kw">impl </span>Narrower {
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// Whether this index was built for a theory of `atoms` atoms.
+<a href=#68 id=68 data-nosnippet>68</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>indexes(<span class="kw-2">&amp;</span><span class="self">self</span>, atoms: usize) -&gt; bool {
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="self">self</span>.atom_nodes.len() == atoms
+<a href=#70 id=70 data-nosnippet>70</a>    }
+<a href=#71 id=71 data-nosnippet>71</a>
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="doccomment">/// What the chains the region has shortened weigh for `atom` (the module
+<a href=#73 id=73 data-nosnippet>73</a>    /// header states the score). `knowledge` must be this index's, closed for
+<a href=#74 id=74 data-nosnippet>74</a>    /// the region.
+<a href=#75 id=75 data-nosnippet>75</a>    ///
+<a href=#76 id=76 data-nosnippet>76</a>    /// One unit per parent read: the parents of the atom's nodes, and those
+<a href=#77 id=77 data-nosnippet>77</a>    /// of each enclosing implication read through. Constant additional space.
+<a href=#78 id=78 data-nosnippet>78</a>    ///
+<a href=#79 id=79 data-nosnippet>79</a>    /// # Errors
+<a href=#80 id=80 data-nosnippet>80</a>    /// The meter's refusal, with the units charged before it.
+<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>shortened_weight&lt;C: Class, Q: Quota + <span class="question-mark">?</span>Sized&gt;(
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#83 id=83 data-nosnippet>83</a>        knowledge: <span class="kw-2">&amp;</span>Knowledge&lt;C&gt;,
+<a href=#84 id=84 data-nosnippet>84</a>        atom: usize,
+<a href=#85 id=85 data-nosnippet>85</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
+<a href=#86 id=86 data-nosnippet>86</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, Failure&lt;Q::Error&gt;&gt; {
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">match </span><span class="kw-2">&amp;</span>knowledge.width {
+<a href=#88 id=88 data-nosnippet>88</a>            Width::Compact16(known) =&gt; <span class="self">self</span>.shortened_weight_at(known, atom, work),
+<a href=#89 id=89 data-nosnippet>89</a>            Width::Compact32(known) =&gt; <span class="self">self</span>.shortened_weight_at(known, atom, work),
+<a href=#90 id=90 data-nosnippet>90</a>            Width::Native(known) =&gt; <span class="self">self</span>.shortened_weight_at(known, atom, work),
+<a href=#91 id=91 data-nosnippet>91</a>        }
+<a href=#92 id=92 data-nosnippet>92</a>    }
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="doccomment">/// [`Self::shortened_weight`] at the knowledge's own counter width.
+<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>shortened_weight_at&lt;W: Count, Q: Quota + <span class="question-mark">?</span>Sized&gt;(
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#97 id=97 data-nosnippet>97</a>        known: <span class="kw-2">&amp;</span>Known&lt;W&gt;,
+<a href=#98 id=98 data-nosnippet>98</a>        atom: usize,
+<a href=#99 id=99 data-nosnippet>99</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
+<a href=#100 id=100 data-nosnippet>100</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, Failure&lt;Q::Error&gt;&gt; {
+<a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">let </span><span class="kw-2">mut </span>score = <span class="number">0_u64</span>;
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>node <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.atom_nodes[atom] {
+<a href=#103 id=103 data-nosnippet>103</a>            score = score.saturating_add(<span class="self">self</span>.weight_above(
+<a href=#104 id=104 data-nosnippet>104</a>                known,
+<a href=#105 id=105 data-nosnippet>105</a>                node,
+<a href=#106 id=106 data-nosnippet>106</a>                ENCLOSING_IMPLICATIONS,
+<a href=#107 id=107 data-nosnippet>107</a>                work,
+<a href=#108 id=108 data-nosnippet>108</a>            )<span class="question-mark">?</span>);
+<a href=#109 id=109 data-nosnippet>109</a>        }
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="prelude-val">Ok</span>(score)
+<a href=#111 id=111 data-nosnippet>111</a>    }
+<a href=#112 id=112 data-nosnippet>112</a>
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="doccomment">/// The weight of the shortened chains that hold `node` as an operand, and
+<a href=#114 id=114 data-nosnippet>114</a>    /// of those above each implication that reads `node` and is not yet known,
+<a href=#115 id=115 data-nosnippet>115</a>    /// through `enclosing` of them.
+<a href=#116 id=116 data-nosnippet>116</a>    </span><span class="kw">fn </span>weight_above&lt;W: Count, Q: Quota + <span class="question-mark">?</span>Sized&gt;(
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#118 id=118 data-nosnippet>118</a>        known: <span class="kw-2">&amp;</span>Known&lt;W&gt;,
+<a href=#119 id=119 data-nosnippet>119</a>        node: usize,
+<a href=#120 id=120 data-nosnippet>120</a>        enclosing: u8,
+<a href=#121 id=121 data-nosnippet>121</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
+<a href=#122 id=122 data-nosnippet>122</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, Failure&lt;Q::Error&gt;&gt; {
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">let </span><span class="kw-2">mut </span>score = <span class="number">0_u64</span>;
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">for </span>parent <span class="kw">in </span><span class="self">self</span>.logical_parents(node) {
+<a href=#125 id=125 data-nosnippet>125</a>            work.tick()<span class="question-mark">?</span>;
+<a href=#126 id=126 data-nosnippet>126</a>            <span class="kw">let </span>root_known = known.masks.node_known(parent);
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(chain) = <span class="self">self</span>.chain_of[parent] {
+<a href=#128 id=128 data-nosnippet>128</a>                <span class="kw">let </span>chain = chain_position(chain);
+<a href=#129 id=129 data-nosnippet>129</a>                <span class="kw">if </span>known.masks.witnessed(chain) {
+<a href=#130 id=130 data-nosnippet>130</a>                    <span class="kw">continue</span>;
+<a href=#131 id=131 data-nosnippet>131</a>                }
+<a href=#132 id=132 data-nosnippet>132</a>                <span class="kw">let </span>written = <span class="self">self</span>.chains[chain].leaves(<span class="kw-2">&amp;</span><span class="self">self</span>.extrema).len();
+<a href=#133 id=133 data-nosnippet>133</a>                <span class="kw">let </span>open = written.saturating_sub(known.neutral_operands.get(chain));
+<a href=#134 id=134 data-nosnippet>134</a>                <span class="comment">// The chain's own truth is a member while it is unknown.
+<a href=#135 id=135 data-nosnippet>135</a>                </span><span class="kw">let </span>own = usize::from(!root_known);
+<a href=#136 id=136 data-nosnippet>136</a>                <span class="kw">if </span>open == written || open + own &lt; <span class="number">2 </span>{
+<a href=#137 id=137 data-nosnippet>137</a>                    <span class="kw">continue</span>;
+<a href=#138 id=138 data-nosnippet>138</a>                }
+<a href=#139 id=139 data-nosnippet>139</a>                score = score.saturating_add(weight(open + own) - weight(written + own));
+<a href=#140 id=140 data-nosnippet>140</a>            } <span class="kw">else if </span>enclosing &gt; <span class="number">0 </span>&amp;&amp; !root_known {
+<a href=#141 id=141 data-nosnippet>141</a>                score =
+<a href=#142 id=142 data-nosnippet>142</a>                    score.saturating_add(<span class="self">self</span>.weight_above(known, parent, enclosing - <span class="number">1</span>, work)<span class="question-mark">?</span>);
+<a href=#143 id=143 data-nosnippet>143</a>            }
+<a href=#144 id=144 data-nosnippet>144</a>        }
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="prelude-val">Ok</span>(score)
+<a href=#146 id=146 data-nosnippet>146</a>    }
+<a href=#147 id=147 data-nosnippet>147</a>}
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a><span class="kw">impl</span>&lt;C: Class&gt; Knowledge&lt;C&gt; {
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="doccomment">/// Whether a closure of the region or of an ancestor shortened a chain.
+<a href=#151 id=151 data-nosnippet>151</a>    /// Without the mark every [`Narrower::shortened_weight`] is zero. A chain
+<a href=#152 id=152 data-nosnippet>152</a>    /// settled since is not forgotten, so with it every weight may be zero
+<a href=#153 id=153 data-nosnippet>153</a>    /// too.
+<a href=#154 id=154 data-nosnippet>154</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>shortened(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.width {
+<a href=#156 id=156 data-nosnippet>156</a>            Width::Compact16(known) =&gt; known.shortened,
+<a href=#157 id=157 data-nosnippet>157</a>            Width::Compact32(known) =&gt; known.shortened,
+<a href=#158 id=158 data-nosnippet>158</a>            Width::Native(known) =&gt; known.shortened,
+<a href=#159 id=159 data-nosnippet>159</a>        }
+<a href=#160 id=160 data-nosnippet>160</a>    }
+<a href=#161 id=161 data-nosnippet>161</a>
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">fn </span>unknown_count(<span class="kw-2">&amp;</span><span class="self">self</span>, atom: usize) -&gt; usize {
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.width {
+<a href=#164 id=164 data-nosnippet>164</a>            Width::Compact16(known) =&gt; known.unknown.get(atom),
+<a href=#165 id=165 data-nosnippet>165</a>            Width::Compact32(known) =&gt; known.unknown.get(atom),
+<a href=#166 id=166 data-nosnippet>166</a>            Width::Native(known) =&gt; known.unknown.get(atom),
+<a href=#167 id=167 data-nosnippet>167</a>        }
+<a href=#168 id=168 data-nosnippet>168</a>    }
+<a href=#169 id=169 data-nosnippet>169</a>
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Select by original choice marks, this subject's unknown-parent count,
+<a href=#171 id=171 data-nosnippet>171</a>    /// then `secondary`'s count; remaining ties select the lowest atom. Both
+<a href=#172 id=172 data-nosnippet>172</a>    /// knowledge values must use the region's atom identities and be closed
+<a href=#173 id=173 data-nosnippet>173</a>    /// for it. This only orders an exhaustive split and changes neither value.
+<a href=#174 id=174 data-nosnippet>174</a>    ///
+<a href=#175 id=175 data-nosnippet>175</a>    /// The scan takes `O(A / 64 + E)` time for `A` atoms and `E` eligible atoms,
+<a href=#176 id=176 data-nosnippet>176</a>    /// with constant additional space. Eligible atoms are the open choice heads
+<a href=#177 id=177 data-nosnippet>177</a>    /// when any remain, otherwise all open atoms. Each primary count is charged
+<a href=#178 id=178 data-nosnippet>178</a>    /// once; a secondary count is read at most once, only when a primary tie
+<a href=#179 id=179 data-nosnippet>179</a>    /// requires it. An uncontested winner needs no secondary read. Packed mask
+<a href=#180 id=180 data-nosnippet>180</a>    /// traversal is not separately charged.
+<a href=#181 id=181 data-nosnippet>181</a>    /// Cancellation and quota reservations follow
+<a href=#182 id=182 data-nosnippet>182</a>    /// [`Self::preferred_atom_reserved`]; every failure retains its exact work
+<a href=#183 id=183 data-nosnippet>183</a>    /// prefix and returns no partial preference.
+<a href=#184 id=184 data-nosnippet>184</a>    ///
+<a href=#185 id=185 data-nosnippet>185</a>    /// # Errors
+<a href=#186 id=186 data-nosnippet>186</a>    /// Retains cancellation, a quota refusal or a zero-grant work refusal.
+<a href=#187 id=187 data-nosnippet>187</a>    ///
+<a href=#188 id=188 data-nosnippet>188</a>    /// # Panics
+<a href=#189 id=189 data-nosnippet>189</a>    /// Panics if an open atom is outside either knowledge's universe.
+<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">pub fn </span>preferred_atom_with_secondary_reserved&lt;Q: Quota + <span class="question-mark">?</span>Sized&gt;(
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#192 id=192 data-nosnippet>192</a>        region: <span class="kw-2">&amp;</span>Region,
+<a href=#193 id=193 data-nosnippet>193</a>        choices: <span class="kw-2">&amp;</span>ChoiceHeads,
+<a href=#194 id=194 data-nosnippet>194</a>        secondary: <span class="kw-2">&amp;</span><span class="self">Self</span>,
+<a href=#195 id=195 data-nosnippet>195</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#196 id=196 data-nosnippet>196</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
+<a href=#197 id=197 data-nosnippet>197</a>    ) -&gt; PreferenceAttempt&lt;Failure&lt;Q::Error&gt;&gt; {
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">let </span>before = work.charged();
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">let </span>result = cancellation
+<a href=#200 id=200 data-nosnippet>200</a>            .poll()
+<a href=#201 id=201 data-nosnippet>201</a>            .map_err(Failure::from)
+<a href=#202 id=202 data-nosnippet>202</a>            .and_then(|()| <span class="self">self</span>.preferred_with_secondary(region, choices, secondary, work));
+<a href=#203 id=203 data-nosnippet>203</a>        work.refund();
+<a href=#204 id=204 data-nosnippet>204</a>        PreferenceAttempt {
+<a href=#205 id=205 data-nosnippet>205</a>            result,
+<a href=#206 id=206 data-nosnippet>206</a>            work: work.charged() - before,
+<a href=#207 id=207 data-nosnippet>207</a>        }
+<a href=#208 id=208 data-nosnippet>208</a>    }
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">fn </span>read_unknown&lt;Q: Quota + <span class="question-mark">?</span>Sized&gt;(
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#212 id=212 data-nosnippet>212</a>        atom: usize,
+<a href=#213 id=213 data-nosnippet>213</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
+<a href=#214 id=214 data-nosnippet>214</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, Failure&lt;Q::Error&gt;&gt; {
+<a href=#215 id=215 data-nosnippet>215</a>        work.tick()<span class="question-mark">?</span>;
+<a href=#216 id=216 data-nosnippet>216</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.unknown_count(atom))
+<a href=#217 id=217 data-nosnippet>217</a>    }
+<a href=#218 id=218 data-nosnippet>218</a>
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">fn </span>preferred_with_secondary&lt;Q: Quota + <span class="question-mark">?</span>Sized&gt;(
+<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#221 id=221 data-nosnippet>221</a>        region: <span class="kw-2">&amp;</span>Region,
+<a href=#222 id=222 data-nosnippet>222</a>        choices: <span class="kw-2">&amp;</span>ChoiceHeads,
+<a href=#223 id=223 data-nosnippet>223</a>        secondary: <span class="kw-2">&amp;</span><span class="self">Self</span>,
+<a href=#224 id=224 data-nosnippet>224</a>        work: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>, Q&gt;,
+<a href=#225 id=225 data-nosnippet>225</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;, Failure&lt;Q::Error&gt;&gt; {
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span><span class="kw-2">mut </span>best: <span class="prelude-ty">Option</span>&lt;(usize, usize, <span class="prelude-ty">Option</span>&lt;usize&gt;)&gt; = <span class="prelude-val">None</span>;
+<a href=#227 id=227 data-nosnippet>227</a>        choices.try_for_each_eligible(region, |atom| -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&lt;Q::Error&gt;&gt; {
+<a href=#228 id=228 data-nosnippet>228</a>            <span class="kw">let </span>primary = <span class="self">self</span>.read_unknown(atom, work)<span class="question-mark">?</span>;
+<a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((previous, degree, cached)) = best.as_mut() <span class="kw">else </span>{
+<a href=#230 id=230 data-nosnippet>230</a>                best = <span class="prelude-val">Some</span>((atom, primary, <span class="prelude-val">None</span>));
+<a href=#231 id=231 data-nosnippet>231</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#232 id=232 data-nosnippet>232</a>            };
+<a href=#233 id=233 data-nosnippet>233</a>            <span class="kw">match </span>primary.cmp(degree) {
+<a href=#234 id=234 data-nosnippet>234</a>                std::cmp::Ordering::Greater =&gt; {
+<a href=#235 id=235 data-nosnippet>235</a>                    <span class="kw-2">*</span>previous = atom;
+<a href=#236 id=236 data-nosnippet>236</a>                    <span class="kw-2">*</span>degree = primary;
+<a href=#237 id=237 data-nosnippet>237</a>                    <span class="kw-2">*</span>cached = <span class="prelude-val">None</span>;
+<a href=#238 id=238 data-nosnippet>238</a>                }
+<a href=#239 id=239 data-nosnippet>239</a>                std::cmp::Ordering::Equal =&gt; {
+<a href=#240 id=240 data-nosnippet>240</a>                    <span class="kw">let </span>previous_count = <span class="kw">if let </span><span class="prelude-val">Some</span>(count) = <span class="kw-2">*</span>cached {
+<a href=#241 id=241 data-nosnippet>241</a>                        count
+<a href=#242 id=242 data-nosnippet>242</a>                    } <span class="kw">else </span>{
+<a href=#243 id=243 data-nosnippet>243</a>                        <span class="kw">let </span>count = secondary.read_unknown(<span class="kw-2">*</span>previous, work)<span class="question-mark">?</span>;
+<a href=#244 id=244 data-nosnippet>244</a>                        <span class="kw-2">*</span>cached = <span class="prelude-val">Some</span>(count);
+<a href=#245 id=245 data-nosnippet>245</a>                        count
+<a href=#246 id=246 data-nosnippet>246</a>                    };
+<a href=#247 id=247 data-nosnippet>247</a>                    <span class="kw">let </span>count = secondary.read_unknown(atom, work)<span class="question-mark">?</span>;
+<a href=#248 id=248 data-nosnippet>248</a>                    <span class="kw">if </span>count &gt; previous_count {
+<a href=#249 id=249 data-nosnippet>249</a>                        <span class="kw-2">*</span>previous = atom;
+<a href=#250 id=250 data-nosnippet>250</a>                        <span class="kw-2">*</span>cached = <span class="prelude-val">Some</span>(count);
+<a href=#251 id=251 data-nosnippet>251</a>                    }
+<a href=#252 id=252 data-nosnippet>252</a>                }
+<a href=#253 id=253 data-nosnippet>253</a>                std::cmp::Ordering::Less =&gt; {}
+<a href=#254 id=254 data-nosnippet>254</a>            }
+<a href=#255 id=255 data-nosnippet>255</a>            <span class="prelude-val">Ok</span>(())
+<a href=#256 id=256 data-nosnippet>256</a>        })<span class="question-mark">?</span>;
+<a href=#257 id=257 data-nosnippet>257</a>        <span class="prelude-val">Ok</span>(best.map(|(atom, <span class="kw">_</span>, <span class="kw">_</span>)| atom))
+<a href=#258 id=258 data-nosnippet>258</a>    }
+<a href=#259 id=259 data-nosnippet>259</a>}
 </code></pre></div></section></main></body></html>

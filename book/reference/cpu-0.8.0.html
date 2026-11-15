@@ -1,0 +1,891 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0.8.0 CPU comparisons - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-e337ce9d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-ec1322fa.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/reference/cpu-0.8.0.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="cpu-comparison-for-the-080-candidate"><a class="header" href="#cpu-comparison-for-the-080-candidate">CPU comparison for the 0.8.0 candidate</a></h1>
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+<p>On 15 November 2026, the qualified 0.8.0 candidate was compared with clingo
+across <strong>315 distinct workloads</strong>. Of <strong>299 complete paired timings</strong>, the
+established 3% band gives <strong>214 zetesis wins, nine close and 76 clingo wins</strong>.
+The other <strong>16</strong> retain an unavailable reference; they are not timing wins.
+Strictly comparing the recorded times gives 214 zetesis-faster and 85
+clingo-faster observations, with no exact equality. All nine close cases
+slightly favor clingo.</p>
+<p>The <a href="observations/cpu-0.8.0-process.tsv">per-case TSV</a> gives every selected
+workload and exact nanosecond times. The
+<a href="observations/cpu-0.8.0-process.json">receipt</a> records SHA-256 workload identities,
+source files and amendments, contracts, profiles, report hashes, duplicate
+observations and classification. The full table below is the same 315-workload
+population. Historical <a href="cpu-0.7.0.html">0.7.0 measurements</a> remain unchanged.</p>
+<h2 id="conditions-and-interpretation"><a class="header" href="#conditions-and-interpretation">Conditions and interpretation</a></h2>
+<p>The measured source was qualified as
+<code>3d395e57f14ca39c8ab436dfc1dbb7439982e4b7</code>, then incorporated without a source-tree
+change into <code>dev/0.8.0</code> at <code>aa0df11fbd76420e557a858c053d29581a19e1d6</code>.
+The runs preceded the release-number and release-documentation changes; the
+frozen executable still identified itself as 0.7.0. These are retained
+measurements of the implementation, not a fresh repeat after the merge.
+Capture ran from 06:30:10 to 07:10:36 UTC on 15 November 2026.</p>
+<p>Zetesis used <strong>14 CPU workers</strong> on an Apple M4 Pro, automatic grounding and
+checking, and a 24 GiB named-storage allowance. Clingo 5.8.2 used <strong>one worker</strong>.
+Each solver had one qualification run and <strong>one timed fresh process</strong>, no
+warmup and no separate RSS run. The outer process deadline was <strong>120 seconds</strong>, except for the reported-planner
+panel, which allowed 130 seconds around the solver’s cooperative 120-second
+deadline; the scalability panel requested indexed formula joins.
+The receipt preserves these per-panel controls. All native execution was on
+CPU; these results do not measure GPU speed.</p>
+<p>Elapsed time includes fresh-process startup, grounding, solving and captured
+JSON output, with statistics enabled for zetesis. It excludes comparison
+hashing. Qualification requires complete selected answer families, including
+multiplicity, final optimal ties and costs. Native full models also agree
+between qualification and timing; hidden reference interpretations are not
+observed. Interrupted or reference-unavailable runs do not receive a timing
+vote.</p>
+<p>The exact zetesis/clingo ratio is classified below 0.97 as a zetesis win and
+above 1.03 as a clingo win; both boundaries count as close. This is the
+published 3% reporting convention, <strong>not a statistical equivalence test</strong>.
+One sample is a performance screen: small differences and parallel-search
+variation need repeated measurement before a causal improvement is claimed.
+The canonical benchmark’s strict faster/slower verdicts remain in the receipt.</p>
+<p>The original schedule has 320 positions. Five extra positions repeat three
+workload identities: task allocation and SEND+MORE=MONEY occur in three
+panels each, and queens variant 02 in two. Each gets one vote in its original
+corpus position, using the SHA-256 identity rather than its display label.
+All repeated observations have the same faster/slower and 3% classification.
+No timing samples are pooled across panels and no summed process total is
+presented as one elapsed corpus run.</p>
+<p>On the 16 unavailable arithmetic references, clingo reached the qualification
+deadline. Zetesis completed with exhaustive UNSAT and no interruption on each;
+clingo supplied no confirming complete family. Paired timing was not attempted.
+The 0.7.0 record used a 600-second deadline, three timed samples and 299 inputs,
+so neither its 13 incomplete cases nor its headline win count is directly
+comparable with this campaign.</p>
+<h2 id="panel-scorecard"><a class="header" href="#panel-scorecard">Panel scorecard</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Panel</th><th style="text-align: right">Distinct</th><th style="text-align: right">Paired</th><th style="text-align: right">zetesis wins</th><th style="text-align: right">Close</th><th style="text-align: right">clingo wins</th><th style="text-align: right">Unavailable</th></tr>
+</thead>
+<tbody>
+<tr><td>reported-default-120s</td><td style="text-align: right">2</td><td style="text-align: right">2</td><td style="text-align: right">0</td><td style="text-align: right">0</td><td style="text-align: right">2</td><td style="text-align: right">0</td></tr>
+<tr><td>usa-plus-queens-w14</td><td style="text-align: right">2</td><td style="text-align: right">2</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">1</td><td style="text-align: right">0</td></tr>
+<tr><td>corpus95-w14</td><td style="text-align: right">95</td><td style="text-align: right">95</td><td style="text-align: right">93</td><td style="text-align: right">1</td><td style="text-align: right">1</td><td style="text-align: right">0</td></tr>
+<tr><td>public-supplement-w14</td><td style="text-align: right">12</td><td style="text-align: right">12</td><td style="text-align: right">5</td><td style="text-align: right">1</td><td style="text-align: right">6</td><td style="text-align: right">0</td></tr>
+<tr><td>sigma-larger5-w14</td><td style="text-align: right">5</td><td style="text-align: right">5</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">4</td><td style="text-align: right">0</td></tr>
+<tr><td>reported-workloads-w14</td><td style="text-align: right">3</td><td style="text-align: right">3</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">2</td><td style="text-align: right">0</td></tr>
+<tr><td>arithmetic-schedule-w14</td><td style="text-align: right">6</td><td style="text-align: right">6</td><td style="text-align: right">0</td><td style="text-align: right">1</td><td style="text-align: right">5</td><td style="text-align: right">0</td></tr>
+<tr><td>family-variants-w14</td><td style="text-align: right">2</td><td style="text-align: right">2</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">1</td><td style="text-align: right">0</td></tr>
+<tr><td>family-components-w14</td><td style="text-align: right">2</td><td style="text-align: right">2</td><td style="text-align: right">0</td><td style="text-align: right">1</td><td style="text-align: right">1</td><td style="text-align: right">0</td></tr>
+<tr><td>inner-heavy18-w14</td><td style="text-align: right">18</td><td style="text-align: right">18</td><td style="text-align: right">12</td><td style="text-align: right">0</td><td style="text-align: right">6</td><td style="text-align: right">0</td></tr>
+<tr><td>arithmetic-defaults-w14</td><td style="text-align: right">8</td><td style="text-align: right">8</td><td style="text-align: right">4</td><td style="text-align: right">1</td><td style="text-align: right">3</td><td style="text-align: right">0</td></tr>
+<tr><td>typed65-w14</td><td style="text-align: right">65</td><td style="text-align: right">65</td><td style="text-align: right">34</td><td style="text-align: right">2</td><td style="text-align: right">29</td><td style="text-align: right">0</td></tr>
+<tr><td>scalability21-w14</td><td style="text-align: right">18</td><td style="text-align: right">18</td><td style="text-align: right">13</td><td style="text-align: right">0</td><td style="text-align: right">5</td><td style="text-align: right">0</td></tr>
+<tr><td>root6-w14</td><td style="text-align: right">6</td><td style="text-align: right">6</td><td style="text-align: right">6</td><td style="text-align: right">0</td><td style="text-align: right">0</td><td style="text-align: right">0</td></tr>
+<tr><td>series22-w14</td><td style="text-align: right">20</td><td style="text-align: right">20</td><td style="text-align: right">12</td><td style="text-align: right">0</td><td style="text-align: right">8</td><td style="text-align: right">0</td></tr>
+<tr><td>ar51-w14</td><td style="text-align: right">51</td><td style="text-align: right">35</td><td style="text-align: right">31</td><td style="text-align: right">2</td><td style="text-align: right">2</td><td style="text-align: right">16</td></tr>
+<tr><td><strong>Total</strong></td><td style="text-align: right"><strong>315</strong></td><td style="text-align: right"><strong>299</strong></td><td style="text-align: right"><strong>214</strong></td><td style="text-align: right"><strong>9</strong></td><td style="text-align: right"><strong>76</strong></td><td style="text-align: right"><strong>16</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>Wide Mastermind took 0.958 s against 22.715 s for clingo, and the parity-chain
+p47 contradiction took 10.766 ms against 55.250 s. Integrated Family Crossing,
+Poker, USA and the reported planner still favor clingo. Larger quantified
+parity at size 28 favors zetesis; the other four cases in that panel favor
+clingo. Arithmetic schedule h399/d80 takes 1.399 s against clingo’s 0.247 s.
+The table records useful strengths and unresolved losses, not a blanket claim
+about planning, arithmetic or all problems at a complexity level.</p>
+<h2 id="reproducing-the-selections"><a class="header" href="#reproducing-the-selections">Reproducing the selections</a></h2>
+<p>Use <code>zetesis-bench</code>; no separate timing or model-decoding implementation is
+needed. From the repository root, build the solver and benchmark tool with the
+pinned toolchain, then run a canonical panel:</p>
+<pre><code class="language-sh">cargo build --locked --release --all-features -p zetesis-cli -p zetesis-bench
+ROOT=$(pwd -P)
+NATIVE="$ROOT/target/release/zetesis"
+BENCH="$ROOT/target/release/zetesis-bench"
+CLINGO=$(command -v clingo)
+OUT=$(mktemp -d)
+
+"$BENCH" run "$ROOT/examples/correctness" --suite corpus \
+  --zetesis "$NATIVE" --clingo "$CLINGO" --native-interface solve \
+  --backend cpu --grounder auto --oracle auto --threads 14 --clingo-threads 1 \
+  --memory 24GiB --warmups 0 --repetitions 1 --memory-runs 0 \
+  --timeout-seconds 120 --campaign-seconds 7200 \
+  --sample-bytes 134217728 --answer-bytes 134217728 \
+  --native-report-bytes 134217728 --native-atoms 4194304 \
+  --native-value-nodes 8388608 --capture-bytes 2147483648 \
+  --report-bytes 4294967296 --report "$OUT/corpus95.json" --json --color never
+</code></pre>
+<p>These commands reproduce the selection and protocol, not the timing of a
+particular machine. Compare an old and new saved report with
+<code>zetesis-bench compare before=before.json after=after.json</code>; the tool requires
+matching identities and profiles. Retain the supplied limits and all failed
+slots. A fresh comparison should use enough repeated samples for the claim it
+is intended to support.</p>
+<p>The other in-repository selections use the same command with the following
+selection arguments instead of <code>--suite corpus</code>, and a separate report name:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Panel</th><th>Selection arguments</th></tr>
+</thead>
+<tbody>
+<tr><td><code>scalability21-w14</code></td><td><code>--suite scalability --examples "$ROOT/examples" --include-einstein --formula-joins indexed</code></td></tr>
+<tr><td><code>series22-w14</code></td><td><code>--suite series</code></td></tr>
+<tr><td><code>typed65-w14</code></td><td><code>--workloads "$ROOT/crates/zetesis-validation/tests/fixtures/typed-selection65.json"</code></td></tr>
+<tr><td><code>public-supplement-w14</code></td><td><code>--workloads "$ROOT/docs/book/reference/observations/cpu-0.8.0-manifests/public-supplement-w14.json"</code></td></tr>
+<tr><td><code>family-components-w14</code></td><td><code>--workloads "$ROOT/docs/book/reference/observations/cpu-0.8.0-manifests/family-components-w14.json"</code></td></tr>
+<tr><td><code>root6-w14</code></td><td><code>--workloads "$ROOT/docs/book/reference/observations/cpu-0.8.0-manifests/root6-w14.json"</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The public supplement includes Poker and the original wide Mastermind source;
+scalability includes the differently shaped Mastermind controls. The typed
+manifest applies its amendments through the existing benchmark constructors.
+No original input needs editing in place.</p>
+<p>The remaining panels use declared external bundles. Their manifests below
+have root <code>.</code>: copy each manifest beside the exact source files it lists, with
+its relative names, include spellings and SHA-256 digests, then pass that
+manifest to <code>--workloads</code> instead of a suite. <strong>The repository does not contain
+all externally reported programs</strong>, and a manifest does not supply missing
+source contents. The default 95-case command alone does not reproduce the full
+315-input scorecard.</p>
+<ul>
+<li><a href="observations/cpu-0.8.0-manifests/reported-default-120s.json">reported-default-120s</a>.</li>
+<li><a href="observations/cpu-0.8.0-manifests/usa-plus-queens-w14.json">usa-plus-queens-w14</a>.</li>
+<li><a href="observations/cpu-0.8.0-manifests/sigma-larger5-w14.json">sigma-larger5-w14</a>.</li>
+<li><a href="observations/cpu-0.8.0-manifests/reported-workloads-w14.json">reported-workloads-w14</a>.</li>
+<li><a href="observations/cpu-0.8.0-manifests/arithmetic-schedule-w14.json">arithmetic-schedule-w14</a>.</li>
+<li><a href="observations/cpu-0.8.0-manifests/family-variants-w14.json">family-variants-w14</a>.</li>
+<li><a href="observations/cpu-0.8.0-manifests/inner-heavy18-w14.json">inner-heavy18-w14</a>.</li>
+<li><a href="observations/cpu-0.8.0-manifests/arithmetic-defaults-w14.json">arithmetic-defaults-w14</a>.</li>
+<li><a href="observations/cpu-0.8.0-manifests/ar51-w14.json">ar51-w14</a>.</li>
+</ul>
+<p>The larger quantified files can be recreated from the tracked parity and
+pigeonhole generators: change only <code>n = 6</code> to 20/24/28 in
+<code>examples/scalability/two-qbf-parity/two_qbf_parity.lp</code>, or <code>holes = 4</code> to 7/8 in
+<code>examples/scalability/two-qbf-pigeonhole/two_qbf_pigeonhole.lp</code>, and verify the
+manifest hashes. USA, the reported planners and other external bundles require
+the corresponding original inputs; the receipt preserves their exact identity.
+For <code>reported-default-120s</code>, use <code>--time-limit 120 --timeout-seconds 130 --campaign-seconds 900</code> to retain
+its cooperative solver deadline and outer allowances. The benchmark guide describes the distinction
+between that option and the outer <code>--timeout-seconds</code> deadline.</p>
+<p>The receipt identifies the measured executables by SHA-256:</p>
+<pre><code class="language-text">zetesis        4ce7e0c37863c284f499c2293ab306a172752c170159a7a36fbc329c63029edc
+zetesis-bench  031285d3437617550687a3960cbfefcdbc3ad8b26023642c5b918d418b774f7f
+clingo         36b7424fe275f3070e1533bb1c1ed5be52a84a6fbeea8b5f773a8814b1ec61d1
+</code></pre>
+<h2 id="all-315-workloads"><a class="header" href="#all-315-workloads">All 315 workloads</a></h2>
+<p>Times are milliseconds, rounded only for display; classifications use exact
+nanoseconds. The entry path and amendment label distinguish workloads whose
+short display names coincide. An unavailable row has no paired timed sample;
+its dashes are not zero-time observations.</p>
+<h3 id="reported-default-120s"><a class="header" href="#reported-default-120s">reported-default-120s</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>five_crosser_light_mode_a_verify_v2.lp</code> — five_crosser_light_mode_a_verify_v2</td><td style="text-align: right">417.266</td><td style="text-align: right">26.049</td><td>clingo</td></tr>
+<tr><td><code>five_crosser_light_mode_b_plan.lp</code> — five_crosser_light_mode_b_plan</td><td style="text-align: right">22,880.583</td><td style="text-align: right">2,679.637</td><td>clingo</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="usa-plus-queens-w14"><a class="header" href="#usa-plus-queens-w14">usa-plus-queens-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>usa/usaSP1.lp</code> — usa/usaSP1</td><td style="text-align: right">1,279.972</td><td style="text-align: right">498.560</td><td>clingo</td></tr>
+<tr><td><code>queens-n12.lp</code> — queens-n12</td><td style="text-align: right">125.234</td><td style="text-align: right">1,688.966</td><td>zetesis</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="corpus95-w14"><a class="header" href="#corpus95-w14">corpus95-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>scenarios/equality-generalized-tsp/01-basic.lp</code> — equality-generalized-tsp/01-basic</td><td style="text-align: right">6.365</td><td style="text-align: right">9.410</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/equality-generalized-tsp/02-larger.lp</code> — equality-generalized-tsp/02-larger</td><td style="text-align: right">6.222</td><td style="text-align: right">7.718</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/equality-generalized-tsp/03-unreachable-subset-unsat.lp</code> — equality-generalized-tsp/03-unreachable-subset-unsat</td><td style="text-align: right">4.752</td><td style="text-align: right">6.188</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-01/01-basic.lp</code> — variant-01/01-basic</td><td style="text-align: right">4.696</td><td style="text-align: right">7.676</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-01/02-start-equals-end.lp</code> — variant-01/02-start-equals-end</td><td style="text-align: right">4.826</td><td style="text-align: right">7.715</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-01/03-zero-cost-detour.lp</code> — variant-01/03-zero-cost-detour</td><td style="text-align: right">4.696</td><td style="text-align: right">7.693</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-01/04-no-path.lp</code> — variant-01/04-no-path</td><td style="text-align: right">4.739</td><td style="text-align: right">6.207</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-01/05-multi-path.lp</code> — variant-01/05-multi-path</td><td style="text-align: right">4.685</td><td style="text-align: right">7.683</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-01/06-layered-dag.lp</code> — variant-01/06-layered-dag</td><td style="text-align: right">6.274</td><td style="text-align: right">7.702</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-01/07-cycles.lp</code> — variant-01/07-cycles</td><td style="text-align: right">4.676</td><td style="text-align: right">7.693</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-01/08-negative-weights.lp</code> — variant-01/08-negative-weights</td><td style="text-align: right">4.752</td><td style="text-align: right">6.189</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/01-basic.lp</code> — variant-02/01-basic</td><td style="text-align: right">4.700</td><td style="text-align: right">7.675</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/02-start-equals-end.lp</code> — variant-02/02-start-equals-end</td><td style="text-align: right">4.789</td><td style="text-align: right">7.707</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/03-before-forces-detour.lp</code> — variant-02/03-before-forces-detour</td><td style="text-align: right">4.671</td><td style="text-align: right">7.677</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/04-after-forces-extension.lp</code> — variant-02/04-after-forces-extension</td><td style="text-align: right">4.717</td><td style="text-align: right">6.195</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/05-ordering-unsat.lp</code> — variant-02/05-ordering-unsat</td><td style="text-align: right">4.700</td><td style="text-align: right">7.675</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/06-layered-dag-before.lp</code> — variant-02/06-layered-dag-before</td><td style="text-align: right">6.238</td><td style="text-align: right">7.733</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/07-layered-dag-before-after.lp</code> — variant-02/07-layered-dag-before-after</td><td style="text-align: right">6.213</td><td style="text-align: right">7.677</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/08-tie-break-under-ordering.lp</code> — variant-02/08-tie-break-under-ordering</td><td style="text-align: right">4.819</td><td style="text-align: right">7.678</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-02/09-negative-weights.lp</code> — variant-02/09-negative-weights</td><td style="text-align: right">4.680</td><td style="text-align: right">7.671</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/01-basic.lp</code> — variant-03/01-basic</td><td style="text-align: right">4.798</td><td style="text-align: right">7.718</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/02-start-equals-end.lp</code> — variant-03/02-start-equals-end</td><td style="text-align: right">4.720</td><td style="text-align: right">7.676</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/03-budget-forces-detour.lp</code> — variant-03/03-budget-forces-detour</td><td style="text-align: right">4.819</td><td style="text-align: right">7.737</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/04-cost-at-cap-allowed.lp</code> — variant-03/04-cost-at-cap-allowed</td><td style="text-align: right">4.707</td><td style="text-align: right">7.288</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/05-budget-unsat.lp</code> — variant-03/05-budget-unsat</td><td style="text-align: right">4.791</td><td style="text-align: right">7.738</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/06-layered-dag-cap.lp</code> — variant-03/06-layered-dag-cap</td><td style="text-align: right">7.736</td><td style="text-align: right">9.206</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/07-layered-dag-tight-cap.lp</code> — variant-03/07-layered-dag-tight-cap</td><td style="text-align: right">7.856</td><td style="text-align: right">9.207</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/08-tie-break-under-cap.lp</code> — variant-03/08-tie-break-under-cap</td><td style="text-align: right">4.712</td><td style="text-align: right">7.680</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-03/09-negative-weights.lp</code> — variant-03/09-negative-weights</td><td style="text-align: right">4.782</td><td style="text-align: right">7.690</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/01-basic.lp</code> — variant-04/01-basic</td><td style="text-align: right">4.691</td><td style="text-align: right">7.691</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/02-start-equals-end.lp</code> — variant-04/02-start-equals-end</td><td style="text-align: right">4.780</td><td style="text-align: right">7.741</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/03-before-forces-detour-within-budget.lp</code> — variant-04/03-before-forces-detour-within-budget</td><td style="text-align: right">4.708</td><td style="text-align: right">7.690</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/04-ordering-violates-budget.lp</code> — variant-04/04-ordering-violates-budget</td><td style="text-align: right">4.795</td><td style="text-align: right">7.707</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/05-after-and-budget-interact.lp</code> — variant-04/05-after-and-budget-interact</td><td style="text-align: right">4.687</td><td style="text-align: right">7.698</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp</code> — variant-04/06-layered-dag-ordering-cap</td><td style="text-align: right">7.826</td><td style="text-align: right">9.214</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/07-layered-dag-combined.lp</code> — variant-04/07-layered-dag-combined</td><td style="text-align: right">7.718</td><td style="text-align: right">9.176</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/08-tie-break-under-ordering-and-cap.lp</code> — variant-04/08-tie-break-under-ordering-and-cap</td><td style="text-align: right">6.311</td><td style="text-align: right">7.713</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/shortest-path/variant-04/09-negative-weights.lp</code> — variant-04/09-negative-weights</td><td style="text-align: right">4.689</td><td style="text-align: right">7.686</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-01/01-basic.lp</code> — variant-01/01-basic</td><td style="text-align: right">4.844</td><td style="text-align: right">6.215</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-01/02-agent-reuse.lp</code> — variant-01/02-agent-reuse</td><td style="text-align: right">4.702</td><td style="text-align: right">6.149</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-01/03-selective-compatibility.lp</code> — variant-01/03-selective-compatibility</td><td style="text-align: right">4.748</td><td style="text-align: right">6.180</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-01/04-no-compatible-agent-unsat.lp</code> — variant-01/04-no-compatible-agent-unsat</td><td style="text-align: right">4.677</td><td style="text-align: right">6.178</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-01/05-larger-mix.lp</code> — variant-01/05-larger-mix</td><td style="text-align: right">4.782</td><td style="text-align: right">7.723</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-02/01-basic.lp</code> — variant-02/01-basic</td><td style="text-align: right">4.692</td><td style="text-align: right">6.134</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp</code> — variant-02/02-makespan-tiebreak</td><td style="text-align: right">4.704</td><td style="text-align: right">6.156</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-02/03-cost-dominates.lp</code> — variant-02/03-cost-dominates</td><td style="text-align: right">4.667</td><td style="text-align: right">7.685</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-02/04-no-compatible-agent-unsat.lp</code> — variant-02/04-no-compatible-agent-unsat</td><td style="text-align: right">4.764</td><td style="text-align: right">6.192</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-02/05-larger-mix.lp</code> — variant-02/05-larger-mix</td><td style="text-align: right">6.229</td><td style="text-align: right">7.686</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-03/01-basic.lp</code> — variant-03/01-basic</td><td style="text-align: right">4.778</td><td style="text-align: right">6.183</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-03/02-multiple-groups.lp</code> — variant-03/02-multiple-groups</td><td style="text-align: right">4.695</td><td style="text-align: right">6.143</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-03/03-mixed-grouped-ungrouped.lp</code> — variant-03/03-mixed-grouped-ungrouped</td><td style="text-align: right">4.761</td><td style="text-align: right">6.155</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-03/04-incompatible-group-unsat.lp</code> — variant-03/04-incompatible-group-unsat</td><td style="text-align: right">4.706</td><td style="text-align: right">6.150</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-03/05-larger-mix.lp</code> — variant-03/05-larger-mix</td><td style="text-align: right">4.746</td><td style="text-align: right">6.172</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-04/01-basic.lp</code> — variant-04/01-basic</td><td style="text-align: right">7.743</td><td style="text-align: right">25.842</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-04/02-precedence.lp</code> — variant-04/02-precedence</td><td style="text-align: right">6.297</td><td style="text-align: right">7.692</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-04/03-agent-serialization.lp</code> — variant-04/03-agent-serialization</td><td style="text-align: right">7.734</td><td style="text-align: right">27.248</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-04/04-window-too-tight-unsat.lp</code> — variant-04/04-window-too-tight-unsat</td><td style="text-align: right">6.382</td><td style="text-align: right">7.701</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/task-allocation/variant-04/05-larger-mix.lp</code> — variant-04/05-larger-mix</td><td style="text-align: right">27.935</td><td style="text-align: right">197.879</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-01/01-basic.lp</code> — variant-01/01-basic</td><td style="text-align: right">4.830</td><td style="text-align: right">7.792</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-01/02-multiple-tours.lp</code> — variant-01/02-multiple-tours</td><td style="text-align: right">4.685</td><td style="text-align: right">7.687</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-01/03-asymmetric.lp</code> — variant-01/03-asymmetric</td><td style="text-align: right">6.269</td><td style="text-align: right">7.738</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-01/04-subtour-unsat.lp</code> — variant-01/04-subtour-unsat</td><td style="text-align: right">4.720</td><td style="text-align: right">6.155</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-01/05-ring.lp</code> — variant-01/05-ring</td><td style="text-align: right">6.313</td><td style="text-align: right">7.692</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-02/01-basic.lp</code> — variant-02/01-basic</td><td style="text-align: right">4.701</td><td style="text-align: right">7.699</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-02/02-single-salesman.lp</code> — variant-02/02-single-salesman</td><td style="text-align: right">4.748</td><td style="text-align: right">6.186</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-02/03-too-many-salesmen-unsat.lp</code> — variant-02/03-too-many-salesmen-unsat</td><td style="text-align: right">4.700</td><td style="text-align: right">6.168</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-02/04-equal-cost-split.lp</code> — variant-02/04-equal-cost-split</td><td style="text-align: right">4.798</td><td style="text-align: right">7.688</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-02/05-larger-asymmetric.lp</code> — variant-02/05-larger-asymmetric</td><td style="text-align: right">4.691</td><td style="text-align: right">7.676</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-02/06-unreachable-edge.lp</code> — variant-02/06-unreachable-edge</td><td style="text-align: right">6.235</td><td style="text-align: right">7.726</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-03/01-basic.lp</code> — variant-03/01-basic</td><td style="text-align: right">4.689</td><td style="text-align: right">7.691</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-03/02-single-salesman.lp</code> — variant-03/02-single-salesman</td><td style="text-align: right">4.790</td><td style="text-align: right">7.728</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-03/03-depot-crossing-unsat.lp</code> — variant-03/03-depot-crossing-unsat</td><td style="text-align: right">4.674</td><td style="text-align: right">7.692</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-03/04-equal-cost-split.lp</code> — variant-03/04-equal-cost-split</td><td style="text-align: right">4.729</td><td style="text-align: right">7.735</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp</code> — variant-03/05-larger-three-depots</td><td style="text-align: right">6.227</td><td style="text-align: right">7.684</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-03/06-unreachable-edge.lp</code> — variant-03/06-unreachable-edge</td><td style="text-align: right">4.706</td><td style="text-align: right">6.193</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-04/01-basic.lp</code> — variant-04/01-basic</td><td style="text-align: right">6.193</td><td style="text-align: right">7.691</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-04/02-single-salesman.lp</code> — variant-04/02-single-salesman</td><td style="text-align: right">6.304</td><td style="text-align: right">7.713</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-04/03-window-too-tight-unsat.lp</code> — variant-04/03-window-too-tight-unsat</td><td style="text-align: right">4.676</td><td style="text-align: right">7.682</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-04/04-depot-window-too-tight-unsat.lp</code> — variant-04/04-depot-window-too-tight-unsat</td><td style="text-align: right">4.750</td><td style="text-align: right">7.735</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-04/05-three-depots-asymmetric-times.lp</code> — variant-04/05-three-depots-asymmetric-times</td><td style="text-align: right">6.234</td><td style="text-align: right">7.670</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-04/06-unreachable-edge.lp</code> — variant-04/06-unreachable-edge</td><td style="text-align: right">6.381</td><td style="text-align: right">7.724</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-05/01-basic.lp</code> — variant-05/01-basic</td><td style="text-align: right">6.230</td><td style="text-align: right">7.709</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-05/02-tight-bound-exact.lp</code> — variant-05/02-tight-bound-exact</td><td style="text-align: right">6.334</td><td style="text-align: right">7.741</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-05/03-revisit-too-tight-unsat.lp</code> — variant-05/03-revisit-too-tight-unsat</td><td style="text-align: right">4.686</td><td style="text-align: right">7.670</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-05/04-depot-and-vertex-revisits.lp</code> — variant-05/04-depot-and-vertex-revisits</td><td style="text-align: right">6.322</td><td style="text-align: right">7.748</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp</code> — variant-05/05-three-depots-mixed</td><td style="text-align: right">6.257</td><td style="text-align: right">7.683</td><td>zetesis</td></tr>
+<tr><td><code>scenarios/traveling-salesman/variant-05/06-unreachable-edge.lp</code> — variant-05/06-unreachable-edge</td><td style="text-align: right">6.299</td><td style="text-align: right">7.718</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-01.lp</code> — n-queens/variant-01</td><td style="text-align: right">6.217</td><td style="text-align: right">8.862</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-02.lp</code> — n-queens/variant-02</td><td style="text-align: right">39.845</td><td style="text-align: right">125.302</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-03.lp</code> — n-queens/variant-03</td><td style="text-align: right">6.243</td><td style="text-align: right">7.717</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-04.lp</code> — n-queens/variant-04</td><td style="text-align: right">6.315</td><td style="text-align: right">7.702</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-05.lp</code> — n-queens/variant-05</td><td style="text-align: right">7.849</td><td style="text-align: right">9.247</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-06.lp</code> — n-queens/variant-06</td><td style="text-align: right">7.845</td><td style="text-align: right">7.687</td><td>close</td></tr>
+<tr><td><code>standalone/send-money/send-money.lp</code> — send-money/send-money</td><td style="text-align: right">10.776</td><td style="text-align: right">15.237</td><td>zetesis</td></tr>
+<tr><td><code>family-crossing/integrated.lp</code> — family-crossing/integrated</td><td style="text-align: right">1,958.365</td><td style="text-align: right">889.255</td><td>clingo</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="public-supplement-w14"><a class="header" href="#public-supplement-w14">public-supplement-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>scalability/parity-chain/parity_chain.lp</code> — parity-chain/parity_chain</td><td style="text-align: right">6.327</td><td style="text-align: right">7.913</td><td>zetesis</td></tr>
+<tr><td><code>scalability/parity-mixed/parity_mixed.lp</code> — parity-mixed/parity_mixed</td><td style="text-align: right">7.750</td><td style="text-align: right">7.703</td><td>close</td></tr>
+<tr><td><code>scalability/parity-tseitin/parity_tseitin.lp</code> — parity-tseitin/parity_tseitin</td><td style="text-align: right">4.782</td><td style="text-align: right">7.699</td><td>zetesis</td></tr>
+<tr><td><code>scalability/pigeonhole-clauses/pigeonhole_clauses.lp</code> — pigeonhole-clauses/pigeonhole_clauses</td><td style="text-align: right">4.686</td><td style="text-align: right">6.150</td><td>zetesis</td></tr>
+<tr><td><code>scalability/poker/draw_poker_tests.lp</code> — poker/draw_poker_tests</td><td style="text-align: right">354.527</td><td style="text-align: right">107.219</td><td>clingo</td></tr>
+<tr><td><code>scalability/shifted-subset-sum/subset_sum.lp</code> — shifted-subset-sum/subset_sum</td><td style="text-align: right">6.407</td><td style="text-align: right">7.757</td><td>zetesis</td></tr>
+<tr><td><code>scalability/strategic-companies/strategic_companies.lp</code> — strategic-companies/strategic_companies</td><td style="text-align: right">12.373</td><td style="text-align: right">7.721</td><td>clingo</td></tr>
+<tr><td><code>scalability/two-qbf/two_qbf.lp</code> — two-qbf/two_qbf</td><td style="text-align: right">39.146</td><td style="text-align: right">10.823</td><td>clingo</td></tr>
+<tr><td><code>scalability/two-qbf-parity/two_qbf_parity.lp</code> — two-qbf-parity/two_qbf_parity</td><td style="text-align: right">18.444</td><td style="text-align: right">9.195</td><td>clingo</td></tr>
+<tr><td><code>scalability/two-qbf-pigeonhole/two_qbf_pigeonhole.lp</code> — two-qbf-pigeonhole/two_qbf_pigeonhole</td><td style="text-align: right">16.929</td><td style="text-align: right">9.237</td><td>clingo</td></tr>
+<tr><td><code>scalability/two-qbf-tseitin/two_qbf_tseitin.lp</code> — two-qbf-tseitin/two_qbf_tseitin</td><td style="text-align: right">22.919</td><td style="text-align: right">9.186</td><td>clingo</td></tr>
+<tr><td><code>wide-mastermind/68/mm-68-examples.lp</code> — 68/mm-68-examples</td><td style="text-align: right">958.083</td><td style="text-align: right">22,715.332</td><td>zetesis</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="sigma-larger5-w14"><a class="header" href="#sigma-larger5-w14">sigma-larger5-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>parity20.lp</code> — parity20</td><td style="text-align: right">69.974</td><td style="text-align: right">28.911</td><td>clingo</td></tr>
+<tr><td><code>parity24.lp</code> — parity24</td><td style="text-align: right">96.913</td><td style="text-align: right">49.981</td><td>clingo</td></tr>
+<tr><td><code>parity28.lp</code> — parity28</td><td style="text-align: right">125.446</td><td style="text-align: right">215.491</td><td>zetesis</td></tr>
+<tr><td><code>pigeonhole7.lp</code> — pigeonhole7</td><td style="text-align: right">109.644</td><td style="text-align: right">25.865</td><td>clingo</td></tr>
+<tr><td><code>pigeonhole8.lp</code> — pigeonhole8</td><td style="text-align: right">201.721</td><td style="text-align: right">79.950</td><td>clingo</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="reported-workloads-w14"><a class="header" href="#reported-workloads-w14">reported-workloads-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>s_crossing.lp</code> — s_crossing</td><td style="text-align: right">592.658</td><td style="text-align: right">27.549</td><td>clingo</td></tr>
+<tr><td><code>sudoku_simple.lp</code> — sudoku_simple</td><td style="text-align: right">81.676</td><td style="text-align: right">1,881.142</td><td>zetesis</td></tr>
+<tr><td><code>elias_pr_simp.lp</code> — elias_pr_simp</td><td style="text-align: right">148.920</td><td style="text-align: right">80.773</td><td>clingo</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="arithmetic-schedule-w14"><a class="header" href="#arithmetic-schedule-w14">arithmetic-schedule-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>S3-h20-d4.lp</code> — S3-h20-d4</td><td style="text-align: right">9.336</td><td style="text-align: right">7.791</td><td>clingo</td></tr>
+<tr><td><code>S3-h19-d4.lp</code> — S3-h19-d4</td><td style="text-align: right">7.732</td><td style="text-align: right">7.694</td><td>close</td></tr>
+<tr><td><code>S3-h100-d20.lp</code> — S3-h100-d20</td><td style="text-align: right">99.762</td><td style="text-align: right">19.800</td><td>clingo</td></tr>
+<tr><td><code>S3-h99-d20.lp</code> — S3-h99-d20</td><td style="text-align: right">87.672</td><td style="text-align: right">18.255</td><td>clingo</td></tr>
+<tr><td><code>S3-h400-d80.lp</code> — S3-h400-d80</td><td style="text-align: right">1,612.519</td><td style="text-align: right">395.018</td><td>clingo</td></tr>
+<tr><td><code>S3-h399-d80.lp</code> — S3-h399-d80</td><td style="text-align: right">1,399.354</td><td style="text-align: right">247.407</td><td>clingo</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="family-variants-w14"><a class="header" href="#family-variants-w14">family-variants-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>family_crossing_vanilla_mode_b.lp</code> — family_crossing_vanilla_mode_b</td><td style="text-align: right">382.656</td><td style="text-align: right">11,388.304</td><td>zetesis</td></tr>
+<tr><td><code>family_crossing_mode_a_observation.lp</code> — family_crossing_mode_a_observation</td><td style="text-align: right">126.137</td><td style="text-align: right">15.381</td><td>clingo</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="family-components-w14"><a class="header" href="#family-components-w14">family-components-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>family_crossing_complete_domain.lp</code> — family_crossing_complete_domain</td><td style="text-align: right">53.011</td><td style="text-align: right">12.207</td><td>clingo</td></tr>
+<tr><td><code>eec_htp_integration_v5.lp</code> — eec_htp_integration_v5</td><td style="text-align: right">9.349</td><td style="text-align: right">9.243</td><td>close</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="inner-heavy18-w14"><a class="header" href="#inner-heavy18-w14">inner-heavy18-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>programs/xorchain-14.lp</code> — programs/xorchain-14</td><td style="text-align: right">13.959</td><td style="text-align: right">12.243</td><td>clingo</td></tr>
+<tr><td><code>programs/xorchain-16.lp</code> — programs/xorchain-16</td><td style="text-align: right">15.416</td><td style="text-align: right">13.764</td><td>clingo</td></tr>
+<tr><td><code>programs/xorchain-18.lp</code> — programs/xorchain-18</td><td style="text-align: right">16.999</td><td style="text-align: right">19.843</td><td>zetesis</td></tr>
+<tr><td><code>programs/xorchain-20.lp</code> — programs/xorchain-20</td><td style="text-align: right">18.422</td><td style="text-align: right">22.766</td><td>zetesis</td></tr>
+<tr><td><code>programs/tseitin-24.lp</code> — programs/tseitin-24</td><td style="text-align: right">13.998</td><td style="text-align: right">12.211</td><td>clingo</td></tr>
+<tr><td><code>programs/tseitin-28.lp</code> — programs/tseitin-28</td><td style="text-align: right">13.844</td><td style="text-align: right">12.204</td><td>clingo</td></tr>
+<tr><td><code>programs/tseitin-30.lp</code> — programs/tseitin-30</td><td style="text-align: right">15.357</td><td style="text-align: right">12.213</td><td>clingo</td></tr>
+<tr><td><code>programs/php-7.lp</code> — programs/php-7</td><td style="text-align: right">31.976</td><td style="text-align: right">21.290</td><td>clingo</td></tr>
+<tr><td><code>programs/php-8.lp</code> — programs/php-8</td><td style="text-align: right">65.228</td><td style="text-align: right">75.589</td><td>zetesis</td></tr>
+<tr><td><code>cores/xorchain-14.core.lp</code> — cores/xorchain-14.core</td><td style="text-align: right">6.251</td><td style="text-align: right">7.675</td><td>zetesis</td></tr>
+<tr><td><code>cores/xorchain-16.core.lp</code> — cores/xorchain-16.core</td><td style="text-align: right">6.287</td><td style="text-align: right">9.173</td><td>zetesis</td></tr>
+<tr><td><code>cores/xorchain-18.core.lp</code> — cores/xorchain-18.core</td><td style="text-align: right">7.716</td><td style="text-align: right">9.172</td><td>zetesis</td></tr>
+<tr><td><code>cores/xorchain-20.core.lp</code> — cores/xorchain-20.core</td><td style="text-align: right">7.882</td><td style="text-align: right">10.695</td><td>zetesis</td></tr>
+<tr><td><code>cores/tseitin-24.core.lp</code> — cores/tseitin-24.core</td><td style="text-align: right">6.247</td><td style="text-align: right">7.686</td><td>zetesis</td></tr>
+<tr><td><code>cores/tseitin-28.core.lp</code> — cores/tseitin-28.core</td><td style="text-align: right">6.266</td><td style="text-align: right">7.658</td><td>zetesis</td></tr>
+<tr><td><code>cores/tseitin-30.core.lp</code> — cores/tseitin-30.core</td><td style="text-align: right">6.183</td><td style="text-align: right">7.673</td><td>zetesis</td></tr>
+<tr><td><code>cores/php-7.core.lp</code> — cores/php-7.core</td><td style="text-align: right">14.600</td><td style="text-align: right">16.700</td><td>zetesis</td></tr>
+<tr><td><code>cores/php-8.core.lp</code> — cores/php-8.core</td><td style="text-align: right">43.313</td><td style="text-align: right">114.745</td><td>zetesis</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="arithmetic-defaults-w14"><a class="header" href="#arithmetic-defaults-w14">arithmetic-defaults-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>S1a-default.lp</code> — S1a-default</td><td style="text-align: right">15.522</td><td style="text-align: right">13.581</td><td>clingo</td></tr>
+<tr><td><code>S1b-default.lp</code> — S1b-default</td><td style="text-align: right">14.057</td><td style="text-align: right">15.579</td><td>zetesis</td></tr>
+<tr><td><code>S2-default.lp</code> — S2-default</td><td style="text-align: right">9.506</td><td style="text-align: right">10.888</td><td>zetesis</td></tr>
+<tr><td><code>S3-default.lp</code> — S3-default</td><td style="text-align: right">23.105</td><td style="text-align: right">18.717</td><td>clingo</td></tr>
+<tr><td><code>S5-default.lp</code> — S5-default</td><td style="text-align: right">13.941</td><td style="text-align: right">7.695</td><td>clingo</td></tr>
+<tr><td><code>S6-default.lp</code> — S6-default</td><td style="text-align: right">8.424</td><td style="text-align: right">12.245</td><td>zetesis</td></tr>
+<tr><td><code>C2-default.lp</code> — C2-default</td><td style="text-align: right">7.881</td><td style="text-align: right">7.686</td><td>close</td></tr>
+<tr><td><code>C2-odd.lp</code> — C2-odd</td><td style="text-align: right">6.281</td><td style="text-align: right">7.724</td><td>zetesis</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="typed65-w14"><a class="header" href="#typed65-w14">typed65-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>subset_sum.lp</code> — subset_sum 17→19</td><td style="text-align: right">4.752</td><td style="text-align: right">6.163</td><td>zetesis</td></tr>
+<tr><td><code>subset_sum.lp</code> — subset_sum 8→30 17→61</td><td style="text-align: right">4.706</td><td style="text-align: right">6.156</td><td>zetesis</td></tr>
+<tr><td><code>subset_sum.lp</code> — subset_sum 8→30 17→63</td><td style="text-align: right">4.778</td><td style="text-align: right">6.169</td><td>zetesis</td></tr>
+<tr><td><code>two_qbf.lp</code> — two_qbf 68→52</td><td style="text-align: right">29.020</td><td style="text-align: right">9.272</td><td>clingo</td></tr>
+<tr><td><code>two_qbf.lp</code> — two_qbf 1→2</td><td style="text-align: right">38.522</td><td style="text-align: right">9.229</td><td>clingo</td></tr>
+<tr><td><code>two_qbf.lp</code> — two_qbf 3→2 68→40</td><td style="text-align: right">24.449</td><td style="text-align: right">9.242</td><td>clingo</td></tr>
+<tr><td><code>two_qbf.lp</code> — two_qbf 8→10 68→85</td><td style="text-align: right">56.332</td><td style="text-align: right">10.751</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_parity.lp</code> — two_qbf_parity 1→0</td><td style="text-align: right">16.995</td><td style="text-align: right">9.206</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_parity.lp</code> — two_qbf_parity 1→2</td><td style="text-align: right">16.940</td><td style="text-align: right">9.224</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_parity.lp</code> — two_qbf_parity 2→3 1→3</td><td style="text-align: right">20.007</td><td style="text-align: right">9.218</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_parity.lp</code> — two_qbf_parity 1→4 6→5 1→2</td><td style="text-align: right">13.912</td><td style="text-align: right">9.196</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_tseitin.lp</code> — two_qbf_tseitin 1→0</td><td style="text-align: right">21.393</td><td style="text-align: right">10.753</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_tseitin.lp</code> — two_qbf_tseitin 1→2</td><td style="text-align: right">23.077</td><td style="text-align: right">9.216</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_tseitin.lp</code> — two_qbf_tseitin 2→3 1→3</td><td style="text-align: right">24.589</td><td style="text-align: right">10.775</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_tseitin.lp</code> — two_qbf_tseitin 1→4</td><td style="text-align: right">23.066</td><td style="text-align: right">9.255</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_pigeonhole.lp</code> — two_qbf_pigeonhole 1→0</td><td style="text-align: right">15.369</td><td style="text-align: right">9.241</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_pigeonhole.lp</code> — two_qbf_pigeonhole 1→2</td><td style="text-align: right">17.154</td><td style="text-align: right">9.269</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_pigeonhole.lp</code> — two_qbf_pigeonhole 2→3 1→3</td><td style="text-align: right">18.692</td><td style="text-align: right">9.269</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_pigeonhole.lp</code> — two_qbf_pigeonhole 1→4 4→3</td><td style="text-align: right">9.281</td><td style="text-align: right">7.765</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_parity.lp</code> — two_qbf_parity 6→10</td><td style="text-align: right">27.726</td><td style="text-align: right">10.758</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_parity.lp</code> — two_qbf_parity 6→14</td><td style="text-align: right">39.920</td><td style="text-align: right">16.759</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_parity.lp</code> — two_qbf_parity 6→16</td><td style="text-align: right">50.281</td><td style="text-align: right">19.830</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_tseitin.lp</code> — two_qbf_tseitin 12→18</td><td style="text-align: right">30.835</td><td style="text-align: right">12.257</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_tseitin.lp</code> — two_qbf_tseitin 12→24</td><td style="text-align: right">39.090</td><td style="text-align: right">12.259</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_tseitin.lp</code> — two_qbf_tseitin 12→30</td><td style="text-align: right">52.205</td><td style="text-align: right">15.212</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_pigeonhole.lp</code> — two_qbf_pigeonhole 4→5</td><td style="text-align: right">29.631</td><td style="text-align: right">10.766</td><td>clingo</td></tr>
+<tr><td><code>two_qbf_pigeonhole.lp</code> — two_qbf_pigeonhole 4→6</td><td style="text-align: right">52.833</td><td style="text-align: right">13.752</td><td>clingo</td></tr>
+<tr><td><code>strategic_companies.lp</code> — strategic_companies 1→2</td><td style="text-align: right">14.033</td><td style="text-align: right">7.724</td><td>clingo</td></tr>
+<tr><td><code>strategic_companies.lp</code> — strategic_companies 12→8 24→16 1→2</td><td style="text-align: right">9.419</td><td style="text-align: right">7.691</td><td>clingo</td></tr>
+<tr><td><code>strategic_companies.lp</code> — strategic_companies 12→10 24→20 1→3</td><td style="text-align: right">10.789</td><td style="text-align: right">7.735</td><td>clingo</td></tr>
+<tr><td><code>strategic_companies.lp</code> — strategic_companies 12→16 24→32</td><td style="text-align: right">29.699</td><td style="text-align: right">9.227</td><td>clingo</td></tr>
+<tr><td><code>strategic_companies.lp</code> — strategic_companies 12→20 24→40</td><td style="text-align: right">68.866</td><td style="text-align: right">12.426</td><td>clingo</td></tr>
+<tr><td><code>parity_tseitin.lp</code> — parity_tseitin 5→2</td><td style="text-align: right">4.826</td><td style="text-align: right">7.699</td><td>zetesis</td></tr>
+<tr><td><code>parity_tseitin.lp</code> — parity_tseitin 5→3 1→0</td><td style="text-align: right">4.699</td><td style="text-align: right">7.684</td><td>zetesis</td></tr>
+<tr><td><code>parity_tseitin.lp</code> — parity_tseitin 1→2</td><td style="text-align: right">6.331</td><td style="text-align: right">7.727</td><td>zetesis</td></tr>
+<tr><td><code>parity_chain.lp</code> — parity_chain 5→2</td><td style="text-align: right">4.684</td><td style="text-align: right">6.139</td><td>zetesis</td></tr>
+<tr><td><code>parity_chain.lp</code> — parity_chain 5→3 1→0</td><td style="text-align: right">4.735</td><td style="text-align: right">6.141</td><td>zetesis</td></tr>
+<tr><td><code>parity_chain.lp</code> — parity_chain 1→2</td><td style="text-align: right">4.686</td><td style="text-align: right">7.688</td><td>zetesis</td></tr>
+<tr><td><code>pigeonhole_clauses.lp</code> — pigeonhole_clauses 4→3</td><td style="text-align: right">4.834</td><td style="text-align: right">6.235</td><td>zetesis</td></tr>
+<tr><td><code>pigeonhole_clauses.lp</code> — pigeonhole_clauses 4→3 1→0</td><td style="text-align: right">4.703</td><td style="text-align: right">6.164</td><td>zetesis</td></tr>
+<tr><td><code>pigeonhole_clauses.lp</code> — pigeonhole_clauses 4→2</td><td style="text-align: right">4.775</td><td style="text-align: right">6.229</td><td>zetesis</td></tr>
+<tr><td><code>parity_mixed.lp</code> — parity_mixed 8→0</td><td style="text-align: right">6.221</td><td style="text-align: right">7.713</td><td>zetesis</td></tr>
+<tr><td><code>parity_mixed.lp</code> — parity_mixed 1→2</td><td style="text-align: right">6.278</td><td style="text-align: right">7.700</td><td>zetesis</td></tr>
+<tr><td><code>parity_mixed.lp</code> — parity_mixed 5→3 8→4</td><td style="text-align: right">6.232</td><td style="text-align: right">7.704</td><td>zetesis</td></tr>
+<tr><td><code>parity_mixed.lp</code> — parity_mixed 8→20</td><td style="text-align: right">7.849</td><td style="text-align: right">7.705</td><td>close</td></tr>
+<tr><td><code>standalone/n-queens/variant-01.lp</code> — n-queens/variant-01 8→4</td><td style="text-align: right">4.700</td><td style="text-align: right">6.135</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-01.lp</code> — n-queens/variant-01 8→5</td><td style="text-align: right">4.791</td><td style="text-align: right">6.144</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-01.lp</code> — n-queens/variant-01 8→6</td><td style="text-align: right">4.688</td><td style="text-align: right">7.684</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-03.lp</code> — n-queens/variant-03 8→4</td><td style="text-align: right">4.765</td><td style="text-align: right">6.196</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-03.lp</code> — n-queens/variant-03 8→5</td><td style="text-align: right">4.708</td><td style="text-align: right">7.671</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-03.lp</code> — n-queens/variant-03 8→6</td><td style="text-align: right">4.708</td><td style="text-align: right">6.186</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-02.lp</code> — n-queens/variant-02 8→4</td><td style="text-align: right">4.697</td><td style="text-align: right">6.136</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-02.lp</code> — n-queens/variant-02 8→5</td><td style="text-align: right">4.717</td><td style="text-align: right">6.131</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-04.lp</code> — n-queens/variant-04 8→4</td><td style="text-align: right">4.694</td><td style="text-align: right">7.668</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-04.lp</code> — n-queens/variant-04 8→5</td><td style="text-align: right">4.791</td><td style="text-align: right">6.210</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-05.lp</code> — n-queens/variant-05 8→4</td><td style="text-align: right">4.683</td><td style="text-align: right">6.157</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-05.lp</code> — n-queens/variant-05 8→5</td><td style="text-align: right">4.723</td><td style="text-align: right">6.133</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-06.lp</code> — n-queens/variant-06 8→4</td><td style="text-align: right">4.700</td><td style="text-align: right">6.143</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-06.lp</code> — n-queens/variant-06 8→5</td><td style="text-align: right">4.747</td><td style="text-align: right">6.140</td><td>zetesis</td></tr>
+<tr><td><code>generated/monotone-choices-6.lp</code> — monotone-choices-6</td><td style="text-align: right">4.707</td><td style="text-align: right">6.143</td><td>zetesis</td></tr>
+<tr><td><code>generated/monotone-choices-8.lp</code> — monotone-choices-8</td><td style="text-align: right">4.812</td><td style="text-align: right">6.175</td><td>zetesis</td></tr>
+<tr><td><code>generated/monotone-choices-10.lp</code> — monotone-choices-10</td><td style="text-align: right">4.706</td><td style="text-align: right">6.169</td><td>zetesis</td></tr>
+<tr><td><code>generated/redundant-transitivity-8.lp</code> — redundant-transitivity-8</td><td style="text-align: right">4.754</td><td style="text-align: right">6.183</td><td>zetesis</td></tr>
+<tr><td><code>generated/redundant-transitivity-12.lp</code> — redundant-transitivity-12</td><td style="text-align: right">4.656</td><td style="text-align: right">6.158</td><td>zetesis</td></tr>
+<tr><td><code>generated/redundant-transitivity-16.lp</code> — redundant-transitivity-16</td><td style="text-align: right">6.258</td><td style="text-align: right">6.160</td><td>close</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="scalability21-w14"><a class="header" href="#scalability21-w14">scalability21-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>scalability/n-queens.lp</code> — scalability/n-queens</td><td style="text-align: right">6.334</td><td style="text-align: right">7.728</td><td>zetesis</td></tr>
+<tr><td><code>scalability/n-queens.lp</code> — scalability/n-queens 8→9</td><td style="text-align: right">7.877</td><td style="text-align: right">10.770</td><td>zetesis</td></tr>
+<tr><td><code>scalability/n-queens.lp</code> — scalability/n-queens 8→10</td><td style="text-align: right">12.897</td><td style="text-align: right">30.321</td><td>zetesis</td></tr>
+<tr><td><code>scalability/pigeonhole.lp</code> — scalability/pigeonhole 7→5</td><td style="text-align: right">4.773</td><td style="text-align: right">7.700</td><td>zetesis</td></tr>
+<tr><td><code>scalability/pigeonhole.lp</code> — scalability/pigeonhole 7→6</td><td style="text-align: right">4.763</td><td style="text-align: right">7.729</td><td>zetesis</td></tr>
+<tr><td><code>scalability/pigeonhole.lp</code> — scalability/pigeonhole</td><td style="text-align: right">4.704</td><td style="text-align: right">19.745</td><td>zetesis</td></tr>
+<tr><td><code>scalability/mastermind.lp</code> — scalability/mastermind 6→5</td><td style="text-align: right">12.399</td><td style="text-align: right">10.818</td><td>clingo</td></tr>
+<tr><td><code>scalability/mastermind.lp</code> — scalability/mastermind</td><td style="text-align: right">38.405</td><td style="text-align: right">33.967</td><td>clingo</td></tr>
+<tr><td><code>scalability/mastermind.lp</code> — scalability/mastermind 6→8</td><td style="text-align: right">253.546</td><td style="text-align: right">198.357</td><td>clingo</td></tr>
+<tr><td><code>scalability/mastermind-nested.lp</code> — scalability/mastermind-nested</td><td style="text-align: right">12.445</td><td style="text-align: right">10.801</td><td>clingo</td></tr>
+<tr><td><code>sudoku.lp</code> — sudoku</td><td style="text-align: right">39.585</td><td style="text-align: right">16.788</td><td>clingo</td></tr>
+<tr><td><code>scalability/prime-sieve.lp</code> — scalability/prime-sieve</td><td style="text-align: right">6.369</td><td style="text-align: right">7.770</td><td>zetesis</td></tr>
+<tr><td><code>scalability/prime-sieve.lp</code> — scalability/prime-sieve 30→100</td><td style="text-align: right">6.336</td><td style="text-align: right">7.712</td><td>zetesis</td></tr>
+<tr><td><code>scalability/prime-sieve.lp</code> — scalability/prime-sieve 30→300</td><td style="text-align: right">7.893</td><td style="text-align: right">9.309</td><td>zetesis</td></tr>
+<tr><td><code>scalability/subset-sum.lp</code> — scalability/subset-sum</td><td style="text-align: right">4.731</td><td style="text-align: right">6.161</td><td>zetesis</td></tr>
+<tr><td><code>scalability/subset-sum.lp</code> — scalability/subset-sum 12→20</td><td style="text-align: right">4.775</td><td style="text-align: right">6.157</td><td>zetesis</td></tr>
+<tr><td><code>scalability/subset-sum.lp</code> — scalability/subset-sum 12→30</td><td style="text-align: right">6.237</td><td style="text-align: right">7.744</td><td>zetesis</td></tr>
+<tr><td><code>einstein-riddle.lp</code> — einstein-riddle</td><td style="text-align: right">15.460</td><td style="text-align: right">37.855</td><td>zetesis</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="root6-w14"><a class="header" href="#root6-w14">root6-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>alternatives.lp</code> — alternatives</td><td style="text-align: right">3.247</td><td style="text-align: right">6.166</td><td>zetesis</td></tr>
+<tr><td><code>choices.lp</code> — choices</td><td style="text-align: right">3.149</td><td style="text-align: right">6.152</td><td>zetesis</td></tr>
+<tr><td><code>lazy-reachability.lp</code> — lazy-reachability</td><td style="text-align: right">4.795</td><td style="text-align: right">6.199</td><td>zetesis</td></tr>
+<tr><td><code>network-repair.lp</code> — network-repair</td><td style="text-align: right">4.684</td><td style="text-align: right">6.131</td><td>zetesis</td></tr>
+<tr><td><code>reachability.lp</code> — reachability</td><td style="text-align: right">3.232</td><td style="text-align: right">6.186</td><td>zetesis</td></tr>
+<tr><td><code>unsatisfiable.lp</code> — unsatisfiable</td><td style="text-align: right">3.160</td><td style="text-align: right">6.141</td><td>zetesis</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="series22-w14"><a class="header" href="#series22-w14">series22-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>generated/independent-choice-12.lp</code> — independent-choice-12</td><td style="text-align: right">6.321</td><td style="text-align: right">10.997</td><td>zetesis</td></tr>
+<tr><td><code>generated/independent-choice-16.lp</code> — independent-choice-16</td><td style="text-align: right">21.791</td><td style="text-align: right">39.058</td><td>zetesis</td></tr>
+<tr><td><code>generated/independent-negation-8.lp</code> — independent-negation-8</td><td style="text-align: right">4.779</td><td style="text-align: right">7.772</td><td>zetesis</td></tr>
+<tr><td><code>generated/independent-negation-10.lp</code> — independent-negation-10</td><td style="text-align: right">4.682</td><td style="text-align: right">7.702</td><td>zetesis</td></tr>
+<tr><td><code>generated/independent-negation-aggregate-16.lp</code> — independent-negation-aggregate-16</td><td style="text-align: right">26.572</td><td style="text-align: right">44.962</td><td>zetesis</td></tr>
+<tr><td><code>generated/disjunction-12.lp</code> — disjunction-12</td><td style="text-align: right">24.803</td><td style="text-align: right">34.450</td><td>zetesis</td></tr>
+<tr><td><code>generated/ties-50.lp</code> — ties-50</td><td style="text-align: right">20.372</td><td style="text-align: right">24.817</td><td>zetesis</td></tr>
+<tr><td><code>generated/transitive-path-100.lp</code> — transitive-path-100</td><td style="text-align: right">39.770</td><td style="text-align: right">10.832</td><td>clingo</td></tr>
+<tr><td><code>generated/transitive-path-200.lp</code> — transitive-path-200</td><td style="text-align: right">165.441</td><td style="text-align: right">21.481</td><td>clingo</td></tr>
+<tr><td><code>generated/transitive-dense-40.lp</code> — transitive-dense-40</td><td style="text-align: right">24.668</td><td style="text-align: right">9.261</td><td>clingo</td></tr>
+<tr><td><code>generated/chain-1000.lp</code> — chain-1000</td><td style="text-align: right">21.390</td><td style="text-align: right">9.235</td><td>clingo</td></tr>
+<tr><td><code>generated/chain-2000.lp</code> — chain-2000</td><td style="text-align: right">38.135</td><td style="text-align: right">12.345</td><td>clingo</td></tr>
+<tr><td><code>generated/chain-arithmetic-1000.lp</code> — chain-arithmetic-1000</td><td style="text-align: right">13.922</td><td style="text-align: right">7.781</td><td>clingo</td></tr>
+<tr><td><code>generated/stratified-16.lp</code> — stratified-16</td><td style="text-align: right">6.297</td><td style="text-align: right">7.710</td><td>zetesis</td></tr>
+<tr><td><code>generated/producer-chain-700.lp</code> — producer-chain-700</td><td style="text-align: right">28.981</td><td style="text-align: right">12.228</td><td>clingo</td></tr>
+<tr><td><code>generated/latin-square-5.lp</code> — latin-square-5</td><td style="text-align: right">15.627</td><td style="text-align: right">23.336</td><td>zetesis</td></tr>
+<tr><td><code>generated/planning-14.lp</code> — planning-14</td><td style="text-align: right">33.884</td><td style="text-align: right">19.922</td><td>clingo</td></tr>
+<tr><td><code>standalone/n-queens/variant-01.lp</code> — n-queens/variant-01 8→10</td><td style="text-align: right">15.020</td><td style="text-align: right">31.977</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-01.lp</code> — n-queens/variant-01 8→11</td><td style="text-align: right">35.444</td><td style="text-align: right">188.744</td><td>zetesis</td></tr>
+<tr><td><code>standalone/n-queens/variant-04.lp</code> — n-queens/variant-04 8→11</td><td style="text-align: right">28.637</td><td style="text-align: right">182.849</td><td>zetesis</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="ar51-w14"><a class="header" href="#ar51-w14">ar51-w14</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input / amendment</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th><th>Outcome</th></tr>
+</thead>
+<tbody>
+<tr><td><code>materialized/tseitin-p17-odd/program.lp</code> — tseitin-p17-odd/program</td><td style="text-align: right">6.276</td><td style="text-align: right">10.777</td><td>zetesis</td></tr>
+<tr><td><code>materialized/chain-p17-odd/program.lp</code> — chain-p17-odd/program</td><td style="text-align: right">6.193</td><td style="text-align: right">9.228</td><td>zetesis</td></tr>
+<tr><td><code>materialized/tseitin-p29-odd/program.lp</code> — tseitin-p29-odd/program</td><td style="text-align: right">9.466</td><td style="text-align: right">191.379</td><td>zetesis</td></tr>
+<tr><td><code>materialized/chain-p29-odd/program.lp</code> — chain-p29-odd/program</td><td style="text-align: right">7.719</td><td style="text-align: right">84.590</td><td>zetesis</td></tr>
+<tr><td><code>materialized/tseitin-p41-odd/program.lp</code> — tseitin-p41-odd/program</td><td style="text-align: right">10.953</td><td style="text-align: right">1,777.607</td><td>zetesis</td></tr>
+<tr><td><code>materialized/chain-p41-odd/program.lp</code> — chain-p41-odd/program</td><td style="text-align: right">10.773</td><td style="text-align: right">3,504.134</td><td>zetesis</td></tr>
+<tr><td><code>materialized/tseitin-p47-odd/program.lp</code> — tseitin-p47-odd/program</td><td style="text-align: right">12.534</td><td style="text-align: right">27,405.090</td><td>zetesis</td></tr>
+<tr><td><code>materialized/chain-p47-odd/program.lp</code> — chain-p47-odd/program</td><td style="text-align: right">10.766</td><td style="text-align: right">55,249.514</td><td>zetesis</td></tr>
+<tr><td><code>materialized/tseitin-p53-odd/program.lp</code> — tseitin-p53-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/chain-p53-odd/program.lp</code> — chain-p53-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/tseitin-p59-odd/program.lp</code> — tseitin-p59-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/chain-p59-odd/program.lp</code> — chain-p59-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/tseitin-p71-odd/program.lp</code> — tseitin-p71-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/chain-p71-odd/program.lp</code> — chain-p71-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/tseitin-p83-odd/program.lp</code> — tseitin-p83-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/chain-p83-odd/program.lp</code> — chain-p83-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/tseitin-p89-odd/program.lp</code> — tseitin-p89-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/chain-p89-odd/program.lp</code> — chain-p89-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/tseitin-p101-odd/program.lp</code> — tseitin-p101-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/chain-p101-odd/program.lp</code> — chain-p101-odd/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/pigeon-clauses-h8-extra1/program.lp</code> — pigeon-clauses-h8-extra1/program</td><td style="text-align: right">4.858</td><td style="text-align: right">89.357</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-clauses-h9-extra1/program.lp</code> — pigeon-clauses-h9-extra1/program</td><td style="text-align: right">4.681</td><td style="text-align: right">967.791</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-clauses-h10-extra1/program.lp</code> — pigeon-clauses-h10-extra1/program</td><td style="text-align: right">6.431</td><td style="text-align: right">15,693.459</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-clauses-h11-extra1/program.lp</code> — pigeon-clauses-h11-extra1/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/pigeon-clauses-h12-extra1/program.lp</code> — pigeon-clauses-h12-extra1/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/pigeon-choice-h8/program.lp</code> — pigeon-choice-h8/program</td><td style="text-align: right">4.738</td><td style="text-align: right">137.331</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-choice-h9/program.lp</code> — pigeon-choice-h9/program</td><td style="text-align: right">6.410</td><td style="text-align: right">686.115</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-choice-h10/program.lp</code> — pigeon-choice-h10/program</td><td style="text-align: right">4.720</td><td style="text-align: right">9,563.898</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-choice-h11/program.lp</code> — pigeon-choice-h11/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/pigeon-choice-h12/program.lp</code> — pigeon-choice-h12/program</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td>reference unavailable</td></tr>
+<tr><td><code>materialized/mixed-p11-c40/program.lp</code> — mixed-p11-c40/program</td><td style="text-align: right">9.549</td><td style="text-align: right">9.451</td><td>close</td></tr>
+<tr><td><code>materialized/mixed-p17-c70/program.lp</code> — mixed-p17-c70/program</td><td style="text-align: right">16.992</td><td style="text-align: right">9.306</td><td>clingo</td></tr>
+<tr><td><code>materialized/mixed-p29-c130/program.lp</code> — mixed-p29-c130/program</td><td style="text-align: right">20.838</td><td style="text-align: right">12.197</td><td>clingo</td></tr>
+<tr><td><code>materialized/mixed-p41-c190/program.lp</code> — mixed-p41-c190/program</td><td style="text-align: right">29.393</td><td style="text-align: right">40.983</td><td>zetesis</td></tr>
+<tr><td><code>materialized/tseitin-p5-even/program.lp</code> — tseitin-p5-even/program</td><td style="text-align: right">6.324</td><td style="text-align: right">7.701</td><td>zetesis</td></tr>
+<tr><td><code>materialized/chain-p5-even/program.lp</code> — chain-p5-even/program</td><td style="text-align: right">6.234</td><td style="text-align: right">7.692</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-clauses-h4-extra0/program.lp</code> — pigeon-clauses-h4-extra0/program</td><td style="text-align: right">4.795</td><td style="text-align: right">6.185</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-clauses-h5-extra0/program.lp</code> — pigeon-clauses-h5-extra0/program</td><td style="text-align: right">4.690</td><td style="text-align: right">6.156</td><td>zetesis</td></tr>
+<tr><td><code>materialized/pigeon-clauses-h6-extra0/program.lp</code> — pigeon-clauses-h6-extra0/program</td><td style="text-align: right">9.324</td><td style="text-align: right">9.254</td><td>close</td></tr>
+<tr><td><code>ground-door/tseitin-20.lp</code> — ground-door/tseitin-20</td><td style="text-align: right">6.277</td><td style="text-align: right">7.689</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/xorchain-12.lp</code> — ground-door/xorchain-12</td><td style="text-align: right">6.325</td><td style="text-align: right">7.719</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/tseitin-30.lp</code> — door-sizes/tseitin-30</td><td style="text-align: right">6.187</td><td style="text-align: right">9.215</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/tseitin-40.lp</code> — door-sizes/tseitin-40</td><td style="text-align: right">7.786</td><td style="text-align: right">9.213</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/tseitin-50.lp</code> — door-sizes/tseitin-50</td><td style="text-align: right">9.250</td><td style="text-align: right">21.276</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/tseitin-60.lp</code> — door-sizes/tseitin-60</td><td style="text-align: right">9.297</td><td style="text-align: right">57.483</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/tseitin-80.lp</code> — door-sizes/tseitin-80</td><td style="text-align: right">12.255</td><td style="text-align: right">1,106.194</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/xorchain-16.lp</code> — door-sizes/xorchain-16</td><td style="text-align: right">7.882</td><td style="text-align: right">10.892</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/xorchain-20.lp</code> — door-sizes/xorchain-20</td><td style="text-align: right">7.729</td><td style="text-align: right">13.762</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/xorchain-24.lp</code> — door-sizes/xorchain-24</td><td style="text-align: right">7.840</td><td style="text-align: right">36.385</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/xorchain-32.lp</code> — door-sizes/xorchain-32</td><td style="text-align: right">10.726</td><td style="text-align: right">67.997</td><td>zetesis</td></tr>
+<tr><td><code>ground-door/door-sizes/xorchain-40.lp</code> — door-sizes/xorchain-40</td><td style="text-align: right">12.546</td><td style="text-align: right">4,676.604</td><td>zetesis</td></tr>
+</tbody>
+</table>
+</div>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/performance.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/cpu-0.7.0.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/performance.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/cpu-0.7.0.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

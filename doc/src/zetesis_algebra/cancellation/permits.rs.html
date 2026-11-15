@@ -246,26 +246,38 @@
 <a href=#246 id=246 data-nosnippet>246</a>    refill: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;mut </span>S) -&gt; <span class="prelude-ty">Result</span>&lt;(), E&gt;,
 <a href=#247 id=247 data-nosnippet>247</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), E&gt; {
 <a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">if </span>state.available() == <span class="number">0 </span>{
-<a href=#249 id=249 data-nosnippet>249</a>        refill(state)<span class="question-mark">?</span>;
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">return </span>refill_and_tick(state, refill);
 <a href=#250 id=250 data-nosnippet>250</a>    }
 <a href=#251 id=251 data-nosnippet>251</a>    state.consume(<span class="number">1</span>);
 <a href=#252 id=252 data-nosnippet>252</a>    <span class="prelude-val">Ok</span>(())
 <a href=#253 id=253 data-nosnippet>253</a>}
 <a href=#254 id=254 data-nosnippet>254</a>
-<a href=#255 id=255 data-nosnippet>255</a><span class="attr">#[inline]
-<a href=#256 id=256 data-nosnippet>256</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>take_available(state: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>State, wanted: u64) -&gt; u64 {
-<a href=#257 id=257 data-nosnippet>257</a>    <span class="kw">let </span>taken = state.available().min(wanted);
-<a href=#258 id=258 data-nosnippet>258</a>    state.consume(taken);
-<a href=#259 id=259 data-nosnippet>259</a>    taken
-<a href=#260 id=260 data-nosnippet>260</a>}
-<a href=#261 id=261 data-nosnippet>261</a>
-<a href=#262 id=262 data-nosnippet>262</a><span class="attr">#[inline]
-<a href=#263 id=263 data-nosnippet>263</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>settle(state: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>State, publish: <span class="kw">impl </span>FnOnce(PermitSettlement)) {
-<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(prior) = state.detach() {
-<a href=#265 id=265 data-nosnippet>265</a>        publish(prior);
-<a href=#266 id=266 data-nosnippet>266</a>    }
-<a href=#267 id=267 data-nosnippet>267</a>}
-<a href=#268 id=268 data-nosnippet>268</a>
-<a href=#269 id=269 data-nosnippet>269</a><span class="attr">#[cfg(test)]
-<a href=#270 id=270 data-nosnippet>270</a></span><span class="kw">mod </span>tests;
+<a href=#255 id=255 data-nosnippet>255</a><span class="comment">// Finish consumption on the refill path so its caller can return the final
+<a href=#256 id=256 data-nosnippet>256</a>// outcome directly, without inspecting an intermediate refill result.
+<a href=#257 id=257 data-nosnippet>257</a></span><span class="attr">#[cold]
+<a href=#258 id=258 data-nosnippet>258</a></span><span class="kw">fn </span>refill_and_tick&lt;S: State, E&gt;(
+<a href=#259 id=259 data-nosnippet>259</a>    state: <span class="kw-2">&amp;mut </span>S,
+<a href=#260 id=260 data-nosnippet>260</a>    refill: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;mut </span>S) -&gt; <span class="prelude-ty">Result</span>&lt;(), E&gt;,
+<a href=#261 id=261 data-nosnippet>261</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), E&gt; {
+<a href=#262 id=262 data-nosnippet>262</a>    refill(state)<span class="question-mark">?</span>;
+<a href=#263 id=263 data-nosnippet>263</a>    state.consume(<span class="number">1</span>);
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="prelude-val">Ok</span>(())
+<a href=#265 id=265 data-nosnippet>265</a>}
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a><span class="attr">#[inline]
+<a href=#268 id=268 data-nosnippet>268</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>take_available(state: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>State, wanted: u64) -&gt; u64 {
+<a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">let </span>taken = state.available().min(wanted);
+<a href=#270 id=270 data-nosnippet>270</a>    state.consume(taken);
+<a href=#271 id=271 data-nosnippet>271</a>    taken
+<a href=#272 id=272 data-nosnippet>272</a>}
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a><span class="attr">#[inline]
+<a href=#275 id=275 data-nosnippet>275</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>settle(state: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>State, publish: <span class="kw">impl </span>FnOnce(PermitSettlement)) {
+<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(prior) = state.detach() {
+<a href=#277 id=277 data-nosnippet>277</a>        publish(prior);
+<a href=#278 id=278 data-nosnippet>278</a>    }
+<a href=#279 id=279 data-nosnippet>279</a>}
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a><span class="attr">#[cfg(test)]
+<a href=#282 id=282 data-nosnippet>282</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

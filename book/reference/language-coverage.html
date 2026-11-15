@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
+            window.path_to_searchindex_js = "../searchindex-e337ce9d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-25cd24fd.js"></script>
+        <script src="../toc-ec1322fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -213,8 +213,8 @@ The separate state/input obligations and unclassified scopes below remain open.<
 <tr><td>L05</td><td><strong>Closed:</strong> nested finite pools and intervals in admitted constructors, expressions and scoped fields preserve independent occurrences, complete value construction, checked binding order and required arithmetic errors</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/finite_values.rs">Finite values</a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/evaluated_heads.rs">Evaluated heads</a></td></tr>
 <tr><td>L06</td><td><strong>Closed:</strong> directed finite integer-affine comparison chains involving several unresolved variables, preserving whole-guard correlation, local scope and checked source arithmetic; nonlinear inversion and systems without directed finite bounds remain outside this profile</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/finite_chains.rs">Finite chains</a></td></tr>
 <tr><td>L07</td><td><strong>Closed:</strong> complete logical bounds on ordinary choices and admitted numeric count/sum comparisons, preserving logical ordering, signed activity and frozen-reduct truth within existing finite binding and measure profiles</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/logical_bounds.rs">Logical bounds</a></td></tr>
-<tr><td>L08</td><td><strong>Closed:</strong> complete outer aggregate-assignment proposals feed finite local head, choice, aggregate-element and universal-conditional consumers without losing their original equality or leaking local bindings</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/conditional_consumers.rs">Conditional consumers</a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/conditional_heads.rs">Conditional heads</a></td></tr>
-<tr><td>L09</td><td><strong>Closed:</strong> dependency-ordered finite assignment consumers and multiple assignments preserve complete predecessor bindings, original equalities and objective costs; recursive producer dependencies use completed possible support</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/aggregate_assignments_multiple.rs">Multiple assignments</a></td></tr>
+<tr><td>L08</td><td><strong>Closed:</strong> complete outer aggregate-assignment proposals feed finite local head, choice, aggregate-element and universal-conditional consumers without losing their original equality or leaking local bindings; an assignment every tuple of which is required over <a href="../architecture/grounding.html#certain-predicates">certain predicates</a> proposes its one value, whose equality is true</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/conditional_consumers.rs">Conditional consumers</a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/conditional_heads.rs">Conditional heads</a></td></tr>
+<tr><td>L09</td><td><strong>Closed:</strong> dependency-ordered finite assignment consumers and multiple assignments preserve complete predecessor bindings, original equalities (an exact assignment’s as the true formula it is) and objective costs; recursive producer dependencies use completed possible support</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/aggregate_assignments_multiple.rs">Multiple assignments</a></td></tr>
 <tr><td>L10</td><td><strong>Closed:</strong> missing/nonnumeric sum-head measures are neutral; missing extremum-head measures use the declared present-first-value projection, retaining independent head permission in guarded and unbounded contexts</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/head_contributions.rs">Head contributions</a></td></tr>
 <tr><td>L11</td><td><strong>Closed:</strong> negative numeric <code>#sum+</code> head measures contribute zero while retaining independent positive permission in guarded and unbounded admitted contexts; fixed-formula semantics and explicit clingo differences are documented</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/head_contributions.rs">Head contributions</a></td></tr>
 <tr><td>L12</td><td><strong>Closed:</strong> complete first tuple values in extremum heads preserve logical ordering and empty-extremum semantics within the documented numeric endpoint, producer and eligibility boundaries; neutral missing values follow L10</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/extrema_heads.rs">Extremum heads</a></td></tr>
@@ -246,11 +246,9 @@ required arithmetic failures. The remaining unclassified scopes are listed
 below; their existence is not a claim of undefined input or resource exhaustion.</p>
 <p>Source arithmetic follows the
 <a href="language.html#numeric-boundaries-and-refusal-meaning">complete-family policy</a>:
-only evaluated numeric division or remainder by zero can omit an instance with
-a warning, and only when that same original family has a jointly defined
-instance. A defined but false instance supplies a witness; an empty positive
-join is silent. Local elements are assessed separately for each fixed outer
-binding. Fatal arithmetic failures in the reached phase, including independent
+only evaluated numeric division or remainder by zero can omit an instance,
+which it always does, with a warning for its statement. A family of such
+instances alone contributes nothing; an empty positive join is silent. Fatal arithmetic failures in the reached phase, including independent
 expression branches after a zero divisor, still refuse admission. An omitted
 body or condition does not advance to a later head or consequent phase.
 Closed-term preparation and

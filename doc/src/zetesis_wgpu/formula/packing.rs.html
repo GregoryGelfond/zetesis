@@ -135,507 +135,514 @@
 <a href=#135 id=135 data-nosnippet>135</a>            .and_then(|n| n.checked_add(graph.numeric_work))
 <a href=#136 id=136 data-nosnippet>136</a>            .and_then(|n| n.checked_add(projection))
 <a href=#137 id=137 data-nosnippet>137</a>            .ok_or_else(|| capacity(<span class="string">"formula setup work overflows"</span>))<span class="question-mark">?</span>;
-<a href=#138 id=138 data-nosnippet>138</a>        shape.sweep_work = nodes
-<a href=#139 id=139 data-nosnippet>139</a>            .checked_mul(<span class="number">9</span>)
-<a href=#140 id=140 data-nosnippet>140</a>            .and_then(|n| shape.edges.checked_mul(<span class="number">2</span>).and_then(|e| n.checked_add(e)))
-<a href=#141 id=141 data-nosnippet>141</a>            .and_then(|n| n.checked_add(atoms))
-<a href=#142 id=142 data-nosnippet>142</a>            .and_then(|n| n.checked_add(<span class="number">65</span>))
-<a href=#143 id=143 data-nosnippet>143</a>            .and_then(|n| n.checked_add(graph.numeric_work))
-<a href=#144 id=144 data-nosnippet>144</a>            .and_then(|n| n.checked_add(graph.threshold_guard_work))
-<a href=#145 id=145 data-nosnippet>145</a>            .ok_or_else(|| capacity(<span class="string">"formula sweep work overflows"</span>))<span class="question-mark">?</span>;
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="prelude-val">Ok</span>(shape)
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>}
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a><span class="doccomment">/// Checked wire layout. Zero levels deliberately selects the serial evaluator;
-<a href=#151 id=151 data-nosnippet>151</a>/// positive levels address a complete dependency schedule after the root prefix.
-<a href=#152 id=152 data-nosnippet>152</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Schedule {
-<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">pub</span>(<span class="kw">super</span>) levels: u32,
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">pub</span>(<span class="kw">super</span>) root_bytes: u64,
-<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">pub</span>(<span class="kw">super</span>) bytes: u64,
-<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">pub</span>(<span class="kw">super</span>) setup_work: u32,
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">pub</span>(<span class="kw">super</span>) incidence: <span class="prelude-ty">Option</span>&lt;<span class="kw">crate</span>::formula_graph::incidence::Layout&gt;,
-<a href=#158 id=158 data-nosnippet>158</a>}
-<a href=#159 id=159 data-nosnippet>159</a><span class="kw">impl </span>Schedule {
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(shape: <span class="kw-2">&amp;</span>Shape, levels: u32, device: <span class="kw-2">&amp;</span>wgpu::Limits) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>root_words =
-<a href=#162 id=162 data-nosnippet>162</a>            <span class="kw">crate</span>::formula_graph::dependency::root_words(shape.nodes, shape.roots, levels)<span class="question-mark">?</span>;
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">let </span>root_bytes = mul(u64::from(root_words), <span class="number">4</span>)<span class="question-mark">?</span>;
-<a href=#164 id=164 data-nosnippet>164</a>        buffer(root_bytes, device)<span class="question-mark">?</span>;
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-<a href=#166 id=166 data-nosnippet>166</a>            levels,
-<a href=#167 id=167 data-nosnippet>167</a>            root_bytes,
-<a href=#168 id=168 data-nosnippet>168</a>            bytes: sum(<span class="kw-2">&amp;</span>[shape.node_bytes, root_bytes])<span class="question-mark">?</span>,
-<a href=#169 id=169 data-nosnippet>169</a>            setup_work: shape
-<a href=#170 id=170 data-nosnippet>170</a>                .setup_work
-<a href=#171 id=171 data-nosnippet>171</a>                .checked_add(levels)
-<a href=#172 id=172 data-nosnippet>172</a>                .ok_or_else(|| capacity(<span class="string">"formula level work overflows"</span>))<span class="question-mark">?</span>,
-<a href=#173 id=173 data-nosnippet>173</a>            incidence: <span class="prelude-val">None</span>,
-<a href=#174 id=174 data-nosnippet>174</a>        })
-<a href=#175 id=175 data-nosnippet>175</a>    }
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>with_incidence(
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw-2">mut </span><span class="self">self</span>,
-<a href=#179 id=179 data-nosnippet>179</a>        incidence: <span class="kw">crate</span>::formula_graph::incidence::Layout,
-<a href=#180 id=180 data-nosnippet>180</a>        device: <span class="kw-2">&amp;</span>wgpu::Limits,
-<a href=#181 id=181 data-nosnippet>181</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">if </span>u64::from(incidence.offset) * <span class="number">4 </span>!= <span class="self">self</span>.root_bytes {
-<a href=#183 id=183 data-nosnippet>183</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(
-<a href=#184 id=184 data-nosnippet>184</a>                <span class="string">"formula incidence offset differs from root prefix"</span>,
-<a href=#185 id=185 data-nosnippet>185</a>            ));
-<a href=#186 id=186 data-nosnippet>186</a>        }
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let </span>extra = mul(u64::from(incidence.words), <span class="number">4</span>)<span class="question-mark">?</span>;
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="self">self</span>.root_bytes = sum(<span class="kw-2">&amp;</span>[<span class="self">self</span>.root_bytes, extra])<span class="question-mark">?</span>;
-<a href=#189 id=189 data-nosnippet>189</a>        buffer(<span class="self">self</span>.root_bytes, device)<span class="question-mark">?</span>;
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="self">self</span>.bytes = sum(<span class="kw-2">&amp;</span>[<span class="self">self</span>.bytes, extra])<span class="question-mark">?</span>;
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="self">self</span>.setup_work = <span class="self">self
-<a href=#192 id=192 data-nosnippet>192</a>            </span>.setup_work
-<a href=#193 id=193 data-nosnippet>193</a>            .checked_add(incidence.setup_work)
-<a href=#194 id=194 data-nosnippet>194</a>            .ok_or_else(|| capacity(<span class="string">"formula dirty setup work overflows"</span>))<span class="question-mark">?</span>;
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="self">self</span>.incidence = <span class="prelude-val">Some</span>(incidence);
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>)
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>propagation(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">crate</span>::GpuPropagation {
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.incidence {
-<a href=#201 id=201 data-nosnippet>201</a>            <span class="prelude-val">Some</span>(incidence) <span class="kw">if </span>incidence.group_map != <span class="number">0 </span>=&gt; <span class="kw">crate</span>::GpuPropagation::IncrementalGroups,
-<a href=#202 id=202 data-nosnippet>202</a>            <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; <span class="kw">crate</span>::GpuPropagation::ChangedDependencies,
-<a href=#203 id=203 data-nosnippet>203</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">crate</span>::GpuPropagation::Dense,
-<a href=#204 id=204 data-nosnippet>204</a>        }
-<a href=#205 id=205 data-nosnippet>205</a>    }
-<a href=#206 id=206 data-nosnippet>206</a>}
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a><span class="doccomment">/// Final shape and schedule only; temporary depth words never belong to Graph.
-<a href=#209 id=209 data-nosnippet>209</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Graph {
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">pub</span>(<span class="kw">super</span>) shape: Shape,
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">pub</span>(<span class="kw">super</span>) schedule: Schedule,
-<a href=#212 id=212 data-nosnippet>212</a>    <span class="doccomment">/// The workgroup size this graph dispatches: the fixed size, or the size
-<a href=#213 id=213 data-nosnippet>213</a>    /// its packed schedule fits.
-<a href=#214 id=214 data-nosnippet>214</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) workgroup_size: <span class="kw">crate</span>::GpuWorkgroupSize,
-<a href=#215 id=215 data-nosnippet>215</a>}
-<a href=#216 id=216 data-nosnippet>216</a>
-<a href=#217 id=217 data-nosnippet>217</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Plan {
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">pub</span>(<span class="kw">super</span>) atoms: u32,
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">pub</span>(<span class="kw">super</span>) max_batch_bytes: u64,
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">pub</span>(<span class="kw">super</span>) worlds: u32,
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">pub</span>(<span class="kw">super</span>) seeds: u64,
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">pub</span>(<span class="kw">super</span>) masks: u64,
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">pub</span>(<span class="kw">super</span>) domains: u64,
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">pub</span>(<span class="kw">super</span>) results: u64,
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">pub</span>(<span class="kw">super</span>) transport: u64,
-<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">pub</span>(<span class="kw">super</span>) accounted: u64,
-<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">pub</span>(<span class="kw">super</span>) setup: u32,
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">pub</span>(<span class="kw">super</span>) sweep: u32,
-<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">pub</span>(<span class="kw">super</span>) max_rounds: u32,
-<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">pub</span>(<span class="kw">super</span>) max_work: u32,
-<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">pub</span>(<span class="kw">super</span>) epoch: u32,
-<a href=#232 id=232 data-nosnippet>232</a>}
-<a href=#233 id=233 data-nosnippet>233</a><span class="kw">impl </span>Plan {
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(
-<a href=#235 id=235 data-nosnippet>235</a>        graph: <span class="kw-2">&amp;</span>Graph,
-<a href=#236 id=236 data-nosnippet>236</a>        worlds: usize,
-<a href=#237 id=237 data-nosnippet>237</a>        limits: FormulaLimits,
-<a href=#238 id=238 data-nosnippet>238</a>        device: <span class="kw-2">&amp;</span>wgpu::Limits,
-<a href=#239 id=239 data-nosnippet>239</a>        fresh: bool,
-<a href=#240 id=240 data-nosnippet>240</a>        epoch: u32,
-<a href=#241 id=241 data-nosnippet>241</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#242 id=242 data-nosnippet>242</a>        <span class="self">Self</span>::layout(
-<a href=#243 id=243 data-nosnippet>243</a>            <span class="kw-2">&amp;</span>graph.shape,
-<a href=#244 id=244 data-nosnippet>244</a>            <span class="kw-2">&amp;</span>graph.schedule,
-<a href=#245 id=245 data-nosnippet>245</a>            worlds,
-<a href=#246 id=246 data-nosnippet>246</a>            limits,
-<a href=#247 id=247 data-nosnippet>247</a>            device,
-<a href=#248 id=248 data-nosnippet>248</a>            fresh,
-<a href=#249 id=249 data-nosnippet>249</a>            epoch,
-<a href=#250 id=250 data-nosnippet>250</a>        )
-<a href=#251 id=251 data-nosnippet>251</a>    }
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>layout(
-<a href=#253 id=253 data-nosnippet>253</a>        shape: <span class="kw-2">&amp;</span>Shape,
-<a href=#254 id=254 data-nosnippet>254</a>        schedule: <span class="kw-2">&amp;</span>Schedule,
-<a href=#255 id=255 data-nosnippet>255</a>        worlds: usize,
-<a href=#256 id=256 data-nosnippet>256</a>        limits: FormulaLimits,
-<a href=#257 id=257 data-nosnippet>257</a>        device: <span class="kw-2">&amp;</span>wgpu::Limits,
-<a href=#258 id=258 data-nosnippet>258</a>        fresh: bool,
-<a href=#259 id=259 data-nosnippet>259</a>        epoch: u32,
-<a href=#260 id=260 data-nosnippet>260</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">let </span>count = address(worlds)<span class="question-mark">?</span>;
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">crate</span>::runtime::positive_timeout(limits.timeout)<span class="question-mark">?</span>;
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">if </span>worlds &gt; limits.max_candidates || count &gt; device.max_compute_workgroups_per_dimension {
-<a href=#264 id=264 data-nosnippet>264</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula batch exceeds candidate/dispatch ceiling"</span>));
-<a href=#265 id=265 data-nosnippet>265</a>        }
-<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">if </span>limits.max_work_per_candidate &lt; schedule.setup_work || epoch == <span class="number">0 </span>{
-<a href=#267 id=267 data-nosnippet>267</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"mandatory formula setup or epoch exceeds limits"</span>));
-<a href=#268 id=268 data-nosnippet>268</a>        }
-<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">let </span>array = |length: u32| -&gt; <span class="prelude-ty">Result</span>&lt;u64, GpuError&gt; {
-<a href=#270 id=270 data-nosnippet>270</a>            <span class="kw">let </span>elements = u64::from(length) * u64::from(count);
-<a href=#271 id=271 data-nosnippet>271</a>            <span class="kw">if </span>elements &gt; u64::from(u32::MAX) {
-<a href=#272 id=272 data-nosnippet>272</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula world offset exceeds u32"</span>));
-<a href=#273 id=273 data-nosnippet>273</a>            }
-<a href=#274 id=274 data-nosnippet>274</a>            mul(elements.max(<span class="number">1</span>), <span class="number">4</span>)
-<a href=#275 id=275 data-nosnippet>275</a>        };
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>seeds = array(shape.words)<span class="question-mark">?</span>;
-<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">let </span>masks = array(shape.nodes)<span class="question-mark">?</span>;
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="kw">let </span>domain_words = schedule.incidence.as_ref().map_or(
-<a href=#279 id=279 data-nosnippet>279</a>            <span class="prelude-val">Ok</span>(shape.variables),
-<a href=#280 id=280 data-nosnippet>280</a>            <span class="kw">crate</span>::formula_graph::incidence::Layout::domain_words,
-<a href=#281 id=281 data-nosnippet>281</a>        )<span class="question-mark">?</span>;
-<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">let </span>domains = array(domain_words)<span class="question-mark">?</span>;
-<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">let </span>result_stride = sum(<span class="kw-2">&amp;</span>[HEADER_WORDS <span class="kw">as </span>u64, mul(<span class="number">2</span>, u64::from(shape.words))<span class="question-mark">?</span>])<span class="question-mark">?</span>;
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="kw">let </span>result_words = mul(u64::from(count), result_stride)<span class="question-mark">?</span>;
-<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">if </span>result_words &gt; u64::from(u32::MAX) {
-<a href=#286 id=286 data-nosnippet>286</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula result offset exceeds u32"</span>));
-<a href=#287 id=287 data-nosnippet>287</a>        }
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="kw">let </span>results = mul(result_words.max(<span class="number">1</span>), <span class="number">4</span>)<span class="question-mark">?</span>;
-<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">for </span>bytes <span class="kw">in </span>[seeds, masks, domains, results] {
-<a href=#290 id=290 data-nosnippet>290</a>            buffer(bytes, device)<span class="question-mark">?</span>;
-<a href=#291 id=291 data-nosnippet>291</a>        }
-<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">if </span>device.max_uniform_buffer_binding_size &lt; PARAM_BYTES {
-<a href=#293 id=293 data-nosnippet>293</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula uniform buffer exceeds device limit"</span>));
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="comment">// Preserve legacy checked arithmetic and its failure order. Only the
+<a href=#139 id=139 data-nosnippet>139</a>        // fresh general-formula receipt takes this proved row-family discount;
+<a href=#140 id=140 data-nosnippet>140</a>        // tight checking and frozen sweep tariffs retain their separate owners.
+<a href=#141 id=141 data-nosnippet>141</a>        </span>shape.setup_work = shape
+<a href=#142 id=142 data-nosnippet>142</a>            .setup_work
+<a href=#143 id=143 data-nosnippet>143</a>            .checked_sub(graph.original_discount)
+<a href=#144 id=144 data-nosnippet>144</a>            .ok_or_else(|| capacity(<span class="string">"original numeric discount exceeds setup"</span>))<span class="question-mark">?</span>;
+<a href=#145 id=145 data-nosnippet>145</a>        shape.sweep_work = nodes
+<a href=#146 id=146 data-nosnippet>146</a>            .checked_mul(<span class="number">9</span>)
+<a href=#147 id=147 data-nosnippet>147</a>            .and_then(|n| shape.edges.checked_mul(<span class="number">2</span>).and_then(|e| n.checked_add(e)))
+<a href=#148 id=148 data-nosnippet>148</a>            .and_then(|n| n.checked_add(atoms))
+<a href=#149 id=149 data-nosnippet>149</a>            .and_then(|n| n.checked_add(<span class="number">65</span>))
+<a href=#150 id=150 data-nosnippet>150</a>            .and_then(|n| n.checked_add(graph.frozen_numeric_work))
+<a href=#151 id=151 data-nosnippet>151</a>            .and_then(|n| n.checked_add(graph.threshold_guard_work))
+<a href=#152 id=152 data-nosnippet>152</a>            .ok_or_else(|| capacity(<span class="string">"formula sweep work overflows"</span>))<span class="question-mark">?</span>;
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="prelude-val">Ok</span>(shape)
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>}
+<a href=#156 id=156 data-nosnippet>156</a>
+<a href=#157 id=157 data-nosnippet>157</a><span class="doccomment">/// Checked wire layout. Zero levels deliberately selects the serial evaluator;
+<a href=#158 id=158 data-nosnippet>158</a>/// positive levels address a complete dependency schedule after the root prefix.
+<a href=#159 id=159 data-nosnippet>159</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Schedule {
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">pub</span>(<span class="kw">super</span>) levels: u32,
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">pub</span>(<span class="kw">super</span>) root_bytes: u64,
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">pub</span>(<span class="kw">super</span>) bytes: u64,
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">pub</span>(<span class="kw">super</span>) setup_work: u32,
+<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">pub</span>(<span class="kw">super</span>) incidence: <span class="prelude-ty">Option</span>&lt;<span class="kw">crate</span>::formula_graph::incidence::Layout&gt;,
+<a href=#165 id=165 data-nosnippet>165</a>}
+<a href=#166 id=166 data-nosnippet>166</a><span class="kw">impl </span>Schedule {
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(shape: <span class="kw-2">&amp;</span>Shape, levels: u32, device: <span class="kw-2">&amp;</span>wgpu::Limits) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">let </span>root_words =
+<a href=#169 id=169 data-nosnippet>169</a>            <span class="kw">crate</span>::formula_graph::dependency::root_words(shape.nodes, shape.roots, levels)<span class="question-mark">?</span>;
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>root_bytes = mul(u64::from(root_words), <span class="number">4</span>)<span class="question-mark">?</span>;
+<a href=#171 id=171 data-nosnippet>171</a>        buffer(root_bytes, device)<span class="question-mark">?</span>;
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+<a href=#173 id=173 data-nosnippet>173</a>            levels,
+<a href=#174 id=174 data-nosnippet>174</a>            root_bytes,
+<a href=#175 id=175 data-nosnippet>175</a>            bytes: sum(<span class="kw-2">&amp;</span>[shape.node_bytes, root_bytes])<span class="question-mark">?</span>,
+<a href=#176 id=176 data-nosnippet>176</a>            setup_work: shape
+<a href=#177 id=177 data-nosnippet>177</a>                .setup_work
+<a href=#178 id=178 data-nosnippet>178</a>                .checked_add(levels)
+<a href=#179 id=179 data-nosnippet>179</a>                .ok_or_else(|| capacity(<span class="string">"formula level work overflows"</span>))<span class="question-mark">?</span>,
+<a href=#180 id=180 data-nosnippet>180</a>            incidence: <span class="prelude-val">None</span>,
+<a href=#181 id=181 data-nosnippet>181</a>        })
+<a href=#182 id=182 data-nosnippet>182</a>    }
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>with_incidence(
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw-2">mut </span><span class="self">self</span>,
+<a href=#186 id=186 data-nosnippet>186</a>        incidence: <span class="kw">crate</span>::formula_graph::incidence::Layout,
+<a href=#187 id=187 data-nosnippet>187</a>        device: <span class="kw-2">&amp;</span>wgpu::Limits,
+<a href=#188 id=188 data-nosnippet>188</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">if </span>u64::from(incidence.offset) * <span class="number">4 </span>!= <span class="self">self</span>.root_bytes {
+<a href=#190 id=190 data-nosnippet>190</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(
+<a href=#191 id=191 data-nosnippet>191</a>                <span class="string">"formula incidence offset differs from root prefix"</span>,
+<a href=#192 id=192 data-nosnippet>192</a>            ));
+<a href=#193 id=193 data-nosnippet>193</a>        }
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span>extra = mul(u64::from(incidence.words), <span class="number">4</span>)<span class="question-mark">?</span>;
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="self">self</span>.root_bytes = sum(<span class="kw-2">&amp;</span>[<span class="self">self</span>.root_bytes, extra])<span class="question-mark">?</span>;
+<a href=#196 id=196 data-nosnippet>196</a>        buffer(<span class="self">self</span>.root_bytes, device)<span class="question-mark">?</span>;
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="self">self</span>.bytes = sum(<span class="kw-2">&amp;</span>[<span class="self">self</span>.bytes, extra])<span class="question-mark">?</span>;
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="self">self</span>.setup_work = <span class="self">self
+<a href=#199 id=199 data-nosnippet>199</a>            </span>.setup_work
+<a href=#200 id=200 data-nosnippet>200</a>            .checked_add(incidence.setup_work)
+<a href=#201 id=201 data-nosnippet>201</a>            .ok_or_else(|| capacity(<span class="string">"formula dirty setup work overflows"</span>))<span class="question-mark">?</span>;
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="self">self</span>.incidence = <span class="prelude-val">Some</span>(incidence);
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>)
+<a href=#204 id=204 data-nosnippet>204</a>    }
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>propagation(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">crate</span>::GpuPropagation {
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.incidence {
+<a href=#208 id=208 data-nosnippet>208</a>            <span class="prelude-val">Some</span>(incidence) <span class="kw">if </span>incidence.group_map != <span class="number">0 </span>=&gt; <span class="kw">crate</span>::GpuPropagation::IncrementalGroups,
+<a href=#209 id=209 data-nosnippet>209</a>            <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; <span class="kw">crate</span>::GpuPropagation::ChangedDependencies,
+<a href=#210 id=210 data-nosnippet>210</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">crate</span>::GpuPropagation::Dense,
+<a href=#211 id=211 data-nosnippet>211</a>        }
+<a href=#212 id=212 data-nosnippet>212</a>    }
+<a href=#213 id=213 data-nosnippet>213</a>}
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a><span class="doccomment">/// Final shape and schedule only; temporary depth words never belong to Graph.
+<a href=#216 id=216 data-nosnippet>216</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Graph {
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">pub</span>(<span class="kw">super</span>) shape: Shape,
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">pub</span>(<span class="kw">super</span>) schedule: Schedule,
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="doccomment">/// The workgroup size this graph dispatches: the fixed size, or the size
+<a href=#220 id=220 data-nosnippet>220</a>    /// its packed schedule fits.
+<a href=#221 id=221 data-nosnippet>221</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) workgroup_size: <span class="kw">crate</span>::GpuWorkgroupSize,
+<a href=#222 id=222 data-nosnippet>222</a>}
+<a href=#223 id=223 data-nosnippet>223</a>
+<a href=#224 id=224 data-nosnippet>224</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Plan {
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">pub</span>(<span class="kw">super</span>) atoms: u32,
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">pub</span>(<span class="kw">super</span>) max_batch_bytes: u64,
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">pub</span>(<span class="kw">super</span>) worlds: u32,
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">pub</span>(<span class="kw">super</span>) seeds: u64,
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">pub</span>(<span class="kw">super</span>) masks: u64,
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">pub</span>(<span class="kw">super</span>) domains: u64,
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">pub</span>(<span class="kw">super</span>) results: u64,
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">pub</span>(<span class="kw">super</span>) transport: u64,
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">pub</span>(<span class="kw">super</span>) accounted: u64,
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">pub</span>(<span class="kw">super</span>) setup: u32,
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">pub</span>(<span class="kw">super</span>) sweep: u32,
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">pub</span>(<span class="kw">super</span>) max_rounds: u32,
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">pub</span>(<span class="kw">super</span>) max_work: u32,
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">pub</span>(<span class="kw">super</span>) epoch: u32,
+<a href=#239 id=239 data-nosnippet>239</a>}
+<a href=#240 id=240 data-nosnippet>240</a><span class="kw">impl </span>Plan {
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(
+<a href=#242 id=242 data-nosnippet>242</a>        graph: <span class="kw-2">&amp;</span>Graph,
+<a href=#243 id=243 data-nosnippet>243</a>        worlds: usize,
+<a href=#244 id=244 data-nosnippet>244</a>        limits: FormulaLimits,
+<a href=#245 id=245 data-nosnippet>245</a>        device: <span class="kw-2">&amp;</span>wgpu::Limits,
+<a href=#246 id=246 data-nosnippet>246</a>        fresh: bool,
+<a href=#247 id=247 data-nosnippet>247</a>        epoch: u32,
+<a href=#248 id=248 data-nosnippet>248</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="self">Self</span>::layout(
+<a href=#250 id=250 data-nosnippet>250</a>            <span class="kw-2">&amp;</span>graph.shape,
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="kw-2">&amp;</span>graph.schedule,
+<a href=#252 id=252 data-nosnippet>252</a>            worlds,
+<a href=#253 id=253 data-nosnippet>253</a>            limits,
+<a href=#254 id=254 data-nosnippet>254</a>            device,
+<a href=#255 id=255 data-nosnippet>255</a>            fresh,
+<a href=#256 id=256 data-nosnippet>256</a>            epoch,
+<a href=#257 id=257 data-nosnippet>257</a>        )
+<a href=#258 id=258 data-nosnippet>258</a>    }
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>layout(
+<a href=#260 id=260 data-nosnippet>260</a>        shape: <span class="kw-2">&amp;</span>Shape,
+<a href=#261 id=261 data-nosnippet>261</a>        schedule: <span class="kw-2">&amp;</span>Schedule,
+<a href=#262 id=262 data-nosnippet>262</a>        worlds: usize,
+<a href=#263 id=263 data-nosnippet>263</a>        limits: FormulaLimits,
+<a href=#264 id=264 data-nosnippet>264</a>        device: <span class="kw-2">&amp;</span>wgpu::Limits,
+<a href=#265 id=265 data-nosnippet>265</a>        fresh: bool,
+<a href=#266 id=266 data-nosnippet>266</a>        epoch: u32,
+<a href=#267 id=267 data-nosnippet>267</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>count = address(worlds)<span class="question-mark">?</span>;
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">crate</span>::runtime::positive_timeout(limits.timeout)<span class="question-mark">?</span>;
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="kw">if </span>worlds &gt; limits.max_candidates || count &gt; device.max_compute_workgroups_per_dimension {
+<a href=#271 id=271 data-nosnippet>271</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula batch exceeds candidate/dispatch ceiling"</span>));
+<a href=#272 id=272 data-nosnippet>272</a>        }
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">if </span>limits.max_work_per_candidate &lt; schedule.setup_work || epoch == <span class="number">0 </span>{
+<a href=#274 id=274 data-nosnippet>274</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"mandatory formula setup or epoch exceeds limits"</span>));
+<a href=#275 id=275 data-nosnippet>275</a>        }
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>array = |length: u32| -&gt; <span class="prelude-ty">Result</span>&lt;u64, GpuError&gt; {
+<a href=#277 id=277 data-nosnippet>277</a>            <span class="kw">let </span>elements = u64::from(length) * u64::from(count);
+<a href=#278 id=278 data-nosnippet>278</a>            <span class="kw">if </span>elements &gt; u64::from(u32::MAX) {
+<a href=#279 id=279 data-nosnippet>279</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula world offset exceeds u32"</span>));
+<a href=#280 id=280 data-nosnippet>280</a>            }
+<a href=#281 id=281 data-nosnippet>281</a>            mul(elements.max(<span class="number">1</span>), <span class="number">4</span>)
+<a href=#282 id=282 data-nosnippet>282</a>        };
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">let </span>seeds = array(shape.words)<span class="question-mark">?</span>;
+<a href=#284 id=284 data-nosnippet>284</a>        <span class="kw">let </span>masks = array(shape.nodes)<span class="question-mark">?</span>;
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">let </span>domain_words = schedule.incidence.as_ref().map_or(
+<a href=#286 id=286 data-nosnippet>286</a>            <span class="prelude-val">Ok</span>(shape.variables),
+<a href=#287 id=287 data-nosnippet>287</a>            <span class="kw">crate</span>::formula_graph::incidence::Layout::domain_words,
+<a href=#288 id=288 data-nosnippet>288</a>        )<span class="question-mark">?</span>;
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">let </span>domains = array(domain_words)<span class="question-mark">?</span>;
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">let </span>result_stride = sum(<span class="kw-2">&amp;</span>[HEADER_WORDS <span class="kw">as </span>u64, mul(<span class="number">2</span>, u64::from(shape.words))<span class="question-mark">?</span>])<span class="question-mark">?</span>;
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">let </span>result_words = mul(u64::from(count), result_stride)<span class="question-mark">?</span>;
+<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">if </span>result_words &gt; u64::from(u32::MAX) {
+<a href=#293 id=293 data-nosnippet>293</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula result offset exceeds u32"</span>));
 <a href=#294 id=294 data-nosnippet>294</a>        }
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span>transport = sum(<span class="kw-2">&amp;</span>[PARAM_BYTES, seeds, masks, domains, results, results])<span class="question-mark">?</span>;
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">let </span>host_results = mul(u64::from(count), std::mem::size_of::&lt;FormulaCheck&gt;() <span class="kw">as </span>u64)<span class="question-mark">?</span>;
-<a href=#297 id=297 data-nosnippet>297</a>        <span class="comment">// All worlds may return a residual simultaneously. The output Vec
-<a href=#298 id=298 data-nosnippet>298</a>        // carries each Region header; each such Region owns two boxed u64 masks.
-<a href=#299 id=299 data-nosnippet>299</a>        </span><span class="kw">let </span>root_payload = mul(u64::from(count), root_mask_bytes(shape.atoms))<span class="question-mark">?</span>;
-<a href=#300 id=300 data-nosnippet>300</a>        <span class="kw">let </span>root_staging = <span class="kw">if </span>count == <span class="number">0 </span>{ <span class="number">0 </span>} <span class="kw">else </span>{ ROOT_STAGING_BYTES };
-<a href=#301 id=301 data-nosnippet>301</a>        <span class="kw">let </span>accounted = sum(<span class="kw-2">&amp;</span>[
-<a href=#302 id=302 data-nosnippet>302</a>            schedule.bytes,
-<a href=#303 id=303 data-nosnippet>303</a>            transport,
-<a href=#304 id=304 data-nosnippet>304</a>            PARAM_BYTES,
-<a href=#305 id=305 data-nosnippet>305</a>            seeds,
-<a href=#306 id=306 data-nosnippet>306</a>            host_results,
-<a href=#307 id=307 data-nosnippet>307</a>            root_payload,
-<a href=#308 id=308 data-nosnippet>308</a>            root_staging,
-<a href=#309 id=309 data-nosnippet>309</a>            <span class="kw">if </span>fresh { schedule.bytes } <span class="kw">else </span>{ <span class="number">0 </span>},
-<a href=#310 id=310 data-nosnippet>310</a>            <span class="kw">if </span>fresh { shape.temporary_bytes } <span class="kw">else </span>{ <span class="number">0 </span>},
-<a href=#311 id=311 data-nosnippet>311</a>        ])<span class="question-mark">?</span>;
-<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">if </span>worlds != <span class="number">0 </span>&amp;&amp; accounted &gt; limits.max_batch_bytes {
-<a href=#313 id=313 data-nosnippet>313</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula batch exceeds authored byte ceiling"</span>));
-<a href=#314 id=314 data-nosnippet>314</a>        }
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-<a href=#316 id=316 data-nosnippet>316</a>            worlds: count,
-<a href=#317 id=317 data-nosnippet>317</a>            atoms: shape.atoms,
-<a href=#318 id=318 data-nosnippet>318</a>            max_batch_bytes: limits.max_batch_bytes,
-<a href=#319 id=319 data-nosnippet>319</a>            seeds,
-<a href=#320 id=320 data-nosnippet>320</a>            masks,
-<a href=#321 id=321 data-nosnippet>321</a>            domains,
-<a href=#322 id=322 data-nosnippet>322</a>            results,
-<a href=#323 id=323 data-nosnippet>323</a>            transport,
-<a href=#324 id=324 data-nosnippet>324</a>            accounted,
-<a href=#325 id=325 data-nosnippet>325</a>            setup: schedule.setup_work,
-<a href=#326 id=326 data-nosnippet>326</a>            <span class="comment">// Bound one gate visit per node plus the dependency-level walk.
-<a href=#327 id=327 data-nosnippet>327</a>            // Active-word execution retains this allowance even when it skips
-<a href=#328 id=328 data-nosnippet>328</a>            // gates and levels; it is not a count of instructions or barriers.
-<a href=#329 id=329 data-nosnippet>329</a>            </span>sweep: shape
-<a href=#330 id=330 data-nosnippet>330</a>                .sweep_work
-<a href=#331 id=331 data-nosnippet>331</a>                .checked_add(schedule.levels)
-<a href=#332 id=332 data-nosnippet>332</a>                .and_then(|n| {
-<a href=#333 id=333 data-nosnippet>333</a>                    n.checked_add(schedule.incidence.as_ref().map_or(<span class="number">0</span>, |i| i.sweep_work))
-<a href=#334 id=334 data-nosnippet>334</a>                })
-<a href=#335 id=335 data-nosnippet>335</a>                .ok_or_else(|| capacity(<span class="string">"formula sweep level work overflows"</span>))<span class="question-mark">?</span>,
-<a href=#336 id=336 data-nosnippet>336</a>            max_rounds: limits.max_rounds,
-<a href=#337 id=337 data-nosnippet>337</a>            max_work: limits.max_work_per_candidate,
-<a href=#338 id=338 data-nosnippet>338</a>            epoch,
-<a href=#339 id=339 data-nosnippet>339</a>        })
-<a href=#340 id=340 data-nosnippet>340</a>    }
-<a href=#341 id=341 data-nosnippet>341</a>    <span class="comment">// Replace the requested cold upload staging with its actual retained element
-<a href=#342 id=342 data-nosnippet>342</a>    // capacities. No work or device effect uses a vector before this admission.
-<a href=#343 id=343 data-nosnippet>343</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>staging(
-<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#345 id=345 data-nosnippet>345</a>        requested: u64,
-<a href=#346 id=346 data-nosnippet>346</a>        nodes: u64,
-<a href=#347 id=347 data-nosnippet>347</a>        roots: u64,
-<a href=#348 id=348 data-nosnippet>348</a>        ceiling: u64,
-<a href=#349 id=349 data-nosnippet>349</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), GpuError&gt; {
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="self">self</span>.accounted = <span class="self">self
-<a href=#351 id=351 data-nosnippet>351</a>            </span>.accounted
-<a href=#352 id=352 data-nosnippet>352</a>            .checked_sub(requested)
-<a href=#353 id=353 data-nosnippet>353</a>            .and_then(|n| n.checked_add(nodes))
-<a href=#354 id=354 data-nosnippet>354</a>            .and_then(|n| n.checked_add(roots))
-<a href=#355 id=355 data-nosnippet>355</a>            .ok_or_else(|| capacity(<span class="string">"formula staging capacity sum overflows"</span>))<span class="question-mark">?</span>;
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">if </span><span class="self">self</span>.accounted &gt; ceiling {
-<a href=#357 id=357 data-nosnippet>357</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(
-<a href=#358 id=358 data-nosnippet>358</a>                <span class="string">"formula staging capacity exceeds authored byte ceiling"</span>,
-<a href=#359 id=359 data-nosnippet>359</a>            ));
-<a href=#360 id=360 data-nosnippet>360</a>        }
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="prelude-val">Ok</span>(())
-<a href=#362 id=362 data-nosnippet>362</a>    }
-<a href=#363 id=363 data-nosnippet>363</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>params(<span class="kw-2">&amp;</span><span class="self">self</span>, graph: <span class="kw-2">&amp;</span>Graph) -&gt; [u32; <span class="number">16</span>] {
-<a href=#364 id=364 data-nosnippet>364</a>        [
-<a href=#365 id=365 data-nosnippet>365</a>            graph.shape.atoms,
-<a href=#366 id=366 data-nosnippet>366</a>            graph.shape.nodes,
-<a href=#367 id=367 data-nosnippet>367</a>            graph.shape.roots,
-<a href=#368 id=368 data-nosnippet>368</a>            graph.shape.variables,
-<a href=#369 id=369 data-nosnippet>369</a>            graph.shape.words,
-<a href=#370 id=370 data-nosnippet>370</a>            graph.schedule.incidence.as_ref().map_or(<span class="number">0</span>, |i| i.offset),
-<a href=#371 id=371 data-nosnippet>371</a>            <span class="self">self</span>.max_rounds,
-<a href=#372 id=372 data-nosnippet>372</a>            <span class="self">self</span>.max_work,
-<a href=#373 id=373 data-nosnippet>373</a>            <span class="self">self</span>.setup,
-<a href=#374 id=374 data-nosnippet>374</a>            <span class="self">self</span>.sweep,
-<a href=#375 id=375 data-nosnippet>375</a>            <span class="self">self</span>.epoch,
-<a href=#376 id=376 data-nosnippet>376</a>            graph.schedule.levels,
-<a href=#377 id=377 data-nosnippet>377</a>            graph.schedule.incidence.as_ref().map_or(<span class="number">0</span>, |i| i.group_map),
-<a href=#378 id=378 data-nosnippet>378</a>            <span class="number">0</span>,
-<a href=#379 id=379 data-nosnippet>379</a>            <span class="number">0</span>,
-<a href=#380 id=380 data-nosnippet>380</a>            <span class="number">0</span>,
-<a href=#381 id=381 data-nosnippet>381</a>        ]
-<a href=#382 id=382 data-nosnippet>382</a>    }
-<a href=#383 id=383 data-nosnippet>383</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>pack(
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#385 id=385 data-nosnippet>385</a>        graph: <span class="kw-2">&amp;</span>Graph,
-<a href=#386 id=386 data-nosnippet>386</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
-<a href=#387 id=387 data-nosnippet>387</a>        staging: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::candidates::Staging,
-<a href=#388 id=388 data-nosnippet>388</a>        ceiling: u64,
-<a href=#389 id=389 data-nosnippet>389</a>        cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
-<a href=#390 id=390 data-nosnippet>390</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, GpuError&gt; {
-<a href=#391 id=391 data-nosnippet>391</a>        <span class="kw">if </span>candidates.len() != <span class="self">self</span>.worlds <span class="kw">as </span>usize {
-<a href=#392 id=392 data-nosnippet>392</a>            staging.release();
-<a href=#393 id=393 data-nosnippet>393</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(
-<a href=#394 id=394 data-nosnippet>394</a>                <span class="string">"formula candidate count differs from admitted plan"</span>,
-<a href=#395 id=395 data-nosnippet>395</a>            ));
-<a href=#396 id=396 data-nosnippet>396</a>        }
-<a href=#397 id=397 data-nosnippet>397</a>        staging.pack(
-<a href=#398 id=398 data-nosnippet>398</a>            <span class="kw-2">&amp;</span>graph.shape.theory,
-<a href=#399 id=399 data-nosnippet>399</a>            candidates,
-<a href=#400 id=400 data-nosnippet>400</a>            <span class="self">self</span>.seeds,
-<a href=#401 id=401 data-nosnippet>401</a>            <span class="self">self</span>.accounted,
-<a href=#402 id=402 data-nosnippet>402</a>            ceiling,
-<a href=#403 id=403 data-nosnippet>403</a>            cancellation,
-<a href=#404 id=404 data-nosnippet>404</a>        )
-<a href=#405 id=405 data-nosnippet>405</a>    }
-<a href=#406 id=406 data-nosnippet>406</a>}
-<a href=#407 id=407 data-nosnippet>407</a>
-<a href=#408 id=408 data-nosnippet>408</a><span class="kw">fn </span>invalid() -&gt; GpuError {
-<a href=#409 id=409 data-nosnippet>409</a>    GpuError::new(GpuErrorKind::Readback, <span class="string">"invalid formula result record"</span>)
-<a href=#410 id=410 data-nosnippet>410</a>}
-<a href=#411 id=411 data-nosnippet>411</a>
-<a href=#412 id=412 data-nosnippet>412</a><span class="doccomment">/// Decoded rows are reserved before submission, so a concurrently admitted
-<a href=#413 id=413 data-nosnippet>413</a>/// lookahead can use the actual capacity rather than an allocation estimate.
-<a href=#414 id=414 data-nosnippet>414</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Output {
-<a href=#415 id=415 data-nosnippet>415</a>    rows: Vec&lt;FormulaCheck&gt;,
-<a href=#416 id=416 data-nosnippet>416</a>    <span class="kw">pub</span>(<span class="kw">super</span>) accounted: u64,
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span>results = mul(result_words.max(<span class="number">1</span>), <span class="number">4</span>)<span class="question-mark">?</span>;
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">for </span>bytes <span class="kw">in </span>[seeds, masks, domains, results] {
+<a href=#297 id=297 data-nosnippet>297</a>            buffer(bytes, device)<span class="question-mark">?</span>;
+<a href=#298 id=298 data-nosnippet>298</a>        }
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">if </span>device.max_uniform_buffer_binding_size &lt; PARAM_BYTES {
+<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula uniform buffer exceeds device limit"</span>));
+<a href=#301 id=301 data-nosnippet>301</a>        }
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">let </span>transport = sum(<span class="kw-2">&amp;</span>[PARAM_BYTES, seeds, masks, domains, results, results])<span class="question-mark">?</span>;
+<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">let </span>host_results = mul(u64::from(count), std::mem::size_of::&lt;FormulaCheck&gt;() <span class="kw">as </span>u64)<span class="question-mark">?</span>;
+<a href=#304 id=304 data-nosnippet>304</a>        <span class="comment">// All worlds may return a residual simultaneously. The output Vec
+<a href=#305 id=305 data-nosnippet>305</a>        // carries each Region header; each such Region owns two boxed u64 masks.
+<a href=#306 id=306 data-nosnippet>306</a>        </span><span class="kw">let </span>root_payload = mul(u64::from(count), root_mask_bytes(shape.atoms))<span class="question-mark">?</span>;
+<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">let </span>root_staging = <span class="kw">if </span>count == <span class="number">0 </span>{ <span class="number">0 </span>} <span class="kw">else </span>{ ROOT_STAGING_BYTES };
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let </span>accounted = sum(<span class="kw-2">&amp;</span>[
+<a href=#309 id=309 data-nosnippet>309</a>            schedule.bytes,
+<a href=#310 id=310 data-nosnippet>310</a>            transport,
+<a href=#311 id=311 data-nosnippet>311</a>            PARAM_BYTES,
+<a href=#312 id=312 data-nosnippet>312</a>            seeds,
+<a href=#313 id=313 data-nosnippet>313</a>            host_results,
+<a href=#314 id=314 data-nosnippet>314</a>            root_payload,
+<a href=#315 id=315 data-nosnippet>315</a>            root_staging,
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="kw">if </span>fresh { schedule.bytes } <span class="kw">else </span>{ <span class="number">0 </span>},
+<a href=#317 id=317 data-nosnippet>317</a>            <span class="kw">if </span>fresh { shape.temporary_bytes } <span class="kw">else </span>{ <span class="number">0 </span>},
+<a href=#318 id=318 data-nosnippet>318</a>        ])<span class="question-mark">?</span>;
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">if </span>worlds != <span class="number">0 </span>&amp;&amp; accounted &gt; limits.max_batch_bytes {
+<a href=#320 id=320 data-nosnippet>320</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(<span class="string">"formula batch exceeds authored byte ceiling"</span>));
+<a href=#321 id=321 data-nosnippet>321</a>        }
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+<a href=#323 id=323 data-nosnippet>323</a>            worlds: count,
+<a href=#324 id=324 data-nosnippet>324</a>            atoms: shape.atoms,
+<a href=#325 id=325 data-nosnippet>325</a>            max_batch_bytes: limits.max_batch_bytes,
+<a href=#326 id=326 data-nosnippet>326</a>            seeds,
+<a href=#327 id=327 data-nosnippet>327</a>            masks,
+<a href=#328 id=328 data-nosnippet>328</a>            domains,
+<a href=#329 id=329 data-nosnippet>329</a>            results,
+<a href=#330 id=330 data-nosnippet>330</a>            transport,
+<a href=#331 id=331 data-nosnippet>331</a>            accounted,
+<a href=#332 id=332 data-nosnippet>332</a>            setup: schedule.setup_work,
+<a href=#333 id=333 data-nosnippet>333</a>            <span class="comment">// Bound one gate visit per node plus the dependency-level walk.
+<a href=#334 id=334 data-nosnippet>334</a>            // Active-word execution retains this allowance even when it skips
+<a href=#335 id=335 data-nosnippet>335</a>            // gates and levels; it is not a count of instructions or barriers.
+<a href=#336 id=336 data-nosnippet>336</a>            </span>sweep: shape
+<a href=#337 id=337 data-nosnippet>337</a>                .sweep_work
+<a href=#338 id=338 data-nosnippet>338</a>                .checked_add(schedule.levels)
+<a href=#339 id=339 data-nosnippet>339</a>                .and_then(|n| {
+<a href=#340 id=340 data-nosnippet>340</a>                    n.checked_add(schedule.incidence.as_ref().map_or(<span class="number">0</span>, |i| i.sweep_work))
+<a href=#341 id=341 data-nosnippet>341</a>                })
+<a href=#342 id=342 data-nosnippet>342</a>                .ok_or_else(|| capacity(<span class="string">"formula sweep level work overflows"</span>))<span class="question-mark">?</span>,
+<a href=#343 id=343 data-nosnippet>343</a>            max_rounds: limits.max_rounds,
+<a href=#344 id=344 data-nosnippet>344</a>            max_work: limits.max_work_per_candidate,
+<a href=#345 id=345 data-nosnippet>345</a>            epoch,
+<a href=#346 id=346 data-nosnippet>346</a>        })
+<a href=#347 id=347 data-nosnippet>347</a>    }
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="comment">// Replace the requested cold upload staging with its actual retained element
+<a href=#349 id=349 data-nosnippet>349</a>    // capacities. No work or device effect uses a vector before this admission.
+<a href=#350 id=350 data-nosnippet>350</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>staging(
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#352 id=352 data-nosnippet>352</a>        requested: u64,
+<a href=#353 id=353 data-nosnippet>353</a>        nodes: u64,
+<a href=#354 id=354 data-nosnippet>354</a>        roots: u64,
+<a href=#355 id=355 data-nosnippet>355</a>        ceiling: u64,
+<a href=#356 id=356 data-nosnippet>356</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), GpuError&gt; {
+<a href=#357 id=357 data-nosnippet>357</a>        <span class="self">self</span>.accounted = <span class="self">self
+<a href=#358 id=358 data-nosnippet>358</a>            </span>.accounted
+<a href=#359 id=359 data-nosnippet>359</a>            .checked_sub(requested)
+<a href=#360 id=360 data-nosnippet>360</a>            .and_then(|n| n.checked_add(nodes))
+<a href=#361 id=361 data-nosnippet>361</a>            .and_then(|n| n.checked_add(roots))
+<a href=#362 id=362 data-nosnippet>362</a>            .ok_or_else(|| capacity(<span class="string">"formula staging capacity sum overflows"</span>))<span class="question-mark">?</span>;
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">if </span><span class="self">self</span>.accounted &gt; ceiling {
+<a href=#364 id=364 data-nosnippet>364</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(
+<a href=#365 id=365 data-nosnippet>365</a>                <span class="string">"formula staging capacity exceeds authored byte ceiling"</span>,
+<a href=#366 id=366 data-nosnippet>366</a>            ));
+<a href=#367 id=367 data-nosnippet>367</a>        }
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="prelude-val">Ok</span>(())
+<a href=#369 id=369 data-nosnippet>369</a>    }
+<a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>params(<span class="kw-2">&amp;</span><span class="self">self</span>, graph: <span class="kw-2">&amp;</span>Graph) -&gt; [u32; <span class="number">16</span>] {
+<a href=#371 id=371 data-nosnippet>371</a>        [
+<a href=#372 id=372 data-nosnippet>372</a>            graph.shape.atoms,
+<a href=#373 id=373 data-nosnippet>373</a>            graph.shape.nodes,
+<a href=#374 id=374 data-nosnippet>374</a>            graph.shape.roots,
+<a href=#375 id=375 data-nosnippet>375</a>            graph.shape.variables,
+<a href=#376 id=376 data-nosnippet>376</a>            graph.shape.words,
+<a href=#377 id=377 data-nosnippet>377</a>            graph.schedule.incidence.as_ref().map_or(<span class="number">0</span>, |i| i.offset),
+<a href=#378 id=378 data-nosnippet>378</a>            <span class="self">self</span>.max_rounds,
+<a href=#379 id=379 data-nosnippet>379</a>            <span class="self">self</span>.max_work,
+<a href=#380 id=380 data-nosnippet>380</a>            <span class="self">self</span>.setup,
+<a href=#381 id=381 data-nosnippet>381</a>            <span class="self">self</span>.sweep,
+<a href=#382 id=382 data-nosnippet>382</a>            <span class="self">self</span>.epoch,
+<a href=#383 id=383 data-nosnippet>383</a>            graph.schedule.levels,
+<a href=#384 id=384 data-nosnippet>384</a>            graph.schedule.incidence.as_ref().map_or(<span class="number">0</span>, |i| i.group_map),
+<a href=#385 id=385 data-nosnippet>385</a>            <span class="number">0</span>,
+<a href=#386 id=386 data-nosnippet>386</a>            <span class="number">0</span>,
+<a href=#387 id=387 data-nosnippet>387</a>            <span class="number">0</span>,
+<a href=#388 id=388 data-nosnippet>388</a>        ]
+<a href=#389 id=389 data-nosnippet>389</a>    }
+<a href=#390 id=390 data-nosnippet>390</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>pack(
+<a href=#391 id=391 data-nosnippet>391</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#392 id=392 data-nosnippet>392</a>        graph: <span class="kw-2">&amp;</span>Graph,
+<a href=#393 id=393 data-nosnippet>393</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
+<a href=#394 id=394 data-nosnippet>394</a>        staging: <span class="kw-2">&amp;mut </span><span class="kw">crate</span>::candidates::Staging,
+<a href=#395 id=395 data-nosnippet>395</a>        ceiling: u64,
+<a href=#396 id=396 data-nosnippet>396</a>        cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
+<a href=#397 id=397 data-nosnippet>397</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;u64, GpuError&gt; {
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">if </span>candidates.len() != <span class="self">self</span>.worlds <span class="kw">as </span>usize {
+<a href=#399 id=399 data-nosnippet>399</a>            staging.release();
+<a href=#400 id=400 data-nosnippet>400</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(
+<a href=#401 id=401 data-nosnippet>401</a>                <span class="string">"formula candidate count differs from admitted plan"</span>,
+<a href=#402 id=402 data-nosnippet>402</a>            ));
+<a href=#403 id=403 data-nosnippet>403</a>        }
+<a href=#404 id=404 data-nosnippet>404</a>        staging.pack(
+<a href=#405 id=405 data-nosnippet>405</a>            <span class="kw-2">&amp;</span>graph.shape.theory,
+<a href=#406 id=406 data-nosnippet>406</a>            candidates,
+<a href=#407 id=407 data-nosnippet>407</a>            <span class="self">self</span>.seeds,
+<a href=#408 id=408 data-nosnippet>408</a>            <span class="self">self</span>.accounted,
+<a href=#409 id=409 data-nosnippet>409</a>            ceiling,
+<a href=#410 id=410 data-nosnippet>410</a>            cancellation,
+<a href=#411 id=411 data-nosnippet>411</a>        )
+<a href=#412 id=412 data-nosnippet>412</a>    }
+<a href=#413 id=413 data-nosnippet>413</a>}
+<a href=#414 id=414 data-nosnippet>414</a>
+<a href=#415 id=415 data-nosnippet>415</a><span class="kw">fn </span>invalid() -&gt; GpuError {
+<a href=#416 id=416 data-nosnippet>416</a>    GpuError::new(GpuErrorKind::Readback, <span class="string">"invalid formula result record"</span>)
 <a href=#417 id=417 data-nosnippet>417</a>}
 <a href=#418 id=418 data-nosnippet>418</a>
-<a href=#419 id=419 data-nosnippet>419</a><span class="kw">impl </span>Output {
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>reserve(plan: <span class="kw-2">&amp;</span>Plan) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#421 id=421 data-nosnippet>421</a>        <span class="kw">let </span>worlds = plan.worlds <span class="kw">as </span>usize;
-<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">let </span>rows = vector(worlds)<span class="question-mark">?</span>;
-<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">let </span>excess = mul(
-<a href=#424 id=424 data-nosnippet>424</a>            (rows.capacity() - worlds) <span class="kw">as </span>u64,
-<a href=#425 id=425 data-nosnippet>425</a>            size_of::&lt;FormulaCheck&gt;() <span class="kw">as </span>u64,
-<a href=#426 id=426 data-nosnippet>426</a>        )<span class="question-mark">?</span>;
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">let </span>accounted = sum(<span class="kw-2">&amp;</span>[plan.accounted, excess])<span class="question-mark">?</span>;
-<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">if </span>accounted &gt; plan.max_batch_bytes {
-<a href=#429 id=429 data-nosnippet>429</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(
-<a href=#430 id=430 data-nosnippet>430</a>                <span class="string">"decoded formula checks exceed the batch allowance"</span>,
-<a href=#431 id=431 data-nosnippet>431</a>            ));
-<a href=#432 id=432 data-nosnippet>432</a>        }
-<a href=#433 id=433 data-nosnippet>433</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ rows, accounted })
-<a href=#434 id=434 data-nosnippet>434</a>    }
-<a href=#435 id=435 data-nosnippet>435</a>}
-<a href=#436 id=436 data-nosnippet>436</a>
-<a href=#437 id=437 data-nosnippet>437</a><span class="doccomment">/// Each metadata row and its two masks share one world stride. The retained
-<a href=#438 id=438 data-nosnippet>438</a>/// seed slice is the exact logical upload for this submission.
-<a href=#439 id=439 data-nosnippet>439</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Readback&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#440 id=440 data-nosnippet>440</a>    <span class="kw">pub</span>(<span class="kw">super</span>) plan: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Plan,
-<a href=#441 id=441 data-nosnippet>441</a>    <span class="kw">pub</span>(<span class="kw">super</span>) seeds: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u32],
-<a href=#442 id=442 data-nosnippet>442</a>    <span class="kw">pub</span>(<span class="kw">super</span>) output: Output,
-<a href=#443 id=443 data-nosnippet>443</a>}
-<a href=#444 id=444 data-nosnippet>444</a>
-<a href=#445 id=445 data-nosnippet>445</a><span class="attr">#[cfg(test)]
-<a href=#446 id=446 data-nosnippet>446</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>decode(
-<a href=#447 id=447 data-nosnippet>447</a>    words: <span class="kw-2">&amp;</span>[u32],
-<a href=#448 id=448 data-nosnippet>448</a>    plan: <span class="kw-2">&amp;</span>Plan,
-<a href=#449 id=449 data-nosnippet>449</a>    seeds: <span class="kw-2">&amp;</span>[u32],
-<a href=#450 id=450 data-nosnippet>450</a>    cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
-<a href=#451 id=451 data-nosnippet>451</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
-<a href=#452 id=452 data-nosnippet>452</a>    Readback {
-<a href=#453 id=453 data-nosnippet>453</a>        plan,
-<a href=#454 id=454 data-nosnippet>454</a>        seeds,
-<a href=#455 id=455 data-nosnippet>455</a>        output: Output::reserve(plan)<span class="question-mark">?</span>,
-<a href=#456 id=456 data-nosnippet>456</a>    }
-<a href=#457 id=457 data-nosnippet>457</a>    .decode(words, cancellation)
-<a href=#458 id=458 data-nosnippet>458</a>}
-<a href=#459 id=459 data-nosnippet>459</a>
-<a href=#460 id=460 data-nosnippet>460</a><span class="kw">impl </span>Readback&lt;<span class="lifetime">'_</span>&gt; {
-<a href=#461 id=461 data-nosnippet>461</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>decode(
-<a href=#462 id=462 data-nosnippet>462</a>        <span class="self">self</span>,
-<a href=#463 id=463 data-nosnippet>463</a>        words: <span class="kw-2">&amp;</span>[u32],
-<a href=#464 id=464 data-nosnippet>464</a>        cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
-<a href=#465 id=465 data-nosnippet>465</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">let </span><span class="self">Self </span>{
-<a href=#467 id=467 data-nosnippet>467</a>            plan,
-<a href=#468 id=468 data-nosnippet>468</a>            seeds,
-<a href=#469 id=469 data-nosnippet>469</a>            output:
-<a href=#470 id=470 data-nosnippet>470</a>                Output {
-<a href=#471 id=471 data-nosnippet>471</a>                    rows: <span class="kw-2">mut </span>output,
-<a href=#472 id=472 data-nosnippet>472</a>                    accounted: actual,
-<a href=#473 id=473 data-nosnippet>473</a>                },
-<a href=#474 id=474 data-nosnippet>474</a>        } = <span class="self">self</span>;
-<a href=#475 id=475 data-nosnippet>475</a>        <span class="kw">let </span>fail = invalid;
-<a href=#476 id=476 data-nosnippet>476</a>        <span class="kw">let </span>width = plan.atoms.div_ceil(<span class="number">32</span>) <span class="kw">as </span>usize;
-<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">let </span>stride = HEADER_WORDS + <span class="number">2 </span>* width;
-<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span>count = plan.worlds <span class="kw">as </span>usize;
-<a href=#479 id=479 data-nosnippet>479</a>        <span class="kw">if </span>count.checked_mul(stride) != <span class="prelude-val">Some</span>(words.len())
-<a href=#480 id=480 data-nosnippet>480</a>            || count.checked_mul(width).map(|n| n.max(<span class="number">1</span>)) != <span class="prelude-val">Some</span>(seeds.len())
-<a href=#481 id=481 data-nosnippet>481</a>            || (width == <span class="number">0 </span>&amp;&amp; seeds[<span class="number">0</span>] != <span class="number">0</span>)
-<a href=#482 id=482 data-nosnippet>482</a>        {
-<a href=#483 id=483 data-nosnippet>483</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(fail());
-<a href=#484 id=484 data-nosnippet>484</a>        }
-<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">for </span>(world, row) <span class="kw">in </span>words.chunks_exact(stride).enumerate() {
-<a href=#486 id=486 data-nosnippet>486</a>            cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
-<a href=#487 id=487 data-nosnippet>487</a>            <span class="kw">let </span>candidate = <span class="kw-2">&amp;</span>seeds[world * width..(world + <span class="number">1</span>) * width];
-<a href=#488 id=488 data-nosnippet>488</a>            <span class="kw">let </span>(held, cut) = row[HEADER_WORDS..].split_at(width);
-<a href=#489 id=489 data-nosnippet>489</a>            <span class="kw">let </span>rounds = row[<span class="number">3</span>];
-<a href=#490 id=490 data-nosnippet>490</a>            <span class="kw">let </span>work = row[<span class="number">4</span>];
-<a href=#491 id=491 data-nosnippet>491</a>            <span class="comment">// Admit complete sweeps against the full reservation. The two terminal
-<a href=#492 id=492 data-nosnippet>492</a>            // verdicts skip the atom-domain scan and report only performed stores.
-<a href=#493 id=493 data-nosnippet>493</a>            </span><span class="kw">let </span>reserved = rounds
-<a href=#494 id=494 data-nosnippet>494</a>                .checked_mul(plan.sweep)
-<a href=#495 id=495 data-nosnippet>495</a>                .and_then(|n| n.checked_add(plan.setup))
-<a href=#496 id=496 data-nosnippet>496</a>                .ok_or_else(invalid)<span class="question-mark">?</span>;
-<a href=#497 id=497 data-nosnippet>497</a>            <span class="kw">let </span>expected = <span class="kw">if </span><span class="macro">matches!</span>(row[<span class="number">2</span>], <span class="number">1 </span>| <span class="number">2</span>) {
-<a href=#498 id=498 data-nosnippet>498</a>                reserved.checked_sub(plan.atoms).ok_or_else(invalid)<span class="question-mark">?
-<a href=#499 id=499 data-nosnippet>499</a>            </span>} <span class="kw">else </span>{
-<a href=#500 id=500 data-nosnippet>500</a>                reserved
-<a href=#501 id=501 data-nosnippet>501</a>            };
-<a href=#502 id=502 data-nosnippet>502</a>            <span class="kw">if </span>row[<span class="number">0</span>] != plan.epoch
-<a href=#503 id=503 data-nosnippet>503</a>                || row[<span class="number">1</span>] <span class="kw">as </span>usize != world
-<a href=#504 id=504 data-nosnippet>504</a>                || row[<span class="number">5</span>] != MAGIC
-<a href=#505 id=505 data-nosnippet>505</a>                || rounds &gt; plan.max_rounds
-<a href=#506 id=506 data-nosnippet>506</a>                || reserved &gt; plan.max_work
-<a href=#507 id=507 data-nosnippet>507</a>                || work != expected
-<a href=#508 id=508 data-nosnippet>508</a>            {
-<a href=#509 id=509 data-nosnippet>509</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(fail());
-<a href=#510 id=510 data-nosnippet>510</a>            }
-<a href=#511 id=511 data-nosnippet>511</a>            <span class="kw">let </span>reason = <span class="kw">match </span>row[<span class="number">2</span>] {
-<a href=#512 id=512 data-nosnippet>512</a>                <span class="number">1 </span><span class="kw">if </span>rounds == <span class="number">0 </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#513 id=513 data-nosnippet>513</a>                <span class="number">2 </span><span class="kw">if </span>rounds &gt; <span class="number">0 </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#514 id=514 data-nosnippet>514</a>                <span class="number">3 </span><span class="kw">if </span>rounds &gt; <span class="number">0 </span>=&gt; <span class="prelude-val">Some</span>(ResidualReason::FixedPoint),
-<a href=#515 id=515 data-nosnippet>515</a>                <span class="number">4 </span><span class="kw">if </span>rounds == plan.max_rounds =&gt; <span class="prelude-val">Some</span>(ResidualReason::RoundLimit),
-<a href=#516 id=516 data-nosnippet>516</a>                <span class="number">5 </span><span class="kw">if </span>rounds &lt; plan.max_rounds &amp;&amp; plan.max_work - work &lt; plan.sweep =&gt; {
-<a href=#517 id=517 data-nosnippet>517</a>                    <span class="prelude-val">Some</span>(ResidualReason::WorkLimit)
-<a href=#518 id=518 data-nosnippet>518</a>                }
-<a href=#519 id=519 data-nosnippet>519</a>                <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(fail()),
-<a href=#520 id=520 data-nosnippet>520</a>            };
-<a href=#521 id=521 data-nosnippet>521</a>            <span class="kw">let </span>verdict = <span class="kw">if let </span><span class="prelude-val">Some</span>(reason) = reason {
-<a href=#522 id=522 data-nosnippet>522</a>                FormulaVerdict::Residual(
-<a href=#523 id=523 data-nosnippet>523</a>                    reason,
-<a href=#524 id=524 data-nosnippet>524</a>                    decode_root(plan, actual, candidate, held, cut, cancellation)<span class="question-mark">?</span>,
-<a href=#525 id=525 data-nosnippet>525</a>                )
-<a href=#526 id=526 data-nosnippet>526</a>            } <span class="kw">else </span>{
-<a href=#527 id=527 data-nosnippet>527</a>                <span class="kw">if </span>held.iter().zip(cut).any(|(<span class="kw-2">&amp;</span>h, <span class="kw-2">&amp;</span>c)| h | c != <span class="number">0</span>) {
-<a href=#528 id=528 data-nosnippet>528</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(fail());
-<a href=#529 id=529 data-nosnippet>529</a>                }
-<a href=#530 id=530 data-nosnippet>530</a>                <span class="kw">if </span>row[<span class="number">2</span>] == <span class="number">1 </span>{
-<a href=#531 id=531 data-nosnippet>531</a>                    FormulaVerdict::NotModel
-<a href=#532 id=532 data-nosnippet>532</a>                } <span class="kw">else </span>{
-<a href=#533 id=533 data-nosnippet>533</a>                    FormulaVerdict::NoProperSubset
-<a href=#534 id=534 data-nosnippet>534</a>                }
-<a href=#535 id=535 data-nosnippet>535</a>            };
-<a href=#536 id=536 data-nosnippet>536</a>            output.push(FormulaCheck {
-<a href=#537 id=537 data-nosnippet>537</a>                verdict,
-<a href=#538 id=538 data-nosnippet>538</a>                statistics: FormulaStatistics { work, rounds },
-<a href=#539 id=539 data-nosnippet>539</a>            });
-<a href=#540 id=540 data-nosnippet>540</a>        }
-<a href=#541 id=541 data-nosnippet>541</a>        <span class="prelude-val">Ok</span>(output)
-<a href=#542 id=542 data-nosnippet>542</a>    }
-<a href=#543 id=543 data-nosnippet>543</a>}
-<a href=#544 id=544 data-nosnippet>544</a>
-<a href=#545 id=545 data-nosnippet>545</a><span class="doccomment">/// Keep root construction inside the announced peak. Lookahead may own the rest.
-<a href=#546 id=546 data-nosnippet>546</a></span><span class="kw">fn </span>admit_decode_storage(
-<a href=#547 id=547 data-nosnippet>547</a>    other: u64,
-<a href=#548 id=548 data-nosnippet>548</a>    requested: u128,
-<a href=#549 id=549 data-nosnippet>549</a>    prepared: u64,
-<a href=#550 id=550 data-nosnippet>550</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), zetesis_algebra::Stop&gt; {
-<a href=#551 id=551 data-nosnippet>551</a>    <span class="kw">let </span>total = u128::from(other)
-<a href=#552 id=552 data-nosnippet>552</a>        .checked_add(requested)
-<a href=#553 id=553 data-nosnippet>553</a>        .ok_or(zetesis_algebra::Stop::StorageLimit)<span class="question-mark">?</span>;
-<a href=#554 id=554 data-nosnippet>554</a>    zetesis_algebra::MeterBytes::check(total, u128::from(prepared))
-<a href=#555 id=555 data-nosnippet>555</a>        .map_err(|<span class="kw">_</span>| zetesis_algebra::Stop::StorageLimit)
-<a href=#556 id=556 data-nosnippet>556</a>}
-<a href=#557 id=557 data-nosnippet>557</a>
-<a href=#558 id=558 data-nosnippet>558</a><span class="doccomment">/// Materialize decisions for a subset of the submitted candidate. Every atom
-<a href=#559 id=559 data-nosnippet>559</a>/// outside the candidate must be cut.
-<a href=#560 id=560 data-nosnippet>560</a></span><span class="kw">fn </span>decode_root(
-<a href=#561 id=561 data-nosnippet>561</a>    plan: <span class="kw-2">&amp;</span>Plan,
-<a href=#562 id=562 data-nosnippet>562</a>    actual: u64,
-<a href=#563 id=563 data-nosnippet>563</a>    candidate: <span class="kw-2">&amp;</span>[u32],
-<a href=#564 id=564 data-nosnippet>564</a>    held: <span class="kw-2">&amp;</span>[u32],
-<a href=#565 id=565 data-nosnippet>565</a>    cut: <span class="kw-2">&amp;</span>[u32],
-<a href=#566 id=566 data-nosnippet>566</a>    cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
-<a href=#567 id=567 data-nosnippet>567</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Region, GpuError&gt; {
-<a href=#568 id=568 data-nosnippet>568</a>    <span class="kw">use </span>zetesis_algebra::Stop;
-<a href=#569 id=569 data-nosnippet>569</a>    <span class="kw">let </span>atoms = plan.atoms <span class="kw">as </span>usize;
-<a href=#570 id=570 data-nosnippet>570</a>    <span class="kw">for </span>(word, ((<span class="kw-2">&amp;</span>present, <span class="kw-2">&amp;</span>yes), <span class="kw-2">&amp;</span>no)) <span class="kw">in </span>candidate.iter().zip(held).zip(cut).enumerate() {
-<a href=#571 id=571 data-nosnippet>571</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
-<a href=#572 id=572 data-nosnippet>572</a>        <span class="kw">let </span>bits = (atoms - word * <span class="number">32</span>).min(<span class="number">32</span>);
-<a href=#573 id=573 data-nosnippet>573</a>        <span class="kw">let </span>valid = u32::MAX &gt;&gt; (<span class="number">32 </span>- bits);
-<a href=#574 id=574 data-nosnippet>574</a>        <span class="kw">if </span>(present | yes | no) &amp; !valid != <span class="number">0
-<a href=#575 id=575 data-nosnippet>575</a>            </span>|| yes &amp; no != <span class="number">0
-<a href=#576 id=576 data-nosnippet>576</a>            </span>|| yes &amp; !present != <span class="number">0
-<a href=#577 id=577 data-nosnippet>577</a>            </span>|| !present &amp; valid &amp; !no != <span class="number">0
-<a href=#578 id=578 data-nosnippet>578</a>        </span>{
-<a href=#579 id=579 data-nosnippet>579</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(invalid());
-<a href=#580 id=580 data-nosnippet>580</a>        }
-<a href=#581 id=581 data-nosnippet>581</a>    }
-<a href=#582 id=582 data-nosnippet>582</a>    <span class="kw">let </span>other = actual
-<a href=#583 id=583 data-nosnippet>583</a>        .checked_sub(root_mask_bytes(plan.atoms) + ROOT_STAGING_BYTES)
-<a href=#584 id=584 data-nosnippet>584</a>        .ok_or_else(invalid)<span class="question-mark">?</span>;
-<a href=#585 id=585 data-nosnippet>585</a>    <span class="kw">let </span><span class="kw-2">mut </span>region = Region::try_all_open_with(
-<a href=#586 id=586 data-nosnippet>586</a>        atoms,
-<a href=#587 id=587 data-nosnippet>587</a>        <span class="kw-2">&amp;mut </span>(),
-<a href=#588 id=588 data-nosnippet>588</a>        <span class="kw-2">&amp;mut </span>|(), <span class="kw">_</span>| cancellation.poll(),
-<a href=#589 id=589 data-nosnippet>589</a>        <span class="kw-2">&amp;mut </span>|(), bytes| admit_decode_storage(other, bytes, actual),
-<a href=#590 id=590 data-nosnippet>590</a>    )
-<a href=#591 id=591 data-nosnippet>591</a>    .map_err(|stop| <span class="kw">match </span>stop {
-<a href=#592 id=592 data-nosnippet>592</a>        Stop::Allocation =&gt; GpuError::new(
-<a href=#593 id=593 data-nosnippet>593</a>            GpuErrorKind::Allocation,
-<a href=#594 id=594 data-nosnippet>594</a>            <span class="string">"formula residual root allocation failed"</span>,
-<a href=#595 id=595 data-nosnippet>595</a>        ),
-<a href=#596 id=596 data-nosnippet>596</a>        Stop::StorageLimit =&gt; capacity(<span class="string">"formula residual root exceeds the batch allowance"</span>),
-<a href=#597 id=597 data-nosnippet>597</a>        Stop::Cancelled | Stop::Deadline =&gt; GpuError::interrupted(stop),
-<a href=#598 id=598 data-nosnippet>598</a>        <span class="kw">_ </span>=&gt; invalid(),
-<a href=#599 id=599 data-nosnippet>599</a>    })<span class="question-mark">?</span>;
-<a href=#600 id=600 data-nosnippet>600</a>    <span class="kw">for </span>(word, (<span class="kw-2">&amp;</span>yes, <span class="kw-2">&amp;</span>no)) <span class="kw">in </span>held.iter().zip(cut).enumerate() {
-<a href=#601 id=601 data-nosnippet>601</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
-<a href=#602 id=602 data-nosnippet>602</a>        <span class="kw">for </span>bit <span class="kw">in </span>zetesis_algebra::words::Words::&lt;u32&gt;::bits(yes) {
-<a href=#603 id=603 data-nosnippet>603</a>            <span class="kw">if </span>!region.hold(word * <span class="number">32 </span>+ bit) {
-<a href=#604 id=604 data-nosnippet>604</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(invalid());
-<a href=#605 id=605 data-nosnippet>605</a>            }
-<a href=#606 id=606 data-nosnippet>606</a>        }
-<a href=#607 id=607 data-nosnippet>607</a>        <span class="kw">for </span>bit <span class="kw">in </span>zetesis_algebra::words::Words::&lt;u32&gt;::bits(no) {
-<a href=#608 id=608 data-nosnippet>608</a>            <span class="kw">if </span>!region.cut(word * <span class="number">32 </span>+ bit) {
-<a href=#609 id=609 data-nosnippet>609</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(invalid());
-<a href=#610 id=610 data-nosnippet>610</a>            }
-<a href=#611 id=611 data-nosnippet>611</a>        }
-<a href=#612 id=612 data-nosnippet>612</a>    }
-<a href=#613 id=613 data-nosnippet>613</a>    verify_materialized(<span class="kw-2">&amp;</span>region, held, cut, cancellation)<span class="question-mark">?</span>;
-<a href=#614 id=614 data-nosnippet>614</a>    <span class="prelude-val">Ok</span>(region)
-<a href=#615 id=615 data-nosnippet>615</a>}
-<a href=#616 id=616 data-nosnippet>616</a>
-<a href=#617 id=617 data-nosnippet>617</a><span class="comment">// Verify operation polarity and the 32-bit wire → 64-bit host representation
-<a href=#618 id=618 data-nosnippet>618</a>// independently of the decision publication loop.
-<a href=#619 id=619 data-nosnippet>619</a></span><span class="kw">fn </span>verify_materialized(
-<a href=#620 id=620 data-nosnippet>620</a>    region: <span class="kw-2">&amp;</span>Region,
-<a href=#621 id=621 data-nosnippet>621</a>    held: <span class="kw-2">&amp;</span>[u32],
-<a href=#622 id=622 data-nosnippet>622</a>    cut: <span class="kw-2">&amp;</span>[u32],
-<a href=#623 id=623 data-nosnippet>623</a>    cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
-<a href=#624 id=624 data-nosnippet>624</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), GpuError&gt; {
-<a href=#625 id=625 data-nosnippet>625</a>    <span class="kw">let </span>(stored_held, stored_cut) = region.decision_words();
-<a href=#626 id=626 data-nosnippet>626</a>    <span class="kw">for </span>(i, (<span class="kw-2">&amp;</span>yes, <span class="kw-2">&amp;</span>no)) <span class="kw">in </span>held.iter().zip(cut).enumerate() {
-<a href=#627 id=627 data-nosnippet>627</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
-<a href=#628 id=628 data-nosnippet>628</a>        <span class="kw">let </span>shift = u32::BITS <span class="kw">as </span>usize * (i % <span class="number">2</span>);
-<a href=#629 id=629 data-nosnippet>629</a>        <span class="kw">let </span>half_word = |packed: u64| (packed &gt;&gt; shift) &amp; u64::from(u32::MAX);
-<a href=#630 id=630 data-nosnippet>630</a>        <span class="kw">if </span>half_word(stored_held[i / <span class="number">2</span>]) != u64::from(yes)
-<a href=#631 id=631 data-nosnippet>631</a>            || half_word(stored_cut[i / <span class="number">2</span>]) != u64::from(no)
-<a href=#632 id=632 data-nosnippet>632</a>        {
-<a href=#633 id=633 data-nosnippet>633</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(invalid());
-<a href=#634 id=634 data-nosnippet>634</a>        }
-<a href=#635 id=635 data-nosnippet>635</a>    }
-<a href=#636 id=636 data-nosnippet>636</a>    <span class="prelude-val">Ok</span>(())
-<a href=#637 id=637 data-nosnippet>637</a>}
-<a href=#638 id=638 data-nosnippet>638</a>
-<a href=#639 id=639 data-nosnippet>639</a><span class="attr">#[cfg(test)]
-<a href=#640 id=640 data-nosnippet>640</a></span><span class="kw">mod </span>tests;
+<a href=#419 id=419 data-nosnippet>419</a><span class="doccomment">/// Decoded rows are reserved before submission, so a concurrently admitted
+<a href=#420 id=420 data-nosnippet>420</a>/// lookahead can use the actual capacity rather than an allocation estimate.
+<a href=#421 id=421 data-nosnippet>421</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Output {
+<a href=#422 id=422 data-nosnippet>422</a>    rows: Vec&lt;FormulaCheck&gt;,
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">pub</span>(<span class="kw">super</span>) accounted: u64,
+<a href=#424 id=424 data-nosnippet>424</a>}
+<a href=#425 id=425 data-nosnippet>425</a>
+<a href=#426 id=426 data-nosnippet>426</a><span class="kw">impl </span>Output {
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>reserve(plan: <span class="kw-2">&amp;</span>Plan) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span>worlds = plan.worlds <span class="kw">as </span>usize;
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">let </span>rows = vector(worlds)<span class="question-mark">?</span>;
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">let </span>excess = mul(
+<a href=#431 id=431 data-nosnippet>431</a>            (rows.capacity() - worlds) <span class="kw">as </span>u64,
+<a href=#432 id=432 data-nosnippet>432</a>            size_of::&lt;FormulaCheck&gt;() <span class="kw">as </span>u64,
+<a href=#433 id=433 data-nosnippet>433</a>        )<span class="question-mark">?</span>;
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">let </span>accounted = sum(<span class="kw-2">&amp;</span>[plan.accounted, excess])<span class="question-mark">?</span>;
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="kw">if </span>accounted &gt; plan.max_batch_bytes {
+<a href=#436 id=436 data-nosnippet>436</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(capacity(
+<a href=#437 id=437 data-nosnippet>437</a>                <span class="string">"decoded formula checks exceed the batch allowance"</span>,
+<a href=#438 id=438 data-nosnippet>438</a>            ));
+<a href=#439 id=439 data-nosnippet>439</a>        }
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ rows, accounted })
+<a href=#441 id=441 data-nosnippet>441</a>    }
+<a href=#442 id=442 data-nosnippet>442</a>}
+<a href=#443 id=443 data-nosnippet>443</a>
+<a href=#444 id=444 data-nosnippet>444</a><span class="doccomment">/// Each metadata row and its two masks share one world stride. The retained
+<a href=#445 id=445 data-nosnippet>445</a>/// seed slice is the exact logical upload for this submission.
+<a href=#446 id=446 data-nosnippet>446</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Readback&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#447 id=447 data-nosnippet>447</a>    <span class="kw">pub</span>(<span class="kw">super</span>) plan: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Plan,
+<a href=#448 id=448 data-nosnippet>448</a>    <span class="kw">pub</span>(<span class="kw">super</span>) seeds: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u32],
+<a href=#449 id=449 data-nosnippet>449</a>    <span class="kw">pub</span>(<span class="kw">super</span>) output: Output,
+<a href=#450 id=450 data-nosnippet>450</a>}
+<a href=#451 id=451 data-nosnippet>451</a>
+<a href=#452 id=452 data-nosnippet>452</a><span class="attr">#[cfg(test)]
+<a href=#453 id=453 data-nosnippet>453</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>decode(
+<a href=#454 id=454 data-nosnippet>454</a>    words: <span class="kw-2">&amp;</span>[u32],
+<a href=#455 id=455 data-nosnippet>455</a>    plan: <span class="kw-2">&amp;</span>Plan,
+<a href=#456 id=456 data-nosnippet>456</a>    seeds: <span class="kw-2">&amp;</span>[u32],
+<a href=#457 id=457 data-nosnippet>457</a>    cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
+<a href=#458 id=458 data-nosnippet>458</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
+<a href=#459 id=459 data-nosnippet>459</a>    Readback {
+<a href=#460 id=460 data-nosnippet>460</a>        plan,
+<a href=#461 id=461 data-nosnippet>461</a>        seeds,
+<a href=#462 id=462 data-nosnippet>462</a>        output: Output::reserve(plan)<span class="question-mark">?</span>,
+<a href=#463 id=463 data-nosnippet>463</a>    }
+<a href=#464 id=464 data-nosnippet>464</a>    .decode(words, cancellation)
+<a href=#465 id=465 data-nosnippet>465</a>}
+<a href=#466 id=466 data-nosnippet>466</a>
+<a href=#467 id=467 data-nosnippet>467</a><span class="kw">impl </span>Readback&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>decode(
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="self">self</span>,
+<a href=#470 id=470 data-nosnippet>470</a>        words: <span class="kw-2">&amp;</span>[u32],
+<a href=#471 id=471 data-nosnippet>471</a>        cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
+<a href=#472 id=472 data-nosnippet>472</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="kw">let </span><span class="self">Self </span>{
+<a href=#474 id=474 data-nosnippet>474</a>            plan,
+<a href=#475 id=475 data-nosnippet>475</a>            seeds,
+<a href=#476 id=476 data-nosnippet>476</a>            output:
+<a href=#477 id=477 data-nosnippet>477</a>                Output {
+<a href=#478 id=478 data-nosnippet>478</a>                    rows: <span class="kw-2">mut </span>output,
+<a href=#479 id=479 data-nosnippet>479</a>                    accounted: actual,
+<a href=#480 id=480 data-nosnippet>480</a>                },
+<a href=#481 id=481 data-nosnippet>481</a>        } = <span class="self">self</span>;
+<a href=#482 id=482 data-nosnippet>482</a>        <span class="kw">let </span>fail = invalid;
+<a href=#483 id=483 data-nosnippet>483</a>        <span class="kw">let </span>width = plan.atoms.div_ceil(<span class="number">32</span>) <span class="kw">as </span>usize;
+<a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">let </span>stride = HEADER_WORDS + <span class="number">2 </span>* width;
+<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">let </span>count = plan.worlds <span class="kw">as </span>usize;
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw">if </span>count.checked_mul(stride) != <span class="prelude-val">Some</span>(words.len())
+<a href=#487 id=487 data-nosnippet>487</a>            || count.checked_mul(width).map(|n| n.max(<span class="number">1</span>)) != <span class="prelude-val">Some</span>(seeds.len())
+<a href=#488 id=488 data-nosnippet>488</a>            || (width == <span class="number">0 </span>&amp;&amp; seeds[<span class="number">0</span>] != <span class="number">0</span>)
+<a href=#489 id=489 data-nosnippet>489</a>        {
+<a href=#490 id=490 data-nosnippet>490</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(fail());
+<a href=#491 id=491 data-nosnippet>491</a>        }
+<a href=#492 id=492 data-nosnippet>492</a>        <span class="kw">for </span>(world, row) <span class="kw">in </span>words.chunks_exact(stride).enumerate() {
+<a href=#493 id=493 data-nosnippet>493</a>            cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="kw">let </span>candidate = <span class="kw-2">&amp;</span>seeds[world * width..(world + <span class="number">1</span>) * width];
+<a href=#495 id=495 data-nosnippet>495</a>            <span class="kw">let </span>(held, cut) = row[HEADER_WORDS..].split_at(width);
+<a href=#496 id=496 data-nosnippet>496</a>            <span class="kw">let </span>rounds = row[<span class="number">3</span>];
+<a href=#497 id=497 data-nosnippet>497</a>            <span class="kw">let </span>work = row[<span class="number">4</span>];
+<a href=#498 id=498 data-nosnippet>498</a>            <span class="comment">// Admit complete sweeps against the full reservation. The two terminal
+<a href=#499 id=499 data-nosnippet>499</a>            // verdicts skip the atom-domain scan and report only performed stores.
+<a href=#500 id=500 data-nosnippet>500</a>            </span><span class="kw">let </span>reserved = rounds
+<a href=#501 id=501 data-nosnippet>501</a>                .checked_mul(plan.sweep)
+<a href=#502 id=502 data-nosnippet>502</a>                .and_then(|n| n.checked_add(plan.setup))
+<a href=#503 id=503 data-nosnippet>503</a>                .ok_or_else(invalid)<span class="question-mark">?</span>;
+<a href=#504 id=504 data-nosnippet>504</a>            <span class="kw">let </span>expected = <span class="kw">if </span><span class="macro">matches!</span>(row[<span class="number">2</span>], <span class="number">1 </span>| <span class="number">2</span>) {
+<a href=#505 id=505 data-nosnippet>505</a>                reserved.checked_sub(plan.atoms).ok_or_else(invalid)<span class="question-mark">?
+<a href=#506 id=506 data-nosnippet>506</a>            </span>} <span class="kw">else </span>{
+<a href=#507 id=507 data-nosnippet>507</a>                reserved
+<a href=#508 id=508 data-nosnippet>508</a>            };
+<a href=#509 id=509 data-nosnippet>509</a>            <span class="kw">if </span>row[<span class="number">0</span>] != plan.epoch
+<a href=#510 id=510 data-nosnippet>510</a>                || row[<span class="number">1</span>] <span class="kw">as </span>usize != world
+<a href=#511 id=511 data-nosnippet>511</a>                || row[<span class="number">5</span>] != MAGIC
+<a href=#512 id=512 data-nosnippet>512</a>                || rounds &gt; plan.max_rounds
+<a href=#513 id=513 data-nosnippet>513</a>                || reserved &gt; plan.max_work
+<a href=#514 id=514 data-nosnippet>514</a>                || work != expected
+<a href=#515 id=515 data-nosnippet>515</a>            {
+<a href=#516 id=516 data-nosnippet>516</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(fail());
+<a href=#517 id=517 data-nosnippet>517</a>            }
+<a href=#518 id=518 data-nosnippet>518</a>            <span class="kw">let </span>reason = <span class="kw">match </span>row[<span class="number">2</span>] {
+<a href=#519 id=519 data-nosnippet>519</a>                <span class="number">1 </span><span class="kw">if </span>rounds == <span class="number">0 </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#520 id=520 data-nosnippet>520</a>                <span class="number">2 </span><span class="kw">if </span>rounds &gt; <span class="number">0 </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#521 id=521 data-nosnippet>521</a>                <span class="number">3 </span><span class="kw">if </span>rounds &gt; <span class="number">0 </span>=&gt; <span class="prelude-val">Some</span>(ResidualReason::FixedPoint),
+<a href=#522 id=522 data-nosnippet>522</a>                <span class="number">4 </span><span class="kw">if </span>rounds == plan.max_rounds =&gt; <span class="prelude-val">Some</span>(ResidualReason::RoundLimit),
+<a href=#523 id=523 data-nosnippet>523</a>                <span class="number">5 </span><span class="kw">if </span>rounds &lt; plan.max_rounds &amp;&amp; plan.max_work - work &lt; plan.sweep =&gt; {
+<a href=#524 id=524 data-nosnippet>524</a>                    <span class="prelude-val">Some</span>(ResidualReason::WorkLimit)
+<a href=#525 id=525 data-nosnippet>525</a>                }
+<a href=#526 id=526 data-nosnippet>526</a>                <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(fail()),
+<a href=#527 id=527 data-nosnippet>527</a>            };
+<a href=#528 id=528 data-nosnippet>528</a>            <span class="kw">let </span>verdict = <span class="kw">if let </span><span class="prelude-val">Some</span>(reason) = reason {
+<a href=#529 id=529 data-nosnippet>529</a>                FormulaVerdict::Residual(
+<a href=#530 id=530 data-nosnippet>530</a>                    reason,
+<a href=#531 id=531 data-nosnippet>531</a>                    decode_root(plan, actual, candidate, held, cut, cancellation)<span class="question-mark">?</span>,
+<a href=#532 id=532 data-nosnippet>532</a>                )
+<a href=#533 id=533 data-nosnippet>533</a>            } <span class="kw">else </span>{
+<a href=#534 id=534 data-nosnippet>534</a>                <span class="kw">if </span>held.iter().zip(cut).any(|(<span class="kw-2">&amp;</span>h, <span class="kw-2">&amp;</span>c)| h | c != <span class="number">0</span>) {
+<a href=#535 id=535 data-nosnippet>535</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(fail());
+<a href=#536 id=536 data-nosnippet>536</a>                }
+<a href=#537 id=537 data-nosnippet>537</a>                <span class="kw">if </span>row[<span class="number">2</span>] == <span class="number">1 </span>{
+<a href=#538 id=538 data-nosnippet>538</a>                    FormulaVerdict::NotModel
+<a href=#539 id=539 data-nosnippet>539</a>                } <span class="kw">else </span>{
+<a href=#540 id=540 data-nosnippet>540</a>                    FormulaVerdict::NoProperSubset
+<a href=#541 id=541 data-nosnippet>541</a>                }
+<a href=#542 id=542 data-nosnippet>542</a>            };
+<a href=#543 id=543 data-nosnippet>543</a>            output.push(FormulaCheck {
+<a href=#544 id=544 data-nosnippet>544</a>                verdict,
+<a href=#545 id=545 data-nosnippet>545</a>                statistics: FormulaStatistics { work, rounds },
+<a href=#546 id=546 data-nosnippet>546</a>            });
+<a href=#547 id=547 data-nosnippet>547</a>        }
+<a href=#548 id=548 data-nosnippet>548</a>        <span class="prelude-val">Ok</span>(output)
+<a href=#549 id=549 data-nosnippet>549</a>    }
+<a href=#550 id=550 data-nosnippet>550</a>}
+<a href=#551 id=551 data-nosnippet>551</a>
+<a href=#552 id=552 data-nosnippet>552</a><span class="doccomment">/// Keep root construction inside the announced peak. Lookahead may own the rest.
+<a href=#553 id=553 data-nosnippet>553</a></span><span class="kw">fn </span>admit_decode_storage(
+<a href=#554 id=554 data-nosnippet>554</a>    other: u64,
+<a href=#555 id=555 data-nosnippet>555</a>    requested: u128,
+<a href=#556 id=556 data-nosnippet>556</a>    prepared: u64,
+<a href=#557 id=557 data-nosnippet>557</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), zetesis_algebra::Stop&gt; {
+<a href=#558 id=558 data-nosnippet>558</a>    <span class="kw">let </span>total = u128::from(other)
+<a href=#559 id=559 data-nosnippet>559</a>        .checked_add(requested)
+<a href=#560 id=560 data-nosnippet>560</a>        .ok_or(zetesis_algebra::Stop::StorageLimit)<span class="question-mark">?</span>;
+<a href=#561 id=561 data-nosnippet>561</a>    zetesis_algebra::MeterBytes::check(total, u128::from(prepared))
+<a href=#562 id=562 data-nosnippet>562</a>        .map_err(|<span class="kw">_</span>| zetesis_algebra::Stop::StorageLimit)
+<a href=#563 id=563 data-nosnippet>563</a>}
+<a href=#564 id=564 data-nosnippet>564</a>
+<a href=#565 id=565 data-nosnippet>565</a><span class="doccomment">/// Materialize decisions for a subset of the submitted candidate. Every atom
+<a href=#566 id=566 data-nosnippet>566</a>/// outside the candidate must be cut.
+<a href=#567 id=567 data-nosnippet>567</a></span><span class="kw">fn </span>decode_root(
+<a href=#568 id=568 data-nosnippet>568</a>    plan: <span class="kw-2">&amp;</span>Plan,
+<a href=#569 id=569 data-nosnippet>569</a>    actual: u64,
+<a href=#570 id=570 data-nosnippet>570</a>    candidate: <span class="kw-2">&amp;</span>[u32],
+<a href=#571 id=571 data-nosnippet>571</a>    held: <span class="kw-2">&amp;</span>[u32],
+<a href=#572 id=572 data-nosnippet>572</a>    cut: <span class="kw-2">&amp;</span>[u32],
+<a href=#573 id=573 data-nosnippet>573</a>    cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
+<a href=#574 id=574 data-nosnippet>574</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Region, GpuError&gt; {
+<a href=#575 id=575 data-nosnippet>575</a>    <span class="kw">use </span>zetesis_algebra::Stop;
+<a href=#576 id=576 data-nosnippet>576</a>    <span class="kw">let </span>atoms = plan.atoms <span class="kw">as </span>usize;
+<a href=#577 id=577 data-nosnippet>577</a>    <span class="kw">for </span>(word, ((<span class="kw-2">&amp;</span>present, <span class="kw-2">&amp;</span>yes), <span class="kw-2">&amp;</span>no)) <span class="kw">in </span>candidate.iter().zip(held).zip(cut).enumerate() {
+<a href=#578 id=578 data-nosnippet>578</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#579 id=579 data-nosnippet>579</a>        <span class="kw">let </span>bits = (atoms - word * <span class="number">32</span>).min(<span class="number">32</span>);
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="kw">let </span>valid = u32::MAX &gt;&gt; (<span class="number">32 </span>- bits);
+<a href=#581 id=581 data-nosnippet>581</a>        <span class="kw">if </span>(present | yes | no) &amp; !valid != <span class="number">0
+<a href=#582 id=582 data-nosnippet>582</a>            </span>|| yes &amp; no != <span class="number">0
+<a href=#583 id=583 data-nosnippet>583</a>            </span>|| yes &amp; !present != <span class="number">0
+<a href=#584 id=584 data-nosnippet>584</a>            </span>|| !present &amp; valid &amp; !no != <span class="number">0
+<a href=#585 id=585 data-nosnippet>585</a>        </span>{
+<a href=#586 id=586 data-nosnippet>586</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(invalid());
+<a href=#587 id=587 data-nosnippet>587</a>        }
+<a href=#588 id=588 data-nosnippet>588</a>    }
+<a href=#589 id=589 data-nosnippet>589</a>    <span class="kw">let </span>other = actual
+<a href=#590 id=590 data-nosnippet>590</a>        .checked_sub(root_mask_bytes(plan.atoms) + ROOT_STAGING_BYTES)
+<a href=#591 id=591 data-nosnippet>591</a>        .ok_or_else(invalid)<span class="question-mark">?</span>;
+<a href=#592 id=592 data-nosnippet>592</a>    <span class="kw">let </span><span class="kw-2">mut </span>region = Region::try_all_open_with(
+<a href=#593 id=593 data-nosnippet>593</a>        atoms,
+<a href=#594 id=594 data-nosnippet>594</a>        <span class="kw-2">&amp;mut </span>(),
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw-2">&amp;mut </span>|(), <span class="kw">_</span>| cancellation.poll(),
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="kw-2">&amp;mut </span>|(), bytes| admit_decode_storage(other, bytes, actual),
+<a href=#597 id=597 data-nosnippet>597</a>    )
+<a href=#598 id=598 data-nosnippet>598</a>    .map_err(|stop| <span class="kw">match </span>stop {
+<a href=#599 id=599 data-nosnippet>599</a>        Stop::Allocation =&gt; GpuError::new(
+<a href=#600 id=600 data-nosnippet>600</a>            GpuErrorKind::Allocation,
+<a href=#601 id=601 data-nosnippet>601</a>            <span class="string">"formula residual root allocation failed"</span>,
+<a href=#602 id=602 data-nosnippet>602</a>        ),
+<a href=#603 id=603 data-nosnippet>603</a>        Stop::StorageLimit =&gt; capacity(<span class="string">"formula residual root exceeds the batch allowance"</span>),
+<a href=#604 id=604 data-nosnippet>604</a>        Stop::Cancelled | Stop::Deadline =&gt; GpuError::interrupted(stop),
+<a href=#605 id=605 data-nosnippet>605</a>        <span class="kw">_ </span>=&gt; invalid(),
+<a href=#606 id=606 data-nosnippet>606</a>    })<span class="question-mark">?</span>;
+<a href=#607 id=607 data-nosnippet>607</a>    <span class="kw">for </span>(word, (<span class="kw-2">&amp;</span>yes, <span class="kw-2">&amp;</span>no)) <span class="kw">in </span>held.iter().zip(cut).enumerate() {
+<a href=#608 id=608 data-nosnippet>608</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#609 id=609 data-nosnippet>609</a>        <span class="kw">for </span>bit <span class="kw">in </span>zetesis_algebra::words::Words::&lt;u32&gt;::bits(yes) {
+<a href=#610 id=610 data-nosnippet>610</a>            <span class="kw">if </span>!region.hold(word * <span class="number">32 </span>+ bit) {
+<a href=#611 id=611 data-nosnippet>611</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(invalid());
+<a href=#612 id=612 data-nosnippet>612</a>            }
+<a href=#613 id=613 data-nosnippet>613</a>        }
+<a href=#614 id=614 data-nosnippet>614</a>        <span class="kw">for </span>bit <span class="kw">in </span>zetesis_algebra::words::Words::&lt;u32&gt;::bits(no) {
+<a href=#615 id=615 data-nosnippet>615</a>            <span class="kw">if </span>!region.cut(word * <span class="number">32 </span>+ bit) {
+<a href=#616 id=616 data-nosnippet>616</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(invalid());
+<a href=#617 id=617 data-nosnippet>617</a>            }
+<a href=#618 id=618 data-nosnippet>618</a>        }
+<a href=#619 id=619 data-nosnippet>619</a>    }
+<a href=#620 id=620 data-nosnippet>620</a>    verify_materialized(<span class="kw-2">&amp;</span>region, held, cut, cancellation)<span class="question-mark">?</span>;
+<a href=#621 id=621 data-nosnippet>621</a>    <span class="prelude-val">Ok</span>(region)
+<a href=#622 id=622 data-nosnippet>622</a>}
+<a href=#623 id=623 data-nosnippet>623</a>
+<a href=#624 id=624 data-nosnippet>624</a><span class="comment">// Verify operation polarity and the 32-bit wire → 64-bit host representation
+<a href=#625 id=625 data-nosnippet>625</a>// independently of the decision publication loop.
+<a href=#626 id=626 data-nosnippet>626</a></span><span class="kw">fn </span>verify_materialized(
+<a href=#627 id=627 data-nosnippet>627</a>    region: <span class="kw-2">&amp;</span>Region,
+<a href=#628 id=628 data-nosnippet>628</a>    held: <span class="kw-2">&amp;</span>[u32],
+<a href=#629 id=629 data-nosnippet>629</a>    cut: <span class="kw-2">&amp;</span>[u32],
+<a href=#630 id=630 data-nosnippet>630</a>    cancellation: <span class="kw-2">&amp;</span>zetesis_algebra::Cancellation,
+<a href=#631 id=631 data-nosnippet>631</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), GpuError&gt; {
+<a href=#632 id=632 data-nosnippet>632</a>    <span class="kw">let </span>(stored_held, stored_cut) = region.decision_words();
+<a href=#633 id=633 data-nosnippet>633</a>    <span class="kw">for </span>(i, (<span class="kw-2">&amp;</span>yes, <span class="kw-2">&amp;</span>no)) <span class="kw">in </span>held.iter().zip(cut).enumerate() {
+<a href=#634 id=634 data-nosnippet>634</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#635 id=635 data-nosnippet>635</a>        <span class="kw">let </span>shift = u32::BITS <span class="kw">as </span>usize * (i % <span class="number">2</span>);
+<a href=#636 id=636 data-nosnippet>636</a>        <span class="kw">let </span>half_word = |packed: u64| (packed &gt;&gt; shift) &amp; u64::from(u32::MAX);
+<a href=#637 id=637 data-nosnippet>637</a>        <span class="kw">if </span>half_word(stored_held[i / <span class="number">2</span>]) != u64::from(yes)
+<a href=#638 id=638 data-nosnippet>638</a>            || half_word(stored_cut[i / <span class="number">2</span>]) != u64::from(no)
+<a href=#639 id=639 data-nosnippet>639</a>        {
+<a href=#640 id=640 data-nosnippet>640</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(invalid());
+<a href=#641 id=641 data-nosnippet>641</a>        }
+<a href=#642 id=642 data-nosnippet>642</a>    }
+<a href=#643 id=643 data-nosnippet>643</a>    <span class="prelude-val">Ok</span>(())
+<a href=#644 id=644 data-nosnippet>644</a>}
+<a href=#645 id=645 data-nosnippet>645</a>
+<a href=#646 id=646 data-nosnippet>646</a><span class="attr">#[cfg(test)]
+<a href=#647 id=647 data-nosnippet>647</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

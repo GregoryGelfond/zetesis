@@ -138,102 +138,124 @@
 <a href=#138 id=138 data-nosnippet>138</a>    <span class="kw-2">mut </span>later: RegionSearchStatistics,
 <a href=#139 id=139 data-nosnippet>139</a>) -&gt; RegionSearchStatistics {
 <a href=#140 id=140 data-nosnippet>140</a>    later.counts = counts(<span class="kw-2">&amp;</span>earlier.counts, later.counts);
-<a href=#141 id=141 data-nosnippet>141</a>    later.generator_order.work = earlier
-<a href=#142 id=142 data-nosnippet>142</a>        .generator_order
-<a href=#143 id=143 data-nosnippet>143</a>        .work
-<a href=#144 id=144 data-nosnippet>144</a>        .saturating_add(later.generator_order.work);
-<a href=#145 id=145 data-nosnippet>145</a>    later.generator_order.peak_bytes = earlier
-<a href=#146 id=146 data-nosnippet>146</a>        .generator_order
-<a href=#147 id=147 data-nosnippet>147</a>        .peak_bytes
-<a href=#148 id=148 data-nosnippet>148</a>        .max(later.generator_order.peak_bytes);
-<a href=#149 id=149 data-nosnippet>149</a>    later.parity.preparation_work = earlier
-<a href=#150 id=150 data-nosnippet>150</a>        .parity
-<a href=#151 id=151 data-nosnippet>151</a>        .preparation_work
-<a href=#152 id=152 data-nosnippet>152</a>        .saturating_add(later.parity.preparation_work);
-<a href=#153 id=153 data-nosnippet>153</a>    later.parity.preparation_bytes = earlier
-<a href=#154 id=154 data-nosnippet>154</a>        .parity
-<a href=#155 id=155 data-nosnippet>155</a>        .preparation_bytes
-<a href=#156 id=156 data-nosnippet>156</a>        .max(later.parity.preparation_bytes);
-<a href=#157 id=157 data-nosnippet>157</a>    later.parity.phases = preparation_work(earlier.parity.phases, later.parity.phases);
-<a href=#158 id=158 data-nosnippet>158</a>    later.parity.region_passes = earlier
-<a href=#159 id=159 data-nosnippet>159</a>        .parity
-<a href=#160 id=160 data-nosnippet>160</a>        .region_passes
-<a href=#161 id=161 data-nosnippet>161</a>        .saturating_add(later.parity.region_passes);
-<a href=#162 id=162 data-nosnippet>162</a>    later.parity.forced = earlier.parity.forced.saturating_add(later.parity.forced);
-<a href=#163 id=163 data-nosnippet>163</a>    later.parity.refuted = earlier.parity.refuted.saturating_add(later.parity.refuted);
-<a href=#164 id=164 data-nosnippet>164</a>    later.cardinality.preparation_work = earlier
-<a href=#165 id=165 data-nosnippet>165</a>        .cardinality
-<a href=#166 id=166 data-nosnippet>166</a>        .preparation_work
-<a href=#167 id=167 data-nosnippet>167</a>        .saturating_add(later.cardinality.preparation_work);
-<a href=#168 id=168 data-nosnippet>168</a>    later.cardinality.preparation_bytes = earlier
-<a href=#169 id=169 data-nosnippet>169</a>        .cardinality
-<a href=#170 id=170 data-nosnippet>170</a>        .preparation_bytes
-<a href=#171 id=171 data-nosnippet>171</a>        .max(later.cardinality.preparation_bytes);
-<a href=#172 id=172 data-nosnippet>172</a>    later.cardinality.phases =
-<a href=#173 id=173 data-nosnippet>173</a>        preparation_work(earlier.cardinality.phases, later.cardinality.phases);
-<a href=#174 id=174 data-nosnippet>174</a>    later.cardinality.region_passes = earlier
-<a href=#175 id=175 data-nosnippet>175</a>        .cardinality
-<a href=#176 id=176 data-nosnippet>176</a>        .region_passes
-<a href=#177 id=177 data-nosnippet>177</a>        .saturating_add(later.cardinality.region_passes);
-<a href=#178 id=178 data-nosnippet>178</a>    later.cardinality.refuted = earlier
-<a href=#179 id=179 data-nosnippet>179</a>        .cardinality
-<a href=#180 id=180 data-nosnippet>180</a>        .refuted
-<a href=#181 id=181 data-nosnippet>181</a>        .saturating_add(later.cardinality.refuted);
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">if let </span>(<span class="prelude-val">Some</span>(earlier), <span class="prelude-val">Some</span>(later)) = (earlier.frontier, later.frontier.as_mut()) {
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw-2">*</span>later = RegionFrontierStatistics {
-<a href=#184 id=184 data-nosnippet>184</a>            peak_regions: earlier.peak_regions.max(later.peak_regions),
-<a href=#185 id=185 data-nosnippet>185</a>            peak_capacity: earlier.peak_capacity.max(later.peak_capacity),
-<a href=#186 id=186 data-nosnippet>186</a>            peak_retained_bytes: earlier.peak_retained_bytes.max(later.peak_retained_bytes),
-<a href=#187 id=187 data-nosnippet>187</a>            ..<span class="kw-2">*</span>later
-<a href=#188 id=188 data-nosnippet>188</a>        };
-<a href=#189 id=189 data-nosnippet>189</a>    }
-<a href=#190 id=190 data-nosnippet>190</a>    later
-<a href=#191 id=191 data-nosnippet>191</a>}
-<a href=#192 id=192 data-nosnippet>192</a>
-<a href=#193 id=193 data-nosnippet>193</a><span class="kw">fn </span>preparation_work(
-<a href=#194 id=194 data-nosnippet>194</a>    earlier: zetesis_ferraris::PreparationWork,
-<a href=#195 id=195 data-nosnippet>195</a>    later: zetesis_ferraris::PreparationWork,
-<a href=#196 id=196 data-nosnippet>196</a>) -&gt; zetesis_ferraris::PreparationWork {
-<a href=#197 id=197 data-nosnippet>197</a>    zetesis_ferraris::PreparationWork {
-<a href=#198 id=198 data-nosnippet>198</a>        recognition: earlier.recognition.saturating_add(later.recognition),
-<a href=#199 id=199 data-nosnippet>199</a>        provenance: earlier.provenance.saturating_add(later.provenance),
-<a href=#200 id=200 data-nosnippet>200</a>        reduction: earlier.reduction.saturating_add(later.reduction),
-<a href=#201 id=201 data-nosnippet>201</a>        discovery: earlier.discovery.saturating_add(later.discovery),
-<a href=#202 id=202 data-nosnippet>202</a>        candidate_checks: earlier
-<a href=#203 id=203 data-nosnippet>203</a>            .candidate_checks
-<a href=#204 id=204 data-nosnippet>204</a>            .saturating_add(later.candidate_checks),
-<a href=#205 id=205 data-nosnippet>205</a>        index: earlier.index.saturating_add(later.index),
-<a href=#206 id=206 data-nosnippet>206</a>        root_seed: earlier.root_seed.saturating_add(later.root_seed),
-<a href=#207 id=207 data-nosnippet>207</a>    }
-<a href=#208 id=208 data-nosnippet>208</a>}
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a><span class="kw">fn </span>counts(earlier: <span class="kw-2">&amp;</span>RegionCounts, later: RegionCounts) -&gt; RegionCounts {
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">let </span>(e, l) = (<span class="kw-2">&amp;</span>earlier.support_explanations, later.support_explanations);
-<a href=#212 id=212 data-nosnippet>212</a>    RegionCounts {
-<a href=#213 id=213 data-nosnippet>213</a>        regions: earlier.regions.saturating_add(later.regions),
-<a href=#214 id=214 data-nosnippet>214</a>        refuted: earlier.refuted.saturating_add(later.refuted),
-<a href=#215 id=215 data-nosnippet>215</a>        leaves: earlier.leaves.saturating_add(later.leaves),
-<a href=#216 id=216 data-nosnippet>216</a>        propagations: earlier.propagations.saturating_add(later.propagations),
-<a href=#217 id=217 data-nosnippet>217</a>        held: earlier.held.saturating_add(later.held),
-<a href=#218 id=218 data-nosnippet>218</a>        cut: earlier.cut.saturating_add(later.cut),
-<a href=#219 id=219 data-nosnippet>219</a>        work: earlier.work.saturating_add(later.work),
-<a href=#220 id=220 data-nosnippet>220</a>        support_work: earlier.support_work.saturating_add(later.support_work),
-<a href=#221 id=221 data-nosnippet>221</a>        founded_work: earlier.founded_work.saturating_add(later.founded_work),
-<a href=#222 id=222 data-nosnippet>222</a>        arithmetic: earlier.arithmetic.saturating_add(later.arithmetic),
-<a href=#223 id=223 data-nosnippet>223</a>        support_explanations: SupportExplanationStatistics {
-<a href=#224 id=224 data-nosnippet>224</a>            attempts: e.attempts.saturating_add(l.attempts),
-<a href=#225 id=225 data-nosnippet>225</a>            certified: e.certified.saturating_add(l.certified),
-<a href=#226 id=226 data-nosnippet>226</a>            matched: e.matched.saturating_add(l.matched),
-<a href=#227 id=227 data-nosnippet>227</a>            cut: e.cut.saturating_add(l.cut),
-<a href=#228 id=228 data-nosnippet>228</a>            forced: e.forced.saturating_add(l.forced),
-<a href=#229 id=229 data-nosnippet>229</a>            refuted: e.refuted.saturating_add(l.refuted),
-<a href=#230 id=230 data-nosnippet>230</a>            declined: e.declined.saturating_add(l.declined),
-<a href=#231 id=231 data-nosnippet>231</a>            work: e.work.saturating_add(l.work),
-<a href=#232 id=232 data-nosnippet>232</a>            peak_bytes: e.peak_bytes.max(l.peak_bytes),
-<a href=#233 id=233 data-nosnippet>233</a>        },
-<a href=#234 id=234 data-nosnippet>234</a>    }
-<a href=#235 id=235 data-nosnippet>235</a>}
-<a href=#236 id=236 data-nosnippet>236</a>
-<a href=#237 id=237 data-nosnippet>237</a><span class="attr">#[cfg(test)]
-<a href=#238 id=238 data-nosnippet>238</a></span><span class="kw">mod </span>tests;
+<a href=#141 id=141 data-nosnippet>141</a>    later.images = root_images(earlier.images, later.images);
+<a href=#142 id=142 data-nosnippet>142</a>    later.generator_order.work = earlier
+<a href=#143 id=143 data-nosnippet>143</a>        .generator_order
+<a href=#144 id=144 data-nosnippet>144</a>        .work
+<a href=#145 id=145 data-nosnippet>145</a>        .saturating_add(later.generator_order.work);
+<a href=#146 id=146 data-nosnippet>146</a>    later.generator_order.peak_bytes = earlier
+<a href=#147 id=147 data-nosnippet>147</a>        .generator_order
+<a href=#148 id=148 data-nosnippet>148</a>        .peak_bytes
+<a href=#149 id=149 data-nosnippet>149</a>        .max(later.generator_order.peak_bytes);
+<a href=#150 id=150 data-nosnippet>150</a>    later.parity.preparation_work = earlier
+<a href=#151 id=151 data-nosnippet>151</a>        .parity
+<a href=#152 id=152 data-nosnippet>152</a>        .preparation_work
+<a href=#153 id=153 data-nosnippet>153</a>        .saturating_add(later.parity.preparation_work);
+<a href=#154 id=154 data-nosnippet>154</a>    later.parity.preparation_bytes = earlier
+<a href=#155 id=155 data-nosnippet>155</a>        .parity
+<a href=#156 id=156 data-nosnippet>156</a>        .preparation_bytes
+<a href=#157 id=157 data-nosnippet>157</a>        .max(later.parity.preparation_bytes);
+<a href=#158 id=158 data-nosnippet>158</a>    later.parity.phases = preparation_work(earlier.parity.phases, later.parity.phases);
+<a href=#159 id=159 data-nosnippet>159</a>    later.parity.region_passes = earlier
+<a href=#160 id=160 data-nosnippet>160</a>        .parity
+<a href=#161 id=161 data-nosnippet>161</a>        .region_passes
+<a href=#162 id=162 data-nosnippet>162</a>        .saturating_add(later.parity.region_passes);
+<a href=#163 id=163 data-nosnippet>163</a>    later.parity.forced = earlier.parity.forced.saturating_add(later.parity.forced);
+<a href=#164 id=164 data-nosnippet>164</a>    later.parity.refuted = earlier.parity.refuted.saturating_add(later.parity.refuted);
+<a href=#165 id=165 data-nosnippet>165</a>    later.cardinality.preparation_work = earlier
+<a href=#166 id=166 data-nosnippet>166</a>        .cardinality
+<a href=#167 id=167 data-nosnippet>167</a>        .preparation_work
+<a href=#168 id=168 data-nosnippet>168</a>        .saturating_add(later.cardinality.preparation_work);
+<a href=#169 id=169 data-nosnippet>169</a>    later.cardinality.preparation_bytes = earlier
+<a href=#170 id=170 data-nosnippet>170</a>        .cardinality
+<a href=#171 id=171 data-nosnippet>171</a>        .preparation_bytes
+<a href=#172 id=172 data-nosnippet>172</a>        .max(later.cardinality.preparation_bytes);
+<a href=#173 id=173 data-nosnippet>173</a>    later.cardinality.phases =
+<a href=#174 id=174 data-nosnippet>174</a>        preparation_work(earlier.cardinality.phases, later.cardinality.phases);
+<a href=#175 id=175 data-nosnippet>175</a>    later.cardinality.region_passes = earlier
+<a href=#176 id=176 data-nosnippet>176</a>        .cardinality
+<a href=#177 id=177 data-nosnippet>177</a>        .region_passes
+<a href=#178 id=178 data-nosnippet>178</a>        .saturating_add(later.cardinality.region_passes);
+<a href=#179 id=179 data-nosnippet>179</a>    later.cardinality.refuted = earlier
+<a href=#180 id=180 data-nosnippet>180</a>        .cardinality
+<a href=#181 id=181 data-nosnippet>181</a>        .refuted
+<a href=#182 id=182 data-nosnippet>182</a>        .saturating_add(later.cardinality.refuted);
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">if let </span>(<span class="prelude-val">Some</span>(earlier), <span class="prelude-val">Some</span>(later)) = (earlier.frontier, later.frontier.as_mut()) {
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw-2">*</span>later = RegionFrontierStatistics {
+<a href=#185 id=185 data-nosnippet>185</a>            peak_regions: earlier.peak_regions.max(later.peak_regions),
+<a href=#186 id=186 data-nosnippet>186</a>            peak_capacity: earlier.peak_capacity.max(later.peak_capacity),
+<a href=#187 id=187 data-nosnippet>187</a>            peak_retained_bytes: earlier.peak_retained_bytes.max(later.peak_retained_bytes),
+<a href=#188 id=188 data-nosnippet>188</a>            ..<span class="kw-2">*</span>later
+<a href=#189 id=189 data-nosnippet>189</a>        };
+<a href=#190 id=190 data-nosnippet>190</a>    }
+<a href=#191 id=191 data-nosnippet>191</a>    later
+<a href=#192 id=192 data-nosnippet>192</a>}
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a><span class="doccomment">/// Match the existing pass composition: actual work/activity accumulate; peak
+<a href=#195 id=195 data-nosnippet>195</a>/// requirement is a maximum; status and populations describe the latest pass.
+<a href=#196 id=196 data-nosnippet>196</a></span><span class="kw">fn </span>root_images(
+<a href=#197 id=197 data-nosnippet>197</a>    earlier: zetesis_ferraris::RootImageStatistics,
+<a href=#198 id=198 data-nosnippet>198</a>    later: zetesis_ferraris::RootImageStatistics,
+<a href=#199 id=199 data-nosnippet>199</a>) -&gt; zetesis_ferraris::RootImageStatistics {
+<a href=#200 id=200 data-nosnippet>200</a>    zetesis_ferraris::RootImageStatistics {
+<a href=#201 id=201 data-nosnippet>201</a>        preparation_work: earlier
+<a href=#202 id=202 data-nosnippet>202</a>            .preparation_work
+<a href=#203 id=203 data-nosnippet>203</a>            .saturating_add(later.preparation_work),
+<a href=#204 id=204 data-nosnippet>204</a>        copying_work: earlier.copying_work.saturating_add(later.copying_work),
+<a href=#205 id=205 data-nosnippet>205</a>        closure_work: earlier.closure_work.saturating_add(later.closure_work),
+<a href=#206 id=206 data-nosnippet>206</a>        peak_bytes: earlier.peak_bytes.max(later.peak_bytes),
+<a href=#207 id=207 data-nosnippet>207</a>        completed_rounds: earlier
+<a href=#208 id=208 data-nosnippet>208</a>            .completed_rounds
+<a href=#209 id=209 data-nosnippet>209</a>            .saturating_add(later.completed_rounds),
+<a href=#210 id=210 data-nosnippet>210</a>        applied_cuts: earlier.applied_cuts.saturating_add(later.applied_cuts),
+<a href=#211 id=211 data-nosnippet>211</a>        ..later
+<a href=#212 id=212 data-nosnippet>212</a>    }
+<a href=#213 id=213 data-nosnippet>213</a>}
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a><span class="kw">fn </span>preparation_work(
+<a href=#216 id=216 data-nosnippet>216</a>    earlier: zetesis_ferraris::PreparationWork,
+<a href=#217 id=217 data-nosnippet>217</a>    later: zetesis_ferraris::PreparationWork,
+<a href=#218 id=218 data-nosnippet>218</a>) -&gt; zetesis_ferraris::PreparationWork {
+<a href=#219 id=219 data-nosnippet>219</a>    zetesis_ferraris::PreparationWork {
+<a href=#220 id=220 data-nosnippet>220</a>        recognition: earlier.recognition.saturating_add(later.recognition),
+<a href=#221 id=221 data-nosnippet>221</a>        provenance: earlier.provenance.saturating_add(later.provenance),
+<a href=#222 id=222 data-nosnippet>222</a>        reduction: earlier.reduction.saturating_add(later.reduction),
+<a href=#223 id=223 data-nosnippet>223</a>        discovery: earlier.discovery.saturating_add(later.discovery),
+<a href=#224 id=224 data-nosnippet>224</a>        candidate_checks: earlier
+<a href=#225 id=225 data-nosnippet>225</a>            .candidate_checks
+<a href=#226 id=226 data-nosnippet>226</a>            .saturating_add(later.candidate_checks),
+<a href=#227 id=227 data-nosnippet>227</a>        index: earlier.index.saturating_add(later.index),
+<a href=#228 id=228 data-nosnippet>228</a>        root_seed: earlier.root_seed.saturating_add(later.root_seed),
+<a href=#229 id=229 data-nosnippet>229</a>    }
+<a href=#230 id=230 data-nosnippet>230</a>}
+<a href=#231 id=231 data-nosnippet>231</a>
+<a href=#232 id=232 data-nosnippet>232</a><span class="kw">fn </span>counts(earlier: <span class="kw-2">&amp;</span>RegionCounts, later: RegionCounts) -&gt; RegionCounts {
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let </span>(e, l) = (<span class="kw-2">&amp;</span>earlier.support_explanations, later.support_explanations);
+<a href=#234 id=234 data-nosnippet>234</a>    RegionCounts {
+<a href=#235 id=235 data-nosnippet>235</a>        regions: earlier.regions.saturating_add(later.regions),
+<a href=#236 id=236 data-nosnippet>236</a>        refuted: earlier.refuted.saturating_add(later.refuted),
+<a href=#237 id=237 data-nosnippet>237</a>        leaves: earlier.leaves.saturating_add(later.leaves),
+<a href=#238 id=238 data-nosnippet>238</a>        propagations: earlier.propagations.saturating_add(later.propagations),
+<a href=#239 id=239 data-nosnippet>239</a>        held: earlier.held.saturating_add(later.held),
+<a href=#240 id=240 data-nosnippet>240</a>        cut: earlier.cut.saturating_add(later.cut),
+<a href=#241 id=241 data-nosnippet>241</a>        work: earlier.work.saturating_add(later.work),
+<a href=#242 id=242 data-nosnippet>242</a>        support_work: earlier.support_work.saturating_add(later.support_work),
+<a href=#243 id=243 data-nosnippet>243</a>        founded_work: earlier.founded_work.saturating_add(later.founded_work),
+<a href=#244 id=244 data-nosnippet>244</a>        arithmetic: earlier.arithmetic.saturating_add(later.arithmetic),
+<a href=#245 id=245 data-nosnippet>245</a>        support_explanations: SupportExplanationStatistics {
+<a href=#246 id=246 data-nosnippet>246</a>            attempts: e.attempts.saturating_add(l.attempts),
+<a href=#247 id=247 data-nosnippet>247</a>            certified: e.certified.saturating_add(l.certified),
+<a href=#248 id=248 data-nosnippet>248</a>            matched: e.matched.saturating_add(l.matched),
+<a href=#249 id=249 data-nosnippet>249</a>            cut: e.cut.saturating_add(l.cut),
+<a href=#250 id=250 data-nosnippet>250</a>            forced: e.forced.saturating_add(l.forced),
+<a href=#251 id=251 data-nosnippet>251</a>            refuted: e.refuted.saturating_add(l.refuted),
+<a href=#252 id=252 data-nosnippet>252</a>            declined: e.declined.saturating_add(l.declined),
+<a href=#253 id=253 data-nosnippet>253</a>            work: e.work.saturating_add(l.work),
+<a href=#254 id=254 data-nosnippet>254</a>            peak_bytes: e.peak_bytes.max(l.peak_bytes),
+<a href=#255 id=255 data-nosnippet>255</a>        },
+<a href=#256 id=256 data-nosnippet>256</a>    }
+<a href=#257 id=257 data-nosnippet>257</a>}
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a><span class="attr">#[cfg(test)]
+<a href=#260 id=260 data-nosnippet>260</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

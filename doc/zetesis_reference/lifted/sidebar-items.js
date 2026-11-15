@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_POSITIVE_BODY"],"enum":["Filter","Term","Value"],"fn":["run_sparse_fixtures"],"struct":["Atom","AtomPattern","LiftedCheck","LiftedProgram","LiftedStats","Limits","Predicate","SparseFixtureReport","Template"]};

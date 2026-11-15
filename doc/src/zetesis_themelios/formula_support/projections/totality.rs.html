@@ -41,7 +41,7 @@
 <a href=#41 id=41 data-nosnippet>41</a>
 <a href=#42 id=42 data-nosnippet>42</a><span class="doccomment">/// Preparation serves either partial scalar families or total arithmetic whose
 <a href=#43 id=43 data-nosnippet>43</a>/// certificate admits incremental source checking. This does not redefine which
-<a href=#44 id=44 data-nosnippet>44</a>/// source families require a defined witness: that remains `family::partial`.
+<a href=#44 id=44 data-nosnippet>44</a>/// source families can meet a zero divisor: that remains `family::partial`.
 <a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::formula_support) <span class="kw">fn </span>needed(literals: <span class="kw-2">&amp;</span>[LiteralIr]) -&gt; bool {
 <a href=#46 id=46 data-nosnippet>46</a>    <span class="kw">let </span>arithmetic = |expression: <span class="kw-2">&amp;</span>Expression| expression.nodes.iter().any(numeric::arithmetic);
 <a href=#47 id=47 data-nosnippet>47</a>    <span class="kw">crate</span>::formula_support::family::partial(literals)
@@ -100,7 +100,7 @@
 <a href=#100 id=100 data-nosnippet>100</a>    /// the generated head suffix. A growing round may select only its current
 <a href=#101 id=101 data-nosnippet>101</a>    /// snapshot. Completed-family admission additionally needs the full key and
 <a href=#102 id=102 data-nosnippet>102</a>    /// head obligations in `total_family`, for every normalized sibling. This
-<a href=#103 id=103 data-nosnippet>103</a>    /// proof supplies no defined witness and no guarantee about partial prefixes.
+<a href=#103 id=103 data-nosnippet>103</a>    /// proof supplies no instance and no guarantee about partial prefixes.
 <a href=#104 id=104 data-nosnippet>104</a>    </span><span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::formula_support) <span class="kw">fn </span>total_body(
 <a href=#105 id=105 data-nosnippet>105</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#106 id=106 data-nosnippet>106</a>        rule: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RuleIr,

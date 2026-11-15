@@ -147,7 +147,7 @@
 <a href=#147 id=147 data-nosnippet>147</a>    /// Omitted, the whole suite is measured.
 <a href=#148 id=148 data-nosnippet>148</a>    </span><span class="attr">#[arg(long = <span class="string">"case"</span>, value_name = <span class="string">"PATH"</span>)]
 <a href=#149 id=149 data-nosnippet>149</a>    </span><span class="kw">pub </span>cases: Vec&lt;String&gt;,
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="doccomment">/// Source-bundle manifest for external programs; uses the explicit workload
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="doccomment">/// Sealed bundle or typed-selection manifest; uses the explicit workload
 <a href=#151 id=151 data-nosnippet>151</a>    /// matrix and requires clingo. Conflicts with suite and case selection.
 <a href=#152 id=152 data-nosnippet>152</a>    </span><span class="attr">#[arg(
 <a href=#153 id=153 data-nosnippet>153</a>        long,
@@ -609,7 +609,7 @@
 <a href=#609 id=609 data-nosnippet>609</a>                source_bytes: request.limits.corpus.source_bytes,
 <a href=#610 id=610 data-nosnippet>610</a>                total_source_bytes: request.limits.corpus.total_source_bytes,
 <a href=#611 id=611 data-nosnippet>611</a>                metadata_bytes: request.limits.corpus.manifest_bytes,
-<a href=#612 id=612 data-nosnippet>612</a>                amendments: <span class="number">0</span>,
+<a href=#612 id=612 data-nosnippet>612</a>                amendments: matrix::WorkloadLimits::default().amendments,
 <a href=#613 id=613 data-nosnippet>613</a>            },
 <a href=#614 id=614 data-nosnippet>614</a>        )<span class="question-mark">?</span>;
 <a href=#615 id=615 data-nosnippet>615</a>        matrix::run_workloads_with_cancellation(

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
+            window.path_to_searchindex_js = "../searchindex-e337ce9d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-25cd24fd.js"></script>
+        <script src="../toc-ec1322fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -413,7 +413,8 @@ and <a href="outcomes.html#resource-contracts">resource contracts</a>.</p>
 <tr><td>Matching <code>DomainObservation::Inapplicable</code> or reading its former <code>Analyzed(&amp;Analysis)</code> payload</td><td>Remove the <code>Inapplicable</code> arm. <code>Analyzed</code> carries <code>NumericAnalysis</code>: use <code>analysis()</code> for bounds/statistics, <code>catalog()</code> for canonical keys, and <code>arguments()</code> for predicate coordinates. Finite-guard applicability is separate; see <a href="source.html#optional-numeric-analysis-and-domain-guards">domain observation</a>.</td></tr>
 <tr><td>Exhaustive <code>zetesis_ferraris::NodeView</code> matches</td><td>Handle <code>Threshold</code> and <code>ExtremumCut</code>. Formula storage now includes shared numeric arenas; preserve them when copying. See <a href="reducts.html#numeric-formula-storage">finite formulas</a>.</td></tr>
 <tr><td>Exhaustive <code>zetesis_ferraris::AdmissionError</code> matches</td><td>Handle <code>ThresholdShape</code>, <code>ThresholdMeasure</code>, <code>NumericShape</code>, <code>NumericDomain</code>, <code>OrdinalRank</code> and <code>OrdinalCut</code>. These distinguish numeric shape/measure refusals from allocation and configured limits.</td></tr>
-<tr><td>Calling <code>zetesis_ferraris::Knowledge::preferred_atom_reserved</code></td><td>Pass <code>&amp;ChoiceHeads</code> before cancellation. <code>ChoiceHeads::default()</code> preserves the previous ranking; <code>Extraction::choice_heads</code> supplies the extracted choice heads. <code>OriginalSubject::with_choices</code> selects the same ranking for narrowing that chooses its own split.</td></tr>
+<tr><td>Calling <code>zetesis_ferraris::Knowledge::preferred_atom_reserved</code></td><td>Pass the theory’s <code>&amp;Narrower</code> first, the index the knowledge was closed with, and <code>&amp;ChoiceHeads</code> before cancellation. <code>ChoiceHeads::default()</code> marks no choice; <code>Extraction::choice_heads</code> supplies the extracted choice heads. <code>OriginalSubject::with_choices</code> selects the same ranking for narrowing that chooses its own split. The ranking now puts the chains the region has shortened before the unknown-parent counts.</td></tr>
+<tr><td>Calling <code>zetesis_ferraris::GeneratorOrder::preferred_atom_reserved</code></td><td>Pass the theory’s <code>&amp;Narrower</code> first and the region’s closed <code>&amp;Knowledge</code> after the region. The order ranks by choice depth, then by the chains the region has shortened, then by component.</td></tr>
 <tr><td>Constructing or destructuring <code>zetesis_sat::RegionSearchStatistics</code></td><td>It now has <code>workers</code> and is non-exhaustive. Construct with <code>Default::default()</code> and assign fields; destructure with <code>..</code>. The new <code>RegionWorkerStatistics</code> is also non-exhaustive.</td></tr>
 <tr><td>Selecting or matching worker engagement</td><td><code>StableModels::with_region_workers_engaging</code> accepts <code>Engagement</code>; <code>Immediate</code> starts workers at the first pull. <code>Engagement</code> and the reported <code>RegionWalkEngagement</code> are non-exhaustive, so external matches need a fallback arm. See <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md#walking-the-tree-with-several-workers">parallel walks</a>.</td></tr>
 <tr><td>Constructing <code>zetesis_solve::SolveConfig</code> with every field</td><td>Add <code>query_division</code>, a <code>QueryDivision</code> (<code>WhenIdle</code> by default). <code>QueryDivision</code> and the reported <code>QueryDivisionStatistics</code> are non-exhaustive. See <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md#walking-the-tree-with-several-workers">parallel walks</a>.</td></tr>

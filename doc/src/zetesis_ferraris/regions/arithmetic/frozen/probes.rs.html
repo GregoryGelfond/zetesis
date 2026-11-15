@@ -127,7 +127,7 @@
 <a href=#127 id=127 data-nosnippet>127</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>storage = Storage::with_live_bytes(storage.bytes());
 <a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let </span><span class="kw-2">mut </span>known = <span class="prelude-val">None</span>;
 <a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">loop </span>{
-<a href=#130 id=130 data-nosnippet>130</a>            <span class="kw">let </span>attempt = <span class="self">self</span>.narrower.narrow_frozen_known_reserved(
+<a href=#130 id=130 data-nosnippet>130</a>            <span class="kw">let </span>attempt = <span class="self">self</span>.narrower.propagate_frozen_known_reserved(
 <a href=#131 id=131 data-nosnippet>131</a>                <span class="self">self</span>.subject,
 <a href=#132 id=132 data-nosnippet>132</a>                <span class="kw-2">&amp;mut </span><span class="self">self</span>.region,
 <a href=#133 id=133 data-nosnippet>133</a>                <span class="kw-2">&amp;mut </span><span class="self">self</span>.retired,

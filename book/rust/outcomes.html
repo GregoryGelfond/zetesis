@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
+            window.path_to_searchindex_js = "../searchindex-e337ce9d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-25cd24fd.js"></script>
+        <script src="../toc-ec1322fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -278,8 +278,8 @@ units’ included), the probing <code>rounds</code>, the <code>refuted_patterns<
 refuted probe, or read off the clauses of the group, or of a group whose support
 it contains, before probing, which runs none for them), the parity <code>rows</code> loaded with their echelon <code>rank</code> and the one-atom
 <code>units</code> seeding the root, the <code>inexact_hulls</code>, the count <code>bounds</code> loaded (a table’s least and
-greatest allowed counts, a clique’s, and the trivial bounds completing a
-partition), by side as <code>lower</code> and <code>upper</code>, the <code>families</code> whose double count
+greatest allowed counts, a clique’s, of pairwise exclusions from above or of
+covering pairs from below, and the trivial bounds completing a partition), by side as <code>lower</code> and <code>upper</code>, the <code>families</code> whose double count
 the walk compares, the preparations <code>root_refuted</code> (candidates decided stable
 there, their walk one region) and the <code>work</code> charged to the search. A
 preparation serves only its own candidate’s query.</p>
@@ -924,6 +924,23 @@ or failed preparation retains its executed prefix; its published retained bytes
 are zero. <code>preparation_bytes</code> is the maximum shared named storage request through
 that stage, including a refused request, not process memory. Shared peaks are
 not additive.</p>
+<p><code>statistics.search.root_images</code> separately reports the optional original-root
+image transaction. Its <code>preparation_work</code>, <code>copying_work</code> and <code>closure_work</code> are
+performed work already contained in candidate reading/search work, not additional
+totals to add to them. <code>peak_bytes</code> is the shared named-storage requirement
+high-water through this attempt, including earlier live owners and refused
+requirements; it is not incremental allocation, actual RSS or an additive peak.
+<code>completed_rounds</code> excludes an interrupted or absorbing partial round.
+<code>applied_cuts</code> includes decisions made in a private root that may later be
+discarded. Likewise, <code>root_refuted</code> records a completed semantic contradiction
+even if a later publication charge refuses. Consult this transaction’s <code>status</code>
+and the enclosing preparation result to determine publication; neither field
+alone establishes a retained seed, exhaustive enumeration or solve completion.
+An absent receipt is unavailable, not a measured zero. A declined image attempt
+can coexist with an earlier complete parity/cardinality preparation. When
+candidate passes are combined, work, completed rounds and applied cuts accumulate
+with saturating addition, and the peak is their maximum; status, groups, pairs
+and <code>root_refuted</code> describe the latest pass.</p>
 <p>Root preparation can seed the candidate walk with proved units or refute its
 root. The default candidate walk skips per-region parity and cardinality
 inspections. Its <code>region_passes</code>, <code>refuted</code> and parity <code>forced</code> counters are

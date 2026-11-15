@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
+            window.path_to_searchindex_js = "../searchindex-e337ce9d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-25cd24fd.js"></script>
+        <script src="../toc-ec1322fa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -318,6 +318,30 @@ an alias on the destination filesystem, is refused before any process launches.<
 <p>Library callers use <code>performance::bundles::load</code> and pass its sealed workloads
 to <code>matrix::run_workloads_with_cancellation</code>. The declared contracts remain
 expectations; the reference run supplies fresh qualification.</p>
+<p>The version 2 manifest selects typed constructions without exporting rewritten
+source files. Its <code>sources</code> list names authored inputs by <code>id</code>, <code>root</code>, <code>entry</code>,
+<code>sha256</code> and their original <code>contract</code>. Each ordered case has one <code>kind</code>:
+<code>authored</code> names a <code>source</code> and <code>amendments</code>; <code>corpus</code> names an <code>entry</code> and
+<code>amendments</code>; <code>generated</code> names an existing lowercase family and its <code>size</code>.
+An amendment contains <code>source_path</code>, <code>name</code>, <code>expected</code> and <code>replacement</code>.
+The optional <code>catalog</code> supplies the pinned correctness catalog for corpus
+amendments. It and authored roots resolve relative to the manifest. Before
+materialization, a corpus workload must also match the campaign’s catalog
+identity, original contract and complete source closure.</p>
+<p>These selections use the same <code>Workload::authored</code>, <code>Workload::amended</code> and
+<code>Workload::generated</code> constructors as maintained suites. A changed constant
+retains the original contract as provenance but has no active answer contract;
+fresh clingo enumeration supplies its comparison. Generated inputs retain their
+family’s existing contract. The new selection manifest seal is recorded and
+checked with other independent inputs, without changing workload identity.
+Source, amendment and unknown-field failures are admission errors, not solver
+outcomes. No private runner or report decoder is needed.</p>
+<p>Typed cases retain the default per-case ceilings (1 MiB for one source, 4 MiB
+for its admitted/derived closure, 64 KiB for metadata and 128 amendments),
+intersected with tighter caller limits. The selection separately shares the
+existing manifest/metadata and combined-source ceilings. The CLI supplies
+1 MiB and 4 MiB for those two selection totals. Schema 1 bundle behavior and
+all solver, timing, cancellation, output and comparison controls stay unchanged.</p>
 <p>Large complete families may require larger measurement capacities. The advanced
 <code>--native-atoms</code> and <code>--native-value-nodes</code> controls bound native report
 normalization across all model occurrences, including atoms reused through the
