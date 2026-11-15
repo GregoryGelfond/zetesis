@@ -7,7 +7,10 @@ use crate::formula_support::{
     testing::{Fixture, binding},
 };
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
-use themelios_program::{program::Relation, term::BinaryOp};
+use themelios_program::{
+    program::Relation,
+    term::{BinaryOp, EvalError},
+};
 use zetesis_core::{Value, ValueNodeRef};
 
 use crate::formula_support::Context;
@@ -162,25 +165,37 @@ fn range_endpoints_use_the_join_workspace() {
         assert!(join.evaluation.scratch.integers.capacity() >= 2);
     });
 }
-#[test]
-fn false_filters_do_not_hide_later_arithmetic_errors() {
-    let mut fixture = Fixture::default();
-    let literals = [
+/// A false comparison, then one whose left side is `left operator right`.
+fn behind_a_false_filter(
+    fixture: &mut Fixture,
+    operator: BinaryOp,
+    left: i32,
+    right: i32,
+) -> [LiteralIr; 2] {
+    [
         LiteralIr::TupleCompare(
-            vec![number(&mut fixture, 0)],
+            vec![number(fixture, 0)],
             Relation::Eq,
-            vec![number(&mut fixture, 1)],
+            vec![number(fixture, 1)],
         ),
         LiteralIr::TupleCompare(
             vec![Expression::new(vec![
-                Operation::Constant(fixture.scalar(&Value::Number(1), location())),
-                Operation::Constant(fixture.scalar(&Value::Number(0), location())),
-                Operation::Binary(BinaryOp::Div, 0, 1),
+                Operation::Constant(fixture.scalar(&Value::Number(left), location())),
+                Operation::Constant(fixture.scalar(&Value::Number(right), location())),
+                Operation::Binary(operator, 0, 1),
             ])],
             Relation::Eq,
-            vec![number(&mut fixture, 0)],
+            vec![number(fixture, 0)],
         ),
-    ];
+    ]
+}
+#[test]
+fn false_filters_do_not_hide_later_zero_divisors() {
+    // The first comparison is false and the second divides by zero. The row
+    // is omitted for the zero divisor, and the false comparison does not
+    // hide that: the join yields no row and its family reports the omission.
+    let mut fixture = Fixture::default();
+    let literals = behind_a_false_filter(&mut fixture, BinaryOp::Div, 1, 0);
     fixture.with(location(), |support, computation, counters| {
         let prefix = binding(&[], computation, counters, location());
         let limits = FormulaLimits::default();
@@ -199,11 +214,34 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
                 .unwrap()
                 .is_none()
         );
+        assert!(join.take_family().finish());
+    });
+}
+#[test]
+fn false_filters_do_not_hide_later_arithmetic_errors() {
+    // The first comparison is false and the second overflows: the join
+    // refuses with the overflow at its site.
+    let mut fixture = Fixture::default();
+    let literals = behind_a_false_filter(&mut fixture, BinaryOp::Add, i32::MAX, 1);
+    fixture.with(location(), |support, computation, counters| {
+        let prefix = binding(&[], computation, counters, location());
+        let limits = FormulaLimits::default();
+        let mut budget = budget();
+        let mut join = Join::new(
+            &literals,
+            &prefix,
+            0,
+            support,
+            &mut budget,
+            Context::new(computation, &limits, counters, location()),
+        )
+        .unwrap();
         assert!(matches!(
-            join.take_family().finish(),
-            Err(FormulaFailure::Expansion(
-                ExpansionFailure::Evaluation { .. }
-            ))
+            join.next(computation, &limits, &mut budget, counters, location()),
+            Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                error: EvalError::Overflow,
+                location: site,
+            })) if site == location()
         ));
     });
 }

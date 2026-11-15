@@ -100,8 +100,8 @@ units' included), the probing `rounds`, the `refuted_patterns` (forbidden by a
 refuted probe, or read off the clauses of the group, or of a group whose support
 it contains, before probing, which runs none for them), the parity `rows` loaded with their echelon `rank` and the one-atom
 `units` seeding the root, the `inexact_hulls`, the count `bounds` loaded (a table's least and
-greatest allowed counts, a clique's, and the trivial bounds completing a
-partition), by side as `lower` and `upper`, the `families` whose double count
+greatest allowed counts, a clique's, of pairwise exclusions from above or of
+covering pairs from below, and the trivial bounds completing a partition), by side as `lower` and `upper`, the `families` whose double count
 the walk compares, the preparations `root_refuted` (candidates decided stable
 there, their walk one region) and the `work` charged to the search. A
 preparation serves only its own candidate's query.

@@ -604,7 +604,14 @@ Choose positive joins separately through the preparation's
 The default `Indexed` strategy probes existing value postings. After a flat
 constraint establishes finite arithmetic totality, a computed equality may
 supply a necessary input domain to the shared table selector under either
-strategy. Unrestricted probes still follow the requested strategy. `Table`
+strategy. Under `Indexed` the selector prepares a table at once only while
+its row masks are small. It leaves a larger relation to the ordinary probe
+and the residual comparison, and prepares its table once the rows the
+snapshot's joins have read in its place have cost what the table would. A
+table is prepared only while the tables take at most half of the room the
+support's limits leave, and otherwise the join scans
+([source instances](../architecture/grounding.md#source-instances-as-a-composition)).
+Unrestricted probes still follow the requested strategy. `Table`
 reuses support masks for all applicable flat positive patterns over completed
 eager support; structural patterns and support-growth rounds keep indexed joins. The bundle
 preparation exposes the same method, and the CLI maps `--formula-joins table`
@@ -726,11 +733,10 @@ for the exact named-capacity scope and preservation premises.
 ## Partial arithmetic families
 
 Only an evaluated numeric division or remainder by zero can omit a source
-instance. A nonempty original rule family needs at least one complete
-substitution whose reached arithmetic is jointly defined; a defined comparison
-that is false still supplies that witness. Thus `d(0;2). p(X):-d(X),1/X=1.`
-keeps just the facts and reports a warning, whereas the same rule over `d(0)`
-is refused. Empty positive joins are valid and silent. An ordinary comparison
+instance, and it always does: the instance is dropped and its statement
+reports a warning. Thus `d(0;2). p(X):-d(X),1/X=1.` keeps just the facts and
+reports a warning, and so does the same rule over `d(0)`, whose family has no
+other instance. Empty positive joins are valid and silent. An ordinary comparison
 over relationally bound variables, such as `X!=0`, explicitly excludes that
 substitution and produces no warning for its zero divisor.
 
@@ -751,10 +757,12 @@ The decisive traversal reads completed support, before formula emission.
 It does not use comparison-pruned candidate domains, support delta partitions
 or already-produced-head shortcuts as family evidence. Normalized fragments of
 one original rule combine their evidence. Each nested choice, aggregate or
-conditional local family is judged separately for its fixed outer binding, so
-a valid family at another outer binding cannot rescue it. Alternatives of one
-authored local element share evidence; distinct authored elements do not. An
-undefined conditional consequent omits its whole local implication. Defined
+conditional local family is traversed for its fixed outer binding. The
+alternatives of one authored conditional consequent belong to one instance: it
+keeps the alternatives that are defined, and when every one divides by zero
+the consequent is false, so the implication requires its condition to be
+false. The head of a conditional disjunct that divides by zero in every
+instance under a condition binding is true under that binding. Defined
 false consequents and empty nonarithmetic witness sets retain their logical
 meaning, including under default negation. The additional complete
 traversal spends the existing grounding work and substitution ceilings;

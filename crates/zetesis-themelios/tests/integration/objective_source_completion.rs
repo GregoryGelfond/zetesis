@@ -1,10 +1,12 @@
 //! Source grounding eligibility remains separate from complete-model truth.
 
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_reference_support as reference;
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-source-completion.jsonl");
@@ -186,20 +188,29 @@ fn numeric_zero_retains_its_model_query() {
 
 #[test]
 fn source_arithmetic_precedes_query_materialization() {
-    for source in [
-        "d(0).{a}.#minimize{1/X:d(X),not not a}.",
-        "d(0).{a}.#minimize{1@1/X:d(X),not not a}.",
-        "d(0).{a}.#minimize{1,1/X:d(X),not not a}.",
+    // A field divides by zero at the one source row. The row is omitted with
+    // a warning before its condition `not not a` is materialized: the empty
+    // allowance is asked for no query node, and no answer is scored.
+    for objective in [
+        "#minimize{1/X:d(X),not not a}.",
+        "#minimize{1@1/X:d(X),not not a}.",
+        "#minimize{1,1/X:d(X),not not a}.",
     ] {
+        let source = format!("d(0).{{a}}.{objective}");
         let limits = resource_limits::formula_objective(
             zetesis_objective::AdmissionResource::ConditionNodes,
             0,
         );
-        assert!(
-            matches!(
-                reference::admit(source, &limits).unwrap_err(),
-                FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Evaluation { .. })
-            ),
+        let input =
+            reference::admit(&source, &limits).unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert_eq!(zero_divisor_statement(&input), objective);
+        assert!(input.objectives().templates().is_empty(), "{source}");
+        assert_eq!(
+            reference::exhaustive(&input),
+            Records::from([
+                (["d(0)".to_owned()].into(), None),
+                (["a".to_owned(), "d(0)".to_owned()].into(), None),
+            ]),
             "{source}"
         );
     }

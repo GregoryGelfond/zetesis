@@ -29,8 +29,10 @@ pub(crate) struct Evaluation {
 }
 
 impl Evaluation {
-    /// A reused successful source value has no unavailable arithmetic output.
-    pub(super) fn clear_zero_divisor(&mut self) {
+    /// Forget the last operation's zero divisor: a reused successful source
+    /// value has no unavailable arithmetic output, and a failure another
+    /// owner evaluated is not this evaluation's.
+    pub(crate) fn clear_zero_divisor(&mut self) {
         self.zero_divisor = false;
     }
 
@@ -301,6 +303,15 @@ impl Failures {
     pub(crate) fn finish(self, evaluation: &mut Evaluation) -> Result<(), FormulaFailure> {
         evaluation.zero_divisor = self.fatal.is_none() && self.zero.is_some();
         match self.fatal.or(self.zero) {
+            Some(error) => Err(error.into()),
+            None => Ok(()),
+        }
+    }
+    /// Return a fatal failure alone. A zero divisor is dropped: another
+    /// component has already decided the value these components make.
+    pub(crate) fn fatal(self, evaluation: &mut Evaluation) -> Result<(), FormulaFailure> {
+        evaluation.zero_divisor = false;
+        match self.fatal {
             Some(error) => Err(error.into()),
             None => Ok(()),
         }

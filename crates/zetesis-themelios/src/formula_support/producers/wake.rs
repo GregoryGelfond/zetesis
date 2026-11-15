@@ -11,7 +11,7 @@ use zetesis_core::{
     relation::Failure,
 };
 
-use super::{Node, find, invalid};
+use super::{Node, invalid, lookup};
 use crate::formula_ir::{HeadIr, RuleIr};
 use crate::formula_support::Counters;
 use crate::formula_support::relations::Memory;
@@ -29,13 +29,21 @@ pub(super) struct Wake<'source> {
     predicates: Vec<PredicateInputs<'source>>,
     postings: Vec<usize>,
     active: Words<u64>,
+    /// Whether every predicate a round can publish is one of `predicates`.
+    /// The positive flat plan certifies that, and an unnamed one is an
+    /// owner failure. A registration does not: an unnamed predicate wakes
+    /// no rule here, and its owner visits the rules that read one in every
+    /// round.
+    total: bool,
 }
 
 impl<'source> Wake<'source> {
+    /// Each rule's range of `inputs`, the predicate nodes of its
+    /// occurrences; a rule without a slot has none.
     pub(super) fn prepare(
         nodes: &[Node<'source>],
-        rules: &[Option<Range<usize>>],
-        inputs: &[usize],
+        (rules, inputs): (&[Option<Range<usize>>], &[usize]),
+        total: bool,
         memory: &mut Memory<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
@@ -85,6 +93,7 @@ impl<'source> Wake<'source> {
             predicates,
             postings,
             active: Words::new(Vec::new()),
+            total,
         };
         wake.bootstrap(rules, memory, limits, counters, location)?;
         Ok(wake)
@@ -113,7 +122,8 @@ impl<'source> Wake<'source> {
         Ok(())
     }
 
-    fn mark(
+    /// Select `rule` for the next round's schedule. One unit.
+    pub(super) fn mark(
         &mut self,
         rule: usize,
         limits: &FormulaLimits,
@@ -159,7 +169,7 @@ impl<'source> Wake<'source> {
                 continue;
             }
             previous = Some(predicate);
-            let index = find(
+            let found = lookup(
                 self.predicates.len(),
                 |index| self.predicates[index].signature,
                 predicate,
@@ -167,6 +177,12 @@ impl<'source> Wake<'source> {
                 counters,
                 location,
             )?;
+            let Some(index) = found else {
+                if self.total {
+                    return Err(invalid(Failure::Owner, location));
+                }
+                continue;
+            };
             let range = self.predicates[index].rules.clone();
             for posting in range {
                 counters.work(limits, location)?;

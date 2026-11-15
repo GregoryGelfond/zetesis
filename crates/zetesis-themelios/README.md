@@ -92,9 +92,14 @@ admitted source behavior or the remaining typed refusals.
 
 Formula admission validates source scopes, completes a bounded possible-positive
 relation, then emits a finite theory from complete joins. Positive support is an
-upper bound on possible atoms; it never substitutes for truth in an answer set.
+upper bound on possible atoms and does not substitute for truth in an answer
+set, with one exception: the supported atoms of a
+[certain predicate](../../docs/book/architecture/grounding.md#certain-predicates)
+are derived from facts by definite rules and hold in every answer set.
 A final unchanged support round is required. Default negation, recursive
-eligibility and aggregate equalities remain in the original formulas and reduct.
+eligibility and aggregate equalities remain in the original formulas and reduct;
+an assignment every tuple of which is required over certain predicates is
+emitted as the one value it takes.
 
 Eager grounding materializes the complete theory. Hybrid grounding shares
 support preparation and streams eligible constraints as described above.
@@ -201,10 +206,12 @@ Selections cannot supply another alternative's missing binding. The
 separate composition laws and their bounded resource contracts.
 
 Arithmetic uses checked `i32` operations. Overflow, nonnumeric arithmetic and
-invalid exponents refuse admission. In formula source families, evaluated numeric
-division or remainder by zero may omit an instance with a warning only when the
-same complete family has a jointly defined instance; an entirely undefined
-family refuses admission. Independent faults in a reached phase remain fatal.
+invalid exponents refuse admission. In formula source families, an instance
+whose evaluated numeric division or remainder has a zero divisor is omitted,
+whatever else its family holds, and its statement warns; the language
+reference names the one omission that keeps no warning. A conditional literal
+keeps such an instance's condition and reads its consequent as false in a body
+and as true in a head. Independent faults in a reached phase remain fatal.
 Closed-term preparation and post-solve observations retain strict checks. See
 [source-family evaluation](../../docs/book/architecture/grounding.md#source-instances-as-a-composition)
 for the binding and phase boundaries.
@@ -326,8 +333,10 @@ against independently declared answers and canonical frozen formulas.
 
 Aggregate assignments with acyclic dependencies within each rule may supply later scalar/range instructions,
 nonbinding aggregate guards, normal/choice/function-head values and admitted
-body conditionals. Generated proposals retain every original aggregate equality;
-an attainable proposal is not evidence that a particular model realizes it.
+body conditionals. A generated proposal retains its original aggregate equality
+unless the assignment is exact over certain predicates, which has the one value
+it proposes; an attainable proposal is not otherwise evidence that a particular
+model realizes it.
 Self-dependent or mutually dependent value slots within a rule and unsupported
 local consumers remain typed refusals. Predicate recursion is admitted when the
 possible-support iteration completes within its resource limits. Body extrema use ASP term order, including real `#inf`/`#sup` values
@@ -473,7 +482,8 @@ observing an empty delta. Positive joins retain full bindings; nonbinding
 aggregate and conditional truth never filters possible producers. Assignment
 proposals include every aggregate value from the complete eligible tuple-key
 carrier, including logical extrema and the empty-set value. Original aggregate
-equalities remain in the theory. Under these source-profile premises,
+equalities remain in the theory, an exact assignment's as the true formula it
+is. Under these source-profile premises,
 intersecting a model with a producer-closed carrier preserves its frozen reduct;
 answer-set minimality therefore excludes atoms outside that carrier.
 [SourceSupport](../../proofs/Zetesis/SourceSupport.lean) makes that projection
@@ -528,7 +538,8 @@ shared with another positive condition. Selection applies to whole bindings
 before priority evaluation, including fixed-priority objectives. An unrealized
 value in the source carrier can retain an inactive priority slot; a proposal
 outside the completed carrier cannot. The original aggregate equalities and
-model-relative objective conditions remain intact. Selected fixed-priority rows
+model-relative objective conditions remain intact; an objective's own
+assignments are never read as exact. Selected fixed-priority rows
 use the same bounded specialization path as dynamic priorities.
 `FormulaLimits::max_objective_presence_entries` conservatively bounds
 logical presence-planning and shared source-activity slots, including completed

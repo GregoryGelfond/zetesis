@@ -121,8 +121,10 @@ impl Compiler<'_> {
                         | LiteralIr::Conditional(_)
                 ) {
                     // Negative gates read completed values without binding or
-                    // pruning possible rows. Grounding retains their original
-                    // polarity, including the existential projection formula.
+                    // pruning possible rows in the join; one that support
+                    // completion decides omits its row after it. Grounding
+                    // retains the original polarity of the others, including
+                    // the existential projection formula.
                     // Range generators follow the checked plan; a previously
                     // bound range target remains a completed-row membership test.
                     // Universal conditions seed their local joins with this

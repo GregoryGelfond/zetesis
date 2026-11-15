@@ -35,6 +35,9 @@ impl GroundingObserver for Observer {
 
 struct Run {
     result: Result<Vec<Vec<i32>>, FormulaFailure>,
+    /// Whether the completed family omitted a row for a zero divisor; false
+    /// when the join failed before completing it.
+    omitted: bool,
     order: Vec<usize>,
     rows: u64,
     work: u64,
@@ -54,6 +57,7 @@ fn execute(
         let previous = std::mem::replace(&mut counters.observed, profile.work());
         let before = counters.accounting.work;
         let mut actual_order = Vec::new();
+        let mut omitted = false;
         let result = profile.phase(
             GroundingPhase::RuleInstantiation,
             Some(given_site()),
@@ -100,13 +104,17 @@ fn execute(
                     None,
                     Context::new(computation, &limits, counters, given_site()),
                 )?;
-                complete(&mut join, computation, &mut budget, counters, variables)
+                let (found, zero) =
+                    complete(&mut join, computation, &mut budget, counters, variables)?;
+                omitted = zero;
+                Ok(found)
             },
         );
         counters.observed = previous;
         let receipt = observer.0.get().unwrap();
         Run {
             result,
+            omitted,
             order: actual_order,
             rows: receipt.join_rows.unwrap(),
             work: counters.accounting.work - before,
@@ -115,13 +123,15 @@ fn execute(
     })
 }
 
+/// The passing rows of `join`'s complete family, sorted, and whether the
+/// family omitted a row for a zero divisor.
 fn complete(
     join: &mut Join<'_, '_>,
     computation: &mut Computation<'_, '_>,
     budget: &mut Budget,
     counters: &mut Counters,
     variables: usize,
-) -> Result<Vec<Vec<i32>>, FormulaFailure> {
+) -> Result<(Vec<Vec<i32>>, bool), FormulaFailure> {
     let mut found = Vec::new();
     while let Some(row) = join.next_row(
         computation,
@@ -148,9 +158,8 @@ fn complete(
             );
         }
     }
-    join.take_family().finish()?;
     found.sort();
-    Ok(found)
+    Ok((found, join.take_family().finish()))
 }
 
 fn row(name: &str, values: &[i32]) -> Atom {
@@ -465,21 +474,15 @@ fn connected_order_preserves_integer_overflow() {
 
 #[test]
 fn connected_order_preserves_undefined_division() {
-    // The comparison's form attempts the division, declines at the zero
-    // divisor, and the general evaluator reports the failure.
+    // The comparison's form attempts the division and declines at the zero
+    // divisor. The general evaluator then omits both rows for it, which the
+    // completed family reports.
     let (mut fixture, literals) = arithmetic_fixture(BinaryOp::Div, 1, 0);
     for permutation in [None, Some(&[0, 1, 2][..])] {
         let run = execute(&mut fixture, &literals, 3, permutation);
         assert!(run.declines > 0);
-        assert!(matches!(
-            run.result,
-            Err(FormulaFailure::Expansion(
-                crate::ExpansionFailure::Evaluation {
-                    error: themelios_program::term::EvalError::Undefined,
-                    ..
-                }
-            ))
-        ));
+        assert!(run.result.unwrap().is_empty());
+        assert!(run.omitted);
     }
 }
 

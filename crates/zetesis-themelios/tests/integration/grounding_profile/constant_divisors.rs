@@ -1,5 +1,6 @@
 //! Literal divisors defer only the redundant complete-family traversal.
 
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::prepare;
 use zetesis_themelios::{
     ExpansionFailure, FormulaFailure, GroundingOutcome, GroundingPhase,
@@ -78,24 +79,63 @@ fn literal_divisors_omit_family_row_evaluation() {
     }
 }
 
-#[test]
-fn possible_zero_divisors_retain_family_refusal() {
-    for source in ["d(0). :- d(X), 1/X=0.", "d(1). :- d(X), X/0=0."] {
-        failure(
-            source,
-            &EvaluationError::Undefined,
-            GroundingPhase::SupportCompletion,
+/// The constraint of `source`, its last statement.
+fn constraint(source: &str) -> &str {
+    &source[source.find(":-").unwrap()..]
+}
+
+/// Both routes admit `source`, one fact and a constraint: the final family
+/// pass evaluates the constraint's row and completes, the constraint keeps
+/// the warning and contributes no instance.
+fn omission(source: &str) {
+    for hybrid in [false, true] {
+        let observer = Observer::default();
+        let prepared = prepare(source).unwrap();
+        if hybrid {
+            let admitted = prepared
+                .ground_hybrid_with_observer(Some(&observer))
+                .unwrap();
+            assert_eq!(
+                zero_divisor_statement(&admitted),
+                constraint(source),
+                "{source}"
+            );
+            assert_eq!(admitted.streamed_instances(), 0, "{source}");
+        } else {
+            let admitted = prepared.ground_with_observer(Some(&observer)).unwrap();
+            assert_eq!(
+                zero_divisor_statement(&admitted),
+                constraint(source),
+                "{source}"
+            );
+            // The fact's root is the only one.
+            assert_eq!(admitted.theory().roots().len(), 1, "{source}");
+        }
+        let pass = family_pass(&observer);
+        assert_eq!(pass.outcome, GroundingOutcome::Completed, "{source}");
+        assert!(
+            pass.work.join_rows.is_some_and(|rows| rows > 0),
+            "{source}, hybrid={hybrid}"
+        );
+        assert!(
+            pass.work
+                .expression_evaluations
+                .is_some_and(|count| count > 0),
+            "{source}, hybrid={hybrid}"
         );
     }
 }
 
 #[test]
-fn nested_zero_divisors_retain_family_refusal() {
-    failure(
-        "d(0). :- d(X), (1/X)/2=0.",
-        &EvaluationError::Undefined,
-        GroundingPhase::SupportCompletion,
-    );
+fn possible_zero_divisors_retain_the_family_warning() {
+    for source in ["d(0). :- d(X), 1/X=0.", "d(1). :- d(X), X/0=0."] {
+        omission(source);
+    }
+}
+
+#[test]
+fn nested_zero_divisors_retain_the_family_warning() {
+    omission("d(0). :- d(X), (1/X)/2=0.");
 }
 
 #[test]
@@ -215,18 +255,30 @@ fn empty_late_heads_preserve_reached_body_overflow() {
 }
 
 #[test]
-fn unsafe_pool_siblings_keep_shared_family_evidence() {
+fn unsafe_pool_siblings_retain_the_family_warning() {
+    // The pool sets the variable divisor X beside the literal divisor 1, so
+    // the family pass still reads the constraint's row, where X/X divides by
+    // zero. Both routes keep one warning, located at the constraint as
+    // written, pool included.
+    let source = "d(0). :- d(X),X/(1;X)=0.";
     for hybrid in [false, true] {
         let observer = Observer::default();
-        assert_eq!(
-            ground("d(0). :- d(X),X/(1;X)=0.", hybrid, &observer).unwrap(),
-            1
-        );
+        let prepared = prepare(source).unwrap();
+        if hybrid {
+            let admitted = prepared
+                .ground_hybrid_with_observer(Some(&observer))
+                .unwrap();
+            assert_eq!(zero_divisor_statement(&admitted), constraint(source));
+        } else {
+            let admitted = prepared.ground_with_observer(Some(&observer)).unwrap();
+            assert_eq!(zero_divisor_statement(&admitted), constraint(source));
+        }
         assert!(
             family_pass(&observer)
                 .work
                 .join_rows
-                .is_some_and(|count| count > 0)
+                .is_some_and(|count| count > 0),
+            "hybrid={hybrid}"
         );
     }
 }

@@ -31,4 +31,5 @@ pub(crate) mod thresholds;
 pub(crate) mod unsigned_spellings;
 pub(crate) mod unevaluable_directives;
 pub(crate) mod upstream;
+pub(crate) mod warnings;
 pub(crate) mod witnesses;

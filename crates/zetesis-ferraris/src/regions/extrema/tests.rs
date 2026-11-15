@@ -395,3 +395,49 @@ fn fingerprint_collisions_do_not_establish_equality() {
     let model = Interpretation::new(&theory, [3]).unwrap();
     assert!(models(&theory, &model, Limits::default(), &Cancellation::default()).unwrap());
 }
+
+#[test]
+fn an_ordinal_cut_is_weighed_as_the_disjunction_it_is() {
+    // The selected minimum is below rank three exactly when 0, 1 or 2 is
+    // selected, so the asserted cut is their disjunction. With 0 cut it has
+    // two members left, and 3 is no operand of it.
+    let mut nodes = owner(4);
+    let cut = cuts(
+        &mut nodes,
+        &[0, 1, 2, 3],
+        &[0, 1, 2, 3],
+        5,
+        &[ExtremumCutRule::Prefix(3)],
+    )[0];
+    let theory = finish(nodes, 4, vec![cut]);
+    let index = Narrower::new(&theory);
+    let mut region = Region::all_open(4);
+    let mut known = index.knowledge();
+    let narrow = |region: &mut Region, known: &mut crate::Knowledge| {
+        let narrowing = index
+            .narrow_known(
+                OriginalSubject::new(&theory, None),
+                region,
+                known,
+                &mut NarrowingScratch::default(),
+                RegionLimits::default(),
+                &Cancellation::default(),
+            )
+            .result
+            .unwrap();
+        assert_ne!(narrowing, Narrowing::Refuted);
+    };
+    narrow(&mut region, &mut known);
+    assert!(!known.shortened());
+    assert!(region.cut(0));
+    narrow(&mut region, &mut known);
+    assert!(known.shortened());
+    let weight = |atom| {
+        index
+            .shortened_weight(&known, atom, &mut crate::regions::Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap()
+    };
+    let two_of_three = crate::regions::tests::shortening(3, 2);
+    assert_eq!([1, 2, 3].map(weight), [two_of_three, two_of_three, 0]);
+}

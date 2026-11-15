@@ -127,6 +127,8 @@ impl StreamedRows {
         SnapshotSource {
             sources: &self.rows,
             components: closed.components.as_ref(),
+            // A streamed constraint proposes no assignment and emits no body.
+            certainty: None,
             read: closed.storage.read(),
             entries: self.entries,
             bytes,

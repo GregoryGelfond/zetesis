@@ -84,8 +84,9 @@ pub struct InnerPreparationStatistics {
     /// Probed groups whose allowed patterns are not affine.
     pub inexact_hulls: u64,
     /// Count bounds loaded: a table's least and greatest allowed counts, a
-    /// clause's lower bound among them, the cliques' upper bounds, and the
-    /// trivial bounds completing a partition.
+    /// clause's lower bound among them, the excluding cliques' upper bounds,
+    /// the covering cliques' lower bounds, and the trivial bounds completing a
+    /// partition.
     pub bounds: u64,
     /// Count bounds from below.
     pub lower: u64,

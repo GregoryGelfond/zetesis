@@ -62,7 +62,8 @@ fn theory() -> Theory {
     .unwrap()
 }
 
-fn closed(theory: &Theory) -> (Region, Knowledge) {
+/// The theory's index, its open region closed, and the closure's knowledge.
+fn closed(theory: &Theory) -> (Narrower, Region, Knowledge) {
     let narrower = Narrower::new(theory);
     let mut region = Region::all_open(theory.atom_count());
     let mut known = narrower.knowledge();
@@ -77,7 +78,7 @@ fn closed(theory: &Theory) -> (Region, Knowledge) {
         )
         .result
         .unwrap();
-    (region, known)
+    (narrower, region, known)
 }
 
 #[test]
@@ -128,6 +129,7 @@ fn separate_preference_has_the_original_narrowing_receipt() {
     ));
     propagated.result.unwrap();
     let preference = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+        &narrower,
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
@@ -143,10 +145,11 @@ fn separate_preference_has_the_original_narrowing_receipt() {
 #[test]
 fn preference_refusal_retains_exact_read_prefix() {
     let theory = theory();
-    let (region, known) = closed(&theory);
+    let (narrower, region, known) = closed(&theory);
     for limit in 0..=3 {
         let mut allowance = Allowance::new(limit);
         let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+            &narrower,
             &region,
             &ChoiceHeads::default(),
             &Cancellation::default(),
@@ -168,11 +171,12 @@ fn preference_refusal_retains_exact_read_prefix() {
 #[test]
 fn cancelled_preference_reads_nothing() {
     let theory = theory();
-    let (region, known) = closed(&theory);
+    let (narrower, region, known) = closed(&theory);
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut allowance = Allowance::new(1000);
     let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+        &narrower,
         &region,
         &ChoiceHeads::default(),
         &cancellation,
@@ -192,13 +196,14 @@ fn zero_parent_counts_prefer_the_lowest_open_atom() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let (mut region, known) = closed(&theory);
+    let (narrower, mut region, known) = closed(&theory);
     for atom in 0..130 {
         if atom != 64 && atom != 129 {
             assert!(region.cut(atom));
         }
     }
     let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+        &narrower,
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
@@ -283,6 +288,7 @@ fn choice_heads_rank_before_more_constrained_atoms() {
         .unwrap();
     assert_eq!(region.open().collect::<Vec<_>>(), [0, 1, 2, 3, 4]);
     let ordinary = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+        &narrower,
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
@@ -293,6 +299,7 @@ fn choice_heads_rank_before_more_constrained_atoms() {
     // parents than the choice head.
     assert!(unknown(&known, busiest) > unknown(&known, 0));
     let choice = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+        &narrower,
         &region,
         &extraction.choice_heads,
         &Cancellation::default(),
@@ -357,7 +364,7 @@ fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let (mut region, known) = closed(&theory);
+    let (narrower, mut region, known) = closed(&theory);
     assert!(region.hold(0));
     assert!(region.cut(64));
     assert!(region.cut(129));
@@ -365,6 +372,7 @@ fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
         words: vec![1, 1, !3, u64::MAX].into(),
     };
     let attempt = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+        &narrower,
         &region,
         &choices,
         &Cancellation::default(),
@@ -376,6 +384,7 @@ fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
         words: vec![1, 1 | (1 << 63), !1, u64::MAX].into(),
     };
     let attempt = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+        &narrower,
         &region,
         &choices,
         &Cancellation::default(),
@@ -607,5 +616,329 @@ fn refuted_frozen_propagation_has_the_unchanged_receipt() {
                 Err(zetesis_algebra::Failure::Refused(Stop::WorkLimit))
             );
         }
+    }
+}
+
+/// `0 ∨ 1 ∨ 2`, and beside it three implications from 3 that no root reads:
+/// 3 has three unknown parents and each other atom one. With `busier`, a
+/// fourth such implication gives 2 a second.
+fn disjunction_beside_a_busier_atom(busier: bool) -> Theory {
+    let mut nodes = vec![
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::atom(3),
+        Node::or_pair([1, 2]),
+        Node::or_pair([0, 4]),
+        Node::implies(3, 0),
+        Node::implies(3, 1),
+        Node::implies(3, 2),
+    ];
+    if busier {
+        nodes.push(Node::implies(2, 3));
+    }
+    Theory::new(
+        4,
+        FormulaParts::new(nodes, vec![]).unwrap(),
+        vec![5],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+/// The closed open region, and then the region with 0 cut, closed on the
+/// first's knowledge: the preferred split of each.
+fn splits_before_and_after_a_cut(theory: &Theory) -> (Option<usize>, Option<usize>) {
+    let narrower = Narrower::new(theory);
+    let mut region = Region::all_open(theory.atom_count());
+    let mut known = narrower.knowledge();
+    let close = |region: &mut Region, known: &mut Knowledge| {
+        let attempt = narrower.narrow_known(
+            OriginalSubject::new(theory, None),
+            region,
+            known,
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        assert_ne!(attempt.result.unwrap(), Narrowing::Refuted);
+        attempt.preferred
+    };
+    let before = close(&mut region, &mut known);
+    assert!(region.cut(0));
+    (before, close(&mut region, &mut known))
+}
+
+#[test]
+fn a_shortened_chain_outranks_more_unknown_parents() {
+    // Nothing is shortened at first, and 3 has the most unknown parents.
+    // Cutting 0 leaves the disjunction two operands, 1 and 2, which then
+    // precede 3; they have one unknown parent each, so the lower is taken.
+    assert_eq!(
+        splits_before_and_after_a_cut(&disjunction_beside_a_busier_atom(false)),
+        (Some(3), Some(1))
+    );
+}
+
+#[test]
+fn equal_shortened_scores_fall_to_unknown_parents() {
+    assert_eq!(
+        splits_before_and_after_a_cut(&disjunction_beside_a_busier_atom(true)),
+        (Some(3), Some(2))
+    );
+}
+
+#[test]
+fn a_countermodel_walk_ranks_by_shortened_chains() {
+    // The candidate holding every atom satisfies every node, so its reduct
+    // is the theory itself.
+    let owner = disjunction_beside_a_busier_atom(false);
+    let narrower = Narrower::new(&owner);
+    let truth = [true; 9];
+    let subject = crate::FrozenSubject::new(&owner, &truth);
+    let mut region = Region::all_open(4);
+    let mut known = narrower.frozen_knowledge();
+    let mut close = |region: &mut Region| {
+        let attempt = crate::test_support::stop_narrowing(&narrower.narrow_frozen_known_reserved(
+            subject,
+            region,
+            &mut known,
+            &mut NarrowingScratch::default(),
+            &Cancellation::default(),
+            &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+        ));
+        assert_ne!(attempt.result.unwrap(), Narrowing::Refuted);
+        attempt.preferred
+    };
+    assert_eq!(close(&mut region), Some(3));
+    assert!(region.cut(0));
+    assert_eq!(close(&mut region), Some(1));
+}
+
+#[test]
+fn a_frozen_mask_shortens_a_disjunction_before_any_split() {
+    // The candidate omits 0, so its reduct reads 0 as falsum: the disjunction
+    // has two members at the query's root, and 1 precedes the busier 3.
+    let owner = disjunction_beside_a_busier_atom(false);
+    let narrower = Narrower::new(&owner);
+    // Under {1, 2, 3}: 0 and `3 -> 0` fail, every other node holds.
+    let truth = [false, true, true, true, true, true, false, true, true];
+    let mut region = Region::all_open(4);
+    let mut known = narrower.frozen_knowledge();
+    let attempt = crate::test_support::stop_narrowing(&narrower.narrow_frozen_known_reserved(
+        crate::FrozenSubject::new(&owner, &truth),
+        &mut region,
+        &mut known,
+        &mut NarrowingScratch::default(),
+        &Cancellation::default(),
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+    ));
+    assert_ne!(attempt.result.unwrap(), Narrowing::Refuted);
+    assert!(known.shortened());
+    assert_eq!(attempt.preferred, Some(1));
+}
+
+#[test]
+fn a_settled_chain_leaves_the_count_ranking() {
+    // Cutting 0 shortens the disjunction and holding 1 then settles it. The
+    // mark stays set while every score is zero, so the unknown-parent counts
+    // decide as they did without it: of `3 -> 0`, `3 -> 1` and `3 -> 2` the
+    // second is now known, which leaves 3 two unknown parents and 2 one.
+    let theory = disjunction_beside_a_busier_atom(false);
+    let narrower = Narrower::new(&theory);
+    let mut region = Region::all_open(4);
+    let mut known = narrower.knowledge();
+    let close = |region: &mut Region, known: &mut Knowledge| {
+        let attempt = narrower.narrow_known(
+            OriginalSubject::new(&theory, None),
+            region,
+            known,
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        assert_ne!(attempt.result.unwrap(), Narrowing::Refuted);
+        attempt.preferred
+    };
+    close(&mut region, &mut known);
+    assert!(region.cut(0));
+    assert_eq!(close(&mut region, &mut known), Some(1));
+    assert!(region.hold(1));
+    let preferred = close(&mut region, &mut known);
+    assert!(known.shortened());
+    for atom in [2, 3] {
+        let score = narrower
+            .shortened_weight(&known, atom, &mut zetesis_algebra::Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap();
+        assert_eq!(score, 0, "atom {atom}");
+    }
+    assert_eq!(preferred, Some(3));
+}
+
+#[test]
+fn a_frozen_region_without_the_mark_scores_nothing() {
+    // Every model of the fixture as the frozen candidate, and every region
+    // of its countermodel walk reached by at most two decisions over the
+    // candidate's atoms. The frozen mask can shorten a chain at the root, so
+    // both marked and unmarked regions occur.
+    let owner = disjunction_beside_a_busier_atom(false);
+    let narrower = Narrower::new(&owner);
+    let (mut unmarked, mut marked) = (0, 0);
+    for candidate in 0..16_usize {
+        let holds = |atom: usize| candidate & (1 << atom) != 0;
+        // Each node's truth under the candidate, in the fixture's order.
+        let truth = [
+            holds(0),
+            holds(1),
+            holds(2),
+            holds(3),
+            holds(1) || holds(2),
+            holds(0) || holds(1) || holds(2),
+            !holds(3) || holds(0),
+            !holds(3) || holds(1),
+            !holds(3) || holds(2),
+        ];
+        if !truth[5] {
+            continue;
+        }
+        let atoms: Vec<usize> = (0..4).filter(|&atom| holds(atom)).collect();
+        let steps: Vec<(usize, bool)> = atoms
+            .iter()
+            .flat_map(|&atom| [(atom, false), (atom, true)])
+            .collect();
+        let mut paths: Vec<Vec<(usize, bool)>> = vec![Vec::new()];
+        paths.extend(steps.iter().map(|&step| vec![step]));
+        for &first in &steps {
+            paths.extend(steps.iter().map(|&second| vec![first, second]));
+        }
+        for path in paths {
+            let mut region = Region::all_open(4);
+            let mut known = narrower.frozen_knowledge();
+            let mut close = |region: &mut Region| {
+                let attempt =
+                    crate::test_support::stop_narrowing(&narrower.narrow_frozen_known_reserved(
+                        crate::FrozenSubject::new(&owner, &truth),
+                        region,
+                        &mut known,
+                        &mut NarrowingScratch::default(),
+                        &Cancellation::default(),
+                        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+                    ));
+                attempt.result.unwrap() != Narrowing::Refuted
+            };
+            let mut reached = close(&mut region);
+            for &(atom, value) in &path {
+                if !reached || !region.is_open(atom) {
+                    reached = false;
+                    break;
+                }
+                assert!(if value {
+                    region.hold(atom)
+                } else {
+                    region.cut(atom)
+                });
+                reached = close(&mut region);
+            }
+            if !reached {
+                continue;
+            }
+            if known.shortened() {
+                marked += 1;
+                continue;
+            }
+            unmarked += 1;
+            for &atom in atoms.iter().filter(|&&atom| region.is_open(atom)) {
+                let score = narrower
+                    .shortened_weight(&known, atom, &mut zetesis_algebra::Meter::local(u64::MAX))
+                    .map_err(zetesis_algebra::Failure::into_stop)
+                    .unwrap();
+                assert_eq!(
+                    score, 0,
+                    "candidate {candidate:04b}, path {path:?}, atom {atom}"
+                );
+            }
+        }
+    }
+    assert!(
+        unmarked > 0 && marked > 0,
+        "{unmarked} unmarked, {marked} marked"
+    );
+}
+
+/// The closed region of `disjunction_beside_a_busier_atom(false)` with 0 cut.
+fn shortened_disjunction() -> (Narrower, Region, Knowledge) {
+    let theory = disjunction_beside_a_busier_atom(false);
+    let (narrower, mut region, mut known) = closed(&theory);
+    assert!(region.cut(0));
+    narrower
+        .narrow_known(
+            OriginalSubject::new(&theory, None),
+            &mut region,
+            &mut known,
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &Cancellation::default(),
+        )
+        .result
+        .unwrap();
+    (narrower, region, known)
+}
+
+/// The reads of ranking `shortened_disjunction`: the open atoms 1, 2 and 3
+/// once each; the disjunction and one implication above each of 1 and 2; and
+/// the three implications above 3, which no node reads in turn.
+const SHORTENED_RANKING_WORK: u64 = 3 + 2 + 2 + 3;
+
+#[test]
+fn a_shortened_ranking_charges_each_parent_read() {
+    let (narrower, region, known) = shortened_disjunction();
+    let scores: Vec<u64> = [1, 2, 3]
+        .into_iter()
+        .map(|atom| {
+            narrower
+                .shortened_weight(&known, atom, &mut crate::regions::Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(
+        scores,
+        [super::shortening(3, 2), super::shortening(3, 2), 0]
+    );
+    let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+        &narrower,
+        &region,
+        &ChoiceHeads::default(),
+        &Cancellation::default(),
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
+    assert_eq!(selected.result, Ok(Some(1)));
+    assert_eq!(selected.work, SHORTENED_RANKING_WORK);
+}
+
+#[test]
+fn a_refused_shortened_ranking_retains_its_exact_read_prefix() {
+    let (narrower, region, known) = shortened_disjunction();
+    for limit in 0..=SHORTENED_RANKING_WORK {
+        let mut allowance = Allowance::new(limit);
+        let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
+            &narrower,
+            &region,
+            &ChoiceHeads::default(),
+            &Cancellation::default(),
+            &mut zetesis_algebra::Meter::reserved(&mut allowance),
+        ));
+        assert_eq!(selected.work, limit, "limit {limit}");
+        assert_eq!(allowance.granted - allowance.refunded, limit);
+        assert_eq!(
+            selected.result,
+            if limit == SHORTENED_RANKING_WORK {
+                Ok(Some(1))
+            } else {
+                Err(Stop::WorkLimit)
+            },
+            "limit {limit}"
+        );
     }
 }

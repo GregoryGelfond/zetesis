@@ -7,16 +7,42 @@
 //! and `body_nodes` temporarily holds finishing order, at most A+B entries.
 //! Forward searches then reuse queue and the same original outgoing postings.
 //! No component IDs survive: only the packed cyclic-atom mask is retained.
+//!
+//! A component of the complete dependencies keeps its heads only when one of
+//! its cycles survives without the circular producers ([`super::super::circular`]).
+//! A component whose every cycle passes through a circular producer needs no
+//! closure: the support cut, which passes over those producers, already
+//! decides its atoms, so they are seeds like any acyclic head. A component
+//! with a surviving cycle is kept whole, the atoms it holds only through a
+//! circular producer included, and its closure reads every producer as before.
+//! With marked producers the search therefore runs twice, first over the
+//! supporting dependencies to find the surviving cycles, then over all of
+//! them; an inventory without marks is searched once, exactly as before.
 
 use zetesis_algebra::{Failure, Quota};
 
 use zetesis_algebra::words::Words;
 
 use super::{
-    Meter, Narrower, NodeView, Producers, Scratch, State, Theory, chain_position, flag_words,
+    Meter, Narrower, NodeView, Producers, Scratch, State, Theory, bit, chain_position, flag_words,
     reserve,
 };
 use zetesis_algebra::Stop;
+
+/// The producer dependencies one component search follows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Dependencies {
+    /// Every producer's dependency of its heads on its body.
+    Every,
+    /// Only those of producers that can support their head.
+    Supporting,
+}
+
+impl Dependencies {
+    fn follows(self, producers: &Producers, row: usize) -> bool {
+        self == Self::Every || !producers.circular(row)
+    }
+}
 
 impl Scratch {
     pub(super) fn prepare_components<Q: Quota + ?Sized>(
@@ -30,10 +56,59 @@ impl Scratch {
             self.owner.is_none(),
             "component scratch is never authoritative"
         );
+        let included = self.body_nodes.len();
+        if !producers.any_circular() {
+            return self.search_components(
+                (theory, index, producers),
+                included,
+                Dependencies::Every,
+                None,
+                work,
+            );
+        }
+        self.search_components(
+            (theory, index, producers),
+            included,
+            Dependencies::Supporting,
+            None,
+            work,
+        )?;
+        // The atoms on a cycle that survives without circular producers.
+        let mut surviving = Vec::new();
+        reserve(&mut surviving, self.cyclic_atoms.len())?;
+        for &word in &self.cyclic_atoms {
+            work.tick()?;
+            surviving.push(word);
+        }
+        // The first search left every included node discovered.
+        for state in &mut self.states {
+            work.tick()?;
+            if matches!(state, State::True) {
+                *state = State::Awaiting(0);
+            }
+        }
+        self.search_components(
+            (theory, index, producers),
+            included,
+            Dependencies::Every,
+            Some(&surviving),
+            work,
+        )
+    }
+
+    /// One search for the components of the followed dependencies. With
+    /// `surviving`, a component keeps its heads only when it holds one of
+    /// those atoms.
+    fn search_components<Q: Quota + ?Sized>(
+        &mut self,
+        (theory, index, producers): (&Theory, &Narrower, &Producers),
+        included: usize,
+        dependencies: Dependencies,
+        surviving: Option<&[u64]>,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let atoms = theory.atom_count();
-        let projected = atoms
-            .checked_add(self.body_nodes.len())
-            .ok_or(Stop::Allocation)?;
+        let projected = atoms.checked_add(included).ok_or(Stop::Allocation)?;
         let vertices = atoms
             .checked_add(theory.nodes().len())
             .ok_or(Stop::Allocation)?;
@@ -59,7 +134,9 @@ impl Scratch {
             self.discover_reverse(root, atoms);
             while let Some(&vertex) = self.queue.last() {
                 work.tick()?;
-                if let Some(previous) = self.predecessor(vertex, theory, index, producers, work)? {
+                if let Some(previous) =
+                    self.predecessor(vertex, (theory, index, producers), dependencies, work)?
+                {
                     if !self.discovered(previous, atoms) {
                         self.discover_reverse(previous, atoms);
                     }
@@ -79,7 +156,7 @@ impl Scratch {
                 self.states[vertex - atoms] = State::Awaiting(0);
             }
         }
-        self.classify_components(theory, index, producers, work)
+        self.classify_components((theory, index, producers), dependencies, surviving, work)
     }
 
     fn zero_words<Q: Quota + ?Sized>(
@@ -121,9 +198,8 @@ impl Scratch {
     fn predecessor<Q: Quota + ?Sized>(
         &mut self,
         vertex: usize,
-        theory: &Theory,
-        index: &Narrower,
-        producers: &Producers,
+        (theory, index, producers): (&Theory, &Narrower, &Producers),
+        dependencies: Dependencies,
         work: &mut Meter<'_, Q>,
     ) -> Result<Option<usize>, Failure<Q::Error>> {
         let atoms = theory.atom_count();
@@ -131,6 +207,9 @@ impl Scratch {
             while let Some(&row) = producers.by_head[vertex].get(self.dependencies[vertex]) {
                 work.tick()?;
                 self.dependencies[vertex] += 1;
+                if !dependencies.follows(producers, row) {
+                    continue;
+                }
                 if let Some(body) = producers.rules[row].body {
                     if matches!(self.states[body], State::Outside) {
                         return Err(Failure::Stopped(Stop::InvalidProgram));
@@ -164,12 +243,18 @@ impl Scratch {
 
     fn classify_components<Q: Quota + ?Sized>(
         &mut self,
-        theory: &Theory,
-        index: &Narrower,
-        producers: &Producers,
+        (theory, index, producers): (&Theory, &Narrower, &Producers),
+        dependencies: Dependencies,
+        surviving: Option<&[u64]>,
         work: &mut Meter<'_, Q>,
     ) -> Result<(), Failure<Q::Error>> {
         let atoms = theory.atom_count();
+        // The atoms of the component being searched, kept only to release
+        // them together when none of them is on a surviving cycle.
+        let mut component = Vec::new();
+        if surviving.is_some() {
+            reserve(&mut component, atoms)?;
+        }
         while let Some(root) = self.body_nodes.pop() {
             work.tick()?;
             if self.discovered(root, atoms) {
@@ -177,15 +262,29 @@ impl Scratch {
             }
             self.discover_forward(root, atoms);
             let mut members = 0_usize;
+            let mut survives = surviving.is_none();
+            component.clear();
             while let Some(vertex) = self.queue.pop() {
                 work.tick()?;
                 members += 1;
-                self.successors(vertex, theory, index, producers, work)?;
+                if let Some(surviving) = surviving
+                    && vertex < atoms
+                {
+                    work.tick()?;
+                    survives |= bit(surviving, vertex);
+                    component.push(vertex);
+                }
+                self.successors(vertex, (theory, index, producers), dependencies, work)?;
             }
             // Atom vertices point only to separate formula vertices. Thus an
             // atom in a singleton component cannot have a positive self edge.
             if members == 1 && root < atoms {
                 self.cyclic_atoms.remove(root);
+            } else if !survives {
+                for &atom in &component {
+                    work.tick()?;
+                    self.cyclic_atoms.remove(atom);
+                }
             }
         }
         Ok(())
@@ -207,9 +306,8 @@ impl Scratch {
     fn successors<Q: Quota + ?Sized>(
         &mut self,
         vertex: usize,
-        theory: &Theory,
-        index: &Narrower,
-        producers: &Producers,
+        (theory, index, producers): (&Theory, &Narrower, &Producers),
+        dependencies: Dependencies,
         work: &mut Meter<'_, Q>,
     ) -> Result<(), Failure<Q::Error>> {
         let atoms = theory.atom_count();
@@ -239,6 +337,9 @@ impl Scratch {
         }
         for &row in &producers.by_body[node] {
             work.tick()?;
+            if !dependencies.follows(producers, row) {
+                continue;
+            }
             for &head in &producers.rules[row].heads {
                 work.tick()?;
                 self.discover_forward(head, atoms);

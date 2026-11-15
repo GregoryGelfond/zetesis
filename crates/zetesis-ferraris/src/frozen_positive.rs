@@ -13,6 +13,12 @@
 //! masks, classifies frozen nodes, and queues each vertex at most once. Unsupported
 //! roots decline before incidence storage is allocated or prepared. This is
 //! a candidate-specific certificate, not a classification of the original theory.
+//!
+//! A decline is the absence of this certificate, never a verdict, and the
+//! root at which one attempt declined for two live heads is tried first by
+//! the next: a root whose head is a disjunction with two distinct true atoms
+//! declines whatever the other roots are, without the classification of
+//! every node.
 
 use std::mem::size_of;
 
@@ -91,6 +97,11 @@ pub struct FrozenPositiveWorkspace {
     heads: Vec<Option<usize>>,
     queue: Vec<usize>,
     words: Words<u64>,
+    /// The position of the root at which an attempt last declined for two
+    /// live heads, which the next attempt tests first
+    /// ([`Self::two_live_heads`]). Only a position: the test reads the
+    /// theory it is given.
+    declined: Option<usize>,
 }
 
 impl FrozenPositiveWorkspace {
@@ -110,9 +121,10 @@ impl FrozenPositiveWorkspace {
     }
 
     /// Conservative reservation for fresh preparation and one query. The
-    /// coefficients cover two incidence passes, prefixes/cursors, initialization,
-    /// classification, seeding, one queue event per vertex, one incidence visit,
-    /// and final atom comparison/copy. Reuse and early declines spend less.
+    /// coefficients cover the test of a remembered root, two incidence passes,
+    /// prefixes/cursors, initialization, classification, seeding, one queue
+    /// event per vertex, one incidence visit, and final atom comparison/copy.
+    /// Reuse and early declines spend less.
     #[must_use]
     pub fn work_bound(theory: &Theory) -> u128 {
         12 * theory.atom_count() as u128
@@ -129,6 +141,11 @@ impl FrozenPositiveWorkspace {
     /// atoms and disjunctions with one distinct live atom; a true negated head
     /// is truth. Multiple live heads or other active shapes decline. Original
     /// nonmodels return before preparation. Each vertex activates at most once.
+    ///
+    /// After a decline for two live heads that root is tested first, and
+    /// declines again for two distinct live head atoms before any node is
+    /// classified; the outcome is the one the classification would reach,
+    /// for less work.
     ///
     /// Storage checks precede growth and inspect actual capacities afterward.
     /// A stopped query publishes no partial closure; cancellation and exhausted
@@ -147,6 +164,11 @@ impl FrozenPositiveWorkspace {
                 return Ok(FrozenPositiveOutcome::NotModel);
             }
             let theory = evaluated.theory();
+            if let Some(position) = self.declined
+                && Self::two_live_heads(evaluated, position, meter)?
+            {
+                return Ok(FrozenPositiveOutcome::Declined);
+            }
             self.reserve_classification(theory, limits.max_bytes)?;
             self.classify(evaluated, meter)?;
             if !self.producers(evaluated, meter)? {
@@ -467,6 +489,9 @@ impl FrozenPositiveWorkspace {
                 continue;
             }
             let Head::Atom(atom) = self.classes[head].head else {
+                if self.classes[head].head == Head::Multiple {
+                    self.declined = Some(position);
+                }
                 return Ok(false);
             };
             if body.is_some_and(|body| !self.classes[body].monotone) {
@@ -475,6 +500,54 @@ impl FrozenPositiveWorkspace {
             self.heads[position] = Some(atom);
         }
         Ok(true)
+    }
+
+    /// Whether the root at `position` has no false body and a head that is
+    /// a disjunction, every true disjunct an atom node, of two distinct
+    /// atoms. The classification gives such a head [`Head::Multiple`]: a
+    /// false disjunct is falsum and each true one names its atom, so
+    /// [`Self::producers`] declines at this root or at an earlier one. With
+    /// a true disjunct of any other shape the answer is no and the
+    /// classification decides, since a true negation there is truth and
+    /// satisfies the root. A position past the roots names none.
+    ///
+    /// One unit for the root and one for each disjunct read.
+    fn two_live_heads(
+        evaluated: &FormulaEvaluation<'_>,
+        position: usize,
+        meter: &mut Meter<'_>,
+    ) -> Result<bool, EvaluationError> {
+        let theory = evaluated.theory();
+        let Some(&root) = theory.roots().get(position) else {
+            return Ok(false);
+        };
+        tick(meter)?;
+        let nodes = theory.view();
+        let (body, head) = match nodes.node(root).map_err(|_| Stop::InvalidProgram)? {
+            NodeView::Implies(body, head) => (Some(body), head),
+            _ => (None, root),
+        };
+        if body.is_some_and(|body| !evaluated.truth()[body]) {
+            return Ok(false);
+        }
+        let NodeView::Or(disjuncts) = nodes.node(head).map_err(|_| Stop::InvalidProgram)? else {
+            return Ok(false);
+        };
+        let mut first = None;
+        let mut distinct = false;
+        for &disjunct in disjuncts {
+            tick(meter)?;
+            if !evaluated.truth()[disjunct] {
+                continue;
+            }
+            let NodeView::Atom(atom) = nodes.node(disjunct).map_err(|_| Stop::InvalidProgram)?
+            else {
+                return Ok(false);
+            };
+            distinct |= first.is_some_and(|first| first != atom);
+            first = first.or(Some(atom));
+        }
+        Ok(distinct)
     }
 
     fn activate(&mut self, vertex: usize, meter: &mut Meter<'_>) -> Result<(), EvaluationError> {

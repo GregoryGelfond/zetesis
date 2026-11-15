@@ -176,7 +176,8 @@ fn with_completed_family(
         Context<'call, &'call mut Computation<'query, 'source>>,
     ),
 ) {
-    let preparation = crate::formula_support::testing::prepare("p. q(N) :- N=#count{1:p}.");
+    // A chosen atom: a fact's would be certain, and its tuple required.
+    let preparation = crate::formula_support::testing::prepare("{p}. q(N) :- N=#count{1:p}.");
     let program = preparation.program;
     let limits = preparation.limits;
     let location = preparation.location;

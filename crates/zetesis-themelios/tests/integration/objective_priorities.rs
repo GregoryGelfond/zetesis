@@ -1,8 +1,10 @@
 //! Finite priorities partition complete eligible objective rows.
 
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::{admit, exhaustive, resource_limits};
 
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
     ProfileFeature,
@@ -60,19 +62,35 @@ fn priority_variables_require_positive_bindings() {
 }
 
 #[test]
-fn undefined_priorities_remain_errors() {
-    for source in [
-        "p(0).#minimize{1@(1/X):p(X)}.",
-        "p(0).#minimize{foo@(1/X):p(X)}.",
-        "p(2147483647).#minimize{1@(X+1):p(X)}.",
-    ] {
-        assert!(matches!(
-            admit(source, &FormulaLimits::default()),
-            Err(FormulaFailure::Expansion(
-                ExpansionFailure::Evaluation { .. }
-            ))
-        ));
+fn undefined_priorities_omit_their_rows() {
+    // The priority divides by zero at the one row, whatever its weight. The
+    // row is omitted, so no answer is scored and no priority is retained.
+    // The objective keeps the warning.
+    for objective in ["#minimize{1@(1/X):p(X)}.", "#minimize{foo@(1/X):p(X)}."] {
+        let source = format!("p(0).{objective}");
+        let input = admit(&source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert_eq!(zero_divisor_statement(&input), objective);
+        assert_eq!(
+            exhaustive(&input),
+            Records::from([(["p(0)".to_owned()].into(), None)]),
+            "{source}"
+        );
+        assert!(input.objectives().priorities().is_empty(), "{source}");
     }
+}
+
+#[test]
+fn overflowing_priorities_remain_errors() {
+    assert!(matches!(
+        admit(
+            "p(2147483647).#minimize{1@(X+1):p(X)}.",
+            &FormulaLimits::default()
+        ),
+        Err(FormulaFailure::Expansion(
+            ExpansionFailure::Evaluation { .. }
+        ))
+    ));
 }
 
 #[test]

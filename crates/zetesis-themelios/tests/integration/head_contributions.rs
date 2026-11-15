@@ -3,6 +3,7 @@
 mod cases;
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
@@ -185,18 +186,8 @@ fn missing_extrema_retain_complete_key_limits() {
 }
 
 #[test]
-fn neutral_rows_cannot_hide_undefined_bindings() {
-    for source in [
-        "#sum{1/0:a}.",
-        "#min{1/0:a}.",
-        "d(0).#sum{word:p(Y):d(X),Y=1/X}=0.",
-        "d(0).e.#sum{word:p(Y):d(X),Y=1/X,not e}=0.",
-        "d(0).#min{:p(Y):d(X),Y=1/X}.",
-        "d(0).#min{:p(Y):d(X),Y=1/X}=#sup.",
-        "d(0).e.#max{:p(Y):d(X),Y=1/X,not e}=#inf.",
-        "#max{1/0:a}=#inf:-#false.",
-        "d(0).#sum+{-1:p(Y):d(X),Y=1/X}=0.",
-    ] {
+fn neutral_rows_cannot_hide_closed_undefined_terms() {
+    for source in ["#sum{1/0:a}.", "#min{1/0:a}.", "#max{1/0:a}=#inf:-#false."] {
         let error = limited(
             source,
             ExpansionLimits::default(),
@@ -215,24 +206,38 @@ fn neutral_rows_cannot_hide_undefined_bindings() {
 }
 
 #[test]
-fn neutral_tuple_fields_preserve_undefined_arithmetic() {
-    let error = limited(
-        "d(0).#sum{word,1/X:a:d(X)}=0.",
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .expect_err("neutral contribution does not skip tuple evaluation");
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                error: themelios_program::term::EvalError::Undefined,
-                ..
-            })
-        ),
-        "{error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+fn neutral_rows_cannot_hide_omitted_bindings() {
+    // Each row would contribute nothing to its aggregate, and its binding
+    // divides by zero. Source evaluation precedes contribution selection:
+    // the row is omitted with the statement's warning, and the facts remain
+    // the only atoms.
+    for (facts, head) in [
+        ("d(0).", "#sum{word:p(Y):d(X),Y=1/X}=0."),
+        ("d(0).e.", "#sum{word:p(Y):d(X),Y=1/X,not e}=0."),
+        ("d(0).", "#min{:p(Y):d(X),Y=1/X}."),
+        ("d(0).", "#min{:p(Y):d(X),Y=1/X}=#sup."),
+        ("d(0).e.", "#max{:p(Y):d(X),Y=1/X,not e}=#inf."),
+        ("d(0).", "#sum+{-1:p(Y):d(X),Y=1/X}=0."),
+    ] {
+        let admitted = input(&format!("{facts}{head}"));
+        assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), head);
+        let expected = native(&input(facts));
+        assert_eq!(native(&admitted), expected, "{head}");
+        assert_eq!(exhaustive(&admitted), expected, "{head}");
+    }
+}
+
+#[test]
+fn neutral_tuple_fields_do_not_hide_a_zero_divisor() {
+    // The weight contributes nothing, yet the tuple's other field is still
+    // evaluated. It divides by zero, so the element is omitted with the
+    // statement's warning and a keeps no permission.
+    let head = "#sum{word,1/X:a:d(X)}=0.";
+    let admitted = input(&format!("d(0).{head}"));
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), head);
+    let expected = native(&input("d(0)."));
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
 }
 
 #[test]

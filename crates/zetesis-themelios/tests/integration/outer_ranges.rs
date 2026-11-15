@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::CASES;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
@@ -224,27 +225,36 @@ fn range_consumers_preserve_scored_answers() {
 }
 
 #[test]
-fn false_filters_cannot_hide_undefined_endpoints() {
-    for source in [
-        "q(K):-N=#count{},N>0,K=N..1/N.",
-        "q(K):-N=#count{},N>0,K=N..2147483647+1.",
-    ] {
-        let error = admit_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-            ),
-            "{source}: {error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    }
+fn false_filters_cannot_hide_a_zero_divisor_endpoint() {
+    let source = "q(K):-N=#count{},N>0,K=N..1/N.";
+    let admitted = input(source);
+    // N>0 compares the count's one value and is false there, which excludes
+    // nothing: the interval's endpoint is still evaluated and divides by
+    // zero. The instance is omitted, so no atom is supported, and the rule
+    // keeps the warning.
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), source);
+    assert!(admitted.atoms().is_empty());
+    assert_eq!(native(&admitted), Models::from([BTreeSet::new()]));
+}
+
+#[test]
+fn false_filters_cannot_hide_an_overflowing_endpoint() {
+    let source = "q(K):-N=#count{},N>0,K=N..2147483647+1.";
+    let error = admit_formula(
+        source.into(),
+        options(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
+        ),
+        "{source}: {error}"
+    );
+    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
 #[test]

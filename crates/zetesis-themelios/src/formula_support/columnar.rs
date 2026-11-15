@@ -10,7 +10,7 @@ use crate::formula_support::Context;
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
 use themelios_program::program::{DefaultNegation, Relation};
-use themelios_program::term::BinaryOp;
+use themelios_program::term::{BinaryOp, EvalError};
 use zetesis_core::relation::Limits;
 use zetesis_core::{
     Atom, AtomPattern, Predicate, TemplateTerm, Term, Value, ValueLimits, ValueNode, ValueNodeRef,
@@ -108,6 +108,8 @@ fn number(catalog: &mut SupportCatalog, value: i32) -> Expression {
     Expression::new(vec![constant(catalog, value)])
 }
 
+/// The bindings `route`'s complete traversal yields, and whether it omitted a
+/// row for a zero divisor.
 fn evaluate(
     route: Route,
     catalog: &mut SupportCatalog,
@@ -115,7 +117,7 @@ fn evaluate(
     prefix: &[Value],
     variables: usize,
     limits: &FormulaLimits,
-) -> Result<Vec<Vec<Value>>, FormulaFailure> {
+) -> Result<(Vec<Vec<Value>>, bool), FormulaFailure> {
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut counters = Counters::default();
     let (relations, mut append) =
@@ -209,12 +211,12 @@ fn evaluate(
         super::Traversal::Finished,
         "only complete cursor exhaustion is success"
     );
-    // These controls traverse completed support. Undefined rows are omitted
-    // by every route, but exhaustion cannot erase an all-undefined family.
-    join.take_family().finish()?;
-    Ok(bindings)
+    // These controls traverse completed support. Every route omits an
+    // undefined row, and the exhausted family reports that it did.
+    Ok((bindings, join.take_family().finish()))
 }
 
+/// Every route yields exactly `expected` and omits no row.
 fn agree(
     support: &mut SupportCatalog,
     literals: &[LiteralIr],
@@ -233,7 +235,7 @@ fn agree(
                 &FormulaLimits::default()
             )
             .unwrap(),
-            expected
+            (expected.to_vec(), false)
         );
     }
 }
@@ -337,8 +339,13 @@ fn column_filters_retain_checked_binding_generation() {
     agree(&mut support, &literals, &[], 2, &[numbers(&[6, 12])]);
 }
 
-#[test]
-fn column_filters_preserve_arithmetic_failures() {
+/// A support of the one row `row(1)` and a body over it: the row, a false
+/// comparison, and a comparison whose left side is `left operator right`.
+fn behind_a_false_comparison(
+    operator: BinaryOp,
+    left: i32,
+    right: i32,
+) -> (SupportCatalog, [LiteralIr; 3]) {
     let mut support = support(vec![numbers(&[1])]);
     let literals = [
         positive(pattern(
@@ -352,14 +359,45 @@ fn column_filters_preserve_arithmetic_failures() {
         ),
         LiteralIr::TupleCompare(
             vec![Expression::new(vec![
-                constant(&mut support, 1),
-                constant(&mut support, 0),
-                Operation::Binary(BinaryOp::Div, 0, 1),
+                constant(&mut support, left),
+                constant(&mut support, right),
+                Operation::Binary(operator, 0, 1),
             ])],
             Relation::Eq,
             vec![number(&mut support, 0)],
         ),
     ];
+    (support, literals)
+}
+
+#[test]
+fn column_filters_preserve_zero_divisor_omissions() {
+    // The one row fails the first comparison and divides by zero in the
+    // second. It is omitted for the zero divisor, which the false comparison
+    // must not hide: every route yields no binding and reports the omission.
+    let (mut support, literals) = behind_a_false_comparison(BinaryOp::Div, 1, 0);
+    for route in [Route::Indexed, Route::Scan, Route::Columns] {
+        assert_eq!(
+            evaluate(
+                route,
+                &mut support,
+                &literals,
+                &[],
+                0,
+                &FormulaLimits::default()
+            )
+            .unwrap(),
+            (Vec::new(), true)
+        );
+    }
+}
+
+#[test]
+fn column_filters_preserve_arithmetic_failures() {
+    // The one row fails the first comparison and overflows in the second,
+    // which the false comparison must not hide: every route refuses with the
+    // overflow at the join's site.
+    let (mut support, literals) = behind_a_false_comparison(BinaryOp::Add, i32::MAX, 1);
     for route in [Route::Indexed, Route::Scan, Route::Columns] {
         assert!(matches!(
             evaluate(
@@ -370,9 +408,10 @@ fn column_filters_preserve_arithmetic_failures() {
                 0,
                 &FormulaLimits::default()
             ),
-            Err(FormulaFailure::Expansion(
-                ExpansionFailure::Evaluation { .. }
-            ))
+            Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                error: EvalError::Overflow,
+                location: site,
+            })) if site == location()
         ));
     }
 }

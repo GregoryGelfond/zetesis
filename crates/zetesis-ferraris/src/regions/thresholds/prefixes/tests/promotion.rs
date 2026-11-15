@@ -199,6 +199,7 @@ fn assert_same_choice(index: &Narrower, region: &Region, left: &Knowledge, right
     assert_eq!(left_scores, right_scores);
     let preferred = left
         .preferred_atom(
+            index,
             region,
             &crate::ChoiceHeads::default(),
             &mut Meter::local(u64::MAX),
@@ -210,6 +211,7 @@ fn assert_same_choice(index: &Narrower, region: &Region, left: &Knowledge, right
         preferred,
         right
             .preferred_atom(
+                index,
                 region,
                 &crate::ChoiceHeads::default(),
                 &mut Meter::local(u64::MAX)

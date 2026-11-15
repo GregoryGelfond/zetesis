@@ -2,7 +2,9 @@
 
 use super::*;
 use crate::test_support::{theory, world};
-use crate::{EvaluationWorkspace, Limits, Node, Verdict};
+use crate::{
+    AdmissionLimits, EvaluationWorkspace, FormulaParts, Limits, Node, OperandSpan, Verdict,
+};
 
 fn attempt(
     workspace: &mut FrozenPositiveWorkspace,
@@ -171,8 +173,9 @@ fn satisfied_support_guards_supply_no_founded_atoms() {
     ));
 }
 
-#[test]
-fn every_tiny_completed_certificate_agrees_with_subset_checking() {
+/// Twenty small formulas over two atoms and the thirteen of them the
+/// exhaustive tests use as roots, in pairs.
+fn tiny() -> (Vec<Node>, [usize; 13]) {
     let nodes = vec![
         Node::atom(0),
         Node::atom(1),
@@ -195,7 +198,12 @@ fn every_tiny_completed_certificate_agrees_with_subset_checking() {
         Node::or_pair([0, 0]),
         Node::implies(4, 0),
     ];
-    let roots = [0, 1, 2, 6, 8, 9, 10, 11, 13, 14, 16, 18, 19];
+    (nodes, [0, 1, 2, 6, 8, 9, 10, 11, 13, 14, 16, 18, 19])
+}
+
+#[test]
+fn every_tiny_completed_certificate_agrees_with_subset_checking() {
+    let (nodes, roots) = tiny();
     let mut decided = 0;
     let mut declined = 0;
     let mut workspace = FrozenPositiveWorkspace::default();
@@ -246,6 +254,252 @@ fn every_tiny_completed_certificate_agrees_with_subset_checking() {
     }
     assert!(decided > 100);
     assert!(declined > 0);
+}
+
+/// What an outcome is, without its witness.
+fn kind(outcome: &FrozenPositiveOutcome) -> std::mem::Discriminant<FrozenPositiveOutcome> {
+    std::mem::discriminant(outcome)
+}
+
+#[test]
+fn a_remembered_root_changes_no_tiny_outcome() {
+    // One workspace remembers across every pair of roots and candidate where
+    // it last declined; a fresh one remembers nothing.
+    let (nodes, roots) = tiny();
+    let mut remembering = FrozenPositiveWorkspace::default();
+    let mut shortened = 0;
+    for (position, &left) in roots.iter().enumerate() {
+        for &right in &roots[position..] {
+            let owner = theory(2, nodes.clone(), vec![left, right]);
+            for mask in 0..4 {
+                let candidate = world(&owner, mask);
+                let remembered = attempt(&mut remembering, &candidate, EvaluationLimits::default());
+                let fresh = attempt(
+                    &mut FrozenPositiveWorkspace::default(),
+                    &candidate,
+                    EvaluationLimits::default(),
+                );
+                let outcome = remembered.result.unwrap();
+                assert_eq!(
+                    kind(&outcome),
+                    kind(&fresh.result.unwrap()),
+                    "roots={left},{right}; M={mask}"
+                );
+                // A decline precedes the incidences, so the two attempts
+                // differ only by the remembered root's test: at most the
+                // root and its two disjuncts more, or the classification
+                // less.
+                if matches!(outcome, FrozenPositiveOutcome::Declined) {
+                    assert!(remembered.work <= fresh.work + 3);
+                    shortened += usize::from(remembered.work < fresh.work);
+                }
+            }
+        }
+    }
+    // The remembered root declined some candidate before its classification.
+    assert!(shortened > 0);
+}
+
+/// The one root `a | b`, over two atoms.
+fn two_heads() -> Theory {
+    theory(
+        2,
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
+        vec![2],
+    )
+}
+
+#[test]
+fn a_root_that_declined_for_two_heads_declines_again_unclassified() {
+    let owner = two_heads();
+    let mut workspace = FrozenPositiveWorkspace::default();
+    let limits = EvaluationLimits::default();
+    let first = attempt(&mut workspace, &world(&owner, 3), limits);
+    assert!(matches!(first.result, Ok(FrozenPositiveOutcome::Declined)));
+    let second = attempt(&mut workspace, &world(&owner, 3), limits);
+    assert!(matches!(second.result, Ok(FrozenPositiveOutcome::Declined)));
+    // The root and its two disjuncts; the first attempt classified the three
+    // nodes as well.
+    assert_eq!(second.work, 3);
+    assert!(first.work > second.work);
+}
+
+#[test]
+fn the_position_remembered_is_the_declining_roots() {
+    // The fact `c` is the first root and `a | b` the second. The second
+    // attempt tests the second root alone: its three units, where a test of
+    // the first root would say nothing and leave the theory to classify.
+    let owner = theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::or_pair([0, 1]),
+        ],
+        vec![2, 3],
+    );
+    let mut workspace = FrozenPositiveWorkspace::default();
+    let limits = EvaluationLimits::default();
+    let first = attempt(&mut workspace, &world(&owner, 7), limits);
+    assert!(matches!(first.result, Ok(FrozenPositiveOutcome::Declined)));
+    let second = attempt(&mut workspace, &world(&owner, 7), limits);
+    assert!(matches!(second.result, Ok(FrozenPositiveOutcome::Declined)));
+    assert_eq!(second.work, 3);
+}
+
+#[test]
+fn a_decline_for_another_shape_is_not_remembered() {
+    // `(a -> b) -> a` declines for its body, a live implication that negates
+    // nothing; the root `a & b` declines for its head, a conjunction. Neither
+    // has two live heads, so the next attempt tests no root first and costs
+    // exactly what the first did.
+    let body = theory(
+        2,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(2, 0),
+        ],
+        vec![3],
+    );
+    let head = theory(
+        2,
+        vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
+        vec![2],
+    );
+    for owner in [body, head] {
+        let mut workspace = FrozenPositiveWorkspace::default();
+        let limits = EvaluationLimits::default();
+        let first = attempt(&mut workspace, &world(&owner, 3), limits);
+        assert!(matches!(first.result, Ok(FrozenPositiveOutcome::Declined)));
+        let second = attempt(&mut workspace, &world(&owner, 3), limits);
+        assert!(matches!(second.result, Ok(FrozenPositiveOutcome::Declined)));
+        assert_eq!(second.work, first.work);
+    }
+}
+
+#[test]
+fn a_remembered_root_with_one_live_head_is_decided() {
+    let owner = two_heads();
+    let mut workspace = FrozenPositiveWorkspace::default();
+    let limits = EvaluationLimits::default();
+    let declined = attempt(&mut workspace, &world(&owner, 3), limits);
+    assert!(matches!(
+        declined.result,
+        Ok(FrozenPositiveOutcome::Declined)
+    ));
+    let decided = attempt(&mut workspace, &world(&owner, 1), limits);
+    assert!(matches!(decided.result, Ok(FrozenPositiveOutcome::Stable)));
+}
+
+#[test]
+fn a_remembered_root_with_a_true_negation_is_classified() {
+    // `a | b | not c`: with `c` the root has two live heads; without it the
+    // negation is truth, the root asks for nothing and the empty set is a
+    // model of the reduct.
+    let owner = Theory::new(
+        3,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::falsum(),
+                Node::implies(2, 3),
+                Node::or_span(OperandSpan {
+                    start: 0,
+                    length: 3,
+                }),
+            ],
+            vec![0, 1, 4],
+        )
+        .unwrap(),
+        vec![5],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let mut workspace = FrozenPositiveWorkspace::default();
+    let limits = EvaluationLimits::default();
+    let declined = attempt(&mut workspace, &world(&owner, 7), limits);
+    assert!(matches!(
+        declined.result,
+        Ok(FrozenPositiveOutcome::Declined)
+    ));
+    let FrozenPositiveOutcome::NonMinimal(witness) =
+        attempt(&mut workspace, &world(&owner, 3), limits)
+            .result
+            .unwrap()
+    else {
+        panic!("a true negation makes the root tautological")
+    };
+    assert_eq!(witness.atoms().count(), 0);
+}
+
+#[test]
+fn a_remembered_root_with_a_false_body_is_not_live() {
+    // `a | b :- c`, beside the facts `a` and `b`: without `c` the rule asks
+    // for nothing and the candidate is the facts' least model.
+    let owner = theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::or_pair([0, 1]),
+            Node::implies(2, 3),
+        ],
+        vec![4, 0, 1],
+    );
+    let mut workspace = FrozenPositiveWorkspace::default();
+    let limits = EvaluationLimits::default();
+    let declined = attempt(&mut workspace, &world(&owner, 7), limits);
+    assert!(matches!(
+        declined.result,
+        Ok(FrozenPositiveOutcome::Declined)
+    ));
+    let decided = attempt(&mut workspace, &world(&owner, 3), limits);
+    assert!(matches!(decided.result, Ok(FrozenPositiveOutcome::Stable)));
+}
+
+#[test]
+fn a_remembered_position_reads_the_theory_it_is_given() {
+    let mut workspace = FrozenPositiveWorkspace::default();
+    let limits = EvaluationLimits::default();
+    // The second root of this theory declines.
+    let first = theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::or_pair([0, 1]),
+        ],
+        vec![2, 3],
+    );
+    let declined = attempt(&mut workspace, &world(&first, 7), limits);
+    assert!(matches!(
+        declined.result,
+        Ok(FrozenPositiveOutcome::Declined)
+    ));
+    // A theory with one root has no second one.
+    let short = theory(1, vec![Node::atom(0)], vec![0]);
+    let decided = attempt(&mut workspace, &world(&short, 1), limits);
+    assert!(matches!(decided.result, Ok(FrozenPositiveOutcome::Stable)));
+    // Its second root names one atom twice: one live head, not two.
+    let repeated = theory(
+        2,
+        vec![
+            Node::atom(1),
+            Node::atom(0),
+            Node::atom(0),
+            Node::or_pair([1, 2]),
+        ],
+        vec![0, 3],
+    );
+    let decided = attempt(&mut workspace, &world(&repeated, 3), limits);
+    assert!(matches!(decided.result, Ok(FrozenPositiveOutcome::Stable)));
 }
 
 #[test]

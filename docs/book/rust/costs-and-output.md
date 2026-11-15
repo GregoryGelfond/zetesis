@@ -254,6 +254,10 @@ An always-zero slot can differ from clingo's reported vector without changing
 objective ordering. For example, `a.a|b.#minimize{1:b}.` has the sole answer
 `{a}`. zetesis retains priority 0 with cost 0; clingo 5.8.2 reports no cost slot.
 Replacing a fact by an equivalent derivation can change clingo's retained slots.
+zetesis retains a slot for each priority that a value proposed by an aggregate
+assignment opens; an [exact](../architecture/grounding.md#certain-predicates)
+assignment proposes one value, so a slot only other values would open is not
+retained.
 Source activity therefore is not a certificate of an identical clingo display.
 Compare costs at identified priorities, distinguish an absent slot from a retained
 zero in reports, and establish that any extra slot is zero across all answers
@@ -318,6 +322,17 @@ The command line prepares at the first answer of a run and reuses the result
 for the rest, so its human and JSON output work falls by the saved comparisons.
 A stopped preparation leaves the selection unprepared; the stop is then reported
 in the same publication phase as without preparation.
+
+`ModelView::shown_atoms` does not visit the atoms an explicit selection leaves
+out when its signatures are few beside the model's atoms. A model keeps its
+atoms in order of signed predicate first, and a selection keeps its signatures
+in that same order, so the atoms of each signature are one run of the model,
+which two binary searches find, and the runs in signature order are the shown
+atoms in model order. The view reads them that way when the searches compare
+fewer atoms than the model holds, `2 * S * (floor(log2(n)) + 1) < n` for `S`
+signatures and `n` atoms, and tests every atom otherwise; the atoms and their
+order are the same either way. A human record is written twice, once to
+measure it and once to fill it, and each pass then reads only what it shows.
 Source collection appends signature occurrences to a private builder, then sorts
 and deduplicates once before publishing `SourceMetadata`. Constructed directives
 affect the same selection without inventing source locations. For `S` signature

@@ -119,8 +119,8 @@ release datasets and their renderer. The independent
 
 Descriptions of arithmetic refusals below apply to those measured revisions.
 The current [source-family policy](../language.md#numeric-boundaries-and-refusal-meaning)
-admits mixed defined/zero-divisor families with warnings while retaining
-all-undefined and fatal-error refusals; the historical timings do not measure
+omits zero-divisor instances with warnings, whether or not their family has a
+defined instance, while retaining fatal-error refusals; the historical timings do not measure
 that policy's implementation.
 
 The [prepared-grounding CPU/Metal comparison](../prepared-metal.md) also retains

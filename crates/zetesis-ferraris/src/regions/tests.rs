@@ -20,6 +20,7 @@ fn compact_mut<C: zetesis_algebra::Class>(knowledge: &mut Knowledge<C>) -> Known
 mod body_wakeups;
 mod chain_links;
 mod chains;
+mod circular_support;
 mod cloning;
 mod competing_heads;
 mod contradictions;
@@ -347,6 +348,14 @@ fn frozen_completed_knowledge_records_propagated_decisions() {
 
 /// The region over four atoms that `code` spells in base three, one digit per
 /// atom from the least significant: open, cut or held.
+/// What one occurrence in a chain that went from `written` members to `now`
+/// adds to an atom's score, by the rule `preference` states: a quarter for
+/// each member, down to 256 at sixteen members or more.
+pub(in crate::regions) fn shortening(written: u32, now: u32) -> u64 {
+    let weight = |members: u32| 4_u64.pow(20 - members.min(16));
+    weight(now) - weight(written)
+}
+
 pub(super) fn partial_region(mut code: usize) -> crate::Region {
     let mut region = crate::Region::all_open(4);
     for atom in 0..4 {

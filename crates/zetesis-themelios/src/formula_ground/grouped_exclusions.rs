@@ -3,8 +3,10 @@
 //! A checked source partition supplies the full product of the same positive
 //! lane relation with itself, except equal lane values. Witnesses reduce with
 //! Any within a lane; each distinct lane remains a separate unit occurrence.
-//! The shared condition stays outside the count. No fact is inferred from
-//! possible support. See the `GroupedWitnessExclusion` correspondence.
+//! The shared condition stays outside the count. Like any body it reads an
+//! explicit fact or an atom of a certain predicate as true; nothing else is
+//! inferred from possible support. See the `GroupedWitnessExclusion`
+//! correspondence.
 
 mod plan;
 #[cfg(test)]

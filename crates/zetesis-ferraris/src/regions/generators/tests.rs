@@ -1,8 +1,13 @@
 //! Dependency precedence and preference authority, independent of membership.
 
 use super::{GeneratorOrder, GeneratorOrderError, GeneratorOrderLimits};
-use crate::{AdmissionLimits, FormulaParts, Node, OriginalSubject, Region, RegionLimits, Theory};
+use crate::{
+    AdmissionLimits, FormulaParts, Narrower, Node, OriginalSubject, Region, RegionLimits, Theory,
+};
 use zetesis_algebra::{Cancellation, Stop};
+
+mod depths;
+mod shortened;
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(
@@ -30,9 +35,18 @@ fn prepare(theory: &Theory) -> super::GeneratorOrderAttempt {
     )
 }
 
+/// The order's choice for a region that has shortened nothing: by choice
+/// depth, then component, then atom.
 fn choose(order: &GeneratorOrder, theory: &Theory, region: &Region) -> Option<usize> {
+    let narrower = Narrower::new(theory);
     order
-        .preferred(theory, region, &mut crate::regions::Meter::local(u64::MAX))
+        .preferred(
+            &narrower,
+            theory,
+            region,
+            &narrower.knowledge(),
+            &mut crate::regions::Meter::local(u64::MAX),
+        )
         .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
 }
@@ -257,16 +271,18 @@ fn an_order_refuses_an_unrelated_same_shape_owner() {
     let other = upstream();
     let order = prepare(&theory).result.unwrap().unwrap();
     assert!(order.belongs_to(&theory.clone()));
+    let narrower = Narrower::new(&theory);
+    let known = narrower.knowledge();
     let mut work = crate::regions::Meter::local(u64::MAX);
     assert_eq!(
         order
-            .preferred(&other, &Region::all_open(2), &mut work)
+            .preferred(&narrower, &other, &Region::all_open(2), &known, &mut work)
             .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::InvalidProgram)
     );
     assert_eq!(
         order
-            .preferred(&theory, &Region::all_open(3), &mut work)
+            .preferred(&narrower, &theory, &Region::all_open(3), &known, &mut work)
             .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::InvalidProgram)
     );
@@ -359,6 +375,7 @@ fn every_preparation_prefix_has_exact_quota_work() {
                 let order = attempt.result.unwrap().unwrap();
                 assert_eq!(order.heads, expected.heads);
                 assert_eq!(order.ranks, expected.ranks);
+                assert_eq!(order.depths, expected.depths);
             }
         }
     }
@@ -443,6 +460,7 @@ fn every_prefix_across_observation_boundaries_has_exact_quota_work() {
                 let order = attempt.result.unwrap().unwrap();
                 assert_eq!(order.heads, expected.heads);
                 assert_eq!(order.ranks, expected.ranks);
+                assert_eq!(order.depths, expected.depths);
             }
         }
     }
@@ -476,7 +494,9 @@ fn storage_refusal_keeps_its_spent_prefix() {
                 if required > limit as u128 && limit == allowance)
             );
         } else {
-            assert_eq!(attempt.result.unwrap().unwrap().ranks, order.ranks);
+            let admitted = attempt.result.unwrap().unwrap();
+            assert_eq!(admitted.ranks, order.ranks);
+            assert_eq!(admitted.depths, order.depths);
         }
     }
 }
@@ -562,6 +582,7 @@ fn native_body_conditions_precede_their_generated_head() {
 fn a_refused_selection_publishes_no_partial_winner() {
     let theory = upstream();
     let order = prepare(&theory).result.unwrap().unwrap();
+    let narrower = Narrower::new(&theory);
     for limit in 0..=3 {
         let mut quota = Allowance {
             remaining: limit,
@@ -569,8 +590,10 @@ fn a_refused_selection_publishes_no_partial_winner() {
             spent: 0,
         };
         let attempt = crate::test_support::stop_preference(&order.preferred_atom_reserved(
+            &narrower,
             &theory,
             &Region::all_open(2),
+            &narrower.knowledge(),
             &Cancellation::default(),
             &mut zetesis_algebra::Meter::reserved(&mut quota),
         ));

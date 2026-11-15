@@ -179,6 +179,7 @@ fn schedules(index: &Narrower, knowledge: &Knowledge) -> Vec<(Vec<usize>, Option
 fn branches(theory: &Theory, index: &Narrower, region: &Region, inherited: &Knowledge) {
     let Some(atom) = inherited
         .preferred_atom(
+            index,
             region,
             &crate::ChoiceHeads::default(),
             &mut Meter::local(u64::MAX),

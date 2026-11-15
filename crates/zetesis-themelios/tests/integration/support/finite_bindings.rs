@@ -199,10 +199,16 @@ pub(crate) fn original_sources_match_clingo_full_models<'a>(
     println!("complete_sources={compared} full_models={models}");
 }
 
-/// Each source of `pairs` and its expansion, both admitted by `input`, have
-/// the same atoms and agree on classical truth and on frozen truth under every
-/// pair of interpretations. Arbitrary M/J includes both proper subsets and
+/// Each source of `pairs` and its expansion, both admitted by `input`, agree
+/// on classical truth and on frozen truth under every pair of interpretations
+/// of the source's atoms. Arbitrary M/J includes both proper subsets and
 /// unrelated worlds.
+///
+/// The expansion names every atom the source names. It may name more: a
+/// source supports only the value an assignment over certain atoms takes,
+/// where the written expansion has a rule for each value it proposes. No
+/// model of the expansion holds such an atom, which is checked, so the atom
+/// is false on both sides of every comparison.
 pub(crate) fn frozen_truth_matches<'a>(
     pairs: impl IntoIterator<Item = (&'a str, &'a str)>,
     input: impl Fn(&str) -> AdmittedFormula,
@@ -213,12 +219,27 @@ pub(crate) fn frozen_truth_matches<'a>(
         let right = input(expanded);
         let names: Vec<_> = left.atoms().iter().map(canonical).collect();
         let other: Vec<_> = right.atoms().iter().map(canonical).collect();
-        assert_eq!(
-            names.iter().collect::<BTreeSet<_>>(),
-            other.iter().collect(),
-            "{source}"
+        let supported: BTreeSet<_> = names.iter().collect();
+        assert!(
+            supported.is_subset(&other.iter().collect()),
+            "{source}: {names:?} within {other:?}"
         );
         assert!(names.len() <= 7, "bounded exhaustive interpretation pairs");
+        // The atoms only the expansion names, as a mask over its atoms.
+        let unsupported = other
+            .iter()
+            .enumerate()
+            .filter(|(_, name)| !supported.contains(name))
+            .fold(0_usize, |mask, (index, _)| mask | (1 << index));
+        if unsupported != 0 {
+            assert!(other.len() <= 10, "bounded exhaustive expansion models");
+            for world in (0..1_usize << other.len()).filter(|world| world & unsupported != 0) {
+                assert!(
+                    !holds(right.theory(), &values(right.theory(), world, None)),
+                    "{source}: an expansion model holds an atom the source does not support"
+                );
+            }
+        }
         let remap = |mask: usize| {
             names.iter().enumerate().fold(0, |result, (index, name)| {
                 result

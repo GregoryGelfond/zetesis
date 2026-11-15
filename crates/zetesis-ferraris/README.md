@@ -284,9 +284,13 @@ proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask.
 exhausting that ceiling, or a control stop, returns the stop, and the region and
 the knowledge then hold what the closure had learned before it, sound but
 not closed, which the proposers abandon. A narrowing that does not refute also prefers a
-region's next split, which the traversal honours: an open atom heading one of the
-subject's atomic choice roots (`ChoiceHeads`, when the subject carries them) before
-any other, then the open atom with the most parents still unknown, ties to the
+region's next split, which the traversal honours. A subject with a
+`GeneratorOrder` takes an open generating head of least choice depth, then the
+one for which the chains the region has shortened weigh the most, then the
+earliest dependency component and the lowest atom. Otherwise an open atom heading one of the
+subject's atomic choice roots (`ChoiceHeads`, when the subject carries them) comes before
+any other, then the atom for which the shortened chains weigh the most, then the
+open atom with the most parents still unknown, ties to the
 lowest; without a preference the traversal splits the highest open atom. The traversal that splits regions and
 covers the tree is `zetesis_algebra::walk::Walk`; `zetesis-stable` uses it
 with original-theory narrowing for candidate generation and frozen-reduct

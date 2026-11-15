@@ -1084,29 +1084,32 @@ fn proposals_split_on_the_original_choice_head_first() {
     assert!(pending.iter().all(|entry| !entry.region.is_open(0)));
 }
 
-/// `a0 <- a1`, `a1 <- a0` beside two atomic choices: the root's pass
-/// captures the loop's absence, and every later region inherits the cut, so
-/// no producer captures it again.
+/// `a0 <- a2`, `a1 <- a0`, `a2 <- a1` beside two atomic choices: the root's
+/// pass captures the loop's absence, and every later region inherits the cut,
+/// so no producer captures it again. The loop has three atoms because the
+/// support cut alone decides a loop of two.
 fn loop_beside_two_choices() -> Theory {
     let mut nodes = vec![
         Node::atom(0),
         Node::atom(1),
+        Node::atom(2),
         Node::falsum(),
-        Node::implies(1, 0),
+        Node::implies(2, 0),
         Node::implies(0, 1),
+        Node::implies(1, 2),
     ];
-    let mut roots = vec![3, 4];
+    let mut roots = vec![4, 5, 6];
     for choice in 0..2 {
         let index = nodes.len();
         nodes.extend([
-            Node::atom(2 + choice),
-            Node::implies(index, 2),
+            Node::atom(3 + choice),
+            Node::implies(index, 3),
             Node::or_pair([index, index + 1]),
         ]);
         roots.push(index + 2);
     }
     Theory::new(
-        4,
+        5,
         zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
         roots,
         AdmissionLimits::default(),

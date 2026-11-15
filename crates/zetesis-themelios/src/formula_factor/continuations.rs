@@ -95,7 +95,8 @@ pub(crate) fn rule<'source>(
 }
 
 /// A selected row has completed body selection and head arithmetic. Its logical
-/// aggregate and negative conditions are still formulas, not a truth certificate.
+/// aggregate and negative conditions are still formulas, not a truth
+/// certificate; emission decides the negations the completed support decides.
 fn next_selected<'source>(
     builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
@@ -154,10 +155,10 @@ fn emit<'source>(
     // Preserve that evidence through filtering; synthesized component bodies
     // still enter the common body API as Temporary and cannot fill this table.
     let literals = Ir::Source(rule.body.as_slice());
-    let common = builder.body_ir_with_carriers(
+    let common = builder.rule_body_with_carriers(
+        rule,
         literals.iter().filter(|literal| !positive(literal.get())),
         &rule.body_binding(binding),
-        rule.location,
         support,
         carriers,
     )?;

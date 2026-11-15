@@ -100,12 +100,22 @@ impl ParitySystem {
         Ok((self.knowledge(), storage.reserve_bytes(words, budget)?))
     }
 
-    /// Whether the rows are consistent under the region's decisions: the
-    /// decided atoms substituted, the rows over the open atoms eliminated
-    /// to echelon form, and no row left reading `0 = 1`. Complete for the
-    /// rows as a linear system, where [`Self::inspect_reserved`] applies one
-    /// row at a time. Charged per word read and combined; the elimination's
-    /// scratch is allocated for the call.
+    /// Whether the system is consistent under the region's decisions: no
+    /// direct unit decided against, the decided atoms substituted in the
+    /// rows, the rows over the open atoms eliminated to echelon form, and no
+    /// row left reading `0 = 1`. Complete for the system as linear equations,
+    /// where [`Self::inspect_reserved`] applies one row at a time and reads
+    /// no direct unit, which the seeded root holds. Charged per unit, and per
+    /// word read and combined; the elimination's scratch is allocated for
+    /// the call.
+    ///
+    /// A region over fewer atoms than the system decides none of the atoms
+    /// beyond it: a unit or a row's words there are not read. A refuted
+    /// system keeps no unit, so its answer says nothing; read
+    /// [`Self::root_refuted`] first.
+    ///
+    /// # Panics
+    /// Panics if the region has more mask words than a row of this system.
     ///
     /// # Errors
     /// The meter's refusal or a stop.
@@ -139,6 +149,18 @@ impl ParitySystem {
     ) -> Result<bool, BudgetError<Q::Error>> {
         let (held, cut) = region.decision_words();
         let width = held.len();
+        // No row names a direct unit's atom, so each is read by itself.
+        for unit in self.prepared.direct() {
+            charge(budget.meter_mut(), 4)?; // locate, select the side, test
+            let against = if unit.value { cut } else { held };
+            // An atom beyond a narrower region's words is open there.
+            let decided_against = against
+                .get(unit.atom / 64)
+                .is_some_and(|word| word & (1 << (unit.atom % 64)) != 0);
+            if decided_against {
+                return Ok(false);
+            }
+        }
         let mut storage = Storage::with_live_bytes(outer.bytes());
         let mut pivots: Vec<(Vec<u64>, bool)> = storage.reserve_bytes(0, budget)?;
         for &source in &self.prepared.basis {
@@ -180,6 +202,9 @@ impl ParitySystem {
     }
 
     /// Inspect applicable rows once and apply their consequences in row order.
+    /// A one-atom equation the original theory's recognition kept as a unit
+    /// is no row and is not applied here: the seeded root holds it
+    /// ([`super::super::RootPreparation::take_seeded_root`]).
     ///
     /// The region uses this system's original atom coordinates. Initialized
     /// knowledge belongs to this exact system and an ancestor of the region;

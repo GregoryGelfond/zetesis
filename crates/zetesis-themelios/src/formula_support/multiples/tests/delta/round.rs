@@ -438,7 +438,7 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
                 // Call the real support-production consumer, not the local helper
                 // used above to inspect individual borrowed cursors.
                 crate::formula_support::derive_variants(
-                    rule,
+                    (0, rule),
                     &mut variants,
                     (None, None),
                     support,
@@ -462,7 +462,7 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
                             .unwrap()
                     );
                     crate::formula_support::derive_rule(
-                        rule,
+                        (0, rule),
                         &mut join,
                         support,
                         computation,

@@ -57,6 +57,7 @@ use crate::{FormulaView, NodeView, Theory};
 
 mod adjacency;
 mod arithmetic;
+mod circular;
 pub use arithmetic::ParityKnowledge;
 pub use arithmetic::{
     ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ClosedQuery,
@@ -235,6 +236,10 @@ pub struct Producers {
     by_head: Adjacency,
     /// The producers whose body is this node.
     by_body: Adjacency,
+    /// One mark per producer that cannot support its head: see [`circular`].
+    circular: Words<u64>,
+    /// Some producer is marked circular.
+    any_circular: bool,
     /// Some extracted producer has at least two distinct heads. When false, holding a
     /// head cannot invalidate any other head's support.
     has_competing_heads: bool,
@@ -250,7 +255,57 @@ impl Producers {
     fn belongs_to(&self, theory: &Theory) -> bool {
         self.owner.same_instance(theory)
     }
+
+    /// Whether the support cut and the positive-dependency test leave this
+    /// producer out: its body requires its own sole head, or an atom derived
+    /// only through that head.
+    fn circular(&self, producer: usize) -> bool {
+        self.circular.contains(producer)
+    }
+
+    /// Whether any producer is marked circular. Without one, every reader of
+    /// the inventory behaves exactly as it does without marks.
+    const fn any_circular(&self) -> bool {
+        self.any_circular
+    }
+
+    /// Mark the circular producers within `allowance` visits and return the
+    /// visits charged, observing control at the meter's cadence. A marking
+    /// that exhausts its allowance leaves every producer unmarked, which is
+    /// the inventory as it was before producers were marked: sound, and only
+    /// weaker in what the support cut and the cycle test can skip.
+    ///
+    /// # Errors
+    /// A requested stop, an allocation refusal of the marking's storage, or
+    /// an invalid node. An exhausted allowance is not an error.
+    fn mark(
+        &mut self,
+        theory: &Theory,
+        allowance: u64,
+        cancellation: &Cancellation,
+    ) -> Result<u64, Stop> {
+        let metered = cancellation.metered(allowance, |work| {
+            circular::mark(theory, &self.rules, &self.by_head, &self.by_body, work)
+        });
+        match metered.result {
+            Ok((marks, any)) => {
+                self.circular = marks;
+                self.any_circular = any;
+            }
+            Err(failure) => match failure.into_stop() {
+                Stop::WorkLimit => {}
+                stop => return Err(stop),
+            },
+        }
+        Ok(metered.charged)
+    }
 }
+
+/// The marking pass may spend this many times the visits of the extraction
+/// it follows, which counts a conjunction once where the pass reads each
+/// operand: wide bodies and shared ones (see [`circular`]) exhaust the
+/// share. The 288 programs measured spent 0.4 to 1.4 times those visits.
+const MARKING_SHARE: u64 = 4;
 
 /// The atoms that head an atomic choice root of a theory, `a ∨ ¬a` standing
 /// alone or as an implication's consequent. A mark records that the theory
@@ -301,7 +356,8 @@ pub struct Extraction {
     /// The heads of the theory's atomic choice roots, whether or not every
     /// root lies in the fragment.
     pub choice_heads: ChoiceHeads,
-    /// Charged node and root visits, the same for a declined extraction.
+    /// Charged node and root visits, the same for a declined extraction,
+    /// and the visits of the pass that marks circular producers.
     pub work: u64,
 }
 
@@ -312,23 +368,60 @@ pub struct Extraction {
 /// case the support rule does not apply. The heads of atomic choice roots are
 /// marked for every theory, in one more charged visit per root.
 ///
+/// The producers that cannot support their head, the circular ones, are
+/// then marked. That pass may spend what `limits.max_work` leaves after the
+/// extraction, and at most four times the extraction's own visits. A marking
+/// that would exceed either marks nothing: the inventory is complete without
+/// marks, and every reader then treats each producer as a possible support.
+/// The extraction therefore stops for want of work exactly where it would
+/// with no marking, and the reported work never exceeds `limits.max_work`.
+///
 /// # Errors
 /// Returns the stop when extraction exceeds `limits.max_work`, control stops,
-/// or compact-adjacency storage cannot be represented or reserved. Other
-/// extraction storage retains its existing infallible allocation behavior.
+/// before the extraction or during the marking, or compact-adjacency storage,
+/// the mark words or the marking's transient storage cannot be represented or
+/// reserved. Other extraction storage retains its existing infallible
+/// allocation behavior.
 pub fn producers(
     theory: &Theory,
     limits: RegionLimits,
     cancellation: &Cancellation,
 ) -> Result<Extraction, Stop> {
+    extraction(theory, limits, cancellation, true)
+}
+
+/// The same extraction with no producer marked circular: the inventory the
+/// founded closure's and the founded collector's own tests read, in which
+/// every producer may support its head and every positive loop stays a cycle.
+#[cfg(test)]
+pub(crate) fn unmarked_producers(
+    theory: &Theory,
+    limits: RegionLimits,
+    cancellation: &Cancellation,
+) -> Result<Extraction, Stop> {
+    extraction(theory, limits, cancellation, false)
+}
+
+fn extraction(
+    theory: &Theory,
+    limits: RegionLimits,
+    cancellation: &Cancellation,
+    marked: bool,
+) -> Result<Extraction, Stop> {
     cancellation.poll()?;
     let mut work = Meter::local(limits.max_work);
     let choice_heads = choice_heads(theory, &mut work).map_err(Failure::into_stop)?;
-    let producers = extract(theory, &mut work).map_err(Failure::into_stop)?;
+    let mut producers = extract(theory, &mut work).map_err(Failure::into_stop)?;
+    let mut charged = work.charged();
+    if marked && let Some(inventory) = producers.as_mut() {
+        let allowance = work.remaining().min(charged.saturating_mul(MARKING_SHARE));
+        // At most what the ceiling leaves, so the sum stays within it.
+        charged += inventory.mark(theory, allowance, cancellation)?;
+    }
     Ok(Extraction {
         producers,
         choice_heads,
-        work: work.charged(),
+        work: charged,
     })
 }
 
@@ -365,6 +458,7 @@ fn ordinary_operands<Q: Quota + ?Sized>(
     Ok(all)
 }
 
+/// The inventory with no producer marked.
 fn extract<Q: Quota + ?Sized>(
     theory: &Theory,
     work: &mut Meter<'_, Q>,
@@ -440,11 +534,14 @@ fn extract<Q: Quota + ?Sized>(
             .enumerate()
             .filter_map(|(index, producer)| producer.body.map(|body| (body, index))),
     )?;
+    let circular = circular::none(rules.len())?;
     Ok(Some(Producers {
         owner: theory.clone(),
         rules,
         by_head,
         by_body,
+        circular,
+        any_circular: false,
         has_competing_heads,
         has_choice_heads,
         founded_cycles: OnceLock::new(),
@@ -529,7 +626,9 @@ pub struct PreferenceAttempt<E = Stop> {
     /// Charged ranking reads, including a refused prefix. The producing selector
     /// reads component ranks or unknown-parent counts once per eligible atom;
     /// secondary counts are read only to distinguish primary ties, at most once
-    /// per eligible atom.
+    /// per eligible atom. Where the region has shortened a chain, a generator
+    /// order reads its eligible atoms a second time, and either selector reads
+    /// the parents of each atom it scores.
     pub work: u64,
 }
 
@@ -835,19 +934,34 @@ impl<C: Class> Knowledge<C> {
     /// Select the open atom to split on. An open atom marked in `choices`, the
     /// heads of the theory's atomic choice roots, ranks before every unmarked
     /// one: deciding the choices first leaves the atoms they derive to
-    /// propagation and support. Among equally ranked atoms, the one with most
-    /// unknown parents in this knowledge wins; ties, including all-zero
-    /// scores, select the lowest atom. Empty `choices` rank by unknown parents
-    /// alone. The region, knowledge and choices must use the same atom
-    /// universe and atom identities; their correspondence is a caller
-    /// precondition, not checked here. This preference only orders an
-    /// exhaustive split; it establishes no truth and does not complete
-    /// propagation.
+    /// propagation and support. Among equally ranked atoms, the one whose
+    /// chains the region has shortened the most wins; among those, the one
+    /// with most unknown parents in this knowledge; ties, including all-zero
+    /// scores, select the lowest atom. Empty `choices` rank by shortened
+    /// chains and unknown parents alone.
+    ///
+    /// A chain is a conjunction or disjunction read as one node over its
+    /// operands. Its members in a region are its open operands, and its own
+    /// truth while that is unknown. The region has shortened it when its
+    /// decisions settled an operand without settling the chain and two or
+    /// more members remain. An atom's score adds, for each occurrence of the
+    /// atom in such a chain, the chain's weight now less its weight with every
+    /// operand open: a quarter for each member. The atom is found as an
+    /// operand of the chain, or under at most two implications whose truth is
+    /// unknown.
+    ///
+    /// `narrower` must be the index this knowledge was closed with, and the
+    /// region, knowledge and choices must use the same atom universe and atom
+    /// identities; their correspondence is a caller precondition, not checked
+    /// here. This preference only orders an exhaustive split; it establishes
+    /// no truth and does not complete propagation.
     ///
     /// For `A` atoms and `E` eligible open atoms the scan takes `O(A / 64 + E)`
-    /// time and constant additional space. Eligible atoms are the open choice
-    /// heads when any remain, otherwise all open atoms. It charges one count
-    /// read per eligible atom; packed mask traversal is not separately charged.
+    /// time and constant additional space, and, once the region has shortened
+    /// a chain, the parents of each eligible atom besides. Eligible atoms are
+    /// the open choice heads when any remain, otherwise all open atoms. It
+    /// charges one count read per eligible atom and one unit per parent read;
+    /// packed mask traversal is not separately charged.
     /// It polls cancellation before reading and reserves/refunds the same batched
     /// permits as [`Narrower::narrow_known_reserved`]. Call after composed
     /// propagation has reached its joint fixed point, so the selected
@@ -859,10 +973,12 @@ impl<C: Class> Knowledge<C> {
     /// attempt retains its charged prefix and changes neither argument.
     ///
     /// # Panics
-    /// Panics if it reads an open atom outside this knowledge's universe,
+    /// Panics if it reads an open atom outside this knowledge's universe, or
+    /// a node or chain outside it through an index of another theory,
     /// violating the caller's shape precondition.
     pub fn preferred_atom_reserved<Q: Quota + ?Sized>(
         &self,
+        narrower: &Narrower,
         region: &Region,
         choices: &ChoiceHeads,
         cancellation: &Cancellation,
@@ -872,7 +988,7 @@ impl<C: Class> Knowledge<C> {
         let result = cancellation
             .poll()
             .map_err(Failure::from)
-            .and_then(|()| self.preferred_atom(region, choices, work));
+            .and_then(|()| self.preferred_atom(narrower, region, choices, work));
         work.refund();
         PreferenceAttempt {
             result,
@@ -882,14 +998,15 @@ impl<C: Class> Knowledge<C> {
 
     fn preferred_atom<Q: Quota + ?Sized>(
         &self,
+        narrower: &Narrower,
         region: &Region,
         choices: &ChoiceHeads,
         work: &mut Meter<'_, Q>,
     ) -> Result<Option<usize>, Failure<Q::Error>> {
         match &self.width {
-            Width::Compact16(known) => preferred_split(region, known, choices, work),
-            Width::Compact32(known) => preferred_split(region, known, choices, work),
-            Width::Native(known) => preferred_split(region, known, choices, work),
+            Width::Compact16(known) => preferred_split(narrower, region, known, choices, work),
+            Width::Compact32(known) => preferred_split(narrower, region, known, choices, work),
+            Width::Native(known) => preferred_split(narrower, region, known, choices, work),
         }
     }
 
@@ -1462,8 +1579,10 @@ impl Narrower {
                 && matches!(selection, SplitSelection::Choose)
             {
                 preferred = match subject.generator_order() {
-                    Some(order) => order.preferred(subject.theory(), region, work)?,
-                    None => knowledge.preferred_atom(region, subject.choices(), work)?,
+                    Some(order) => {
+                        order.preferred(self, subject.theory(), region, knowledge, work)?
+                    }
+                    None => knowledge.preferred_atom(self, region, subject.choices(), work)?,
                 };
             }
             Ok(narrowing)
@@ -1540,22 +1659,31 @@ impl Narrower {
 }
 
 /// The open atom to split on. Atoms marked in `choices` rank before every
-/// unmarked one; among equally ranked atoms, the one with the most parents
-/// still unknown, whose decision the theory is most sensitive to, as a
-/// clause search branches on the variable with the most unresolved
-/// occurrences; ties go to the lower atom. The counts are kept as parents
-/// become known, so ranking reads each eligible atom once. Packed choice
-/// filtering omits atoms that cannot win without changing the ordering.
+/// unmarked one. Among equally ranked atoms the region's own state decides
+/// first: the atom whose chains the region has shortened the most
+/// (`preference` states the score), where one more decision does the most.
+/// Then the one with the most parents still unknown, whose decision the
+/// theory is most sensitive to, as a clause search branches on the variable
+/// with the most unresolved occurrences; ties go to the lower atom. The
+/// counts are kept as parents become known, so ranking reads each eligible
+/// atom once, and its parents once the region has shortened a chain. Packed
+/// choice filtering omits atoms that cannot win without changing the ordering.
 fn preferred_split<C: Count, Q: Quota + ?Sized>(
+    narrower: &Narrower,
     region: &Region,
     known: &Known<C>,
     choices: &ChoiceHeads,
     work: &mut Meter<'_, Q>,
 ) -> Result<Option<usize>, Failure<Q::Error>> {
-    let mut best: Option<(usize, usize)> = None;
+    let mut best: Option<(usize, (u64, usize))> = None;
     choices.try_for_each_eligible(region, |atom| -> Result<(), Failure<Q::Error>> {
         work.tick()?;
-        let rank = known.unknown.get(atom);
+        let shortened = if known.shortened {
+            narrower.shortened_weight_at(known, atom, work)?
+        } else {
+            0
+        };
+        let rank = (shortened, known.unknown.get(atom));
         if best.is_none_or(|(_, best)| rank > best) {
             best = Some((atom, rank));
         }
@@ -1602,6 +1730,11 @@ struct Known<C> {
     founded_closed: bool,
     /// Completed unavailable producer prefixes, inherited only by descendants.
     support_progress: support::Progress,
+    /// A closure settled an operand of a chain and left it two or more
+    /// members (`preference`). Without this every atom's shortened weight is
+    /// zero, so the split ranking reads none. The chain may since have been
+    /// settled: with it the weights may all be zero as well.
+    shortened: bool,
 }
 
 impl<C: Clone> Clone for Known<C> {
@@ -1614,6 +1747,7 @@ impl<C: Clone> Clone for Known<C> {
             seeded: self.seeded,
             founded_closed: self.founded_closed,
             support_progress: self.support_progress.clone(),
+            shortened: self.shortened,
         }
     }
 
@@ -1625,6 +1759,7 @@ impl<C: Clone> Clone for Known<C> {
         self.seeded = source.seeded;
         self.founded_closed = source.founded_closed;
         self.support_progress.clone_from(&source.support_progress);
+        self.shortened = source.shortened;
     }
 }
 
@@ -1924,6 +2059,7 @@ struct KnownMut<'a, C> {
     seeded: &'a mut bool,
     founded_closed: &'a mut bool,
     support_progress: &'a mut support::Progress,
+    shortened: &'a mut bool,
 }
 
 impl<C> Known<C> {
@@ -1942,6 +2078,7 @@ impl<C> Known<C> {
             seeded: &mut self.seeded,
             founded_closed: &mut self.founded_closed,
             support_progress: &mut self.support_progress,
+            shortened: &mut self.shortened,
         }
     }
 }
@@ -2006,6 +2143,7 @@ impl<C: Count> Known<C> {
             seeded: false,
             founded_closed: false,
             support_progress: support::Progress::default(),
+            shortened: false,
         }
     }
 }
@@ -2635,6 +2773,13 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
         }
         self.known.neutral_operands.add(chain, 1);
         let neutral = self.known.neutral_operands.get(chain);
+        // An operand settled and two or more members remain: the open
+        // operands, and the chain's own truth while that is unknown. This is
+        // what the split ranking weighs (`preference`).
+        let root_known = self.known.sure.contains(root) || self.known.never.contains(root);
+        if neutral + usize::from(root_known) < total {
+            *self.known.shortened = true;
+        }
         Ok(match disjunction {
             true if neutral == total => self.never(root),
             true if self.known.sure.contains(root) && neutral + 1 == total => {
@@ -2905,11 +3050,14 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
     /// An atom none of its producers can support is known to fail, and an
     /// atom known to hold with exactly one producer able to support it
     /// forces that producer's body (`unsupported_cut`,
-    /// `sole_support_forces`). A producer can support its atom when its
-    /// body is not known to fail and, unless it is a choice, no other of
-    /// its heads is known to hold. An open atom needs only one possible
-    /// supporter to remain open; a held atom with two cannot force a sole
-    /// body. Stop at those witnesses and charge only visited producers.
+    /// `sole_support_forces`; with circular producers passed over,
+    /// `noncircular_unsupported_cut`, `noncircular_sole_rule_forces` and
+    /// `noncircular_sole_choice_forces`). A producer can support its atom
+    /// when it is not circular, its body is not known to fail and, unless it
+    /// is a choice, no other of its heads is known to hold. An open atom
+    /// needs only one possible supporter to remain open; a held atom with
+    /// two cannot force a sole body. Stop at those witnesses and charge only
+    /// visited producers.
     /// Inherited positions skip only prefixes already proved unavailable in
     /// this region or an ancestor; zero or sole support still requires complete
     /// coverage. Later body failure, a competing held head or this atom becoming

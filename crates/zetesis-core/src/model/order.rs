@@ -20,7 +20,10 @@ const MARK_BITS: usize = usize::BITS as usize;
 ///
 /// Preparation uses O(n log n) checked semantic comparisons and retains two
 /// n-cell integer buffers: each occurrence's rank, and the occurrences in
-/// semantic order (equal ranks by ascending position). Selection marks the m
+/// semantic order (equal ranks by ascending position). A catalog already in
+/// semantic order costs fewer comparisons than it has occurrences, and one
+/// made of a few ordered stretches about one more for each occurrence of
+/// the stretches that must be merged (`checked_sort`). Selection marks the m
 /// supplied positions in an n-bit mask, then either walks the semantic order
 /// once (O(n) integer steps) or sorts the marked positions (O(m log m) integer
 /// comparisons), whichever the counts make cheaper; both publish the same model

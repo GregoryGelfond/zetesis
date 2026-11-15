@@ -2,10 +2,12 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support as reference;
 use zetesis_reference_support::resource_limits;
+use zetesis_test_support::records::Records;
 use zetesis_test_support::thresholds::first_success;
-use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-scopes.jsonl");
 
@@ -115,43 +117,61 @@ fn scoped_numeric_zero_retains_its_query() {
     );
 }
 
+/// `source` admitted under `limits` with exactly one warning: a zero divisor
+/// omitted from an instance of `statement`.
+fn omitting(source: &str, statement: &str, limits: &FormulaLimits) -> AdmittedFormula {
+    let input =
+        reference::admit(source, limits).unwrap_or_else(|error| panic!("{source}: {error}"));
+    assert_eq!(zero_divisor_statement(&input), statement, "{source}");
+    input
+}
+
 #[test]
 fn scoped_validation_precedes_numeric_selection() {
+    // The scoped guard divides by zero at the one row. The row is validated
+    // before its weight or priority is read: it is omitted with a warning
+    // even where a symbolic field would have ignored it, and before the
+    // numeric weight 0 asks for a query node.
     for field in ["symbol", "1@symbol", "0"] {
-        let source = format!("d(0).{{a}}.:~d(X),#count{{1:a}}>1/X.[{field}]");
+        let statement = format!(":~d(X),#count{{1:a}}>1/X.[{field}]");
+        let source = format!("d(0).{{a}}.{statement}");
         let limits = resource_limits::formula_objective(
             zetesis_objective::AdmissionResource::ConditionNodes,
             0,
         );
-        let error = reference::admit(&source, &limits).unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Evaluation { .. })
-            ),
-            "{source}: {error}"
+        let input = omitting(&source, &statement, &limits);
+        assert!(input.objectives().templates().is_empty(), "{source}");
+        assert_eq!(
+            reference::exhaustive(&input),
+            Records::from([
+                (["d(0)".to_owned()].into(), None),
+                (["a".to_owned(), "d(0)".to_owned()].into(), None),
+            ]),
+            "{source}"
         );
     }
 }
 
 #[test]
 fn scoped_validation_precedes_activity_exclusion() {
+    // The fact a makes `not a` false, which would exclude the row from the
+    // objective. The scoped guard is validated first: it divides by zero, so
+    // the row is omitted with a warning, wherever the gate stands and
+    // whatever the fields are.
     for body in ["d(X),not a,#count{}>1/X", "d(X),#count{}>1/X,not a"] {
         for field in ["1", "symbol", "1@symbol", "0"] {
-            let source = format!("d(0).a.:~{body}.[{field}]");
+            let statement = format!(":~{body}.[{field}]");
+            let source = format!("d(0).a.{statement}");
             let limits = resource_limits::formula_objective(
                 zetesis_objective::AdmissionResource::ConditionNodes,
                 0,
             );
-            let error = reference::admit(&source, &limits).unwrap_err();
-            assert!(
-                matches!(
-                    error,
-                    FormulaFailure::Expansion(
-                        zetesis_themelios::ExpansionFailure::Evaluation { .. }
-                    )
-                ),
-                "{source}: {error}"
+            let input = omitting(&source, &statement, &limits);
+            assert!(input.objectives().templates().is_empty(), "{source}");
+            assert_eq!(
+                reference::exhaustive(&input),
+                Records::from([(["a".to_owned(), "d(0)".to_owned()].into(), None)]),
+                "{source}"
             );
         }
     }

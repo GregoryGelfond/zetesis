@@ -2,8 +2,11 @@
 //!
 //! Only a selected complete descendant may publish an atom or group. Later
 //! siblings reuse exactly the prefix left intact by join undo. Matched rows
-//! supply identities; support membership supplies no truth premise. A separately
-//! collected explicit fact permits its positive body occurrence to become true.
+//! supply identities; support membership supplies no truth premise, except for
+//! a certain predicate, whose supported atoms hold in every answer set
+//! (`formula_support::certain`). A separately collected explicit fact, or an
+//! atom of a certain predicate, permits its positive body occurrence to become
+//! true.
 //!
 //! Balanced groups have at most three children. Consecutive traversal columns
 //! split into two or three nearly equal ranges recursively, so native rows keep
@@ -384,7 +387,7 @@ pub(super) fn rule(
         let head = builder.atom_identity(&atom, rule.location)?;
         let formula = builder.node(NodeView::Implies(body, head), rule.location)?;
         builder.root(formula, rule)?;
-        builder.producer(head, body, rule)?;
+        builder.ordinary_producer(head, body, rule)?;
         #[cfg(test)]
         testing::record(testing::Point::Publish);
     }

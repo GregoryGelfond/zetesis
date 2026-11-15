@@ -15,9 +15,10 @@ Empty rows and repeated incidences are allowed. The coverage premise is exact;
 no subset relation between the outer and tested interpretations is required.
 Nested conjunction laws also justify appending entailed requirements while
 retaining the original guards. That extension needs entailment, rather than a
-second complete incidence table. These semantic laws do not prove that a
-compiler builds complete incidence rows, preserves source evidence, or respects
-its storage and work bounds.
+second complete incidence table. A head whose requirement is the true formula
+needs no guard at all (`unconditional_guards_omitted`). These semantic laws do
+not prove that a compiler builds complete incidence rows, preserves source
+evidence, or respects its storage and work bounds.
 -/
 
 namespace Zetesis.SupportTransposition
@@ -209,5 +210,25 @@ theorem supplemental_answer_sets (M : Atoms α) (context guards extra : Theory �
     have original : Models M guards :=
       ((stable_guard_theory_iff M context guards).mp accepted).2
     exact ⟨accepted, entailed original⟩
+
+/-- A head whose requirement is the canonical true formula, falsum implying
+falsum, needs no guard. Every interpretation satisfies such a requirement, so
+the guards of these heads may be left out of any theory without changing its
+answer sets. This is the head with an unconditional producer: a fact, or the
+head of a rule, choice or disjunction whose body is true. The law does not
+prove that a compiler finds exactly those heads.
+
+Proof. Each listed guard is an implication whose consequent is falsum implying
+falsum, which every interpretation satisfies; so every answer set of the
+context models the guards, and `stable_guard_theory_iff_of_stable_entails`
+applies. -/
+theorem unconditional_guards_omitted (M : Atoms α) (context : Theory α)
+    (heads : List (Formula α)) :
+    Stable M (GuardTheory (heads.map (fun head => Formula.imp head (.imp .bot .bot))) ++
+      context) ↔ Stable M context := by
+  refine stable_guard_theory_iff_of_stable_entails context _ ?_ M
+  intro N _ formula member
+  obtain ⟨head, _, rfl⟩ := List.mem_map.mp member
+  exact fun _ impossible => impossible
 
 end Zetesis.SupportTransposition

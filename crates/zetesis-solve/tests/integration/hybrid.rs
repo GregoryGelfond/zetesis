@@ -18,7 +18,7 @@ use zetesis_themelios::{
 
 const MONOTONE: &str = include_str!("../fixtures/hybrid/monotone.lp");
 const CORE: &str = "d(1..6). p(X)|q(X):-d(X).";
-const ROOT_CEILING: usize = 32;
+const ROOT_CEILING: usize = 16;
 
 fn configuration() -> SolveConfig {
     SolveConfig {
@@ -110,17 +110,17 @@ fn monotone_family() -> Family {
 fn hybrid_admits_the_retained_root_ceiling() {
     let core = eager(CORE, &limits()).unwrap();
     // Six facts and six disjunctions contribute twelve ordinary roots. After
-    // fact substitution each atom retains its own support guard: six facts
-    // and twelve alternatives. Eager constraints still add fifteen roots,
-    // exceeding 32; the hybrid retains only this complete core.
-    assert_eq!(core.theory().roots().len(), 12 + 6 + 12);
+    // fact substitution every atom has an unconditional producer, so none
+    // needs a support guard. Eager constraints still add fifteen roots,
+    // exceeding sixteen; the hybrid retains only this complete core.
+    assert_eq!(core.theory().roots().len(), 12);
     let failure = eager(MONOTONE, &limits()).unwrap_err();
     assert!(matches!(
         failure,
         FormulaFailure::Limit {
             resource: FormulaResource::Roots,
-            limit: 32,
-            observed: 33,
+            limit: 16,
+            observed: 17,
             ..
         }
     ));

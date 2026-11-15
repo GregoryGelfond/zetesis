@@ -163,7 +163,7 @@ fn owned_rows_survive_later_join_mutation() {
                 .next_owned_row(computation, &limits, budget, counters, location())
                 .unwrap()
                 .unwrap();
-            assert!(join.take_family().defined);
+            assert!(join.take_family().zero.is_none());
             let second = join
                 .next_row(computation, &limits, budget, counters, location())
                 .unwrap()

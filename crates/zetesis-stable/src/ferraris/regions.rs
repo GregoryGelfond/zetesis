@@ -676,6 +676,37 @@ pub(crate) fn open(
     open_attempt(theory, order_byte_limit, learning, budget).result
 }
 
+/// Word operations the optional root preparation may spend for each node and
+/// for each operand occurrence of its theory: one table of the patterns of
+/// the widest group its parity recognition admits, which has eight atoms.
+const PREPARATION_WORK_PER_READ: u64 = 256;
+
+/// The optional root preparation's work allowance for a theory of `nodes`
+/// nodes and `occurrences` operand occurrences, when the search's work limit
+/// leaves `remaining`.
+///
+/// Recognition reads the theory against the patterns of its groups, so what
+/// it needs grows with the theory, and an allowance that did not would
+/// decline the largest theories, where a completed preparation prunes the
+/// most. This one covers a pattern table for each node and occurrence.
+/// Checking and eliminating among the recognized rows grows with their number
+/// times the theory's width instead, and a theory that yields tens of
+/// thousands of equations over two or more atoms can still exceed the
+/// allowance; the preparation is then declined and the walk runs without it.
+/// An equation over one atom is a root decision and no row.
+///
+/// The allowance is never less than [`PreparationLimits::DEFAULT_WORK`].
+/// Above that it is at most half of `remaining`: the preparation is optional,
+/// so under a work limit it leaves the walk at least what it may spend, and
+/// its own allowance is exhausted before the limit is. The product saturates.
+fn preparation_work(nodes: usize, occurrences: usize, remaining: u64) -> u64 {
+    let size = nodes as u128 + occurrences as u128;
+    u64::try_from(size * u128::from(PREPARATION_WORK_PER_READ))
+        .unwrap_or(u64::MAX)
+        .min(remaining / 2)
+        .max(PreparationLimits::DEFAULT_WORK)
+}
+
 fn open_recording(
     theory: &Theory,
     order_byte_limit: u64,
@@ -688,13 +719,18 @@ fn open_recording(
     budget.charge(extraction.work)?;
     statistics.producers = extraction.producers.is_some();
     let cancellation = budget.cancellation;
+    let allowance = preparation_work(
+        theory.nodes().len(),
+        theory.parts().occurrences(),
+        budget.remaining_work(),
+    );
     let mut quota = BudgetQuota { budget };
     let mut meter = Meter::reserved(&mut quota);
     let arithmetic = RootPreparation::prepare_reserved(
         theory,
         extraction.producers.as_ref(),
         PreparationLimits {
-            work: PreparationLimits::DEFAULT_WORK,
+            work: allowance,
             bytes: usize::try_from(order_byte_limit).unwrap_or(usize::MAX),
         },
         cancellation,
@@ -1045,13 +1081,19 @@ impl Drop for RegionSearch {
 /// share one allowance. Every source decision decreases the number of open atoms;
 /// no source clause is added to the theory or its frozen reduct.
 ///
-/// Select the split once after the joint fixed point. Original atomic choice
-/// heads rank first. The active bound, latest permanent restriction, or original
-/// theory supplies the primary unknown-parent count, in that precedence. The
-/// original count breaks restriction-count ties, followed by the lower atom.
-/// Selection borrows existing knowledge, charging two count reads per open atom
-/// when a restriction is active and one otherwise. A failed attempt installs no
-/// partial preference.
+/// Select the split once after the joint fixed point. With no restriction, a
+/// prepared generator order ranks its heads by choice depth, then by the
+/// chains the region has shortened, then by component; without one, original
+/// atomic choice heads rank first, then shortened chains, then the original's
+/// unknown-parent count. Under a restriction choice heads rank first and the
+/// active bound, or else the latest permanent restriction, supplies the
+/// primary unknown-parent count; the original count breaks its ties, followed
+/// by the lower atom. Selection borrows existing knowledge, charging two count
+/// reads per open atom when a restriction is active and one otherwise. Where
+/// the region has shortened a chain and no restriction is active, a generator
+/// order reads its eligible atoms a second time, and either ranking charges
+/// one more unit per parent of each atom it scores. A failed attempt installs
+/// no partial preference.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     reading: CandidateReading<'_>,
     restrictions: &Conditions<R>,
@@ -1090,7 +1132,14 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     if result == Narrowing::Refuted {
         return Ok(result);
     }
-    let preferred = prefer_split(original, restrictions, region, knowledge, budget, counts)?;
+    let preferred = prefer_split(
+        (original, narrower),
+        restrictions,
+        region,
+        knowledge,
+        budget,
+        counts,
+    )?;
     if let Some(atom) = preferred {
         entry.prefer(atom);
     }
@@ -1099,9 +1148,10 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
 
 /// Rank open atoms only after all subjects agree on the current region. An
 /// active restriction keeps the primary degree; the original breaks its ties.
-/// Otherwise a prepared generator order takes precedence over the degree read.
+/// Otherwise a prepared generator order takes precedence over the degree read,
+/// and reads the original's closed knowledge for what the region shortened.
 fn prefer_split<Q: Quota, R>(
-    original: OriginalSubject<'_>,
+    (original, narrower): (OriginalSubject<'_>, &Narrower),
     conditions: &Conditions<R>,
     region: &Region,
     knowledge: &CandidateKnowledge,
@@ -1114,10 +1164,17 @@ fn prefer_split<Q: Quota, R>(
     let mut meter = Meter::reserved(&mut quota);
     let attempt = if conditions.permanent.is_empty() && conditions.bound.is_none() {
         match original.generator_order() {
-            Some(order) => {
-                order.preferred_atom_reserved(original.theory(), region, cancellation, &mut meter)
-            }
-            None => primary.preferred_atom_reserved(
+            Some(order) => order.preferred_atom_reserved(
+                narrower,
+                original.theory(),
+                region,
+                original_known,
+                cancellation,
+                &mut meter,
+            ),
+            // No condition is active, so the primary knowledge is the original's.
+            None => original_known.preferred_atom_reserved(
+                narrower,
                 region,
                 original.choices(),
                 cancellation,

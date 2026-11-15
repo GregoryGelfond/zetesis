@@ -52,12 +52,33 @@ that next round. A resource failure produces no completed support owner. An
 empty affected set still admits the final support round, while avoiding a new
 catalog/query snapshot. Full final formula emission is separate and unchanged.
 
-Richer source visits every producer each round, through the
+Richer source registers each producer, through the
 [producer registration](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers/registration.rs).
-A rich producer registers its read set: every atom occurrence in its body and
-head element conditions, at every depth. After the first round it is traversed
-only when one of those predicates gained rows, which is the general law's
-selection.
+An ordinary producer (a normal or disjunctive head, or a choice without
+element conditions, over positive, negated and scalar body literals) registers
+its positive occurrences as the plan does, with the same reverse postings and
+packed set. The first round visits every producer; a later round visits an
+ordinary producer only after a predicate of one of those occurrences gained
+rows. For an ordinary producer none of whose negations is decided while
+grounding, that is `selective_step_exact` again: the registration of positive
+inputs is complete, the first round is its bootstrap, a default negation is no
+input of its proposals, and the heads proposed earlier are published.
+
+An ordinary producer held back for the atoms it negates is outside that law
+until the component schedule has traversed it. A decided negation drops rows,
+so its proposals read the negated relation; its first-round visit takes no
+variant, and its first traversal is the schedule's, once that relation is
+complete, by the decomposition stated below for a producer held back for an
+assignment's elements. From then on the negated relation cannot change, the
+producer's proposals depend on its positive occurrences alone, and it is
+visited like the others. A producer with an occurrence whose predicate the
+dependency graph does not name is outside the postings and is visited in every
+round.
+
+A rich producer is visited in every round and registers its read set: every
+atom occurrence in its body and head element conditions, at every depth. After
+the first round it is traversed only when one of those predicates gained rows,
+which is the general law's selection.
 
 A rich producer whose reads all lie in dependency components before its heads'
 is instead scheduled by component: it waits, unselected though affected, until
@@ -69,6 +90,26 @@ not read the upper one, `ordered_components` closes the lower component once,
 then closes the upper with those inputs fixed. `completed_ordered_rounds`
 connects this result to finite scans whose results are known to be closed; it
 does not claim that arbitrary fuel completes them.
+
+A rich producer that is not scheduled by component is held back when one of its
+assignment aggregates has an element over earlier decidable components alone:
+it waits, unselected though affected, until the components those elements read
+reach their fixed point, is traversed in full in that round, and is selected by
+changed reads from then on. The wait restores monotonicity. An assignment
+proposes the measures of the selections that contain its required tuples, and
+a tuple is required when its element's condition holds certain atoms. Over a
+relation that still grows that set of required tuples grows too, and the
+proposals do not grow with it: a value below the final count of required
+tuples is proposed early and never again, so the inflationary step keeps a
+head no later traversal and no final family derives, and its tuple can feed
+the assignment without end. Equal registered relations still give equal
+proposals, so the selection law's premise holds with or without the wait.
+What fails without it is that the proposals grow with the carrier, which the
+component decomposition and the agreement with final grounding both assume.
+After the wait the required tuples are the same in every traversal, and with
+those fixed the proposals only grow as the support the rule reads grows. That
+each head component waits for the first traversal of its held-back producers
+is the same Rust obligation as for a producer traversed once.
 
 The actual schedule may begin upper work earlier. Its history obligation is
 separate: `completed_producers_closed` permits each producer its own last

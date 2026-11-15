@@ -8,11 +8,12 @@ use crate::formula_ground::ground;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::testing;
 use crate::grounding_observer::Profile;
-use crate::test_support::Observer;
+use crate::test_support::{Observer, answer_sets, atom_sets, zero_divisor_statements};
 use crate::{ExpansionFailure, FormulaResource, GroundingPhase, GroundingWork};
 use themelios_program::program::DefaultNegation;
 use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::ValueLimits;
+use zetesis_test_support::programs::unary;
 
 mod accounting;
 
@@ -197,10 +198,6 @@ fn zero_and_overflow_keep_their_typed_diagnostics() {
     assert_eq!(after.binding_snapshots, before.binding_snapshots);
     for (source, expected) in [
         (
-            include_str!("../../../../tests/fixtures/arithmetic-family-totality/all-zero.lp"),
-            crate::observation::EvaluationError::Undefined,
-        ),
-        (
             include_str!("../../../../tests/fixtures/arithmetic-family-totality/overflow.lp"),
             crate::observation::EvaluationError::Overflow,
         ),
@@ -222,6 +219,28 @@ fn zero_and_overflow_keep_their_typed_diagnostics() {
             );
         }
     }
+}
+
+#[test]
+fn an_all_zero_family_is_omitted_with_its_warning() {
+    let source = include_str!("../../../../tests/fixtures/arithmetic-family-totality/all-zero.lp");
+    let (ordinary, _) = scan(source, true);
+    let (actual, _) = scan(source, false);
+    let ordinary = ordinary.unwrap();
+    assert_eq!(
+        zero_divisor_statements(source, &ordinary),
+        [":- num(X), 1/X=0."]
+    );
+    assert_eq!(actual.unwrap(), ordinary);
+    let (ordinary, _) = controlled(true, None, || ground(testing::prepare(source), None, None));
+    let (actual, _) = controlled(false, None, || ground(testing::prepare(source), None, None));
+    let actual = actual.unwrap();
+    assert_same_program(&ordinary.unwrap(), &actual);
+    // The constraint has no instance: one kept would leave no answer set.
+    assert_eq!(
+        answer_sets(&actual.theory, &actual.atoms),
+        atom_sets([&[unary("num", 0)]])
+    );
 }
 
 #[test]
@@ -363,13 +382,14 @@ fn successful_proof_does_not_select_evidence_rows() {
             counters,
         )
         .unwrap();
+        let before = counters.accounting.substitutions;
         assert!(
             join.total_family_fragment(rule, computation, &FormulaLimits::default(), counters)
                 .unwrap()
         );
-        let evidence = join.take_family();
-        assert!(!evidence.defined);
-        assert!(evidence.zero.is_none());
+        // The proof visits no row, so it finds no zero divisor either.
+        assert_eq!(counters.accounting.substitutions, before);
+        assert!(join.take_family().zero.is_none());
         let mut rows = 0;
         while join
             .next_owned_row(

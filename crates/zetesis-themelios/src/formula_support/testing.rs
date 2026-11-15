@@ -253,6 +253,31 @@ pub(crate) fn prepare(text: &str) -> crate::formula::Preparation {
     }
 }
 
+/// The certainty support completion installs for `text`, or none when no
+/// component view resolves its predicates.
+pub(crate) fn certainty(text: &str) -> Option<super::certain::Certainty> {
+    let preparation = prepare(text);
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let producers = super::producers::Producers::prepare(
+        &preparation.program,
+        &preparation.catalog,
+        &limits,
+        &mut counters,
+        preparation.location,
+    )
+    .unwrap();
+    producers
+        .certainty(
+            &preparation.program,
+            &preparation.catalog,
+            &limits,
+            &mut counters,
+            preparation.location,
+        )
+        .unwrap()
+}
+
 /// Complete source support and lend its canonical query and computation owners.
 pub(crate) fn with_completed_source(
     text: &str,

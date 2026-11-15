@@ -298,9 +298,10 @@ fn a_later_zero_divisor_declines_snapshot_selection() {
         assert!(join.multiples.is_none());
         assert!(!join.certified_total);
         let selected = collect(&mut join, computation, counters, rule.location);
-        let evidence = join.take_family();
-        assert!(!evidence.defined);
-        let zero = evidence
+        // The one new row divides by zero: it yields nothing and is recorded.
+        assert!(selected.values.is_empty());
+        let zero = join
+            .take_family()
             .zero
             .expect("the new snapshot retains zero-divisor evidence");
         assert_eq!(zero.site(), Some(rule.location));

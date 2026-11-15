@@ -66,6 +66,151 @@ fn scoped<T>(
     (result, STATE.with(|state| state.borrow().accepted))
 }
 
+thread_local! {
+    static VACUOUS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+/// Whether this thread's reference construction publishes the guard of an
+/// atom with an unconditional producer, as every atom's once was.
+pub(super) fn vacuous_guards_kept() -> bool {
+    VACUOUS.with(std::cell::Cell::get)
+}
+/// Run `action` publishing every atom's guard; restored on unwind.
+fn with_vacuous_guards<T>(action: impl FnOnce() -> T) -> T {
+    struct Reset(bool);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            VACUOUS.with(|kept| kept.set(self.0));
+        }
+    }
+    let _reset = Reset(VACUOUS.with(|kept| kept.replace(true)));
+    action()
+}
+
+/// The atoms of `theory` with a guard of their own: a root that is the
+/// double negation of an implication whose premise is the atom.
+fn guarded(theory: &Theory) -> Vec<usize> {
+    let nodes = theory.view();
+    let negated = |node: usize| match nodes.node(node).unwrap() {
+        Node::Implies(inner, consequent) if consequent == FALSUM => Some(inner),
+        _ => None,
+    };
+    let mut atoms: Vec<usize> = theory
+        .roots()
+        .iter()
+        .filter_map(|&root| negated(root).and_then(negated))
+        .filter_map(|necessary| match nodes.node(necessary).unwrap() {
+            Node::Implies(premise, _) => match nodes.node(premise).unwrap() {
+                Node::Atom(atom) => Some(atom),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    atoms.sort_unstable();
+    atoms
+}
+
+/// The catalog index of the propositional atom `name`.
+fn atom(compiled: &crate::formula::Compiled, name: &str) -> usize {
+    compiled
+        .atoms
+        .atoms()
+        .iter()
+        .position(|atom| atom.predicate().name() == name)
+        .unwrap_or_else(|| panic!("the program names {name}"))
+}
+
+#[test]
+fn an_atom_with_an_unconditional_producer_has_no_guard() {
+    // `p` is a fact, `c` follows from it alone, `a` is chosen without a
+    // condition and `x`, `y` head an unconditional disjunction: each has a
+    // producer that needs nothing. `q` and `r` are derived under `a`.
+    let source = "p. c :- p. {a}. x | y. q :- a. r :- a, not q.";
+    let grounded = ground(testing::prepare(source), None, None).unwrap();
+    let expected = {
+        let mut atoms = vec![atom(&grounded, "q"), atom(&grounded, "r")];
+        atoms.sort_unstable();
+        atoms
+    };
+    assert_eq!(guarded(&grounded.theory), expected);
+    let reference = with_vacuous_guards(|| ground(testing::prepare(source), None, None).unwrap());
+    assert_eq!(
+        guarded(&reference.theory).len(),
+        reference.theory.atom_count()
+    );
+}
+
+#[test]
+fn leaving_out_vacuous_guards_changes_no_formula_truth() {
+    // The reference publishes a guard for every atom. Original truth, answer
+    // sets and every frozen reduct's truth agree; only the theory is smaller.
+    for source in [
+        "p.",
+        "p. c :- p.",
+        "{a}. p. q :- a.",
+        "{a;b}. p :- a. p :- b. p.",
+        "{a;b}. c. p :- a. p :- b. p :- c.",
+        "a | b.",
+        "{a}. b | c :- a.",
+        "{a;b}. x :- a, b. y :- not a. z.",
+        "{a}. {b} :- a. c :- not b.",
+        "p :- not q. q :- not p. r. s :- r, p.",
+    ] {
+        let grounded = ground(testing::prepare(source), None, None).unwrap();
+        let reference =
+            with_vacuous_guards(|| ground(testing::prepare(source), None, None).unwrap());
+        assert_eq!(grounded.atoms.atoms(), reference.atoms.atoms(), "{source}");
+        same_truth(&grounded.theory, &reference.theory);
+        assert!(
+            grounded.theory.roots().len() < reference.theory.roots().len(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn an_unconditional_producer_among_others_publishes_no_disjunction() {
+    // `p` has the producers `a`, `b` and, last, truth: `c` is a fact, so the
+    // third rule's body is. Its guard would be `p -> (a | b | true)`; neither
+    // it nor the disjunction of the first two producers is published.
+    let source = "{a;b}. c. p :- a. p :- b. p :- c.";
+    let grounded = ground(testing::prepare(source), None, None).unwrap();
+    let reference = with_vacuous_guards(|| ground(testing::prepare(source), None, None).unwrap());
+    let disjunctions = |theory: &Theory| {
+        (0..theory.nodes().len())
+            .filter(|&index| matches!(theory.view().node(index).unwrap(), Node::Or(_)))
+            .count()
+    };
+    // Each choice is a disjunction of its atom and the atom's negation.
+    assert_eq!(disjunctions(&grounded.theory), 2);
+    assert_eq!(disjunctions(&reference.theory), 3);
+    assert!(guarded(&grounded.theory).is_empty());
+}
+
+#[test]
+fn the_scan_for_an_unconditional_producer_is_charged_per_producer() {
+    // Unshared guards for the pair fixture: `a` and `b` have no producer and
+    // `h`, `i` and `j` one each, none unconditional. The scan reads those
+    // three producers; the reference construction publishes without it, and
+    // both publish the same theory.
+    let defaults = crate::FormulaLimits::default();
+    let (scanned, _) = scoped(false, None, || raw(&defaults, false, None));
+    let (reference, _) =
+        with_vacuous_guards(|| scoped(false, None, || raw(&defaults, false, None)));
+    assert_eq!(scanned.work, reference.work + 3);
+    let (scanned, reference) = (scanned.result.unwrap().0, reference.result.unwrap().0);
+    assert_eq!(scanned.nodes(), reference.nodes());
+    assert_eq!(scanned.roots(), reference.roots());
+}
+
+#[test]
+fn a_conditional_producer_alone_keeps_its_guard() {
+    // Without the fact, `p` holds only under `a` or `b`, and its guard says so.
+    let source = "{a;b}. p :- a. p :- b.";
+    let grounded = ground(testing::prepare(source), None, None).unwrap();
+    assert_eq!(guarded(&grounded.theory), [atom(&grounded, "p")]);
+}
+
 #[test]
 fn reference_control_restores_after_unwind() {
     let result = std::panic::catch_unwind(|| {
@@ -299,82 +444,120 @@ fn fixture(
 ) -> Attempt {
     let observer = Peak::default();
     let profile = Profile::new(Some(&observer));
-    let defaults = crate::FormulaLimits::default();
-    let (result, work) =
-        testing::Fixture::default().with(location(0), |_, computation, counters| {
-            *counters = Counters::resume(std::mem::take(&mut counters.accounting), profile.work())
-                .with_cancellation(cancellation);
-            let mut budget = Budget::new(ExpansionLimits::default(), 0);
-            let mut builder = Builder::empty(
-                computation,
-                &defaults,
-                &mut budget,
-                counters,
-                Purpose::Theory,
-                None,
-                location(0),
+    let (result, work) = built(limits, shape, (&profile, cancellation), |builder, atoms| {
+        let workspace = builder.counters.workspace_bytes();
+        let result = profile.phase(GroundingPhase::SupportGuards, None, || {
+            builder.support_guards()
+        });
+        assert_eq!(
+            builder.counters.workspace_bytes(),
+            workspace,
+            "plan scratch must release its sole leases on every outcome"
+        );
+        let work = builder.counters.accounting.work;
+        let result = result.map(|()| {
+            let theory = Theory::new(
+                atoms.len(),
+                std::mem::take(&mut builder.nodes).into_parts(),
+                std::mem::take(&mut builder.roots),
+                limits.theory,
             )
             .unwrap();
-            builder.initialize(location(0)).unwrap();
-            let mut atoms = Vec::new();
-            for (index, name) in shape.names().iter().enumerate() {
-                let atom = zetesis_core::Atom::new(
-                    zetesis_core::Predicate::new(*name, 0).unwrap(),
-                    vec![],
-                )
-                .unwrap();
-                atoms.push(
-                    builder
-                        .atom_ref((&atom).into(), location(u32::try_from(index).unwrap()))
-                        .unwrap(),
-                );
-            }
-            let row = shape.row(&atoms);
-            let body = if row.is_empty() {
-                builder.group(&row, true, location(0)).unwrap()
-            } else {
-                builder.node(Node::And(&row), location(0)).unwrap()
-            };
-            for (index, &head) in atoms.iter().enumerate().skip(shape.head_start()) {
-                let rule = RuleIr {
-                    head: HeadIr::Normal(None),
-                    body: vec![],
-                    body_variables: 0,
-                    bindings: None,
-                    variables: 0,
-                    location: location(10),
-                    origins: vec![location(10), location(20 + u32::try_from(index).unwrap())],
-                };
-                builder.producer(head, body, &rule).unwrap();
-            }
-            builder.limits = limits;
-            let workspace = builder.counters.workspace_bytes();
-            let result = profile.phase(GroundingPhase::SupportGuards, None, || {
-                builder.support_guards()
-            });
-            assert_eq!(
-                builder.counters.workspace_bytes(),
-                workspace,
-                "plan scratch must release its sole leases on every outcome"
-            );
-            let work = builder.counters.accounting.work;
-            let result = result.map(|()| {
-                let theory = Theory::new(
-                    atoms.len(),
-                    std::mem::take(&mut builder.nodes).into_parts(),
-                    std::mem::take(&mut builder.roots),
-                    limits.theory,
-                )
-                .unwrap();
-                (theory, std::mem::take(&mut builder.origins))
-            });
-            (result, work)
+            (theory, std::mem::take(&mut builder.origins))
         });
+        (result, work)
+    });
     Attempt {
         result,
         work,
         peak: observer.0.get(),
     }
+}
+
+/// Run `action` on a builder holding `shape`'s atoms, each head with one
+/// producer over the shape's body, under `limits`, with the atoms' nodes.
+fn built<T>(
+    limits: &crate::FormulaLimits,
+    shape: Shape,
+    (profile, cancellation): (&Profile<'_>, Option<&Cancellation>),
+    action: impl FnOnce(&mut Builder<'_, '_, '_>, &[usize]) -> T,
+) -> T {
+    let defaults = crate::FormulaLimits::default();
+    testing::Fixture::default().with(location(0), |_, computation, counters| {
+        *counters = Counters::resume(std::mem::take(&mut counters.accounting), profile.work())
+            .with_cancellation(cancellation);
+        let mut budget = Budget::new(ExpansionLimits::default(), 0);
+        let mut builder = Builder::empty(
+            computation,
+            &defaults,
+            &mut budget,
+            counters,
+            Purpose::Theory,
+            None,
+            location(0),
+        )
+        .unwrap();
+        builder.initialize(location(0)).unwrap();
+        let mut atoms = Vec::new();
+        for (index, name) in shape.names().iter().enumerate() {
+            let atom =
+                zetesis_core::Atom::new(zetesis_core::Predicate::new(*name, 0).unwrap(), vec![])
+                    .unwrap();
+            atoms.push(
+                builder
+                    .atom_ref((&atom).into(), location(u32::try_from(index).unwrap()))
+                    .unwrap(),
+            );
+        }
+        let row = shape.row(&atoms);
+        let body = if row.is_empty() {
+            builder.group(&row, true, location(0)).unwrap()
+        } else {
+            builder.node(Node::And(&row), location(0)).unwrap()
+        };
+        for (index, &head) in atoms.iter().enumerate().skip(shape.head_start()) {
+            let rule = RuleIr {
+                head: HeadIr::Normal(None),
+                body: vec![],
+                body_variables: 0,
+                bindings: None,
+                variables: 0,
+                location: location(10),
+                origins: vec![location(10), location(20 + u32::try_from(index).unwrap())],
+            };
+            builder.producer(head, body, &rule).unwrap();
+        }
+        builder.limits = limits;
+        action(&mut builder, &atoms)
+    })
+}
+
+/// The work `support_guard` charges for the atom at `index` of `shape`, and
+/// whether it published a guard for it.
+fn guard_charge(shape: Shape, index: usize) -> (u64, bool) {
+    let defaults = crate::FormulaLimits::default();
+    let profile = Profile::new(None);
+    built(&defaults, shape, (&profile, None), |builder, _| {
+        let metadata = std::mem::take(&mut builder.metadata);
+        let (work, roots) = (builder.counters.accounting.work, builder.roots.len());
+        builder.support_guard(&metadata, index).unwrap();
+        (
+            builder.counters.accounting.work - work,
+            builder.roots.len() > roots,
+        )
+    })
+}
+
+#[test]
+fn the_producer_that_ends_the_scan_is_charged() {
+    // Each head of the empty shape has one producer, whose body is true. The
+    // scan reads it, finds it unconditional and publishes nothing: that read
+    // is the one unit charged.
+    let head = Shape::Empty.head_start();
+    assert_eq!(
+        scoped(false, None, || guard_charge(Shape::Empty, head)).0,
+        (1, false)
+    );
 }
 
 #[test]

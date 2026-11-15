@@ -147,17 +147,22 @@ root refutes.
 
 Without active candidate restrictions, complete original producer coverage can
 prepare one shared `GeneratorOrder`. It prioritizes atomic choice heads and
-ordinary disjunctive heads that have no ordinary singleton producer, then the
+ordinary disjunctive heads that have no ordinary singleton producer. Among
+those still open it takes a head of least choice depth, the longest path of
+dependency components holding such a head below it; then the head for which the
+chains the region has shortened weigh the most; then the
 earliest ground dependency component and lowest atom identity within that
 component. Both signs of body formula operands contribute to dependency order;
 this does not shift disjunctive rules or certify minimality. Once no open
-generator remains, the same component order selects among all open atoms.
+generator remains, the same order selects among all open atoms.
 An active bound or latest permanent restriction instead ranks atomic choices
 first, then uses its unknown-parent count, with the original theory breaking
 ties. If generator
 preparation is inapplicable or exceeds its independently applied byte allowance,
-open atomic choices rank first and unknown-parent counts determine the remaining
-preference. Every route preserves both split children and the original reduct.
+open atomic choices rank first, then the atoms in the chains the region has
+shortened the most, and unknown-parent counts determine the remaining
+preference; the countermodel walk of a frozen reduct ranks the same way. Every
+route preserves both split children and the original reduct.
 The order is shared across scalar, parallel and joined device candidate workers;
 its preparation receipt is included in candidate reading work.
 

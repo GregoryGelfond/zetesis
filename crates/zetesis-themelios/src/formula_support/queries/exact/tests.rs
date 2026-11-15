@@ -1,6 +1,7 @@
 //! Complete-key selection agrees with source rows and the original join route.
 
 mod cheap;
+mod identified;
 
 use std::cell::Cell;
 
@@ -11,26 +12,45 @@ use crate::{FormulaLimits, FormulaResource};
 use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Atom, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode};
 
+/// The realization that located one exact selection.
+#[derive(Clone, Copy)]
+pub(super) enum Route {
+    Identifiers,
+    Ordered,
+}
+
 thread_local! {
-    static CONTROL: Cell<(bool, usize)> = const { Cell::new((true, 0)) };
+    /// Whether exact selection runs, and the selections each route has made.
+    static CONTROL: Cell<(bool, [usize; 2])> = const { Cell::new((true, [0; 2])) };
 }
 
 pub(super) fn enabled() -> bool {
     CONTROL.get().0
 }
 
-pub(super) fn record() {
-    CONTROL.set((enabled(), CONTROL.get().1 + 1));
+pub(super) fn record(route: Route) {
+    let (enabled, mut selections) = CONTROL.get();
+    selections[route as usize] += 1;
+    CONTROL.set((enabled, selections));
 }
 
+/// Run `action` with exact selection enabled or not, counting the exact
+/// selections it makes by either route.
 fn scoped<T>(enabled: bool, action: impl FnOnce() -> T) -> (T, usize) {
-    struct Restore((bool, usize));
+    let (result, [identifiers, ordered]) = routed(enabled, action);
+    (result, identifiers + ordered)
+}
+
+/// As [`scoped`], counting identifier selections and ordered point queries
+/// separately, in that order.
+fn routed<T>(enabled: bool, action: impl FnOnce() -> T) -> (T, [usize; 2]) {
+    struct Restore((bool, [usize; 2]));
     impl Drop for Restore {
         fn drop(&mut self) {
             CONTROL.set(self.0);
         }
     }
-    let _restore = Restore(CONTROL.replace((enabled, 0)));
+    let _restore = Restore(CONTROL.replace((enabled, [0; 2])));
     let result = action();
     (result, CONTROL.get().1)
 }

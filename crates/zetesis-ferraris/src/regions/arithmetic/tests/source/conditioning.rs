@@ -17,6 +17,38 @@ fn supported_constraint() -> Theory {
 }
 
 #[test]
+fn a_unit_is_checked_against_the_conditioned_support() {
+    // Atoms 0 and 1 are checked facts, so the constraint's support is atom 2
+    // alone and it leaves `a2 = 1`. A unit over a fact's atom names no
+    // coordinate of that support, whatever its value.
+    let owner = supported_constraint();
+    let facts = checked_facts(&owner);
+    let cancellation = Cancellation::default();
+    let mut work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut work, &cancellation);
+    let conditioned =
+        source::conditioned_clause(&owner, &facts, 2, &mut Storage::default(), &mut meter)
+            .unwrap()
+            .unwrap();
+    let mut check = |atom: usize, value: bool| {
+        source::check_clause_unit(
+            &owner,
+            &facts,
+            &[conditioned],
+            conditioned.support,
+            (atom, value),
+            &mut Storage::default(),
+            &mut meter,
+        )
+        .unwrap()
+    };
+    assert!(check(2, true));
+    assert!(!check(2, false));
+    assert!(!check(0, true));
+    assert!(!check(1, true));
+}
+
+#[test]
 fn checked_positive_facts_leave_only_unknown_coordinates() {
     let owner = supported_constraint();
     let facts = checked_facts(&owner);

@@ -1,6 +1,7 @@
 //! Successful admission retains bounded warnings and original source evidence.
 
 use crate::support::admission;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::{BundleFixture, resource_limits};
 
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
@@ -19,25 +20,15 @@ fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Formul
 #[test]
 fn warnings_retain_their_original_locations() {
     let admitted = admit(SOURCE, &FormulaLimits::default()).unwrap();
+    assert!(zero_divisor_statement_in(SOURCE_ID, &admitted).contains("1/X"));
+    // The warning's own accessors agree with the site it carries.
     let [warning @ FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
         panic!("one typed zero-divisor warning: {:?}", admitted.warnings());
     };
-    assert_eq!(
-        location.location().expect("parsed source").source,
-        SOURCE_ID
-    );
     assert_eq!(warning.site(), *location);
     assert_eq!(
         warning.location().expect("parsed source"),
         location.location().expect("parsed source")
-    );
-    assert!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap()
-            .contains("1/X")
     );
     let diagnostic = warning.diagnostic().expect("parsed source diagnostic");
     assert_eq!(

@@ -10,10 +10,10 @@ mod logical;
 use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::sources;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
-use themelios_program::term::EvalError;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -428,25 +428,16 @@ fn local_values_require_independent_bindings() {
 }
 
 #[test]
-fn undefined_generated_values_refuse_the_whole_source() {
-    let error = admit_formula(
-        "0<=#min{Y:a:d(X),Y=1/X}.d(0).".into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                error: EvalError::Undefined,
-                ..
-            })
-        ),
-        "{error}"
+fn an_undefined_generated_value_omits_its_element() {
+    let statement = "0<=#min{Y:a:d(X),Y=1/X}.";
+    let admitted = input(&format!("{statement}d(0)."));
+    // The element's one value divides by zero, so the element is omitted
+    // and a keeps no permission. The statement keeps the warning.
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), statement);
+    assert_eq!(
+        native(&admitted),
+        Models::from([BTreeSet::from(["d(0)".into()])])
     );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
 #[test]

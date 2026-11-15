@@ -1,11 +1,12 @@
 //! The source subject is checked against the independent complete formula door.
 
-use crate::test_support::prepared;
+use crate::test_support::{prepared, zero_divisor_statements};
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, SourceAdmission, prepare_formula};
 use std::{collections::BTreeSet, sync::Arc};
 use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, ValueLimits};
 use zetesis_ferraris::{Interpretation, Limits, check};
+use zetesis_test_support::programs::unary;
 
 fn admitted(source: &str) -> super::AcyclicSource {
     let SourceAdmission::Admitted(owner) = prepared(source).try_source().unwrap() else {
@@ -91,6 +92,23 @@ fn complete_source_scan_matches_original_ferraris_membership() {
         assert_eq!(actual, independent(source), "{source}");
         assert!(owner.statistics().work > 0);
     }
+}
+
+#[test]
+fn a_row_a_decided_negation_blocks_names_no_head() {
+    // `q` is certain and complete when the rule of `r` is read, so the row
+    // `X = 1` is passed over as support completion passed over it: `r(1)`
+    // is no atom of the published catalog, whose four atoms all hold. The
+    // row `X = 2` derives `r(2)`.
+    let owner = admitted("p(1). p(2). q(1). r(X) :- p(X), not q(X).");
+    let published: BTreeSet<Atom> = owner
+        .atom_catalog()
+        .atoms()
+        .iter()
+        .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+        .collect();
+    assert_eq!(published.len(), 4);
+    assert_eq!(Some(published), interpretation(&owner));
 }
 
 #[test]
@@ -193,7 +211,6 @@ fn formula_node_limits_are_not_spent_by_direct_source_evaluation() {
 fn original_family_errors_survive_false_bodies_and_constraints() {
     for source in [
         "p(2147483647). q(X) :- p(X), X+1 > 0, not absent.",
-        "p(0). q(X) :- p(X), 1/X > 0.",
         "p(2147483647). :- . q(X) :- p(X), X+1 > 0.",
     ] {
         let expected = prepared(source).ground().unwrap_err();
@@ -209,6 +226,26 @@ fn original_family_errors_survive_false_bodies_and_constraints() {
             "original statement remains exact"
         );
     }
+}
+
+#[test]
+fn an_entirely_undefined_family_retains_its_zero_warning() {
+    // The rule's one instance divides by zero and is omitted: `q` has no
+    // atom, by the source scan and by the formula door alike.
+    let source = "p(0). q(X) :- p(X), 1/X > 0.";
+    let formula = prepared(source).ground().unwrap();
+    let owner = admitted(source);
+    assert_eq!(
+        zero_divisor_statements(source, owner.warnings()),
+        ["q(X) :- p(X), 1/X > 0."]
+    );
+    assert_eq!(owner.warnings(), formula.warnings());
+    let expected = BTreeSet::from([BTreeSet::from([unary("p", 0)])]);
+    assert_eq!(
+        interpretation(&owner).into_iter().collect::<BTreeSet<_>>(),
+        expected
+    );
+    assert_eq!(independent(source), expected);
 }
 
 #[test]

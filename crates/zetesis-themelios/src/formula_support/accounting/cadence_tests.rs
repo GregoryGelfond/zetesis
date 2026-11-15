@@ -126,6 +126,71 @@ fn charged_ranges_observe_the_boundary_and_preserve_counts() {
     }
 }
 
+/// The inline admission refines the complete decision. Around every place the
+/// two could part, a cadence boundary, the ceiling, the machine width and a
+/// pending stop, both return the same result after the same observations.
+#[test]
+fn inline_admission_agrees_with_the_complete_decision() {
+    use super::super::{check_observed_work, check_work};
+    let recorded = [
+        0,
+        1,
+        7,
+        254,
+        255,
+        256,
+        257,
+        511,
+        512,
+        u64::MAX - 256,
+        u64::MAX - 1,
+        u64::MAX,
+    ];
+    let amounts = [
+        0,
+        1,
+        2,
+        255,
+        256,
+        257,
+        u128::from(u64::MAX),
+        u128::from(u64::MAX) + 1,
+        u128::MAX,
+    ];
+    let ceilings = [0, 1, 7, 255, 256, 257, 600, u64::MAX];
+    let compare = |control: Option<&super::AccountControl>| {
+        for work in recorded {
+            for amount in amounts {
+                for max_work in ceilings {
+                    let limits = FormulaLimits {
+                        max_work,
+                        ..Default::default()
+                    };
+                    OBSERVATIONS.set(0);
+                    let inline = check_work(work, control, amount, &limits, location());
+                    let inline_observations = OBSERVATIONS.replace(0);
+                    let complete = check_observed_work(work, control, amount, &limits, location());
+                    assert_eq!(
+                        (format!("{inline:?}"), inline_observations),
+                        (format!("{complete:?}"), OBSERVATIONS.get()),
+                        "recorded {work}, amount {amount}, ceiling {max_work}"
+                    );
+                }
+            }
+        }
+    };
+    compare(None);
+    for pending_stop in [false, true] {
+        let cancellation = Cancellation::default();
+        if pending_stop {
+            cancellation.cancel();
+        }
+        let control = super::AccountControl::new(Some(&cancellation));
+        compare(Some(&control));
+        observe_every_charge(|| compare(Some(&control)));
+    }
+}
+
 #[test]
 fn a_pending_stop_admits_at_most_255_more_units() {
     for initial in 0..256 {

@@ -13,6 +13,8 @@ pub(crate) mod families;
 mod family_replay;
 mod canonical_suffix;
 mod extremum_guards;
+mod decided_negation;
+use decided_negation::{Decide, Negated};
 mod fixed_facts;
 mod matched_nodes;
 mod metadata;
@@ -36,6 +38,7 @@ mod constants;
 mod fact_declines;
 
 use crate::formula_support::Ir;
+use crate::formula_support::certain::Certainty;
 use crate::formula_support::family::Warnings;
 use crate::formula_support::{Context, GroundingWork};
 
@@ -574,6 +577,7 @@ fn emit<'source>(
         builder.initialize(location)?;
         builder.families.enable(queries, location)?;
         builder.collect_fixed_facts(prepared.items())?;
+        builder.certainty = support.certainty();
         Ok::<_, FormulaFailure>(builder)
     })?;
     let mut streaming =
@@ -752,6 +756,9 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     families: Rc<families::Workspace<'terms, 'source>>,
     aggregate_atoms: formula_support::SourceSelection,
     fixed_facts: Option<formula_support::SourceSelection>,
+    /// The certain predicates of the completed support, whose supported atoms
+    /// are fixed as the explicit facts are. Only the theory's builder reads it.
+    certainty: Option<&'source Certainty>,
     metadata: metadata::Metadata,
     nodes: FormulaNodes,
     node_indices: nodes::Index,
@@ -876,7 +883,7 @@ impl<'source> Builder<'_, '_, 'source> {
             let atom = self.atom_identity(&atom, location)?;
             let formula = self.node(Node::Implies(VERUM, atom), location)?;
             self.root_at(formula, Cow::Borrowed(row.evidence()), location)?;
-            self.producer_at(atom, VERUM, row.evidence(), location)?;
+            self.ordinary_producer_at(atom, VERUM, row.evidence(), location)?;
         }
         Ok(())
     }
@@ -991,7 +998,8 @@ impl<'source> Builder<'_, '_, 'source> {
     /// program order, and leave the rest streamed. This runs once the producer
     /// core and its completion are built, so a retained template takes only
     /// room the rest of the program left, and it adds no atom: capture retained
-    /// every atom its instances read, and completion has guarded them. A
+    /// every atom its instances read, and completion has guarded those that
+    /// need a guard. A
     /// template fits when an upper bound on what its instances add stays within
     /// what remains of `max_retained_constraint_nodes` and of the theory's own
     /// ceilings, so retention never ends in a refusal. A template that does not
@@ -1288,6 +1296,7 @@ impl<'source> Builder<'_, '_, 'source> {
             families,
             aggregate_atoms,
             fixed_facts: None,
+            certainty: None,
             metadata: metadata::Metadata::default(),
             nodes: FormulaNodes::default(),
             node_indices: nodes::Index::default(),
@@ -1342,7 +1351,8 @@ impl<'source> Builder<'_, '_, 'source> {
         }
     }
     /// Complete the semantic additions over the finished atom catalog: the
-    /// coherence of opposite atoms and every atom's support guards.
+    /// coherence of opposite atoms and the support guard of every atom that
+    /// needs one.
     fn complete(&mut self, profile: &Profile<'_>) -> Result<(), FormulaFailure> {
         profile.phase(GroundingPhase::Coherence, None, || self.coherence())?;
         profile.phase(GroundingPhase::SupportGuards, None, || {
@@ -1354,9 +1364,11 @@ impl<'source> Builder<'_, '_, 'source> {
     /// Moving the emitted vectors preserves IDs, root order and source origins;
     /// cumulative budgets are never released with the discarded scratch.
     fn seal(
-        self,
+        mut self,
         location: ProgramSite,
     ) -> Result<Emission<formula_support::SourceSelection>, FormulaFailure> {
+        // Retained constraints read bodies too, so no body is read after this.
+        self.fixed_atoms_are_derived()?;
         // Preserve the sole owner's topology evidence. This consuming attempt
         // fixes the remaining scans before charging them; raw input still takes
         // the full route. Final atom bounds and roots are never inferred here.
@@ -1703,38 +1715,50 @@ impl<'source> Builder<'_, '_, 'source> {
         )
     }
 
-    /// Emit the same body while borrowing this selected continuation's carriers.
-    /// The assignment-family consumer still checks exact IR, support and inputs.
-    pub(super) fn body_ir_with_carriers<'literal>(
+    /// Emit these literals of `rule`'s own body while borrowing a selected
+    /// continuation's carriers. The assignment-family consumer still checks
+    /// exact IR, support and inputs. They decide their default-negated atoms
+    /// as the rule's body does: support completion derived the rule's head
+    /// from the rows whose decided negations hold, whichever route emits it.
+    pub(super) fn rule_body_with_carriers<'literal>(
         &mut self,
+        rule: &RuleIr,
         literals: impl IntoIterator<Item = Ir<'literal, 'source, LiteralIr>>,
         assignment: &Binding,
-        location: ProgramSite,
         support: &Support<'source>,
         carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
     ) -> Result<usize, FormulaFailure> {
-        self.body_matched(literals, assignment, location, support, None, carriers)
+        self.body_matched(
+            literals,
+            assignment,
+            rule.location,
+            (support, Decide::of(rule)),
+            None,
+            carriers,
+        )
     }
 
     /// Name a selected component row through the ordinary body implementation.
     /// The node owner belongs to this literal slice and this cursor alone;
     /// rejected rows must be skipped before calling. Borrowed positive rows
-    /// establish atom identities, not the truth of their body literals.
+    /// establish atom identities, not the truth of their body literals. The
+    /// literals are a component of `rule`'s own body, which decides its
+    /// default-negated atoms as that rule's body does.
     pub(super) fn body_from_row(
         &mut self,
-        literals: &[LiteralIr],
+        (rule, literals): (&RuleIr, &[LiteralIr]),
         row: &formula_support::witnesses::MatchedBinding<'_, 'source>,
         nodes: &mut Option<MatchedNodes>,
         support: &Support<'source>,
-        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         debug_assert!(row.passes);
+        let location = rule.location;
         let view = self.matched_view(nodes, row.witnesses.as_ref(), literals.len(), location)?;
         self.body_matched(
             literals.iter().map(Ir::Temporary),
             &row.values,
             location,
-            support,
+            (support, Decide::of(rule)),
             nodes.as_mut().zip(view),
             row.carriers,
         )
@@ -1747,15 +1771,25 @@ impl<'source> Builder<'_, '_, 'source> {
         location: ProgramSite,
         support: &Support<'source>,
     ) -> Result<usize, FormulaFailure> {
-        self.body_ir_with_carriers(literals, assignment, location, support, None)
+        self.body_matched(
+            literals,
+            assignment,
+            location,
+            (support, Decide::Nothing),
+            None,
+            None,
+        )
     }
 
+    /// The conjunction of `literals` under `assignment`, read over `support`.
+    /// `decide` says which default-negated flat atoms the completed support
+    /// decides for this body (`decided_negation`).
     fn body_matched<'literal>(
         &mut self,
         literals: impl IntoIterator<Item = Ir<'literal, 'source, LiteralIr>>,
         assignment: &Binding,
         location: ProgramSite,
-        support: &Support<'source>,
+        (support, decide): (&Support<'source>, Decide),
         mut matched: Option<(
             &mut MatchedNodes,
             &formula_support::witnesses::WitnessRow<'_, 'source>,
@@ -1765,11 +1799,23 @@ impl<'source> Builder<'_, '_, 'source> {
         let mut result = VERUM;
         for (index, source_literal) in literals.into_iter().enumerate() {
             let literal = source_literal.get();
-            let named = match &mut matched {
+            let mut named = match &mut matched {
                 Some((nodes, row)) => nodes.literal(index, row, self, location)?,
                 None => None,
             };
             if let LiteralIr::Atom(negation, pattern) = literal {
+                if *negation != DefaultNegation::None && named.is_none() {
+                    match self
+                        .decided_negation(decide, *negation, *pattern, assignment, location)?
+                    {
+                        Negated::Decided(value) => {
+                            result = self.and(result, value, location)?;
+                            continue;
+                        }
+                        Negated::Named(node) => named = Some(node),
+                        Negated::Written => {}
+                    }
+                }
                 let mut atom = match named {
                     Some(node) => node,
                     None => self.atom(*pattern, assignment, location)?,
@@ -1946,7 +1992,7 @@ impl<'source> Builder<'_, '_, 'source> {
         let formula = self.node(Node::Implies(body, head), rule.location)?;
         self.root(formula, rule)?;
         if head != FALSUM {
-            self.producer(head, body, rule)?;
+            self.ordinary_producer(head, body, rule)?;
         }
         Ok(())
     }
@@ -1967,7 +2013,7 @@ impl<'source> Builder<'_, '_, 'source> {
             Ir::Source(rule.body.as_slice()).iter(),
             &rule.body_binding(assignment),
             rule.location,
-            support,
+            (support, Decide::of(rule)),
             matched,
             carriers,
         )?;
@@ -1978,65 +2024,125 @@ impl<'source> Builder<'_, '_, 'source> {
             HeadIr::Normal(head) => self.normal(*head, rule, assignment, body),
             HeadIr::Disjunction(heads) => self.disjunction(heads, body, assignment, rule),
             HeadIr::ConditionalDisjunction { ordinary, elements } => {
-                let mut disjunction = FALSUM;
-                let mut count = 0;
-                for head in ordinary {
-                    let literal = self.disjunct_instance(head, assignment, VERUM, body, rule)?;
-                    disjunction = self.or(disjunction, literal, rule.location)?;
-                    count += 1;
-                }
-                for element in elements {
-                    let mut local = Join::local_head(
-                        Ir::Source(element.condition.as_slice()),
-                        &assignment.prefix(element.outer_variables),
-                        element.body_variables..element.variables,
-                        support,
-                        self.budget,
-                        Context::new(
-                            &*self.computation,
-                            self.limits,
-                            self.counters,
-                            rule.location,
-                        ),
-                    )?;
-                    local.share_families(
-                        Rc::clone(&self.families),
-                        self.limits,
-                        self.counters,
-                        rule.location,
-                    )?;
-                    while let Some(binding) = local.next(
-                        self.computation,
-                        self.limits,
-                        self.budget,
-                        self.counters,
-                        rule.location,
-                    )? {
-                        count += 1;
-                        ceiling(
-                            FormulaResource::DisjunctionElements,
-                            count,
-                            self.limits.max_disjunction_elements as u128,
-                            rule.location,
-                        )?;
-                        let condition = self.body_ir(
-                            Ir::Source(element.condition.as_slice()).iter(),
-                            &binding.prefix(element.body_variables),
-                            rule.location,
-                            support,
-                        )?;
-                        let literal =
-                            self.disjunct_instance(&element.head, &binding, condition, body, rule)?;
-                        disjunction = self.or(disjunction, literal, rule.location)?;
-                    }
-                }
-                // Exhaustion, not a stopped prefix, establishes the empty disjunction.
-                let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
-                self.root(formula, rule)
+                self.conditional_disjunction(rule, (ordinary, elements), assignment, support, body)
             }
             HeadIr::Choice(group) => self.choice(rule, group, body, assignment, support),
         }
     }
+    /// Publish one instance of a rule whose head holds conditional
+    /// disjuncts: the implication from `body` to the disjunction of its
+    /// ordinary heads and of every instance of its conditional ones.
+    fn conditional_disjunction(
+        &mut self,
+        rule: &'source RuleIr,
+        (ordinary, elements): (
+            &[HeadLiteral],
+            &'source [crate::formula_conditional_head_ir::ConditionalHeadIr],
+        ),
+        assignment: &Binding,
+        support: &Support<'source>,
+        body: usize,
+    ) -> Result<(), FormulaFailure> {
+        let mut disjunction = FALSUM;
+        let mut count = 0;
+        for head in ordinary {
+            let literal = self.disjunct_instance(head, assignment, VERUM, body, rule)?;
+            disjunction = self.or(disjunction, literal, rule.location)?;
+            count += 1;
+        }
+        // The head alternatives of one condition alternative of one source
+        // disjunct are contiguous and are read together.
+        let mut rest = elements;
+        while let Some(first) = rest.first() {
+            let width = rest
+                .iter()
+                .take_while(|element| {
+                    element.family == first.family && element.alternative == first.alternative
+                })
+                .count();
+            let (alternatives, later) = rest.split_at(width);
+            rest = later;
+            let mut zero = false;
+            for element in alternatives {
+                zero |= self.defined_disjuncts(
+                    element,
+                    assignment,
+                    support,
+                    (body, rule),
+                    (&mut disjunction, &mut count),
+                )?;
+            }
+            if zero {
+                self.undefined_disjuncts(
+                    alternatives,
+                    assignment,
+                    support,
+                    (body, rule),
+                    (&mut disjunction, &mut count),
+                )?;
+            }
+        }
+        // Exhaustion, not a stopped prefix, establishes the empty disjunction.
+        let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
+        self.root(formula, rule)
+    }
+
+    /// The disjuncts of `element` whose head is defined: one for each
+    /// instance of the head under each row of the condition. Returns whether
+    /// an instance divided by zero, which the join omitted.
+    fn defined_disjuncts(
+        &mut self,
+        element: &'source crate::formula_conditional_head_ir::ConditionalHeadIr,
+        assignment: &Binding,
+        support: &Support<'source>,
+        (body, rule): (usize, &RuleIr),
+        (disjunction, count): (&mut usize, &mut u128),
+    ) -> Result<bool, FormulaFailure> {
+        let mut local = Join::local_head(
+            Ir::Source(element.condition.as_slice()),
+            &assignment.prefix(element.outer_variables),
+            element.body_variables..element.variables,
+            support,
+            self.budget,
+            Context::new(
+                &*self.computation,
+                self.limits,
+                self.counters,
+                rule.location,
+            ),
+        )?;
+        local.share_families(
+            Rc::clone(&self.families),
+            self.limits,
+            self.counters,
+            rule.location,
+        )?;
+        while let Some(binding) = local.next(
+            self.computation,
+            self.limits,
+            self.budget,
+            self.counters,
+            rule.location,
+        )? {
+            *count += 1;
+            ceiling(
+                FormulaResource::DisjunctionElements,
+                *count,
+                self.limits.max_disjunction_elements as u128,
+                rule.location,
+            )?;
+            let condition = self.body_ir(
+                Ir::Source(element.condition.as_slice()).iter(),
+                &binding.prefix(element.body_variables),
+                rule.location,
+                support,
+            )?;
+            let literal = self.disjunct_instance(&element.head, &binding, condition, body, rule)?;
+            *disjunction = self.or(*disjunction, literal, rule.location)?;
+        }
+        Ok(local.take_family().zero.is_some())
+    }
+
     fn disjunction(
         &mut self,
         heads: &[HeadLiteral],
@@ -2113,6 +2219,151 @@ impl<'source> Builder<'_, '_, 'source> {
         let eligible = self.neg(absent, rule.location)?;
         self.and(implication, eligible, rule.location)
     }
+    /// The disjuncts of one condition alternative of a source disjunct whose
+    /// head takes no value. `alternatives` are that disjunct's head
+    /// alternatives over the one condition: a pooled head gives several, any
+    /// other head one. Under one row of the condition, a head that has no
+    /// defined instance in any alternative and divides by zero in one is
+    /// true: the disjunct is the one a written `#true : condition` has, and
+    /// needs no atom. clingo grounds the same instance so. Where some
+    /// alternative is defined under the row, the caller emitted it and the
+    /// undefined ones contribute nothing, as alternatives of a disjunction.
+    ///
+    /// Called only when an alternative's family met a zero divisor. It
+    /// visits each condition row once, through the first alternative's
+    /// condition stage, and asks each alternative's head stage for that row
+    /// (`Join::head_outcome`): the condition's generators run once, in the
+    /// condition stage, so a head variable the condition binds by an
+    /// interval keeps the row's value. A zero divisor in the condition
+    /// itself leaves no row.
+    fn undefined_disjuncts(
+        &mut self,
+        alternatives: &'source [crate::formula_conditional_head_ir::ConditionalHeadIr],
+        assignment: &Binding,
+        support: &Support<'source>,
+        (body, rule): (usize, &RuleIr),
+        (disjunction, count): (&mut usize, &mut u128),
+    ) -> Result<(), FormulaFailure> {
+        const TRUE: HeadLiteral = HeadLiteral {
+            negation: DefaultNegation::None,
+            operand: HeadOperand::Boolean(true),
+        };
+        let first = alternatives
+            .first()
+            .expect("a source disjunct has an alternative");
+        debug_assert!(alternatives.iter().all(|element| {
+            element.outer_variables == first.outer_variables
+                && element.body_variables == first.body_variables
+        }));
+        let mut conditions = Join::local_head(
+            Ir::Source(first.condition.as_slice()),
+            &assignment.prefix(first.outer_variables),
+            first.body_variables..first.variables,
+            support,
+            self.budget,
+            Context::new(
+                &*self.computation,
+                self.limits,
+                self.counters,
+                rule.location,
+            ),
+        )?;
+        conditions.conditions_only();
+        conditions.share_families(
+            Rc::clone(&self.families),
+            self.limits,
+            self.counters,
+            rule.location,
+        )?;
+        while let Some(binding) = conditions.next(
+            self.computation,
+            self.limits,
+            self.budget,
+            self.counters,
+            rule.location,
+        )? {
+            let outcome = self.head_outcome(alternatives, &binding, assignment, support, rule)?;
+            if outcome.defined || !outcome.zero {
+                continue;
+            }
+            *count += 1;
+            ceiling(
+                FormulaResource::DisjunctionElements,
+                *count,
+                self.limits.max_disjunction_elements as u128,
+                rule.location,
+            )?;
+            let condition = self.body_ir(
+                Ir::Source(first.condition.as_slice()).iter(),
+                &binding.prefix(first.body_variables),
+                rule.location,
+                support,
+            )?;
+            let literal = self.disjunct_instance(&TRUE, &binding, condition, body, rule)?;
+            *disjunction = self.or(*disjunction, literal, rule.location)?;
+        }
+        Ok(())
+    }
+    /// What the heads of `alternatives` hold under the condition row
+    /// `binding`: whether one has a defined instance there, and whether one
+    /// divides by zero there. Each alternative's head stage is asked for
+    /// that row (`Join::head_outcome`) until one is defined.
+    fn head_outcome(
+        &mut self,
+        alternatives: &'source [crate::formula_conditional_head_ir::ConditionalHeadIr],
+        binding: &Binding,
+        assignment: &Binding,
+        support: &Support<'source>,
+        rule: &RuleIr,
+    ) -> Result<formula_support::HeadOutcome, FormulaFailure> {
+        let mut outcome = formula_support::HeadOutcome {
+            defined: false,
+            zero: false,
+        };
+        for element in alternatives {
+            self.work(rule.location)?;
+            let mut head = Join::local_head(
+                Ir::Source(element.condition.as_slice()),
+                &assignment.prefix(element.outer_variables),
+                element.body_variables..element.variables,
+                support,
+                self.budget,
+                Context::new(
+                    &*self.computation,
+                    self.limits,
+                    self.counters,
+                    rule.location,
+                ),
+            )?;
+            head.share_families(
+                Rc::clone(&self.families),
+                self.limits,
+                self.counters,
+                rule.location,
+            )?;
+            let row = binding.copied(
+                &*self.computation,
+                self.limits,
+                self.counters,
+                rule.location,
+            )?;
+            let under = head.head_outcome(
+                row,
+                self.computation,
+                self.limits,
+                self.budget,
+                self.counters,
+                rule.location,
+            )?;
+            outcome.zero |= under.zero;
+            if under.defined {
+                outcome.defined = true;
+                break;
+            }
+        }
+        Ok(outcome)
+    }
+
     pub(super) fn producer(
         &mut self,
         head: usize,
@@ -2120,21 +2371,54 @@ impl<'source> Builder<'_, '_, 'source> {
         rule: &RuleIr,
     ) -> Result<(), FormulaFailure> {
         self.producer_at(head, antecedent, &rule.origins, rule.location)
+            .map(|_| ())
     }
-    fn producer_at(
+
+    /// Record the producer of an ordinary root just published: one head atom
+    /// under `antecedent`. A true antecedent makes the root unconditional,
+    /// and it is counted with the roots that derive the atom
+    /// ([`Self::fixed_atoms_are_derived`]). A choice's or a disjunct's
+    /// permission is recorded through [`Self::producer`] and never counted.
+    pub(crate) fn ordinary_producer(
+        &mut self,
+        head: usize,
+        antecedent: usize,
+        rule: &RuleIr,
+    ) -> Result<(), FormulaFailure> {
+        self.ordinary_producer_at(head, antecedent, &rule.origins, rule.location)
+    }
+
+    fn ordinary_producer_at(
         &mut self,
         head: usize,
         antecedent: usize,
         origins: &[ProgramSite],
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
+        let atom = self.producer_at(head, antecedent, origins, location)?;
+        if antecedent == VERUM {
+            self.metadata.record_root(atom);
+        }
+        Ok(())
+    }
+
+    /// Record a producer of `head` and its origins, and return the head's
+    /// atom.
+    fn producer_at(
+        &mut self,
+        head: usize,
+        antecedent: usize,
+        origins: &[ProgramSite],
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         let Node::Atom(atom) = self.nodes.view().node(head).expect("owned node") else {
             unreachable!("head is an atom");
         };
         self.metadata
             .producer(atom, antecedent, self.counters, self.limits, location)?;
-        self.record_origins(atom, origins)
+        self.record_origins(atom, origins)?;
+        Ok(atom)
     }
     fn head_origins(&mut self, head: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
         let Node::Atom(atom) = self.nodes.view().node(head).expect("owned node") else {
@@ -2964,6 +3248,24 @@ impl<'source> Builder<'_, '_, 'source> {
             self.counters,
             location,
         )?;
+        // Every tuple is required: each is in every interpretation, so the one
+        // value the carrier holds is the aggregate's value in all of them and
+        // its equality is true. No element can change it, and no family is
+        // built to test one.
+        self.counters
+            .charge_work(1 + required.len() as u128, self.limits, location)?;
+        if values.len() == 1 && required.iter().all(|&required| required) {
+            let key = values.key(0, location)?;
+            let value = self.term(&key, location)?;
+            roots.insert(
+                value,
+                VERUM,
+                None,
+                Context::new(&*self.computation, self.limits, self.counters, location),
+            )?;
+            self.work(location)?;
+            return Ok(Arc::new(roots));
+        }
         match elements {
             AssignmentElements::Extrema(function, elements) => {
                 self.extremum_assignment_roots(elements, function, values, &mut roots, location)?;
@@ -3138,10 +3440,13 @@ impl<'source> Builder<'_, '_, 'source> {
                 )
             })
             .transpose()?;
-        for element in aggregate
+        let certainty = support.certainty();
+        for (position, element) in aggregate
             .map(|aggregate| aggregate.elements.as_slice())
             .iter()
+            .enumerate()
         {
+            let element_required = Certainty::requires(certainty, aggregate.id, position, &element);
             let mut local = Join::local(
                 element.map(|element| element.condition.as_slice()),
                 assignment,
@@ -3192,7 +3497,7 @@ impl<'source> Builder<'_, '_, 'source> {
                     )),
                     Context::new(&*self.computation, self.limits, self.counters, location),
                 )?;
-                if let Some(required) = required.as_mut().filter(|_| element.required) {
+                if let Some(required) = required.as_mut().filter(|_| element_required) {
                     required.insert(
                         key,
                         (),

@@ -113,6 +113,15 @@ fn reused_tables_preserve_the_emitted_theory() {
 }
 
 #[test]
+fn the_table_strategy_prepares_a_table_whatever_its_size() {
+    // 2000 distinct keys cost 2000 masks of 63 words, 504000 bytes: past
+    // the 262144 bytes a table may take when it only narrows an indexed
+    // probe. Under the table strategy the caller asked for the table.
+    let work = equal_theory("p(1..2000).{r(X)}:-p(X).");
+    assert!(work.table_index_bytes.unwrap() > 262_144);
+}
+
+#[test]
 fn typed_signed_rows_preserve_the_emitted_theory() {
     equal_theory(
         "d(1;\"1\";f(1);#inf;#sup). -q(1,1). -q(\"1\",\"1\"). -q(f(1),f(1)). -q(#inf,#sup). {r(X)}:-d(X),-q(X,X).",

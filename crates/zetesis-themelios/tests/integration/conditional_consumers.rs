@@ -2,6 +2,7 @@
 
 use crate::support::admission;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
@@ -14,8 +15,8 @@ use cases::CASES;
 use reference::{Models, native};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(163);
@@ -208,21 +209,18 @@ fn unrelated_objectives_keep_their_priority() {
 }
 
 #[test]
-fn possible_conditions_cannot_hide_undefined_arguments() {
+fn an_undefined_consequent_is_false_under_a_possible_condition() {
     let source = "{d}.q(N):-N=#count{};p(1/N):d.";
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-        ),
-        "{error}"
+    let admitted = input(source);
+    // The consequent divides by zero at the count's one value, so it is
+    // false wherever its condition d holds: q(0) needs d absent. A condition
+    // that is merely possible hides neither that nor the rule's warning.
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), &source[4..]);
+    assert_eq!(
+        native(&admitted),
+        Models::from([
+            BTreeSet::from(["q(0)".into()]),
+            BTreeSet::from(["d".into()]),
+        ])
     );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
