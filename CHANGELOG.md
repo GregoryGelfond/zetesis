@@ -4,13 +4,42 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
-### Fixed
+## 0.8.0 — 2026-11-15
 
-- Circular-support preparation now charges inspections of non-atomic
-  conjunction operands. Wide shared bodies could previously perform these
-  reads without consuming their work allowance or advancing cancellation
-  checks. Exhausting the optional marking allowance retains the complete
-  unmarked producer inventory; answer-set semantics are unchanged.
+Zetesis 0.8.0 reduces repeated grounding, support and candidate-checking work,
+and improves arithmetic and conditional-literal handling. Programs with settled
+predicates and recursive aggregate assignments can build smaller theories or
+finish grounding where earlier versions did not. Search retains the shared
+region algebra and reduct-defined answer-set membership.
+
+The release also improves aggregate-family and join reuse, objective-bound
+preparation, support scheduling, split ranking and large answer enumeration.
+`zetesis-bench` accepts typed workload manifests through its existing comparison
+engine. GPU accounting now charges shared aggregate reductions once per row;
+this does not introduce a new device search mode.
+
+### Compatibility and limits
+
+- Some previously incorrect answer families change: conditional literals with
+  undefined consequents and comparison chains now follow their corrected
+  grounding semantics. Some formerly refused arithmetic families are admitted;
+  some unsafe or overflowing cases are correctly refused. Details and examples
+  below identify these changes.
+- Substituted instances that divide by zero are omitted with a warning. Closed
+  undefined terms and zero divisors in `#show` retain their documented refusal
+  behavior. Overflow, invalid exponents and noninteger arithmetic still refuse.
+  The stages validated for a negation-excluded instance remain as documented.
+- Rust callers must review the changed split-ranking signatures, added
+  preparation statistics and projected-objective interfaces, including
+  `ObjectiveProjectionAttempt`, `ObjectiveProjectionReceipt` and
+  `ExecutionObservation::ObjectiveProjectionUnavailable`. Exhaustive matches
+  and struct literals may need changes. The typed workload manifest is an
+  additional input schema; existing bundle manifests remain supported.
+- Exact work receipts and tight-limit refusal points change with the operations
+  and storage actually used. Optional preparation may decline; ordinary exact
+  solving remains available where its own limits permit. Reserving half of the
+  available storage for narrowing tables does not guarantee that later required
+  allocations fit. Complete answer families and all optimal ties remain required.
 
 ### Added
 
@@ -351,6 +380,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   cutting all of its atoms.
 
 ### Fixed
+
+- Circular-support preparation now charges inspections of non-atomic
+  conjunction operands. Wide shared bodies could previously perform these
+  reads without consuming their work allowance or advancing cancellation
+  checks. Exhausting the optional marking allowance retains the complete
+  unmarked producer inventory; answer-set semantics are unchanged.
 
 - A rule with an arithmetic equality over a large relation is grounded within
   its memory. `d(0..199999). q(X) :- d(X), X \ 2 = 0.` was refused: the

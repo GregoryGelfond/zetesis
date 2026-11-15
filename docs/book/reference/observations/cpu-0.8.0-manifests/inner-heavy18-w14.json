@@ -1,0 +1,384 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "programs/xorchain-14.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/xorchain-14.lp",
+          "sha256": "4a15e60186eb6bf3f5cea4f6f0108f01541348d660a8da510ae687243b10d39c",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "programs/xorchain-16.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/xorchain-16.lp",
+          "sha256": "54f64ba274690404a1b1e9cdd5a5d5b1aef1a7d33e3e3ab69cdfa96d2eba0407",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "programs/xorchain-18.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/xorchain-18.lp",
+          "sha256": "b06dc50620d741e4445cd7d10aad07ef234fc955f2ebc33e56c768860698b5a7",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "programs/xorchain-20.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/xorchain-20.lp",
+          "sha256": "95065ad6488833ff40ad116b53124dc05bd22beb0ccc9364701d33084db8c298",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "programs/tseitin-24.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/tseitin-24.lp",
+          "sha256": "22b94526d0490eae70b22e6e5c3b59293d318552f9ba5dbdee01e4503a4561d4",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "programs/tseitin-28.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/tseitin-28.lp",
+          "sha256": "e01a83d2b4971a2ab2a2c542564de238760c429dbc541b8f1ce4e4cacbe68083",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "programs/tseitin-30.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/tseitin-30.lp",
+          "sha256": "c5d03120a14294e885012f45ee6f568b8c09cbad51b07c9ff37a3fad045df490",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "programs/php-7.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/php-7.lp",
+          "sha256": "052c7aaecb3c4cd8fd833ad2f46cc43d9c5eced3e5e12d3b55cc9c8bbcb34b50",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "programs/php-8.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "programs/php-8.lp",
+          "sha256": "f2c61d2295c7a5dd674b63c0c345c9f2bbc2f77204f2927a0b58c4620022c19f",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/xorchain-14.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/xorchain-14.core.lp",
+          "sha256": "5e1ba73da9a4e318c45b27bae0cba64ff0096828c3c7acebb63d6052ea16c22c",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/xorchain-16.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/xorchain-16.core.lp",
+          "sha256": "5abe315e4be488ca2de890d9b55a13c34c2498c2ae6734638f0fcbed8faa3ba1",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/xorchain-18.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/xorchain-18.core.lp",
+          "sha256": "c5f22ab48e5fa0ad56e49a64fabbe44c4b17716068bcf271860df7aa30f0f340",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/xorchain-20.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/xorchain-20.core.lp",
+          "sha256": "b800c44cfd4c24117f3575e984c6efd3de43370ccfd249ec16c7ffbd25ffe93a",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/tseitin-24.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/tseitin-24.core.lp",
+          "sha256": "7e4223fa92796f9705c670032dd5eaad432de2260156a06df5b6f2ca6c353abf",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/tseitin-28.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/tseitin-28.core.lp",
+          "sha256": "79eea4f7e463f19eb4715e88ca72ee2ca1213c35a4a5d2c274ab95ccc05b5161",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/tseitin-30.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/tseitin-30.core.lp",
+          "sha256": "1201eb01dcdc2a58eccb076ceeade376843290eb32169a903e1de444926c9ed1",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/php-7.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/php-7.core.lp",
+          "sha256": "f3f6e597e8e622187b5da18b698b0195f87e7152a574ce3d543eedd8c9552463",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "cores/php-8.core.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Expected count/status from five retained exhausted M0 native references, corroborated by historical clingo all-models output; each new campaign requires fresh canonical reference qualification. No hidden-model witness is inferred from shown output."
+        ]
+      },
+      "files": [
+        {
+          "path": "cores/php-8.core.lp",
+          "sha256": "c9151d86c0b69f7eb093f350747063d232745396eed4e89c276cb1da3a79a239",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

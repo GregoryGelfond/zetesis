@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "root": "../../../../../examples/family-crossing",
+  "cases": [
+    {
+      "entry": "family_crossing_complete_domain.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "No occurrence generator; unsupported occurs/happens cycle cannot initiate right-side fluents; right-side horizon goals make every stable candidate fail.",
+          "Standalone source argument only; mandatory fresh complete clingo qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "family_crossing_complete_domain.lp",
+          "sha256": "2903ff0b8134ad5b99df68fe7cc0ac6ad387f44f160d16a199c037a5c59241da",
+          "includes": [
+            {
+              "spelling": "eec_htp_integration_v5.lp",
+              "target": "eec_htp_integration_v5.lp"
+            }
+          ]
+        },
+        {
+          "path": "eec_htp_integration_v5.lp",
+          "sha256": "1d0f52af6de50c7d0bb64abb3b61203c351c582b29222fccacb71bac53c727ed",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "eec_htp_integration_v5.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "All rules except plan_valid have a positive body requiring an unseeded domain/occurrence predicate; plan_invalid has no support, so the reduct derives only plan_valid.",
+          "Standalone source argument only; mandatory fresh complete clingo qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "eec_htp_integration_v5.lp",
+          "sha256": "1d0f52af6de50c7d0bb64abb3b61203c351c582b29222fccacb71bac53c727ed",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

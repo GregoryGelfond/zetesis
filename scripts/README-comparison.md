@@ -18,7 +18,7 @@ zetesis-bench run examples/correctness \
 
 The named baseline contains SEND, queens02 and task allocation. `--suite queens`
 contains all six unchanged eight-queens encodings. Repeated `--case` selects any
-one through 94 distinct cases of the suite, here the whole sealed clean corpus,
+one through 95 distinct cases of the suite, here the whole sealed clean corpus,
 including optimized and inconsistent inputs. Original contracts survive as typed
 manifest data; removed test annotations never become solver directives.
 
@@ -62,7 +62,7 @@ planning line) at sizes whose complete native output fits 16 MiB, three amended
 queens boards and two unchanged entries. The default profile requests the
 shipped defaults; the report retains the grounding mode each cell took.
 `--time-limit SECONDS` gives every native profile a cooperative deadline;
-`--oracle closure|countermodel` requests a reduct procedure explicitly for every
+`--oracle auto|countermodel` selects automatic or general reduct checking for every
 profile. The series raises the per-record, capture, report and native-decoding
 byte ceilings to what its cells need (16 MiB per record); raw reports are large
 and stay with their builds. The amended cells have no recorded contract, so

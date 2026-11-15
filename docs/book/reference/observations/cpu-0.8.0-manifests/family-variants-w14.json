@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "family_crossing_vanilla_mode_b.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "optimal",
+        "model_count": 8,
+        "cost": [
+          7,
+          29
+        ],
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Historical complete-family contract from the audited original Family Crossing sources/outcomes; fresh complete clingo qualification remains required. Authored horizon9."
+        ]
+      },
+      "files": [
+        {
+          "path": "family_crossing_vanilla_mode_b.lp",
+          "sha256": "2dd1ffae167d9786bd1602590cf22834c2f7173c38b2db3a352aac9724122970",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "family_crossing_mode_a_observation.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Historical complete-family contract from the audited original Family Crossing sources/outcomes; fresh complete clingo qualification remains required. Authored horizon9."
+        ]
+      },
+      "files": [
+        {
+          "path": "family_crossing_mode_a_observation.lp",
+          "sha256": "319a285c07db93e12bbd974952874f7dab73446073fec82249ef3c3553939663",
+          "includes": [
+            {
+              "spelling": "family_crossing_complete_domain.lp",
+              "target": "family_crossing_complete_domain.lp"
+            }
+          ]
+        },
+        {
+          "path": "family_crossing_complete_domain.lp",
+          "sha256": "2903ff0b8134ad5b99df68fe7cc0ac6ad387f44f160d16a199c037a5c59241da",
+          "includes": [
+            {
+              "spelling": "eec_htp_integration_v5.lp",
+              "target": "eec_htp_integration_v5.lp"
+            }
+          ]
+        },
+        {
+          "path": "eec_htp_integration_v5.lp",
+          "sha256": "1d0f52af6de50c7d0bb64abb3b61203c351c582b29222fccacb71bac53c727ed",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}
