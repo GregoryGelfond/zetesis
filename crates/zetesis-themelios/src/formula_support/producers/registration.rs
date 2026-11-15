@@ -221,7 +221,9 @@ impl<'source> Registration<'source> {
     /// every rule. The retained vectors are admitted beside the
     /// registration's own bytes and `external`, and counted with them; the
     /// graph's nodes are scratch. One unit per producer and per positive
-    /// occurrence, with each occurrence's resolution.
+    /// occurrence, with each occurrence's resolution. This additional setup
+    /// work and storage can change tight-limit refusals; such a refusal
+    /// propagates; there is no fallback on refused wake-set preparation.
     pub(in crate::formula_support) fn wake(
         &mut self,
         prepared: &'source crate::formula_ir::Prepared,

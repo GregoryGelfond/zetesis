@@ -63,7 +63,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   answer changes. `support_producer_visits` is lower, and reported
   production and wake work change with it; `support_deferred_visits` is
   lower for a rule that waits through rounds in which nothing it reads
-  grows.
+  grows. Preparing the reverse postings and active set adds admitted work and
+  storage, so exact tight-limit refusals can change even though the completed
+  support and answer families do not.
 - Ordering a model's atoms costs less when they are already in order. The
   order of an answer's atoms is prepared by a stable merge sort over the
   whole atom catalog, which compared half the atoms in every pass whatever
@@ -363,13 +365,14 @@ Notable changes by release. Versions follow Semantic Versioning.
   its place have cost what the table would, a row weighed as eight words of
   masks. The count is the snapshot's, so several rules that probe one
   relation repay its table together; a probe that a numeric index serves
-  counts nothing. No such table is a reason to refuse a join that can scan:
-  small or not, it is prepared only if twice its preparation, with what the
-  tables already hold and the growth of their list, is within what the
+  counts nothing. Small or not, a table is attempted only if twice its
+  estimated preparation, with what the tables already hold and the growth
+  of their list, is within what the
   support's limits leave, weighed as the table's own accounting charges it,
-  and otherwise the join keeps its scan. The tables so take at most half of
-  the room, and what the grounding needs after them finds at least as much
-  as they hold.
+  and otherwise the join keeps its scan. Immediately after preparation the
+  retained tables take at most half of the room beside other live storage.
+  Later required growth can still refuse where scanning throughout would
+  fit; work-limit refusals also remain possible during preparation.
   The answer sets do not change. `table_preparations` and
   `table_index_bytes` are lower for a
   rule that probes once, and its reported work changes with them. Under

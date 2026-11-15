@@ -497,9 +497,11 @@ impl<'source> Support<'source> {
     /// in its place have cost what its masks would ([`TableCost::repaid`]):
     /// one probe scans, and probes repeated for many outer rows, by one
     /// rule or by several, get the table that serves the rest of them.
-    /// Either is prepared only where its preparation is within what the
-    /// limits leave ([`Self::declines`]), so no such table refuses a join
-    /// that can scan.
+    /// Either is attempted only when its estimated preparation fits the
+    /// current byte/entry allowance and table storage share
+    /// ([`Self::declines`]). A decline preserves the ordinary probe;
+    /// retained tables can still leave too little room for later allocations,
+    /// and work refusals still propagate.
     pub(super) fn select_domains_after<'value>(
         &self,
         rows: Option<&'source RelationRows<'source>>,
@@ -613,9 +615,10 @@ impl<'source> Support<'source> {
     /// A table waits while it does not fit what the limits leave
     /// ([`Self::fits`]), and one that is not small waits as well until the
     /// rows read in its place have repaid it ([`TableCost::repaid`]).
-    /// Neither the table nor the count kept for it is a reason to refuse a
-    /// join that can scan: a count the limits leave no room for is not kept,
-    /// and that selection is inapplicable.
+    /// A table that fails this preparation check leaves the ordinary probe
+    /// available. A count the limits leave no room for is not kept, and that
+    /// selection is inapplicable. These decisions do not guarantee that later
+    /// allocations or the work needed for preparation will fit.
     fn declines(
         &self,
         cost: TableCost,

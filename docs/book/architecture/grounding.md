@@ -1297,8 +1297,8 @@ probe a few times repay the table together, and the table then serves them
 all. A constraint that is streamed lazily is checked over a snapshot of its
 own, and its count is that check's.
 
-Under the indexed strategy no such table is a reason to refuse a join that
-can scan, and the tables together take at most half of the room. A table,
+Under the indexed strategy a narrowing table is declined when its conservative
+preparation estimate does not fit the current limits and storage share. A table,
 small or not, is prepared only if twice its preparation, with what the tables
 already prepared hold, is within what the support's limits leave. The
 preparation is weighed as the table's accounting charges it: the masks grow
@@ -1732,7 +1732,11 @@ such a visit takes no variant and is counted as deferred, and the schedule
 traverses the producer outside the round's visits, whether or not the round
 visited it. A program that grows for many rounds therefore pays in each
 round for the rules that round can affect, and no longer for every rule it
-has.
+has. The reverse postings and active set add admitted setup storage and work;
+subsequent rounds charge their actual wake work. At tight work or storage
+ceilings this can change where preparation refuses. A refusal remains a typed
+stop and publishes no completed support; the registration does not fall back to
+an all-producers schedule when its preparation is refused.
 
 A rich producer whose reads all lie in dependency components before its heads'
 components is scheduled by component. Components come from the dependency
