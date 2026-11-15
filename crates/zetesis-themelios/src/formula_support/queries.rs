@@ -61,6 +61,9 @@ pub(crate) struct Support<'source> {
 
 struct TableWorkspace<'source> {
     indices: RefCell<Vec<Table<'source, 'source>>>,
+    /// The bytes the tables hold beside their list, which weigh on the
+    /// preparation of the next ([`TableCost::fits`]).
+    held: Cell<usize>,
     /// What this snapshot's joins have read in place of the table selections
     /// it declined, by relation ([`Declined`]).
     declined: RefCell<Vec<Declined<'source>>>,
@@ -467,8 +470,8 @@ impl<'source> Support<'source> {
     /// Ranges are borrowed for this call only; returned rows keep source IDs.
     ///
     /// Declines, with `None`, a structural pattern, an absent relation and,
-    /// when ordinary joins are indexed, a relation whose table is not yet
-    /// prepared and is not small ([`TableCost::small`]). The
+    /// when ordinary joins are indexed, a relation whose table is left
+    /// unprepared ([`Self::select_domains_after`]). The
     /// domains are necessary conditions the caller's residual checks state
     /// again, so a declined selection loses no row and admits none.
     pub(super) fn select_domains_at<'value>(
@@ -489,12 +492,14 @@ impl<'source> Support<'source> {
 
     /// [`Self::select_domains_at`] for a caller that reports what it read
     /// in place of a declined selection ([`Self::count_scanned`]). Where
-    /// ordinary joins are indexed, a table that is not small is prepared
-    /// once the rows this snapshot's joins have read in its place have cost
-    /// what its masks would ([`TableCost::repaid`]), if its preparation is
-    /// within what the limits leave ([`TableCost::fits`]): one probe scans,
-    /// and probes repeated for many outer rows, by one rule or by several,
-    /// get the table that serves the rest of them.
+    /// ordinary joins are indexed, a small table is prepared at its first
+    /// probe and a larger one once the rows this snapshot's joins have read
+    /// in its place have cost what its masks would ([`TableCost::repaid`]):
+    /// one probe scans, and probes repeated for many outer rows, by one
+    /// rule or by several, get the table that serves the rest of them.
+    /// Either is prepared only where its preparation is within what the
+    /// limits leave ([`Self::declines`]), so no such table refuses a join
+    /// that can scan.
     pub(super) fn select_domains_after<'value>(
         &self,
         rows: Option<&'source RelationRows<'source>>,
@@ -522,6 +527,7 @@ impl<'source> Support<'source> {
         let bound = bind_domains(pattern, values, finite, &mut scratch, counters)?;
         let workspace = self.tables.get_or_init(|| TableWorkspace {
             indices: RefCell::new(Vec::new()),
+            held: Cell::new(0),
             declined: RefCell::new(Vec::new()),
         });
         let mut tables = workspace.indices.borrow_mut();
@@ -534,24 +540,18 @@ impl<'source> Support<'source> {
             // the table only narrows a probe the join can make without it.
             if !self.table_strategy {
                 let cost = TableCost::of(rows, &bound.scope, limits, counters, location)?;
-                if !cost.small() {
-                    let ticket = self.declined_slot(
-                        &mut workspace.declined.borrow_mut(),
-                        relation.predicate(),
-                        GroundingWork::new(limits, counters, location),
-                    )?;
-                    let read = workspace.declined.borrow()[ticket].rows;
-                    let outer = self.live_bytes() - relation.storage().retained_bytes;
-                    let allowance = self.table_limits(limits, counters, outer, location)?;
-                    if !cost.repaid(read)
-                        || !cost.fits(relation.storage().retained_bytes, &allowance)
-                    {
-                        counters.record(Event::TableInapplicableProbe);
-                        return Ok(DomainSelection::Declined(ticket));
-                    }
+                let declined = self.declines(
+                    cost,
+                    rows,
+                    (&tables, workspace),
+                    GroundingWork::new(limits, counters, location),
+                )?;
+                if let Some(declined) = declined {
+                    counters.record(Event::TableInapplicableProbe);
+                    return Ok(declined);
                 }
             }
-            self.reserve_tables(&mut tables, limits, counters, location)?;
+            self.reserve_one(&mut tables, limits, counters, location)?;
             let outer = self.live_bytes() - relation.storage().retained_bytes;
             let table_limits = self.table_limits(limits, counters, outer, location)?;
             let base_work = counters.accounting.work;
@@ -567,6 +567,7 @@ impl<'source> Support<'source> {
             )?;
             let retained = table.statistics().retained_bytes - size_of::<Table<'_, '_>>();
             self.live.set(self.live.get() + retained);
+            workspace.held.set(workspace.held.get() + retained);
             self.entries
                 .set(self.entries.get() + table.support_entries());
             counters.record(Event::TableIndexBytes(retained));
@@ -606,15 +607,92 @@ impl<'source> Support<'source> {
         }))
     }
 
+    /// What the join is told when a table that only narrows a probe is left
+    /// unprepared at this probe, or `None` when it is to be prepared now.
+    ///
+    /// A table waits while it does not fit what the limits leave
+    /// ([`Self::fits`]), and one that is not small waits as well until the
+    /// rows read in its place have repaid it ([`TableCost::repaid`]).
+    /// Neither the table nor the count kept for it is a reason to refuse a
+    /// join that can scan: a count the limits leave no room for is not kept,
+    /// and that selection is inapplicable.
+    fn declines(
+        &self,
+        cost: TableCost,
+        rows: &RelationRows<'source>,
+        (tables, workspace): (&Vec<Table<'source, 'source>>, &TableWorkspace<'source>),
+        work: GroundingWork<'_>,
+    ) -> Result<Option<DomainSelection<'_, 'source>>, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let relation_bytes = rows.relation.storage().retained_bytes;
+        let fits = self.fits(
+            cost,
+            relation_bytes,
+            (tables, workspace.held.get()),
+            limits,
+            counters,
+            location,
+        )?;
+        if fits && cost.small() {
+            return Ok(None);
+        }
+        let ticket = self.declined_slot(
+            &mut workspace.declined.borrow_mut(),
+            rows.relation.predicate(),
+            GroundingWork::new(limits, counters, location),
+        )?;
+        let Some(ticket) = ticket else {
+            return Ok(Some(DomainSelection::Inapplicable));
+        };
+        let read = workspace.declined.borrow()[ticket].rows;
+        Ok((!fits || !cost.repaid(read)).then_some(DomainSelection::Declined(ticket)))
+    }
+
+    /// Whether a table of `cost` over a relation of `relation_bytes` can be
+    /// added to `tables`, which hold `held` bytes beside their list, within
+    /// what the limits leave: the list's own growth, whose two buffers are
+    /// live together while its entries move, and then the table's share of
+    /// the room beside the list it grows to ([`TableCost::fits`]).
+    fn fits(
+        &self,
+        cost: TableCost,
+        relation_bytes: usize,
+        (tables, held): (&Vec<Table<'source, 'source>>, usize),
+        limits: &FormulaLimits,
+        counters: &Counters,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        let Some(growth) = Growth::of::<Table<'_, '_>>(tables.len(), tables.capacity()) else {
+            return Ok(false);
+        };
+        let live = self.live_bytes();
+        if live
+            .checked_add(growth.next)
+            .is_none_or(|peak| peak > limits.max_support_bytes)
+        {
+            return Ok(false);
+        }
+        let outer = live + growth.kept() - relation_bytes;
+        let allowance = self.table_limits(limits, counters, outer, location)?;
+        let held = held + growth.entries * size_of::<Table<'_, '_>>();
+        Ok(cost.fits(relation_bytes, held, &allowance))
+    }
+
     /// The count this snapshot keeps for `predicate`, entered at zero when
-    /// it has none. One unit for each count compared; a new count's bytes
-    /// are admitted beside the workspace's and stay live with it.
+    /// it has none, or `None` when the limits leave no room to keep one. One
+    /// unit for each count compared. The list of counts grows as the list of
+    /// tables does ([`Self::reserve_one`]) and stays live with the
+    /// workspace.
     fn declined_slot(
         &self,
         declined: &mut Vec<Declined<'source>>,
         predicate: PredicateRef<'source>,
         work: GroundingWork<'_>,
-    ) -> Result<usize, FormulaFailure> {
+    ) -> Result<Option<usize>, FormulaFailure> {
         let GroundingWork {
             limits,
             counters,
@@ -623,21 +701,18 @@ impl<'source> Support<'source> {
         for (ticket, entry) in declined.iter().enumerate() {
             counters.work(limits, location)?;
             if entry.predicate == predicate {
-                return Ok(ticket);
+                return Ok(Some(ticket));
             }
         }
-        let bytes = size_of::<Declined<'_>>();
-        let peak = self
-            .live_bytes()
-            .checked_add(bytes)
-            .ok_or_else(|| allocation(Cause::Overflow, location))?;
-        Self::admit(peak, limits, counters, location)?;
-        declined
-            .try_reserve_exact(1)
-            .map_err(|_| allocation(Cause::Allocation, location))?;
+        let room = Growth::of::<Declined<'_>>(declined.len(), declined.capacity())
+            .and_then(|growth| self.live_bytes().checked_add(growth.next))
+            .is_some_and(|peak| peak <= limits.max_support_bytes);
+        if !room {
+            return Ok(None);
+        }
+        self.reserve_one(declined, limits, counters, location)?;
         declined.push(Declined { predicate, rows: 0 });
-        self.live.set(self.live.get() + bytes);
-        Ok(declined.len() - 1)
+        Ok(Some(declined.len() - 1))
     }
 
     /// Count `rows` read in place of the declined selection `ticket` names
@@ -761,41 +836,77 @@ impl<'source> Support<'source> {
         Ok(())
     }
 
-    fn reserve_tables(
+    /// Make room for one more entry in a list this workspace keeps: a full
+    /// list doubles ([`Growth`]), admitted with the buffer it replaces still
+    /// live, and its capacity stays live with the workspace. One unit for
+    /// each entry moved.
+    fn reserve_one<T>(
         &self,
-        tables: &mut Vec<Table<'source, 'source>>,
+        list: &mut Vec<T>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
-        if tables.len() < tables.capacity() {
+        let growth = Growth::of::<T>(list.len(), list.capacity())
+            .ok_or_else(|| allocation(Cause::Overflow, location))?;
+        if growth.entries == list.capacity() {
             return Ok(());
         }
-        let old = tables.capacity() * size_of::<Table<'_, '_>>();
-        let desired = tables
-            .len()
-            .saturating_add(1)
-            .max(tables.capacity().saturating_mul(2));
-        let next = desired
-            .checked_mul(size_of::<Table<'_, '_>>())
-            .ok_or_else(|| allocation(Cause::Overflow, location))?;
         let peak = self
             .live_bytes()
-            .checked_add(next)
+            .checked_add(growth.next)
             .ok_or_else(|| allocation(Cause::Overflow, location))?;
         Self::admit(peak, limits, counters, location)?;
-        counters.charge_work(tables.len() as u128, limits, location)?;
-        tables
-            .try_reserve_exact(desired - tables.len())
+        counters.charge_work(list.len() as u128, limits, location)?;
+        list.try_reserve_exact(growth.entries - list.len())
             .map_err(|_| allocation(Cause::Allocation, location))?;
-        let actual = tables.capacity() * size_of::<Table<'_, '_>>();
+        let actual = list.capacity() * size_of::<T>();
         let peak = self
             .live_bytes()
             .checked_add(actual)
             .ok_or_else(|| allocation(Cause::Overflow, location))?;
-        self.live.set(self.live.get() - old + actual);
+        self.live.set(self.live.get() - growth.old + actual);
         counters.record(Event::SupportPeakBytes(peak as u128));
         Self::admit(peak, limits, counters, location)
+    }
+}
+
+/// What one more entry asks of a list of `T` holding `len` of `capacity`:
+/// nothing while it has room, and otherwise a buffer of twice the capacity,
+/// at least one entry, beside the one it replaces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Growth {
+    /// The capacity the list has once the entry is in.
+    entries: usize,
+    /// The bytes of the buffer the list has now.
+    old: usize,
+    /// The bytes of the buffer it grows to, live beside `old` while the
+    /// entries move; zero when the list has room.
+    next: usize,
+}
+
+impl Growth {
+    /// `None` when the grown buffer's bytes do not fit a `usize`.
+    fn of<T>(len: usize, capacity: usize) -> Option<Self> {
+        let old = capacity * size_of::<T>();
+        if len < capacity {
+            return Some(Self {
+                entries: capacity,
+                old,
+                next: 0,
+            });
+        }
+        let entries = len.saturating_add(1).max(capacity.saturating_mul(2));
+        Some(Self {
+            entries,
+            old,
+            next: entries.checked_mul(size_of::<T>())?,
+        })
+    }
+
+    /// The bytes the list holds more once it has grown.
+    fn kept(self) -> usize {
+        self.next.saturating_sub(self.old)
     }
 }
 
@@ -940,11 +1051,13 @@ fn bind_domains<'value>(
 pub(super) enum DomainSelection<'a, 'source> {
     /// The rows the domains select.
     Rows(Rows<'a, 'source>),
-    /// A structural pattern or an absent relation: no table applies.
+    /// A structural pattern or an absent relation, to which no table
+    /// applies, or a table left unprepared whose count the limits leave no
+    /// room to keep.
     Inapplicable,
-    /// A relation whose table is not small and not yet worth preparing, or
-    /// not within the limits. The caller's own probe offers its rows, and
-    /// the caller reports how many under this ticket
+    /// A relation whose table is left unprepared: not within the limits, or
+    /// not small and not yet repaid. The caller's own probe offers its rows,
+    /// and the caller reports how many under this ticket
     /// ([`Support::count_scanned`]).
     Declined(usize),
 }
@@ -1043,9 +1156,9 @@ impl TableCost {
     }
 
     /// Whether the masks take at most [`TABLE_MASK_WORDS`] words, so that
-    /// the table is prepared for a single probe: a single column of distinct
-    /// keys up to 1440 rows, and a larger relation only while its labelled
-    /// columns hold few distinct values.
+    /// the table is prepared for a single probe where it fits: a single
+    /// column of distinct keys up to 1440 rows, and a larger relation only
+    /// while its labelled columns hold few distinct values.
     fn small(self) -> bool {
         self.mask_words <= TABLE_MASK_WORDS
     }
@@ -1057,14 +1170,23 @@ impl TableCost {
         self.mask_words <= u128::from(scanned) * SCANNED_ROW_MASK_WORDS
     }
 
-    /// Whether the entries, and the preparation's bytes beside a relation
-    /// of `relation_bytes`, are within what `allowance` leaves a table. A
-    /// table that fails this is not attempted, and the join keeps its scan;
-    /// one that passes it is charged no more than was weighed here.
-    fn fits(self, relation_bytes: usize, allowance: &table::Limits) -> bool {
+    /// Whether the entries are within what `allowance` leaves a table, and
+    /// the tables, this one's preparation included, hold no more than they
+    /// leave free: beside a relation of `relation_bytes`, twice the
+    /// preparation's bytes and the `held` bytes of the tables already
+    /// prepared, with their list, are within the allowance's bytes.
+    ///
+    /// A table that fails this is not attempted, and the join keeps its
+    /// scan. One that passes it, prepared under that allowance, is charged
+    /// no more than was weighed here, and the tables then hold at most half
+    /// of the room the limits leave beside everything else: what the
+    /// grounding still needs finds at least as much as they took.
+    fn fits(self, relation_bytes: usize, held: usize, allowance: &table::Limits) -> bool {
         self.entries <= allowance.max_entries as u128
             && self
                 .preparation_bytes
+                .saturating_mul(2)
+                .saturating_add(held as u128)
                 .saturating_add(relation_bytes as u128)
                 <= allowance.max_bytes as u128
     }

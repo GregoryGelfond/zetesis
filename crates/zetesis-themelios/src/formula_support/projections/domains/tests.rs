@@ -199,15 +199,17 @@ fn twelve_scans_do_not_repay_the_table() {
 #[test]
 fn a_declined_selection_served_by_a_numeric_probe_counts_no_scan() {
     // Eager emission also selects numeric probes. The equality's postings
-    // then serve each declined probe, no row is read in the table's place,
-    // and twenty outer rows prepare no table where thirteen scans would.
+    // then serve each declined probe with the rows it selects, about 300 of
+    // the 1500 here, which a table could not narrow. They count nothing:
+    // the 1500 masks of 47 words would be repaid by 8813 rows, which thirty
+    // such probes offer, and forty prepare no table.
     with_selected_join(
-        "p(1..3000).m(1..20). :-m(Y),p(X),X/3=Y.",
+        "p(1..1500).m(0..4,1..8). :-m(Y,Z),p(X),X/300=Y.",
         true,
         |join, computation, counters, location| {
             let (rows, work) = collect(join, computation, counters, location);
-            assert_eq!(rows.len(), 60);
-            assert_eq!(work.table_inapplicable_probes, Some(20));
+            assert_eq!(rows.len(), 8 * 1499);
+            assert_eq!(work.table_inapplicable_probes, Some(40));
             assert_eq!(work.table_preparations, Some(0));
         },
     );
@@ -347,10 +349,11 @@ fn no_byte_ceiling_turns_a_repaid_table_into_a_refusal() {
             "room {room}"
         );
     }
-    // Around what the preparation is weighed at, the table comes to be
-    // prepared, and is never refused on the way.
+    // Around twice what the preparation is weighed at, since the table may
+    // take half of the room, it comes to be prepared, and is never refused
+    // on the way.
     let mut prepared = false;
-    for room in (640_000..=1_280_000).step_by(64_000) {
+    for room in (640_000..=1_920_000).step_by(128_000) {
         match run(admitted + room) {
             Ok((24, Some(0))) => assert!(!prepared, "room {room}"),
             Ok((24, Some(1))) => prepared = true,
@@ -358,6 +361,136 @@ fn no_byte_ceiling_turns_a_repaid_table_into_a_refusal() {
         }
     }
     assert!(prepared);
+}
+
+/// Every constraint of `source`, joined in source order over one completed
+/// snapshot under `limits`: the rows each join finds and the tables they
+/// prepare between them, or the first refusal.
+fn join_constraints(
+    source: &str,
+    limits: &FormulaLimits,
+) -> Result<(Vec<usize>, u64), FormulaFailure> {
+    let mut outcome = None;
+    with_completed_source(source, |program, support, computation, counters| {
+        let mut rules: Vec<_> = program
+            .rules_without_facts()
+            .iter()
+            .filter(|rule| matches!(rule.head, HeadIr::Normal(None)))
+            .collect();
+        rules.sort_by_key(|rule| {
+            rule.location
+                .location()
+                .map(|location| location.span.start().get())
+        });
+        let joined = || {
+            let mut rows = Vec::new();
+            let mut prepared = 0;
+            for rule in rules {
+                let mut join =
+                    Join::rule(rule, support, computation, limits, &mut budget(), counters)?;
+                assert!(join.select_total_body(rule, computation, limits, counters)?);
+                let (found, work) =
+                    try_collect_under(&mut join, computation, counters, rule.location, limits)?;
+                rows.push(found.len());
+                prepared += work.table_preparations.unwrap();
+            }
+            Ok((rows, prepared))
+        };
+        outcome = Some(joined());
+    });
+    outcome.unwrap()
+}
+
+/// The least ceiling, to a kibibyte, under which `admits` holds, for an
+/// `admits` that holds of every ceiling above one it holds of, and of 8 MiB.
+fn least_ceiling(admits: impl Fn(usize) -> bool) -> usize {
+    let (mut refused, mut admitted) = (0_usize, 8 << 20);
+    assert!(admits(admitted));
+    while refused + 1024 < admitted {
+        let middle = refused + (admitted - refused) / 2;
+        if admits(middle) {
+            admitted = middle;
+        } else {
+            refused = middle;
+        }
+    }
+    admitted
+}
+
+/// Join the constraints of `source` under each ceiling of `ceilings`, which
+/// ascend: once a ceiling admits them, no higher one may refuse them. Returns
+/// the tables prepared under the first admitting ceiling and under the last.
+fn more_room_never_refuses(source: &str, ceilings: impl Iterator<Item = usize>) -> (u64, u64) {
+    let mut admitted: Option<(usize, u64)> = None;
+    let mut last = 0;
+    for max_support_bytes in ceilings {
+        let limits = FormulaLimits {
+            max_support_bytes,
+            ..FormulaLimits::default()
+        };
+        match (join_constraints(source, &limits), admitted) {
+            (Ok((_, prepared)), None) => {
+                admitted = Some((max_support_bytes, prepared));
+                last = prepared;
+            }
+            (Ok((_, prepared)), Some(_)) => last = prepared,
+            (Err(_), None) => {}
+            (Err(error), Some((room, _))) => {
+                panic!("{max_support_bytes} bytes refuse what {room} admit: {error}")
+            }
+        }
+    }
+    let (_, first) = admitted.expect("some ceiling admits the joins");
+    (first, last)
+}
+
+#[test]
+fn a_small_table_that_does_not_fit_leaves_the_join_to_its_scan() {
+    // The 1000 masks of `p` are small, so its table is prepared for a single
+    // probe. With 999 support entries to spare no table of `p` fits, which
+    // gives the least ceiling under which the scan alone completes. The
+    // table's preparation needs more than that, and must not refuse a join
+    // that needs none of it.
+    let source = "p(1..1000).q(2). :-p(X),q(Y),X/2=Y.";
+    let under = |max_support_bytes, max_support_index_entries| {
+        join_constraints(
+            source,
+            &FormulaLimits {
+                max_support_index_entries,
+                max_support_bytes,
+                ..FormulaLimits::default()
+            },
+        )
+    };
+    let entries = FormulaLimits::default().max_support_index_entries;
+    let scan = least_ceiling(|bytes| under(bytes, 999).is_ok());
+    assert_eq!(under(scan, 999).unwrap(), (vec![2], 0));
+    assert_eq!(under(scan, entries).unwrap(), (vec![2], 0));
+    assert_eq!(under(scan + (1 << 20), entries).unwrap(), (vec![2], 1));
+}
+
+#[test]
+fn a_table_kept_for_the_round_refuses_no_later_small_table() {
+    // The seventh probe of `d` prepares its table where that fits, and the
+    // table stays for the round. The two relations joined after it have
+    // small tables; where the first table has taken the room one of them
+    // wants, that join scans as well. The ceilings rise from the least under
+    // which the scans alone complete, which the scans of `d` set, to one
+    // with room for all three tables.
+    let source = "d(1..1449).m(1..7).a(1..200).b(1..200).k(2).\
+                  :-m(Y),d(X),X/3=Y. :-k(Y),a(X),X/2=Y. :-k(Y),b(X),X/2=Y.";
+    let scan = least_ceiling(|max_support_bytes| {
+        let limits = FormulaLimits {
+            max_support_index_entries: 199,
+            max_support_bytes,
+            ..FormulaLimits::default()
+        };
+        join_constraints(source, &limits).is_ok()
+    });
+    let (first, last) =
+        more_room_never_refuses(source, (scan..=scan + (3 << 20)).step_by(192 << 10));
+    assert!(first < 3, "{first}");
+    assert_eq!(last, 3);
 }
 
 #[test]

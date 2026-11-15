@@ -1274,8 +1274,8 @@ A table keeps one row mask for each distinct value of each of its columns, so
 a column of distinct keys over `R` rows costs `R²` bits to hold and as much
 work to fill, where a scan of the relation reads `R` rows. Under the indexed
 strategy the table is only a way to narrow a probe the join can make without
-it, so the selector prepares one only while it is small: its row masks may
-take 65536 words of 32 bits. That admits a single column of distinct keys up
+it, so the selector prepares one at its first probe only while it is small:
+its row masks may take 65536 words of 32 bits. That admits a single column of distinct keys up
 to 1440 rows, and a larger relation only while its columns hold few distinct
 values; a column no join binds has no postings to count and is taken to hold
 a value for each row. Past that bound the derived domain is not used at
@@ -1287,17 +1287,29 @@ One probe is cheaper as a scan; a probe that a join repeats for every row of
 its outer prefix is not. `q(X,Y) :- m(Y), d(X), X / 3 = Y.` selects from `d`
 once for each row of `m`. The snapshot therefore counts, for each relation,
 the rows its joins read in place of a declined selection: the rows that the
-probe which took its place offered, whether a scan, a posting of another
-bound column or a numeric index. The selector prepares the table once
-those rows, weighed at eight words of masks each, have cost what the masks
-would. Every join of the round adds to the one count, so several rules that
-each probe a few times repay the table together, and the table then serves
-them all. It is prepared only if its preparation is within what the support's
-limits leave, weighed as the table's accounting charges it: the masks grow by
-doubling, and a growth is charged with the buffer it replaces still live.
-Otherwise it is not attempted, and the joins keep their scans. A numeric
-index, as in eager emission, offers a handful of rows for each probe, so its
-joins do not come to repay a table. Under the table strategy the caller asked
+probe which took its place offered, a scan or a posting of another bound
+column. A numeric index, as in eager emission, already offers the rows its
+equality selects, which the table would offer too, so a probe it serves
+counts nothing. The selector prepares the table once the counted rows,
+weighed at eight words of masks each, have cost what the masks would. The
+joins that share a snapshot add to the one count, so several rules that each
+probe a few times repay the table together, and the table then serves them
+all. A constraint that is streamed lazily is checked over a snapshot of its
+own, and its count is that check's.
+
+Under the indexed strategy no such table is a reason to refuse a join that
+can scan, and the tables together take at most half of the room. A table,
+small or not, is prepared only if twice its preparation, with what the tables
+already prepared hold, is within what the support's limits leave. The
+preparation is weighed as the table's accounting charges it: the masks grow
+by doubling, a growth is charged with the buffer it replaces still live, and
+the list that holds the tables grows the same way. Otherwise the table is not
+attempted and the join keeps its scan; a count the limits leave no room for
+is not kept either. A table stays for its snapshot, so what the grounding
+needs afterwards, the atoms its rules append among it, finds less room: by
+this rule, at least as much as the tables hold. A grounding that grows by
+more than that after its last table is refused, where scanning throughout it
+could have grown by twice as much. Under the table strategy the caller asked
 for tables, and none of this applies.
 
 Domain derivation scans the existing input/result coordinates, without another

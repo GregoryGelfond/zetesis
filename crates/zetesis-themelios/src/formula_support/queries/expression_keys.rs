@@ -96,11 +96,6 @@ pub(in crate::formula_support) struct Rows<'read, 'source> {
 }
 
 impl Rows<'_, '_> {
-    /// The number of rows offered.
-    pub(in crate::formula_support) fn len(&self) -> usize {
-        self.range.len()
-    }
-
     pub(in crate::formula_support) fn get(&self, position: usize) -> Option<usize> {
         let offset = self.range.start.checked_add(position)?;
         if offset >= self.range.end {

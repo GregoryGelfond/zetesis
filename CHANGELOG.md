@@ -353,10 +353,15 @@ Notable changes by release. Versions follow Semantic Versioning.
   was. Joins that repeat the probe, as `q(X,Y) :- m(Y), d(X), X / 3 = Y.`
   does for each row of `m`, prepare the table once the rows they have read in
   its place have cost what the table would, a row weighed as eight words of
-  masks. The count is kept for the round, so several rules that probe one
-  relation repay its table together. The table is prepared only if its
-  preparation is within what the support's limits leave, weighed as the
-  table's own accounting charges it; otherwise the joins keep their scans.
+  masks. The count is the snapshot's, so several rules that probe one
+  relation repay its table together; a probe that a numeric index serves
+  counts nothing. No such table is a reason to refuse a join that can scan:
+  small or not, it is prepared only if twice its preparation, with what the
+  tables already hold and the growth of their list, is within what the
+  support's limits leave, weighed as the table's own accounting charges it,
+  and otherwise the join keeps its scan. The tables so take at most half of
+  the room, and what the grounding needs after them finds at least as much
+  as they hold.
   The answer sets do not change. `table_preparations` and
   `table_index_bytes` are lower for a
   rule that probes once, and its reported work changes with them. Under

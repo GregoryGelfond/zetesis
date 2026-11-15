@@ -34,12 +34,15 @@ fn a_table_fits_within_the_entries_and_the_bytes_left() {
         max_work: 0,
     };
     // Ten entries, and a preparation charged 400 bytes beside a relation of
-    // 50; the masks' own words are not what is weighed.
+    // 50 and tables that hold 30: the tables may take half of the room, so
+    // the preparation is weighed twice, and the masks' own words are not
+    // what is weighed.
     let table = cost(10, 1_000_000, 400);
-    assert!(table.fits(50, &allowance(10, 450)));
-    assert!(!table.fits(50, &allowance(9, 450)));
-    assert!(!table.fits(50, &allowance(10, 449)));
-    assert!(!table.fits(51, &allowance(10, 450)));
+    assert!(table.fits(50, 30, &allowance(10, 880)));
+    assert!(!table.fits(50, 30, &allowance(9, 880)));
+    assert!(!table.fits(50, 30, &allowance(10, 879)));
+    assert!(!table.fits(51, 30, &allowance(10, 880)));
+    assert!(!table.fits(50, 31, &allowance(10, 880)));
 }
 
 #[test]
@@ -109,5 +112,216 @@ fn a_declined_selection_enters_its_relations_count_once() {
     let workspace = support.tables.get().unwrap();
     assert_eq!(workspace.declined.borrow().len(), 1);
     assert_eq!(workspace.declined.borrow()[0].rows, 3_500);
+    assert!(workspace.indices.borrow().is_empty());
+}
+
+/// Unary relations `t0`, `t1`, … of ten rows each, with the pattern that
+/// reads each: a small table apiece.
+fn tiny_relations(relations: usize) -> (super::super::super::SupportCatalog, Vec<AtomPattern>) {
+    let mut catalog = super::super::super::SupportCatalog::default();
+    let mut patterns = Vec::new();
+    for relation in 0..relations {
+        let predicate = Predicate::new(format!("t{relation}"), 1).unwrap();
+        for value in 0..10 {
+            let atom = Atom::new(predicate.clone(), vec![Value::Number(value)]).unwrap();
+            catalog = catalog
+                .insert(
+                    &atom,
+                    &FormulaLimits::default(),
+                    &mut Counters::default(),
+                    location(),
+                )
+                .unwrap();
+        }
+        patterns.push(AtomPattern::new(predicate, vec![Term::Variable(0)]).unwrap());
+    }
+    (catalog, patterns)
+}
+
+/// What a selection by domains came to.
+#[derive(Debug, PartialEq, Eq)]
+enum Selected {
+    Rows,
+    Declined,
+    Inapplicable,
+    Refused,
+}
+
+/// What a selection of the value 8 over `pattern`'s relation comes to under
+/// `limits`.
+fn selects(support: &Support<'_>, pattern: &AtomPattern, limits: &FormulaLimits) -> Selected {
+    let mut counters = Counters::default();
+    let pattern = PositivePattern::Flat(pattern.into());
+    let binding: [Option<Value>; 1] = [None];
+    let Ok(rows) = support.resolve(pattern.atom(), limits, &mut counters, location()) else {
+        return Selected::Refused;
+    };
+    let permitted = [TermRef::from(&Value::Number(8))];
+    let finite = FiniteDomains {
+        values: &permitted,
+        variables: &[(0, 0..1)],
+    };
+    let selected = support.select_domains_after(
+        rows,
+        pattern,
+        binding.as_slice().into(),
+        finite,
+        GroundingWork::new(limits, &mut counters, location()),
+    );
+    match selected {
+        Ok(DomainSelection::Rows(_)) => Selected::Rows,
+        Ok(DomainSelection::Declined(_)) => Selected::Declined,
+        Ok(DomainSelection::Inapplicable) => Selected::Inapplicable,
+        Err(_) => Selected::Refused,
+    }
+}
+
+fn under(max_support_bytes: usize) -> FormulaLimits {
+    FormulaLimits {
+        max_support_bytes,
+        ..FormulaLimits::default()
+    }
+}
+
+/// The bytes a selection over `pattern`'s relation holds while it decides:
+/// the least room beside the live bytes under which it is not refused. With
+/// no more room than that it keeps nothing, so the workspace is unchanged.
+fn deciding_bytes(
+    support: &Support<'_>,
+    pattern: &AtomPattern,
+    limits: impl Fn(usize) -> FormulaLimits,
+) -> usize {
+    let live = support.live_bytes();
+    let room = (0..4096)
+        .find(|room| selects(support, pattern, &limits(live + room)) != Selected::Refused)
+        .expect("a selection decides within four kibibytes");
+    assert_eq!(support.live_bytes(), live);
+    room
+}
+
+#[test]
+fn the_growth_of_the_table_list_is_weighed_with_the_table() {
+    // Sixteen small tables fill their list, and the seventeenth comes with a
+    // list of 32: sixteen entries more to hold, and both buffers live while
+    // the tables move. A ceiling with room for the table's preparation and
+    // not for the list leaves the selection declined, neither prepared nor
+    // refused, and the least ceiling with room for both prepares it.
+    let (catalog, patterns) = tiny_relations(17);
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    let support = Support::completed(
+        &relations,
+        JoinStrategy::Indexed,
+        &limits,
+        &counters,
+        location(),
+    )
+    .unwrap();
+    for pattern in &patterns[..16] {
+        assert_eq!(selects(&support, pattern, &limits), Selected::Rows);
+    }
+    let workspace = support.tables.get().unwrap();
+    assert_eq!(workspace.indices.borrow().capacity(), 16);
+    // The first decline enters the relation's count, which the rest find.
+    let last = &patterns[16];
+    let deciding = deciding_bytes(&support, last, under);
+    let live = support.live_bytes() + deciding;
+    assert_eq!(
+        selects(&support, last, &under(live + size_of::<Declined<'_>>())),
+        Selected::Declined
+    );
+    let live = support.live_bytes() + deciding;
+    let rows = support
+        .resolve(
+            PositivePattern::Flat(last.into()).atom(),
+            &limits,
+            &mut counters,
+            location(),
+        )
+        .unwrap()
+        .unwrap();
+    let cost = TableCost::of(rows, &[0], &limits, &mut counters, location()).unwrap();
+    let growth = Growth::of::<Table<'_, '_>>(16, 16).unwrap();
+    assert_eq!(growth.kept(), 16 * size_of::<Table<'_, '_>>());
+    let preparation = usize::try_from(cost.preparation_bytes).unwrap();
+    // The seventeen tables may take half of the room: twice the preparation,
+    // with what the sixteen hold and the list of 32, beside the list's
+    // growth.
+    let held = workspace.held.get() + growth.next;
+    let fitting = live + growth.kept() + 2 * preparation + held;
+    for ceiling in [
+        live + 2 * preparation + held,
+        live + growth.next,
+        fitting - 1,
+    ] {
+        assert_eq!(
+            selects(&support, last, &under(ceiling)),
+            Selected::Declined,
+            "{ceiling}"
+        );
+        assert_eq!(workspace.indices.borrow().len(), 16);
+    }
+    assert_eq!(selects(&support, last, &under(fitting)), Selected::Rows);
+    assert_eq!(workspace.indices.borrow().len(), 17);
+    assert_eq!(workspace.indices.borrow().capacity(), 32);
+}
+
+#[test]
+fn a_count_the_limits_leave_no_room_for_is_not_kept() {
+    // With nine support entries to spare no table of ten values fits, so
+    // each relation's selection is declined and wants a count. The list of
+    // counts doubles when full and is charged at its capacity; where the
+    // limits leave no room for it to grow, the selection is inapplicable and
+    // the join scans without a count.
+    let (catalog, patterns) = tiny_relations(4);
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
+    let support = Support::completed(
+        &relations,
+        JoinStrategy::Indexed,
+        &limits,
+        &counters,
+        location(),
+    )
+    .unwrap();
+    let scanning = |max_support_bytes| FormulaLimits {
+        max_support_index_entries: 9,
+        ..under(max_support_bytes)
+    };
+    let count = size_of::<Declined<'_>>();
+    let live = support.live_bytes();
+    let deciding = deciding_bytes(&support, &patterns[0], scanning);
+    assert_eq!(
+        selects(
+            &support,
+            &patterns[0],
+            &scanning(live + deciding + count - 1)
+        ),
+        Selected::Inapplicable
+    );
+    assert_eq!(support.live_bytes(), live);
+    for pattern in &patterns[..3] {
+        assert_eq!(
+            selects(&support, pattern, &scanning(usize::MAX)),
+            Selected::Declined
+        );
+    }
+    let workspace = support.tables.get().unwrap();
+    assert_eq!(workspace.declined.borrow().len(), 3);
+    assert_eq!(workspace.declined.borrow().capacity(), 4);
+    assert_eq!(support.live_bytes() - live, 4 * count);
+    // A fourth count has room; a list of five would double to eight, with
+    // its four entries still live beside them.
+    assert_eq!(
+        selects(&support, &patterns[3], &scanning(usize::MAX)),
+        Selected::Declined
+    );
+    assert_eq!(support.live_bytes() - live, 4 * count);
     assert!(workspace.indices.borrow().is_empty());
 }

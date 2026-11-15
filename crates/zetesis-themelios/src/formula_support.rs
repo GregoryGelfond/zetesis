@@ -1425,15 +1425,16 @@ impl<'source> Resolution<'source> {
     }
 }
 impl Probe<'_, '_> {
-    /// The rows this probe offers, for the count of rows read in place of
-    /// a declined table selection. A table selection is never such a probe
-    /// and counts none.
+    /// The rows this probe offers that a table selection could have spared
+    /// the join, for the count of rows read in place of a declined one. A
+    /// numeric index offers the rows its equality selects, which the table
+    /// would offer too, and a table selection is never such a probe: both
+    /// count none.
     fn offered(&self) -> usize {
         match self {
             Self::Indexed(rows) => rows.len(),
             Self::Owned(rows) | Self::Range(rows) => rows.slice().len(),
-            Self::Expression(rows) => rows.len(),
-            Self::Table(_) => 0,
+            Self::Expression(_) | Self::Table(_) => 0,
         }
     }
 
