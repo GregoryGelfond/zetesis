@@ -687,3 +687,207 @@ fn a_requested_stop_ends_the_marking_as_a_stop() {
     );
     assert!(!inventory.any_circular());
 }
+
+/// A shared body with one required atom and non-atomic operands.
+fn mixed_body(heads: usize, width: usize, choices: bool) -> Theory {
+    // b, q, r, h_1 ... h_k; b, q and r have producers only with choices.
+    let atoms = heads + 3;
+    let mut nodes: Vec<Node> = (0..atoms).map(Node::atom).collect();
+    let either = nodes.len();
+    nodes.push(Node::or_pair([1, 2]));
+    let mut operands = vec![0];
+    operands.resize(width + 1, either);
+    let body = nodes.len();
+    nodes.push(Node::and_span(crate::OperandSpan {
+        start: 0,
+        length: operands.len(),
+    }));
+    let mut roots = Vec::new();
+    for head in 3..atoms {
+        roots.push(nodes.len());
+        nodes.push(Node::implies(body, head));
+    }
+    if choices {
+        let falsum = nodes.len();
+        nodes.push(Node::falsum());
+        for atom in 0..3 {
+            let negated = nodes.len();
+            nodes.push(Node::implies(atom, falsum));
+            roots.push(nodes.len());
+            nodes.push(Node::or_pair([atom, negated]));
+        }
+    }
+    Theory::new(
+        atoms,
+        crate::FormulaParts::new(nodes, operands).unwrap(),
+        roots,
+        crate::AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn non_atomic_requirements_charge_each_operand_at_both_readers() {
+    let unlimited = RegionLimits { max_work: u64::MAX };
+    let narrow = mixed_body(32, 2, false);
+    let wider = mixed_body(32, 3, false);
+    let plain = unmarked(&narrow, unlimited).unwrap().work;
+    assert_eq!(plain, 167);
+    assert_eq!(unmarked(&wider, unlimited).unwrap().work, plain);
+    let read = |owner| super::super::producers(owner, unlimited, &Cancellation::default()).unwrap();
+    let first = read(&narrow);
+    let second = read(&wider);
+    // One extra operand in the shared requirement inventory and each of
+    // the 32 singleton-head producers: 33 actual inspected operands.
+    assert_eq!(first.work, 434);
+    assert_eq!(second.work, 467);
+    assert!(!first.producers.unwrap().any_circular());
+    assert!(!second.producers.unwrap().any_circular());
+}
+
+#[test]
+fn wide_non_atomic_requirements_exhaust_only_the_optional_marking_share() {
+    let unlimited = RegionLimits { max_work: u64::MAX };
+    let owner = mixed_body(32, 65_536, false);
+    let reference = unmarked(&owner, unlimited).unwrap();
+    let plain = reference.work;
+    let expected = reference.producers.unwrap();
+    let attempt = super::super::producers(&owner, unlimited, &Cancellation::default()).unwrap();
+    // The required-atom inventory itself exhausts the four-times share;
+    // the complete original producer inventory still succeeds unmarked.
+    assert_eq!(attempt.work, 5 * plain);
+    let actual = attempt.producers.unwrap();
+    assert!(actual.belongs_to(&owner));
+    assert_eq!(actual.rules.len(), expected.rules.len());
+    for (actual, expected) in actual.rules.iter().zip(&expected.rules) {
+        assert_eq!(actual.body, expected.body);
+        assert_eq!(actual.heads, expected.heads);
+        assert_eq!(actual.choice, expected.choice);
+    }
+    for atom in 0..owner.atom_count() {
+        assert_eq!(actual.by_head[atom], expected.by_head[atom]);
+    }
+    for node in 0..owner.nodes().len() {
+        assert_eq!(actual.by_body[node], expected.by_body[node]);
+    }
+    assert_eq!(actual.has_competing_heads, expected.has_competing_heads);
+    assert_eq!(actual.has_choice_heads, expected.has_choice_heads);
+    assert!(!actual.any_circular());
+    assert_eq!(marks(&actual), vec![false; 32]);
+}
+
+#[test]
+fn non_atomic_requirement_reads_observe_cancellation_at_a_refill() {
+    struct CancelOnRefill {
+        cancellation: Cancellation,
+        requests: usize,
+        granted: u64,
+        refunded: u64,
+    }
+
+    impl zetesis_algebra::Quota for CancelOnRefill {
+        type Error = Stop;
+
+        fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
+            self.requests += 1;
+            if self.requests == 2 {
+                self.cancellation.cancel();
+            }
+            self.cancellation.poll()?;
+            self.granted += wanted;
+            Ok(wanted)
+        }
+
+        fn refund(&mut self, unspent: u64) {
+            self.refunded += unspent;
+        }
+    }
+
+    let owner = mixed_body(32, 65_536, false);
+    let inventory = unmarked(&owner, RegionLimits { max_work: u64::MAX })
+        .unwrap()
+        .producers
+        .unwrap();
+    let cancellation = Cancellation::default();
+    let mut quota = CancelOnRefill {
+        cancellation: cancellation.clone(),
+        requests: 0,
+        granted: 0,
+        refunded: 0,
+    };
+    let (result, charged) = {
+        let mut work = zetesis_algebra::Meter::reserved(&mut quota);
+        let result = super::super::circular::mark(
+            &owner,
+            &inventory.rules,
+            &inventory.by_head,
+            &inventory.by_body,
+            &mut work,
+        );
+        let charged = work.charged();
+        work.refund();
+        (result, charged)
+    };
+    assert!(matches!(
+        result,
+        Err(zetesis_algebra::Failure::Refused(Stop::Cancelled))
+    ));
+    assert_eq!(charged, zetesis_algebra::POLL_INTERVAL);
+    assert_eq!(quota.requests, 2);
+    assert_eq!(quota.granted - quota.refunded, charged);
+    assert_eq!(cancellation.poll(), Err(Stop::Cancelled));
+    assert!(!inventory.any_circular());
+    assert_eq!(marks(&inventory), vec![false; 32]);
+}
+
+#[test]
+fn mixed_body_marking_preserves_the_complete_answer_family() {
+    for width in [2, 3, 1_024] {
+        let owner = mixed_body(1, width, true);
+        let unlimited = RegionLimits { max_work: u64::MAX };
+        let reference = unmarked(&owner, unlimited).unwrap();
+        let marked = super::super::producers(&owner, unlimited, &Cancellation::default()).unwrap();
+        // The large body reaches the optional fallback; the small ones finish.
+        assert_eq!(marked.work == 5 * reference.work, width == 1_024);
+        let inventories = [reference.producers.unwrap(), marked.producers.unwrap()];
+        let narrower = Narrower::new(&owner);
+        let mut expected = Vec::new();
+        let mut actual = [Vec::new(), Vec::new()];
+        for mask in 0..16 {
+            let interpretation = crate::test_support::world(&owner, mask);
+            let accepted = crate::check(
+                &owner,
+                &interpretation,
+                crate::Limits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap()
+            .accepted();
+            if accepted {
+                expected.push(mask);
+            }
+            let mut region = Region::all_open(4);
+            for atom in 0..4 {
+                if mask & (1 << atom) == 0 {
+                    region.cut(atom);
+                } else {
+                    region.hold(atom);
+                }
+            }
+            for (inventory, family) in inventories.iter().zip(&mut actual) {
+                if close(
+                    (&owner, &narrower),
+                    (inventory, &mut NarrowingScratch::default()),
+                    region.clone(),
+                )
+                .is_some()
+                    && accepted
+                {
+                    family.push(mask);
+                }
+            }
+        }
+        assert_eq!(expected, [0, 1, 2, 4, 6, 11, 13, 15]);
+        assert_eq!(actual, [expected.clone(), expected], "width {width}");
+    }
+}

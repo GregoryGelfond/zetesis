@@ -4,6 +4,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Fixed
+
+- Circular-support preparation now charges inspections of non-atomic
+  conjunction operands. Wide shared bodies could previously perform these
+  reads without consuming their work allowance or advancing cancellation
+  checks. Exhausting the optional marking allowance retains the complete
+  unmarked producer inventory; answer-set semantics are unchanged.
+
 ### Added
 
 - `zetesis-bench run --workloads` accepts typed selections of authored, corpus

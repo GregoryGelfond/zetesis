@@ -110,7 +110,7 @@ pub(super) fn mark<Q: Quota + ?Sized>(
             let mut circular = false;
             for atom in required(theory, body) {
                 work.tick()?;
-                let atom = atom?;
+                let Some(atom) = atom? else { continue };
                 if atom == head {
                     circular = true;
                     break;
@@ -156,12 +156,16 @@ fn only_through<Q: Quota + ?Sized>(
     Ok(!producers.is_empty())
 }
 
-/// The atoms a body requires: itself when it is an atom, or its operands that
-/// are atoms when it is a conjunction. Repeated operands repeat.
-fn required(theory: &Theory, body: usize) -> impl Iterator<Item = Result<usize, Stop>> + '_ {
+/// Each inspected requirement: the body when it is an atom, or every operand
+/// when it is a conjunction. A non-atomic operand yields `None` so the caller
+/// charges its inspection too. Repeated operands repeat.
+fn required(
+    theory: &Theory,
+    body: usize,
+) -> impl Iterator<Item = Result<Option<usize>, Stop>> + '_ {
     let nodes = theory.view();
     let (own, operands) = match nodes.node(body) {
-        Ok(NodeView::Atom(atom)) => (Some(Ok(atom)), &[][..]),
+        Ok(NodeView::Atom(atom)) => (Some(Ok(Some(atom))), &[][..]),
         Ok(NodeView::And(operands)) => (None, operands),
         Ok(_) => (None, &[][..]),
         Err(_) => (Some(Err(Stop::InvalidProgram)), &[][..]),
@@ -169,10 +173,10 @@ fn required(theory: &Theory, body: usize) -> impl Iterator<Item = Result<usize, 
     own.into_iter().chain(
         operands
             .iter()
-            .filter_map(move |&operand| match nodes.node(operand) {
-                Ok(NodeView::Atom(atom)) => Some(Ok(atom)),
-                Ok(_) => None,
-                Err(_) => Some(Err(Stop::InvalidProgram)),
+            .map(move |&operand| match nodes.node(operand) {
+                Ok(NodeView::Atom(atom)) => Ok(Some(atom)),
+                Ok(_) => Ok(None),
+                Err(_) => Err(Stop::InvalidProgram),
             }),
     )
 }
@@ -197,8 +201,9 @@ impl Requirements {
             }
             for atom in required(theory, body) {
                 work.tick()?;
+                let Some(atom) = atom? else { continue };
                 pairs.try_reserve(1).map_err(|_| Stop::Allocation)?;
-                pairs.push((atom?, body));
+                pairs.push((atom, body));
             }
         }
         let bodies = Adjacency::build(theory.atom_count(), pairs.iter().copied())?;
