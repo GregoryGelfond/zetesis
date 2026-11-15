@@ -1111,6 +1111,69 @@ theorem upper_of_clique (C : Atoms α → Prop) (S : List α) (nodup : S.Nodup)
       rw [Nat.zero_add]
       exact tail
 
+/-- A count over atoms all of which hold is their number. -/
+theorem count_of_all (M : Atoms α) (S : List α) (all : ∀ a ∈ S, M a) :
+    measure counting.toReduction M (S.map fun a => (a, 1)) = S.length := by
+  induction S with
+  | nil => rfl
+  | cons head rest counted =>
+    have present : M head := all head (List.mem_cons_self ..)
+    rw [List.map_cons, measure_cons,
+      contribution_of_holds counting.toReduction (M := M) (t := (head, 1)) present,
+      counted (fun a listed => all a (List.mem_cons_of_mem head listed))]
+    show 1 + rest.length = (head :: rest).length
+    simp only [List.length_cons, Nat.add_comm]
+
+/-- **A clique of covering pairs is a lower bound.** If every member of the class
+holds at least one of any two distinct atoms of a duplicate-free list `S`, every
+member misses at most one of them: the count over `S` is at least its length less
+one. Each pair's premise is a refuted two-atom pattern, the one cutting both
+(`Algebra.entailed_by_refutations`). This is `upper_of_clique` with holding and
+cutting exchanged, so a pairwise constraint yields a bound whichever polarity its
+atoms were read in.
+
+Proof. By induction on `S`. A member holding the head counts it together with all
+but at most one of the rest, by the induction hypothesis. A member missing the
+head holds every other atom, each being paired with the head, and so counts the
+whole rest (`count_of_all`). -/
+theorem lower_of_cover (C : Atoms α → Prop) (S : List α) (nodup : S.Nodup)
+    (covered : ∀ a ∈ S, ∀ b ∈ S, a ≠ b → ∀ M, C M → M a ∨ M b) :
+    LowerOf counting C (S.map fun a => (a, 1)) (S.length - 1) := by
+  classical
+  intro M member
+  induction S with
+  | nil => exact Nat.zero_le _
+  | cons head rest counted =>
+    have headFresh : head ∉ rest := (List.nodup_cons.mp nodup).1
+    have restNodup : rest.Nodup := (List.nodup_cons.mp nodup).2
+    have restCovered : ∀ a ∈ rest, ∀ b ∈ rest, a ≠ b → ∀ N, C N → N a ∨ N b :=
+      fun a inRest b inRest' distinct =>
+        covered a (List.mem_cons_of_mem head inRest) b (List.mem_cons_of_mem head inRest') distinct
+    rw [List.map_cons, measure_cons]
+    by_cases held : M head
+    · have tail : rest.length - 1 ≤ measure counting.toReduction M (rest.map fun a => (a, 1)) :=
+        counted restNodup restCovered
+      rw [contribution_of_holds counting.toReduction (M := M) (t := (head, 1)) held]
+      show (head :: rest).length - 1 ≤
+        1 + measure counting.toReduction M (rest.map fun a => (a, 1))
+      simp only [List.length_cons]
+      omega
+    · have all : ∀ a ∈ rest, M a := by
+        intro a listed
+        have distinct : head ≠ a := by
+          intro same
+          rw [same] at headFresh
+          exact headFresh listed
+        have one : M head ∨ M a :=
+          covered head (List.mem_cons_self ..) a (List.mem_cons_of_mem head listed) distinct
+            M member
+        exact one.resolve_left held
+      rw [contribution_of_fails counting.toReduction (M := M) (t := (head, 1)) held,
+        count_of_all M rest all]
+      show (head :: rest).length - 1 ≤ 0 + rest.length
+      simp only [List.length_cons]
+      omega
+
 /-- **Bounds from allowed patterns.** If every member of the class is allowed, where
 being allowed depends on `S` alone, and every allowed interpretation supported on
 `S` counts between `low` and `high` over `S`, then those are a lower and an upper

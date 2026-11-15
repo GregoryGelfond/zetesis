@@ -35,6 +35,7 @@ pub(crate) use buffer::Buffer;
 pub(crate) use term_selection::TermSelection;
 #[cfg(test)]
 mod captures;
+pub(crate) mod certain;
 #[cfg(test)]
 mod columnar;
 #[cfg(test)]
@@ -72,13 +73,13 @@ mod rows;
 pub(crate) use factoring::Continuations;
 
 mod local_plans;
-pub(crate) use local_plans::Ir;
 use local_plans::Plan as JoinPlan;
+pub(crate) use local_plans::{Certificate as LocalPlanCertificate, Ir};
 
 use crate::ProgramSite;
 use components::Pattern as AtomPattern;
 use relations::SupportAppend;
-use themelios_program::program::Relation;
+use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::EvalError;
 use zetesis_core::catalog::{Atoms, PredicateRef, TermRef};
 use zetesis_core::{PatternRef, TemplateTerm};
@@ -498,8 +499,8 @@ impl Counters {
 /// Admit `amount` units before their effect: observe at a charged-range boundary
 /// or before a work refusal, check the ceiling, record the receipt, then count.
 /// Zero admits no units and never observes; use `Counters::poll` explicitly. Every charged unit runs
-/// on this path, so it inlines into its callers; the site is read only when a
-/// failure is built, on the cold path.
+/// on this path, so its admission inlines into its callers; the site is read
+/// only by the cold decision that observes control or builds a failure.
 #[inline]
 fn charge_work(
     work: &mut u64,
@@ -520,8 +521,37 @@ fn charge_work(
 
 /// Check the charged range and ceiling. A refused charge observes first; an
 /// admitted range observes only when it contains a cadence boundary.
+///
+/// Nearly every charge is a machine-width amount that stays under the ceiling
+/// and whose range holds no cadence boundary. That charge is admitted with no
+/// observation and builds no failure, so it is decided here, inline in its
+/// caller, by one addition and two comparisons. Every other charge takes
+/// [`check_observed_work`], which decides all charges alike: the two agree
+/// wherever this test admits.
 #[inline]
 fn check_work(
+    work: u64,
+    control: Option<&accounting::AccountControl>,
+    amount: u128,
+    limits: &FormulaLimits,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    if let Ok(amount) = u64::try_from(amount)
+        && let Some(observed) = work.checked_add(amount)
+        && observed <= limits.max_work
+        && !accounting::charge_observes(control, work, amount)
+    {
+        return Ok(());
+    }
+    check_observed_work(work, control, amount, limits, location)
+}
+
+/// The complete decision of a charge: one that observes control, reaches the
+/// ceiling or needs the wide check. Marked cold, which keeps it off the fast
+/// path of callers that carry the inline admission of [`check_work`]; the
+/// attribute does not itself forbid inlining.
+#[cold]
+fn check_observed_work(
     work: u64,
     control: Option<&accounting::AccountControl>,
     amount: u128,
@@ -620,6 +650,16 @@ fn complete(
         location: fallback,
     } = work;
     catalog.prepared_bytes(producers.bytes());
+    // Certain predicates are read by assignment proposals from the first
+    // round on, so they are installed before the first snapshot.
+    if certain::every_predicate_assumed() {
+        catalog.install_certainty(certain::Certainty::all(), limits, counters, fallback)?;
+    } else if !certain::left_out()
+        && let Some(certainty) =
+            producers.certainty(prepared, &catalog, limits, counters, fallback)?
+    {
+        catalog.install_certainty(certainty, limits, counters, fallback)?;
+    }
     // Postings are kept only for columns a join can bind, decided before the
     // first relation is created, since a column cannot gain postings later.
     if let Some(view) = catalog.component_view(limits, counters, fallback)? {
@@ -664,7 +704,7 @@ fn complete(
             let kept = std::mem::take(&mut retained);
             let support = Support::indexed_retaining(&relations, kept, limits, counters, fallback)?;
             counters.observe_work(Event::SupportProductionWork, |counters| {
-                while let Some((index, deferred)) = next_producer(
+                while let Some((index, scheduled)) = next_producer(
                     selected,
                     &mut facts,
                     (&producers, &mut delta, &support),
@@ -676,7 +716,7 @@ fn complete(
                     let rule = &prepared.rules_without_facts()[index];
                     counters.work(limits, rule.location)?;
                     counters.record(Event::SupportProducerVisit);
-                    let mut variants = if deferred {
+                    let mut variants = if scheduled {
                         counters.record(Event::SupportRichTraversal);
                         delta::traversal(rule, &support, true)
                     } else {
@@ -690,7 +730,7 @@ fn complete(
                         budget,
                         (limits, counters),
                     )?;
-                    if !deferred {
+                    if !scheduled {
                         selected = schedule.next(limits, counters, fallback)?;
                     }
                 }
@@ -701,17 +741,18 @@ fn complete(
             retained = support.into_retained(fallback)?;
             advance_round(
                 &mut delta,
-                producers.plan_mut(),
+                Some(&mut producers),
                 GroundingWork::new(limits, counters, fallback),
             )?
         };
         if !changed {
-            // An unchanged round decides every component no deferred producer
-            // still feeds, so the earliest waiting producer was traversed.
-            debug_assert!(
-                !producers.pending(),
-                "a deferred producer was not traversed"
-            );
+            // An unchanged round decides every component no waiting producer
+            // still feeds, so the earliest waiting producer was traversed. A
+            // producer left waiting would mean heads the support lacks, and
+            // every decision read from it: refuse instead of publishing it.
+            if producers.pending() {
+                return Err(FormulaFailure::SourceActivity { location: fallback });
+            }
             return finish(
                 (catalog, producers, retained),
                 GroundingWork::new(limits, counters, fallback),
@@ -722,8 +763,9 @@ fn complete(
 }
 
 /// The round's next producer: the schedule's, then, once it is exhausted and
-/// the facts are in, each deferred rich producer whose read components reached
-/// their fixed point, flagged so its caller traverses it in full.
+/// the facts are in, each producer the component schedule holds whose waited
+/// components reached their fixed point, flagged so its caller traverses it
+/// in full.
 fn next_producer<'source>(
     selected: Option<usize>,
     facts: &mut Option<facts::FirstRound<'_>>,
@@ -777,7 +819,7 @@ fn produce<'source>(
         None => None,
     };
     derive_variants(
-        rule,
+        (index, rule),
         variants,
         (guards.as_ref(), totality),
         support,
@@ -790,7 +832,7 @@ fn produce<'source>(
 /// publication order. Refusal leaves private round metadata, never completion.
 fn advance_round(
     delta: &mut SupportAppend<'_>,
-    plan: Option<&mut producers::ProducerPlan<'_>>,
+    producers: Option<&mut producers::Producers<'_>>,
     work: GroundingWork<'_>,
 ) -> Result<bool, FormulaFailure> {
     let GroundingWork {
@@ -806,9 +848,9 @@ fn advance_round(
     })?;
     #[cfg(test)]
     facts::rounds::record(delta.atoms());
-    if let Some(plan) = plan {
+    if let Some(producers) = producers {
         counters.observe_work(Event::SupportWakeWork, |counters| {
-            plan.advance(delta.atoms(), limits, counters, location)
+            producers.advance(delta.atoms(), limits, counters, location)
         })?;
     }
     Ok(true)
@@ -839,9 +881,19 @@ fn finish(
     })
 }
 
+/// What a conditional head's head stage holds under one condition row.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HeadOutcome {
+    /// An instance of the head is defined there.
+    pub(crate) defined: bool,
+    /// An instance of the head divides by zero there.
+    pub(crate) zero: bool,
+}
+
 /// Visit one rule's ordered delta variants under the same admitted guards.
+/// `index` is the rule's position among the producers.
 fn derive_variants<'source>(
-    rule: &'source crate::formula_ir::RuleIr,
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     variants: &mut delta::Variants<'_, '_>,
     (guards, totality): (
         Option<&queries::Guards<'_, 'source>>,
@@ -879,7 +931,7 @@ fn derive_variants<'source>(
                 outer.select_static_total_body(rule, totality, limits, counters)?;
             }
             derive_rule(
-                rule,
+                (index, rule),
                 &mut outer,
                 support,
                 computation,
@@ -904,7 +956,7 @@ fn derive_variants<'source>(
             outer.select_static_total_body(rule, totality, limits, counters)?;
         }
         derive_rule(
-            rule,
+            (index, rule),
             &mut outer,
             support,
             computation,
@@ -926,8 +978,12 @@ fn derive_variants<'source>(
     Ok(())
 }
 
+/// Derive the heads of every complete row of `outer`, a join of the rule at
+/// position `index` among the producers. A row under which a decided
+/// default-negated atom fails derives nothing
+/// ([`Derivation::negations_hold`]).
 fn derive_rule<'source>(
-    rule: &'source crate::formula_ir::RuleIr,
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     outer: &mut Join<'_, 'source>,
     support: &Support<'source>,
     computation: &mut Computation<'_, '_>,
@@ -953,7 +1009,13 @@ fn derive_rule<'source>(
         HeadIr::Normal(head) => *head,
         _ => None,
     };
+    let certainty = support.certainty();
     while let Some(binding) = derivation.next(outer, projected, rule.location)? {
+        if let Some(certainty) = certainty
+            && !derivation.negations_hold(rule, certainty.decided(index), &binding)?
+        {
+            continue;
+        }
         match &rule.head {
             HeadIr::Normal(Some(head)) => {
                 derivation.normal_head(*head, &binding, rule.location)?;
@@ -999,6 +1061,38 @@ fn derive_rule<'source>(
     Ok(())
 }
 
+/// Whether every default-negated atom of `rule` at the body positions
+/// `decided` has the value its literal requires under `binding`: `not a`
+/// requires `a` outside the support `computation` reads, `not not a` inside.
+/// The positions are those [`certain::Certainty::decided`] lists for the
+/// rule, so each atom's predicate is certain and its relation complete: the
+/// atom holds in every answer set when it is supported and in none otherwise.
+/// Support completion and source activity both ask here, so they omit the
+/// same rows. One unit per atom tested, with the pattern's read and the
+/// support lookup.
+pub(crate) fn decided_negations_hold(
+    rule: &crate::formula_ir::RuleIr,
+    decided: impl Iterator<Item = usize>,
+    binding: &Binding<'_>,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    for occurrence in decided {
+        let LiteralIr::Atom(negation, pattern) = &rule.body[occurrence] else {
+            unreachable!("a decided occurrence is a default-negated flat atom");
+        };
+        counters.work(limits, rule.location)?;
+        let pattern = computation.static_pattern(*pattern, limits, counters, rule.location)?;
+        let supported =
+            computation.contains_pattern(pattern, binding, limits, counters, rule.location)?;
+        if supported != (*negation == DefaultNegation::NotNot) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// A support round publishes newly derived heads after complete checked binding.
 /// Existing support and the current delta share one borrowed atom identity.
 struct Derivation<'a, 'source, 'round> {
@@ -1034,6 +1128,30 @@ impl Derivation<'_, '_, '_> {
                     .expect("prepared normal head")
                     .derive(binding, self.computation, self.limits, counters, location)
             })
+    }
+
+    /// Whether every default-negated atom of `rule` at the body positions
+    /// `decided` has the value its literal requires under `binding`. Each
+    /// such atom's predicate is certain and its relation complete whenever
+    /// this rule is traversed (`certain::Certainty::decided`), so the atom
+    /// holds in every answer set when it is supported and in none otherwise:
+    /// `not a` requires it unsupported, `not not a` supported. A row that
+    /// fails derives no head, as no answer set satisfies its body. One unit
+    /// per atom tested, with the pattern's read and the support lookup.
+    fn negations_hold(
+        &mut self,
+        rule: &crate::formula_ir::RuleIr,
+        decided: impl Iterator<Item = usize>,
+        binding: &Binding<'_>,
+    ) -> Result<bool, FormulaFailure> {
+        decided_negations_hold(
+            rule,
+            decided,
+            binding,
+            self.computation,
+            self.limits,
+            self.counters,
+        )
     }
 
     /// Select a complete support binding before the consumer borrows its frame.
@@ -1231,6 +1349,7 @@ pub(crate) struct Join<'a, 'source> {
     /// Enabled only for a borrowed non-generated filtered binding; undo
     /// truncates it with that binding. No truth survives a cursor/check.
     positive_prefix: Option<rows::PositivePrefix>,
+    families: Option<std::rc::Rc<crate::formula_ground::families::Workspace<'a, 'source>>>,
     support: &'a Support<'source>,
     values: Binding<'static>,
     lease: StorageLease,
@@ -1272,6 +1391,13 @@ enum Probe<'a, 'source> {
     Owned(Buffer<usize>),
 }
 
+/// A probe that narrows an occurrence, if any, and the count to add its
+/// replacement's rows to when a table selection was declined.
+struct Narrowed<'a, 'source> {
+    probe: Option<Probe<'a, 'source>>,
+    declined: Option<usize>,
+}
+
 #[derive(Clone, Copy)]
 enum Resolution<'source> {
     Unresolved,
@@ -1299,6 +1425,19 @@ impl<'source> Resolution<'source> {
     }
 }
 impl Probe<'_, '_> {
+    /// The rows this probe offers that a table selection could have spared
+    /// the join, for the count of rows read in place of a declined one. A
+    /// numeric index offers the rows its equality selects, which the table
+    /// would offer too, and a table selection is never such a probe: both
+    /// count none.
+    fn offered(&self) -> usize {
+        match self {
+            Self::Indexed(rows) => rows.len(),
+            Self::Owned(rows) | Self::Range(rows) => rows.slice().len(),
+            Self::Expression(_) | Self::Table(_) => 0,
+        }
+    }
+
     fn next(
         &self,
         position: &mut usize,
@@ -1815,6 +1954,70 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(join)
     }
 
+    /// Stop after the condition stage: each passing condition row is
+    /// returned once, with no head value generated for it.
+    pub(crate) fn conditions_only(&mut self) {
+        self.head_slots = self.head_slots.start..self.head_slots.start;
+    }
+
+    /// Whether this join's head stage has an instance under the condition
+    /// row `frame`, and whether an instance of it there divides by zero.
+    /// `frame` is a passing row of a condition stage over this join's
+    /// condition and slots, its own or that of another alternative of the
+    /// same condition. The head's generators run under that row alone, as
+    /// the staged traversal runs them for each of its rows: the condition's
+    /// own generators are not run again. One defined instance settles the
+    /// answer, so later instances are not visited; a fatal failure reached
+    /// before it is returned.
+    pub(crate) fn head_outcome(
+        &mut self,
+        frame: Binding<'static>,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<HeadOutcome, FormulaFailure> {
+        let mut pending = crate::formula_binding_cursor::Cursor::new(
+            self.literals,
+            frame,
+            self.support,
+            self.bindings,
+            self.head_slots.clone(),
+            Context::new(computation, limits, counters, location),
+        )?;
+        if let Some(families) = &self.families {
+            pending.share_families(std::rc::Rc::clone(families), limits, counters, location)?;
+        }
+        let mut outcome = HeadOutcome {
+            defined: false,
+            zero: false,
+        };
+        loop {
+            match pending.next(
+                &mut self.evaluation,
+                computation,
+                limits,
+                budget,
+                counters,
+                location,
+            ) {
+                Ok(Some(_)) => {
+                    outcome.defined = true;
+                    return Ok(outcome);
+                }
+                Ok(None) => return Ok(outcome),
+                Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. }))
+                    if self.evaluation.zero_divisor() =>
+                {
+                    outcome.zero = true;
+                    pending.reject(location)?;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
     fn stage_head(
         &mut self,
         slots: std::ops::Range<usize>,
@@ -1944,6 +2147,25 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         Ok(())
     }
+    /// Share the existing final Builder's family stages. This is installed
+    /// before traversal; the query borrow keeps the exact Support alive.
+    pub(crate) fn share_families(
+        &mut self,
+        families: std::rc::Rc<crate::formula_ground::families::Workspace<'a, 'source>>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        families.authenticate(self.support, location)?;
+        counters.work(limits, location)?;
+        assert!(
+            self.pending.is_none() && self.pending_head.is_none(),
+            "family access is installed before cursor traversal"
+        );
+        self.families = Some(families);
+        Ok(())
+    }
+
     #[cfg_attr(test, track_caller)]
     pub(crate) fn local(
         literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
@@ -1953,6 +2175,34 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
+        Self::local_inner::<false>(literals, prefix, variables, support, budget, context)
+            .map(|(join, _)| join)
+    }
+
+    /// The same local constructor, optionally lending its already selected
+    /// source plan to a completed-family occurrence certificate. Ordinary local
+    /// callers instantiate RETAIN=false and perform no extra Rc clone.
+    #[cfg_attr(test, track_caller)]
+    pub(crate) fn local_certified(
+        literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
+        prefix: &Binding,
+        variables: usize,
+        support: &'a Support<'source>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(Self, Option<LocalPlanCertificate<'source>>), FormulaFailure> {
+        Self::local_inner::<true>(literals, prefix, variables, support, budget, context)
+    }
+
+    #[cfg_attr(test, track_caller)]
+    fn local_inner<const RETAIN: bool>(
+        literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
+        prefix: &Binding,
+        variables: usize,
+        support: &'a Support<'source>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(Self, Option<LocalPlanCertificate<'source>>), FormulaFailure> {
         let literals = literals.into();
         let Context {
             computation,
@@ -1984,6 +2234,16 @@ impl<'a, 'source> Join<'a, 'source> {
         } else {
             None
         };
+        let certificate = if RETAIN {
+            if let Some(plan) = &shared {
+                counters.work(limits, location)?;
+                Some(LocalPlanCertificate::retain(plan))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let mut join = if let Some(plan) = shared {
             Self::with_plan(
                 literals.get(),
@@ -2005,7 +2265,7 @@ impl<'a, 'source> Join<'a, 'source> {
             )?
         };
         join.literals = literals;
-        Ok(join)
+        Ok((join, certificate))
     }
 
     pub(crate) fn new(
@@ -2156,6 +2416,7 @@ impl<'a, 'source> Join<'a, 'source> {
             anchor: None,
             positive_prefix: None,
             support,
+            families: None,
             values,
             lease,
             trail_bytes: 0,
@@ -2350,9 +2611,12 @@ impl<'a, 'source> Join<'a, 'source> {
             self.trail_bytes - old + self.changes[self.depth].capacity() * size_of::<usize>();
         result
     }
-    /// Fix, for the current order and prefix, the depth at which each
-    /// comparison is decided and whether any check waits for the complete
-    /// row. Called after every arrangement and after the prefix is fixed.
+    /// Evaluate `guard` beside every row that holds, so that a fatal failure
+    /// in it refuses and a zero divisor is recorded. Such a row is still
+    /// returned: the guard is the consequent of a conditional literal, and
+    /// its consumer reads an undefined consequent as false. A row that fails
+    /// a check, or is omitted, does not reach the guard: the condition
+    /// comes before its consequent.
     pub(crate) fn check_guard(&mut self, guard: &'a crate::formula_guard::Guard) {
         if guard.expressions().any(family::expression) {
             self.coverage = Coverage::Complete;
@@ -2401,6 +2665,9 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         Ok(prefix)
     }
+    /// Fix, for the current order and prefix, the depth at which each
+    /// comparison is decided and whether any check waits for the complete
+    /// row. Called after every arrangement and after the prefix is fixed.
     fn decide(
         &mut self,
         computation: &Computation<'_, '_>,
@@ -2544,7 +2811,9 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(None)
     }
     /// Body data and scalar/range filters complete before head-only generation.
-    /// Negative gates and aggregate truth remain formulas, never row selection.
+    /// Negative gates and aggregate truth remain formulas here and select no
+    /// row; a negation support completion decides omits its row afterwards
+    /// (`decided_negations_hold`).
     fn next_staged(
         &mut self,
         ownership: Ownership,
@@ -2580,7 +2849,6 @@ impl<'a, 'source> Join<'a, 'source> {
                     location,
                 ) {
                     Ok(Some(values)) => {
-                        self.family.defined = true;
                         return Ok(Some(Staged {
                             frame: Frame::Owned(values),
                             passes: true,
@@ -2610,17 +2878,20 @@ impl<'a, 'source> Join<'a, 'source> {
                 return Ok(None);
             };
             if !row.passes || self.head_slots.is_empty() {
-                self.family.defined = true;
                 return Ok(Some(row));
             }
-            self.pending_head = Some(crate::formula_binding_cursor::Cursor::new(
+            let mut pending = crate::formula_binding_cursor::Cursor::new(
                 self.literals,
                 row.frame.into_owned(),
                 self.support,
                 self.bindings,
                 self.head_slots.clone(),
                 Context::new(computation, limits, counters, location),
-            )?);
+            )?;
+            if let Some(families) = &self.families {
+                pending.share_families(std::rc::Rc::clone(families), limits, counters, location)?;
+            }
+            self.pending_head = Some(pending);
             self.lease.observe(self.storage_bytes(), location)?;
         }
     }
@@ -2632,6 +2903,15 @@ impl<'a, 'source> Join<'a, 'source> {
             filters::Selection::Zero(error) => {
                 self.family.zero.get_or_insert(error);
                 None
+            }
+            // The row holds: only the guard checked beside it divides by
+            // zero, and its consumer gives that guard a value.
+            filters::Selection::UndefinedGuard(error) => {
+                self.family.zero.get_or_insert(error);
+                Some(Staged {
+                    frame,
+                    passes: true,
+                })
             }
         }
     }
@@ -2663,7 +2943,7 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         loop {
             if let Some(pending) = &mut self.pending {
-                match pending.next(
+                match pending.step(
                     &mut self.evaluation,
                     computation,
                     limits,
@@ -2671,7 +2951,7 @@ impl<'a, 'source> Join<'a, 'source> {
                     counters,
                     location,
                 ) {
-                    Ok(Some(binding)) => {
+                    Ok(crate::formula_binding_cursor::Step::Frame(binding)) => {
                         let binding = Frame::Owned(binding);
                         let selection = self.filters(
                             &binding,
@@ -2686,11 +2966,19 @@ impl<'a, 'source> Join<'a, 'source> {
                         }
                         continue;
                     }
-                    Ok(None) => {}
+                    Ok(crate::formula_binding_cursor::Step::Valueless(slot)) => {
+                        self.valueless(slot, computation, limits, counters, location)?;
+                        continue;
+                    }
+                    Ok(crate::formula_binding_cursor::Step::Finished) => {}
                     Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
                         let zero = self.evaluation.zero_divisor();
                         let excluded = filters::excludes(
-                            (self.literals.get(), &self.plan.decisions),
+                            (
+                                self.literals.get(),
+                                &self.plan.decisions,
+                                self.checked_guard,
+                            ),
                             &mut self.evaluation,
                             pending.binding(),
                             computation,
@@ -2729,6 +3017,32 @@ impl<'a, 'source> Join<'a, 'source> {
             )?;
         }
     }
+    /// The generator of `slot` in the proposal cursor has no value under the
+    /// values of those before it: read the comparisons over that value, which
+    /// no frame under them will reach (`filters::valueless`).
+    fn valueless(
+        &mut self,
+        slot: usize,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Some(pending) = &self.pending else {
+            return Ok(());
+        };
+        filters::valueless(
+            (
+                self.literals.get(),
+                &self.plan.decisions,
+                self.checked_guard,
+            ),
+            slot,
+            &mut self.evaluation,
+            pending.binding(),
+            Context::new(computation, limits, counters, location),
+        )
+    }
     /// Reuse only a complete support continuation; otherwise restart its
     /// existing frame or initialize the first cursor. Both live input frames
     /// remain admitted before comparison, and a hit adds no storage receipt.
@@ -2751,7 +3065,7 @@ impl<'a, 'source> Join<'a, 'source> {
             // Only support production passes the normal head projection.
             // Formula lowering retains every positive activation. The
             // previous completed continuation already published its heads
-            // and contributed its defined/first-error family evidence.
+            // and contributed its zero-divisor family evidence.
             if projected.is_some()
                 && let Some(inputs) = self
                     .bindings
@@ -2779,6 +3093,9 @@ impl<'a, 'source> Join<'a, 'source> {
                 0..self.head_slots.start,
                 Context::new(computation, limits, counters, location),
             )?;
+            if let Some(families) = &self.families {
+                pending.share_families(std::rc::Rc::clone(families), limits, counters, location)?;
+            }
             pending.select_range(self.range_selection);
             self.pending = Some(pending);
         }
@@ -2981,27 +3298,12 @@ impl<'a, 'source> Join<'a, 'source> {
         self.resolve_probe_source(pattern, GroundingWork::new(limits, counters, location))?;
         if self.probes[self.depth].is_none() {
             let source = self.resolutions[self.depth].rows();
-            if let Some(anchor) = &mut self.anchor
-                && anchor.occurrence == pattern.source
-            {
-                if matches!(anchor.row, rows::AnchorRow::Unresolved) {
-                    // Source/filter authentication above must complete before
-                    // an absent or singleton domain can be published.
-                    counters.work(limits, location)?;
-                    anchor.row = match source {
-                        Some(source) => self
-                            .support
-                            .lookup_at(source, anchor.atom, limits, counters, location)?
-                            .map_or(rows::AnchorRow::Absent, rows::AnchorRow::Present),
-                        None => rows::AnchorRow::Absent,
-                    };
-                }
-                let range = match anchor.row {
-                    rows::AnchorRow::Absent => 0..0,
-                    rows::AnchorRow::Present(row) => row..row + 1,
-                    rows::AnchorRow::Unresolved => unreachable!("resolved above"),
-                };
-                self.probes[self.depth] = Some(Probe::Indexed(delta::Rows::Interval(range)));
+            if let Some(probe) = self.anchored_probe(
+                source,
+                pattern.source,
+                GroundingWork::new(limits, counters, location),
+            )? {
+                self.probes[self.depth] = Some(probe);
                 return Ok(());
             }
             if let structural::Selection::Posting(posting) = self.structural_selection(
@@ -3019,57 +3321,170 @@ impl<'a, 'source> Join<'a, 'source> {
                 )?);
                 return Ok(());
             }
-            // Covered computed domains may combine several restrictions. Keep
-            // their selection before the numeric fallback, whose ordinary
-            // posting can otherwise replace it with a broader candidate set.
-            if let Some(probe) = self.computed_probe(
-                pattern.pattern,
-                source,
-                Context::new(computation, limits, counters, location),
-            )? {
-                self.probes[self.depth] = Some(probe);
-                return Ok(());
-            }
-            if let Some(probe) = self.expression_key_probe(
+            let narrowed = self.narrowed_probe(
                 pattern,
                 source,
-                Context::new(&*computation, limits, counters, location),
-            )? {
-                self.probes[self.depth] = Some(probe);
-                return Ok(());
-            }
-            let binding = self
-                .values
-                .view(computation.read(), limits, counters, location)?;
-            self.probes[self.depth] = Some(
-                if let Some(rows) = self.support.select_at(
+                Context::new(computation, limits, counters, location),
+            )?;
+            let probe = match narrowed.probe {
+                Some(probe) => probe,
+                None => self.broad_probe(
+                    pattern,
                     source,
-                    pattern.pattern,
-                    binding,
+                    Context::new(computation, limits, counters, location),
+                )?,
+            };
+            // The rows this probe offers are read in place of a selection
+            // the snapshot declined, and count towards preparing its table.
+            if let Some(ticket) = narrowed.declined {
+                self.support.count_scanned(ticket, probe.offered());
+            }
+            self.probes[self.depth] = Some(probe);
+        }
+        Ok(())
+    }
+
+    /// The probe of a covered computed domain or, where its selection is
+    /// absent or declined, of a numeric index over the occurrence.
+    ///
+    /// Covered computed domains may combine several restrictions, so their
+    /// selection is kept before the numeric fallback, whose ordinary posting
+    /// can otherwise replace it with a broader candidate set. A declined
+    /// selection names the count that the probe taking its place adds to
+    /// ([`Support::count_scanned`]).
+    fn narrowed_probe(
+        &mut self,
+        pattern: PatternOccurrence<'a>,
+        source: Option<&'source relations::RelationRows<'source>>,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Narrowed<'a, 'source>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
                     limits,
                     counters,
                     location,
-                )? {
-                    Probe::Table(rows)
-                } else if let Some(probe) = self.multiples_probe(
+                },
+        } = context;
+        let declined = match self.computed_probe(
+            pattern.pattern,
+            source,
+            Context::new(computation, limits, counters, location),
+        )? {
+            projections::Computed::Probe(probe) => {
+                return Ok(Narrowed {
+                    probe: Some(probe),
+                    declined: None,
+                });
+            }
+            projections::Computed::Declined(ticket) => Some(ticket),
+            projections::Computed::Absent => None,
+        };
+        let probe = self.expression_key_probe(
+            pattern,
+            source,
+            Context::new(&*computation, limits, counters, location),
+        )?;
+        Ok(Narrowed { probe, declined })
+    }
+
+    /// The probe of an occurrence that neither a computed domain nor a
+    /// numeric index narrows: a table selection under the table strategy, a
+    /// posting of multiples, or the indexed selection by its bound columns.
+    fn broad_probe(
+        &mut self,
+        pattern: PatternOccurrence<'a>,
+        source: Option<&'source relations::RelationRows<'source>>,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Probe<'a, 'source>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        let binding = self
+            .values
+            .view(computation.read(), limits, counters, location)?;
+        Ok(
+            if let Some(rows) = self.support.select_at(
+                source,
+                pattern.pattern,
+                binding,
+                limits,
+                counters,
+                location,
+            )? {
+                Probe::Table(rows)
+            } else if let Some(probe) = self.multiples_probe(
+                source,
+                Context::new(&*computation, limits, counters, location),
+            )? {
+                probe
+            } else {
+                match self.support.indexed_selection_at(
                     source,
-                    Context::new(&*computation, limits, counters, location),
+                    pattern.pattern,
+                    binding,
+                    (self.delta, pattern.source),
+                    GroundingWork::new(limits, counters, location),
                 )? {
-                    probe
-                } else {
-                    let posting = self.support.probe_at(
+                    queries::IndexedSelection::Exact(range) => {
+                        Probe::Indexed(delta::Rows::Interval(range))
+                    }
+                    queries::IndexedSelection::Posting(posting) => self.indexed_probe(
+                        posting,
                         source,
-                        pattern.atom(),
-                        binding,
+                        pattern.source,
                         limits,
                         counters,
                         location,
-                    )?;
-                    self.indexed_probe(posting, source, pattern.source, limits, counters, location)?
-                },
-            );
+                    )?,
+                }
+            },
+        )
+    }
+
+    /// Resolve an explicitly anchored occurrence after source/filter admission.
+    /// Its original row identity is retained across backtracking.
+    fn anchored_probe(
+        &mut self,
+        source: Option<&'source relations::RelationRows<'source>>,
+        occurrence: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<Probe<'a, 'source>>, FormulaFailure> {
+        let Some(anchor) = self
+            .anchor
+            .as_mut()
+            .filter(|anchor| anchor.occurrence == occurrence)
+        else {
+            return Ok(None);
+        };
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        if matches!(anchor.row, rows::AnchorRow::Unresolved) {
+            counters.work(limits, location)?;
+            anchor.row = match source {
+                Some(source) => self
+                    .support
+                    .lookup_at(source, anchor.atom, limits, counters, location)?
+                    .map_or(rows::AnchorRow::Absent, rows::AnchorRow::Present),
+                None => rows::AnchorRow::Absent,
+            };
         }
-        Ok(())
+        let range = match anchor.row {
+            rows::AnchorRow::Absent => 0..0,
+            rows::AnchorRow::Present(row) => row..row + 1,
+            rows::AnchorRow::Unresolved => unreachable!("resolved above"),
+        };
+        Ok(Some(Probe::Indexed(delta::Rows::Interval(range))))
     }
     fn indexed_probe(
         &self,

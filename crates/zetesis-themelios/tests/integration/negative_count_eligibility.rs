@@ -2,6 +2,7 @@
 
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement_in;
 use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
@@ -228,22 +229,16 @@ fn negated_conditions_cannot_supply_local_bindings() {
 }
 
 #[test]
-fn undefined_negative_arguments_refuse_admission() {
-    let error = admit_formula(
-        "1#count{1:a:X=0,not b(1/X)}1.".into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-        ),
-        "{error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+fn an_undefined_negative_argument_omits_its_element() {
+    let source = "1#count{1:a:X=0,not b(1/X)}1.";
+    let admitted = input(source);
+    // The negated atom's argument divides by zero at the element's one
+    // binding. The element is omitted, not made eligible by the absence of
+    // b: the count is empty, its bounds fail and no answer set remains. The
+    // statement keeps the warning.
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), source);
+    assert!(native(&admitted).is_empty());
+    assert!(exhaustive(&admitted).is_empty());
 }
 
 #[test]

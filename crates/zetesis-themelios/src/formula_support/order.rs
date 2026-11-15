@@ -184,6 +184,56 @@ impl<'a> Plan<'a> {
         })
     }
 
+    /// Record the prefix bits this ordinary local plan actually reads. The
+    /// caller supplies its already-accounted key storage, initialized to None.
+    /// A local plan has no selected comparison view: positive-pattern slots
+    /// and direct comparison/argument-check inputs are its whole footprint.
+    /// Other literal kinds retain their fresh complete-row execution in Join.
+    pub(super) fn local_prefix_requirements(
+        &self,
+        literals: &[LiteralIr],
+        prefix: &Binding,
+        required: &mut [Option<bool>],
+        budget: &mut Budget,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        debug_assert_eq!(required.len(), prefix.len());
+        debug_assert!(required.iter().all(Option::is_none));
+        work(budget, 1, location)?;
+        if required.is_empty() {
+            return Ok(());
+        }
+        for occurrence in &self.patterns {
+            each_slot(occurrence, budget, location, |slot| {
+                if let Some(entry) = required.get_mut(slot) {
+                    *entry = Some(false);
+                }
+            })?;
+        }
+        for (index, literal) in literals.iter().enumerate() {
+            work(budget, 1, location)?;
+            if let Some(([left, right], _)) = operands(None, index, literal) {
+                work(
+                    budget,
+                    left.nodes.len() as u128 + right.nodes.len() as u128,
+                    location,
+                )?;
+                for slot in left.inputs().chain(right.inputs()) {
+                    if let Some(entry) = required.get_mut(slot) {
+                        *entry = Some(false);
+                    }
+                }
+            }
+        }
+        for (slot, entry) in required.iter_mut().enumerate() {
+            work(budget, 1, location)?;
+            if entry.is_some() {
+                *entry = Some(prefix.is_bound(slot, location)?);
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn retained_bytes(&self) -> u128 {
         self.patterns.capacity() as u128 * size_of::<PatternOccurrence<'_>>() as u128
             + self.decisions.at.capacity() as u128 * size_of::<Option<usize>>() as u128

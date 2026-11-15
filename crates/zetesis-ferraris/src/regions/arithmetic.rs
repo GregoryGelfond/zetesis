@@ -12,22 +12,23 @@
 use zetesis_algebra::Quota;
 
 mod budget;
+mod cardinality;
+mod cardinality_runtime;
 mod cardinality_source;
 mod completion;
 mod conjunction;
 mod frozen;
 mod hull;
+mod images;
 mod parity;
 mod root_facts;
 mod rows;
+pub(super) mod runtime;
+mod snapshot;
 mod source;
 mod storage;
 mod uniform;
-mod cardinality;
-mod cardinality_runtime;
 mod work;
-pub(super) mod runtime;
-mod snapshot;
 
 pub use frozen::{
     ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
@@ -35,6 +36,7 @@ pub use frozen::{
 };
 
 pub use cardinality_runtime::CardinalityKnowledge;
+pub use images::RootImageStatistics;
 pub use parity::ParityKnowledge;
 pub use runtime::ArithmeticAttempt;
 pub use work::PreparationWork;
@@ -65,10 +67,12 @@ pub struct PreparationLimits {
 
 impl PreparationLimits {
     /// Ordinary optional effort allowance, shared by both arithmetic systems.
+    /// A caller that scales the allowance with its theory, as the solver's
+    /// opening does, grants no less than this.
     pub const DEFAULT_WORK: u64 = 100_000_000;
 }
 
-/// Whether a complete immutable preparation was published.
+/// Whether the observed preparation transaction completed and was published.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreparationStatus {
     /// The stage has not run, or ran and found nothing to publish: an earlier
@@ -77,9 +81,9 @@ pub enum PreparationStatus {
     NotPrepared,
     /// Complete checked rows and their root result are available.
     Prepared,
-    /// The shared optional effort allowance declined the entire preparation.
+    /// The shared optional effort allowance declined this transaction.
     WorkDeclined,
-    /// The named optional storage allowance declined the entire preparation.
+    /// The named optional storage allowance declined this transaction.
     StorageDeclined,
     /// A mandatory resource or source failure left the preparation incomplete.
     Incomplete,
@@ -122,7 +126,9 @@ pub struct ParityStatistics {
     pub unsupported_definitions: u64,
     /// Proposals rejected by independent source checking.
     pub provenance_rejected: u64,
-    /// Retained echelon pivots.
+    /// The rank of the checked equations: the atoms their one-atom equations
+    /// decide, and the retained echelon pivots of the rest. A refuted root
+    /// reports the pivots retained before its refutation.
     pub rank: usize,
     /// Trusted row additions executed during elimination.
     pub row_additions: u64,
@@ -134,9 +140,11 @@ pub struct ParityStatistics {
     pub preparation_bytes: u128,
     /// Published system header and actual capacities, excluding source theory.
     pub retained_bytes: u128,
-    /// A checked zero row with constant one refuted the unconstrained root.
+    /// A checked zero row with constant one, or two one-atom equations that
+    /// disagree, refuted the unconstrained root.
     pub root_refuted: bool,
-    /// Echelon rows that force an original atom at the root.
+    /// Original atoms decided at the root: by a one-atom equation, or by an
+    /// echelon row that elimination left with one atom.
     pub units: usize,
     /// Completed runtime batches, including unchanged batches and absorbing
     /// refutations. Repeated batches on one region count separately; failed
@@ -251,7 +259,9 @@ impl ParitySystem {
         self.recognized.facts.belongs_to(theory)
     }
 
-    /// Original atom decisions from one-atom echelon rows, in basis order.
+    /// Original atom decisions, each atom once: from the one-atom equations
+    /// recognition found, in the order found, then from the one-atom echelon
+    /// rows, in basis order.
     pub fn units(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
         self.prepared
             .units
@@ -259,7 +269,8 @@ impl ParitySystem {
             .map(|unit| (unit.atom, unit.value))
     }
 
-    /// Whether a checked row established the root contradiction `0 = 1`.
+    /// Whether the checked equations are contradictory at the root: a row
+    /// reads `0 = 1`, or two one-atom equations disagree.
     #[must_use]
     pub const fn root_refuted(&self) -> bool {
         self.prepared.root_refuted
@@ -324,13 +335,14 @@ impl CardinalitySystem {
     }
 }
 
-/// The two immutable original-answer preparations, sharing one optional budget.
+/// Checked original arithmetic systems and root consequences, sharing one optional budget.
 /// A parity refutation absorbs before cardinality preparation is necessary.
 #[derive(Debug)]
 pub struct RootPreparation {
     parity: ParitySystem,
     cardinality: Option<CardinalitySystem>,
     seeded_root: Option<Region>,
+    image_refuted: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -352,6 +364,8 @@ pub struct PreparationAttempt<E = Stop> {
     pub parity: ParityStatistics,
     /// Counting-stage observations.
     pub cardinality: CardinalityStatistics,
+    /// Original-root image attempt, independently attributed to its transaction.
+    pub images: RootImageStatistics,
 }
 
 impl RootPreparation {
@@ -366,6 +380,24 @@ impl RootPreparation {
         limits: PreparationLimits,
         cancellation: &Cancellation,
         meter: &mut Meter<'_, Q>,
+    ) -> PreparationAttempt<Failure<Q::Error>> {
+        Self::prepare_with_image_policy(
+            theory,
+            producers,
+            limits,
+            cancellation,
+            meter,
+            images::POLICY,
+        )
+    }
+
+    fn prepare_with_image_policy<Q: Quota + ?Sized>(
+        theory: &Theory,
+        producers: Option<&Producers>,
+        limits: PreparationLimits,
+        cancellation: &Cancellation,
+        meter: &mut Meter<'_, Q>,
+        image_policy: images::Policy,
     ) -> PreparationAttempt<Failure<Q::Error>> {
         let mut budget = Budget::new(meter, limits.work, limits.bytes, cancellation);
         let mut parity = ParityStatistics::default();
@@ -431,6 +463,16 @@ impl RootPreparation {
                 }
             }
         };
+        let mut images = RootImageStatistics::default();
+        let result = images::apply(
+            result,
+            theory,
+            image_policy,
+            &mut parity,
+            &mut cardinality,
+            &mut images,
+            &mut budget,
+        );
         budget.finish();
         PreparationAttempt {
             result,
@@ -438,13 +480,15 @@ impl RootPreparation {
             peak_bytes: budget.peak_bytes(),
             parity,
             cardinality,
+            images,
         }
     }
 
-    /// Whether either checked preparation refuted the unconstrained root.
+    /// Whether any checked preparation refuted the unconstrained root.
     #[must_use]
     pub fn root_refuted(&self) -> bool {
-        self.parity.root_refuted()
+        self.image_refuted
+            || self.parity.root_refuted()
             || self
                 .cardinality
                 .as_ref()
@@ -473,7 +517,7 @@ impl RootPreparation {
                 .is_none_or(|system| system.belongs_to(theory))
     }
 
-    /// Transfer the root seeded by P0's unique one-atom rows, at most once.
+    /// Transfer checked original-root consequences, at most once.
     /// `None` means there were no units, preparation refuted the root, or the
     /// caller already took it. Check `root_refuted` before creating a walk.
     pub fn take_seeded_root(&mut self) -> Option<Region> {
@@ -499,11 +543,15 @@ fn build<Q: Quota + ?Sized>(
             - size_of::<parity::Prepared>()) as u128,
         budget,
     )?;
-    let mut recognized = budget.in_phase(Phase::Recognition, |budget| {
+    let rows::Recognition {
+        rows: mut recognized,
+        units,
+    } = budget.in_phase(Phase::Recognition, |budget| {
         rows::recognize(theory, producers, &mut storage, budget)
     })?;
     let prepared = budget.in_phase(Phase::Reduction, |budget| {
-        parity::prepare(
+        parity::prepare_after_units(
+            units,
             &mut recognized.equations,
             theory.atom_count(),
             &mut storage,
@@ -520,6 +568,7 @@ fn build<Q: Quota + ?Sized>(
             parity,
             cardinality: None,
             seeded_root: None,
+            image_refuted: false,
         });
     }
     *stage = Stage::Cardinality;
@@ -560,6 +609,7 @@ fn build<Q: Quota + ?Sized>(
             parity,
             cardinality: Some(cardinality),
             seeded_root: None,
+            image_refuted: false,
         });
     }
     *stage = Stage::Seeding;
@@ -573,6 +623,7 @@ fn build<Q: Quota + ?Sized>(
         parity,
         cardinality: Some(cardinality),
         seeded_root,
+        image_refuted: false,
     })
 }
 
@@ -593,7 +644,7 @@ impl ParityStatistics {
             unsupported_clauses: recognized.counts.unsupported_clauses,
             unsupported_definitions: recognized.counts.unsupported_definitions,
             provenance_rejected: recognized.counts.provenance_rejected,
-            rank: prepared.basis.len(),
+            rank: prepared.rank(),
             row_additions: prepared.counts.additions,
             preparation_work: budget.work(),
             phases: budget.phases(),
@@ -613,7 +664,7 @@ impl ParityStatistics {
 }
 
 /// Root decisions are part of preparation: failure publishes no partial seed.
-/// The all-open masks are initialized once; every unit has a distinct pivot.
+/// The all-open masks are initialized once; every unit names a distinct atom.
 fn seed_root<Q: Quota + ?Sized>(
     theory: &Theory,
     parity: &ParitySystem,
@@ -641,7 +692,7 @@ fn seed_root<Q: Quota + ?Sized>(
     for unit in &parity.prepared.units {
         // Select the operation, then execute Region::decide's open-atom path:
         // bounds (1), locate (3), held/cut tests (4), polarity (1), OR (1),
-        // and successful result (1). Distinct echelon pivots remain open here.
+        // and successful result (1). Distinct atoms remain open here.
         budget.charge(1)?;
         let hold = unit.value;
         budget.charge(11)?;
@@ -650,7 +701,7 @@ fn seed_root<Q: Quota + ?Sized>(
         } else {
             root.cut(unit.atom)
         };
-        assert!(applied, "echelon units have distinct admitted pivots");
+        assert!(applied, "units name distinct admitted atoms");
     }
     budget.charge(1)?;
     Ok(Some(root))

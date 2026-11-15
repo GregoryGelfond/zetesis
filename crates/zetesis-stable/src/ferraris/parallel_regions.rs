@@ -933,6 +933,7 @@ impl ParallelRegions {
             generator_order: self.statistics.generator_order,
             parity: self.statistics.parity,
             cardinality: self.statistics.cardinality,
+            images: self.statistics.images,
             frontier: None,
             frontier_order: None,
             workers: Some(RegionWorkerStatistics {

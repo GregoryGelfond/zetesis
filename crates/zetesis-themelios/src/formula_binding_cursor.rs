@@ -9,19 +9,21 @@
 mod tests;
 
 use crate::ProgramSite;
+use crate::formula_ground::families::{Carrier, Workspace};
 use crate::formula_support::{Context, GroundingWork, Ir};
 use std::ops::{Range, RangeInclusive};
+use std::rc::Rc;
 use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::TermKey;
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
-use crate::formula_ir::{Expression, LiteralIr};
+use crate::formula_ir::{AggregateIr, Expression, LiteralIr};
 use crate::formula_support::{Computation, Counters, Evaluation, Failures, StorageLease, Support};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
-enum State {
+enum State<'source> {
     Fresh,
     Scalar {
         pending: bool,
@@ -32,7 +34,7 @@ enum State {
         divisor: i32,
     },
     Values {
-        values: Binding<'static>,
+        values: Carrier<'source>,
         index: usize,
     },
     Unavailable {
@@ -49,10 +51,23 @@ enum Alternative {
     Exhausted,
 }
 
+/// One advance of a [`Cursor`].
+pub(super) enum Step {
+    /// A complete frame.
+    Frame(Binding<'static>),
+    /// The generator of this slot has no value under the values of the
+    /// generators before it.
+    Valueless(usize),
+    /// No frame remains.
+    Finished,
+}
+
 pub(super) struct Cursor<'a, 'source> {
     generators: Vec<Generator<'a, 'source>>,
-    states: Vec<State>,
+    states: Vec<State<'source>>,
     value_frames: usize,
+    owned_value_frames: usize,
+    families: Option<Rc<Workspace<'a, 'source>>>,
     values: Binding<'static>,
     scalars: Binding<'static>,
     lease: StorageLease,
@@ -78,7 +93,24 @@ pub(super) fn target(literal: &LiteralIr) -> Option<usize> {
     }
 }
 
+fn owned_frame(state: &State<'_>) -> bool {
+    matches!(state, State::Values { values, .. } if values.owns_binding_header())
+}
+
 impl<'a, 'source> Cursor<'a, 'source> {
+    /// Installed by the owning final join before this cursor's first traversal.
+    pub(super) fn share_families(
+        &mut self,
+        families: Rc<Workspace<'a, 'source>>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        counters.work(limits, location)?;
+        self.families = Some(families);
+        Ok(())
+    }
+
     pub(crate) fn new(
         literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
         values: Binding<'static>,
@@ -102,6 +134,8 @@ impl<'a, 'source> Cursor<'a, 'source> {
             generators: Vec::new(),
             states: Vec::new(),
             value_frames: 0,
+            owned_value_frames: 0,
+            families: None,
             values,
             scalars,
             lease: computation.lease(),
@@ -128,7 +162,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
             &targets,
             Context::new(computation, limits, counters, location),
         )?;
-        let other = cursor.bytes() - cursor.states.capacity() * size_of::<State>();
+        let other = cursor.bytes() - cursor.states.capacity() * size_of::<State<'source>>();
         crate::formula_support::reserve(
             &mut cursor.states,
             cursor.generators.len(),
@@ -241,8 +275,8 @@ impl<'a, 'source> Cursor<'a, 'source> {
     fn bytes(&self) -> usize {
         Self::header()
             + self.generators.capacity() * size_of::<Generator<'_, '_>>()
-            + self.states.capacity() * size_of::<State>()
-            - self.value_frames * size_of::<Binding<'static>>()
+            + self.states.capacity() * size_of::<State<'source>>()
+            - self.owned_value_frames * size_of::<Binding<'static>>()
     }
     fn generator(
         &mut self,
@@ -264,18 +298,24 @@ impl<'a, 'source> Cursor<'a, 'source> {
         self.generators.push(value);
         Ok(())
     }
-    fn state(&mut self, state: State, location: ProgramSite) -> Result<(), FormulaFailure> {
+    fn state(
+        &mut self,
+        state: State<'source>,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
         self.state_at(self.depth, state, location)
     }
 
     fn state_at(
         &mut self,
         depth: usize,
-        state: State,
+        state: State<'source>,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.value_frames -= usize::from(matches!(self.states[depth], State::Values { .. }));
         self.value_frames += usize::from(matches!(state, State::Values { .. }));
+        self.owned_value_frames -= usize::from(owned_frame(&self.states[depth]));
+        self.owned_value_frames += usize::from(owned_frame(&state));
         self.states[depth] = state;
         // A list Binding's own lease includes its inline header. The enclosing
         // enum buffer accounts the remaining initialized and spare cell bytes.
@@ -421,6 +461,55 @@ impl<'a, 'source> Cursor<'a, 'source> {
         self.equal_inputs(inputs, values, limits, counters, location)
     }
 
+    /// Lend a completed assignment carrier from this exact generator and support.
+    /// The existing input check authenticates both bindings before comparing
+    /// their declared family inputs. The caller must finish consuming the loan
+    /// before this cursor advances; no new storage or cache owner is introduced.
+    pub(super) fn assignment_carrier(
+        &self,
+        aggregate: &AggregateIr,
+        assignment: &Binding<'_>,
+        support: &Support<'source>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Option<&Binding<'static>>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        counters.work(limits, location)?;
+        if !std::ptr::eq(self.support, support) {
+            return Ok(None);
+        }
+        for (generator, state) in self.generators.iter().zip(&self.states) {
+            counters.work(limits, location)?;
+            let (LiteralIr::Aggregate(source), State::Values { values, .. }) =
+                (generator.literal.get(), state)
+            else {
+                continue;
+            };
+            if std::ptr::eq(source, aggregate) {
+                let matches = self.matches_inputs(
+                    assignment,
+                    &aggregate.family_inputs,
+                    Context::new(computation, limits, counters, location),
+                )?;
+                #[cfg(test)]
+                if matches && matches!(values, Carrier::Shared(_)) {
+                    crate::formula_ground::families::testing::record(
+                        crate::formula_ground::families::testing::Event::CarrierBorrowed,
+                    );
+                }
+                return Ok(matches.then_some(&**values));
+            }
+        }
+        Ok(None)
+    }
+
     fn equal_inputs(
         &self,
         inputs: &[usize],
@@ -462,6 +551,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
     pub(super) fn reject(&mut self, location: ProgramSite) -> Result<(), FormulaFailure> {
         if let Some(depth) = self.failed_initialization.take() {
             self.value_frames -= usize::from(matches!(self.states[depth], State::Values { .. }));
+            self.owned_value_frames -= usize::from(owned_frame(&self.states[depth]));
             self.states[depth] = State::Scalar { pending: false };
             self.lease.observe(self.bytes(), location)?;
         }
@@ -471,6 +561,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         &self.values
     }
 
+    /// The next complete frame, passing over generators without a value.
     pub(crate) fn next(
         &mut self,
         evaluation: &mut Evaluation,
@@ -480,6 +571,29 @@ impl<'a, 'source> Cursor<'a, 'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
+        loop {
+            match self.step(evaluation, computation, limits, budget, counters, location)? {
+                Step::Frame(frame) => return Ok(Some(frame)),
+                Step::Valueless(_) => {}
+                Step::Finished => return Ok(None),
+            }
+        }
+    }
+
+    /// Advance to the next complete frame, or to the next generator that has
+    /// no value under the values of the generators before it. At
+    /// [`Step::Valueless`] the binding holds those earlier values and none
+    /// from that generator on, so its owner can read the checks over that
+    /// generator's value, which no frame under them will reach.
+    pub(super) fn step(
+        &mut self,
+        evaluation: &mut Evaluation,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Step, FormulaFailure> {
         while !self.finished {
             counters.work(limits, location)?;
             if self.depth == self.generators.len() {
@@ -507,8 +621,16 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 return self
                     .values
                     .copied(computation, limits, counters, location)
-                    .map(Some);
+                    .map(Step::Frame);
             }
+            // A generator entered from the one before it has given no value
+            // yet: a fresh one, or a retained carrier at its first value.
+            let entered = match &self.states[self.depth] {
+                State::Fresh | State::Values { index: 0, .. } => {
+                    target(self.generators[self.depth].literal.get())
+                }
+                _ => None,
+            };
             if matches!(self.states[self.depth], State::Fresh) {
                 let initialized =
                     self.initialize(evaluation, computation, limits, budget, counters, location);
@@ -526,13 +648,18 @@ impl<'a, 'source> Cursor<'a, 'source> {
             }
             if self.advance(computation, limits, counters, location)? {
                 self.depth += 1;
-            } else if self.depth == 0 {
+                continue;
+            }
+            if self.depth == 0 {
                 self.finished = true;
             } else {
                 self.depth -= 1;
             }
+            if let Some(target) = entered {
+                return Ok(Step::Valueless(target));
+            }
         }
-        Ok(None)
+        Ok(Step::Finished)
     }
 
     fn advance(
@@ -636,7 +763,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: ProgramSite,
-    ) -> Result<State, FormulaFailure> {
+    ) -> Result<State<'source>, FormulaFailure> {
         match self.generators[self.depth].literal.get() {
             LiteralIr::Bind { value, .. } => {
                 let value =
@@ -704,18 +831,35 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 )? {
                     return Ok(State::Unavailable { pending: true });
                 }
-                let values = crate::formula_assignment::values(
-                    self.generators[self.depth].literal.map(|literal| {
-                        let LiteralIr::Aggregate(aggregate) = literal else {
-                            unreachable!("aggregate generator")
-                        };
-                        aggregate
-                    }),
-                    &self.values,
-                    self.support,
-                    budget,
-                    Context::new(computation, limits, counters, location),
-                )?;
+                let aggregate = self.generators[self.depth].literal.map(|literal| {
+                    let LiteralIr::Aggregate(aggregate) = literal else {
+                        unreachable!("aggregate generator")
+                    };
+                    aggregate
+                });
+                // The carrier is computed by evaluations of its own, which
+                // leave `evaluation` as an earlier generator or row left it.
+                // A failure it returns is therefore fatal, never this
+                // generator's zero divisor: an element that divides by zero
+                // is omitted inside the carrier's own joins.
+                evaluation.clear_zero_divisor();
+                let values = if let Some(families) = &self.families {
+                    families.values(
+                        aggregate,
+                        &self.values,
+                        self.support,
+                        budget,
+                        Context::new(computation, limits, counters, location),
+                    )?
+                } else {
+                    Carrier::Owned(crate::formula_assignment::values(
+                        aggregate,
+                        &self.values,
+                        self.support,
+                        budget,
+                        Context::new(computation, limits, counters, location),
+                    )?)
+                };
                 Ok(State::Values { values, index: 0 })
             }
             _ => unreachable!("only binding instructions enter a value cursor"),

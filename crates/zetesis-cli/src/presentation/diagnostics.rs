@@ -97,6 +97,7 @@ impl<W: Write> Diagnostics<W> {
                 observation,
                 Event::KeyAnalysisStopped(_)
                     | Event::ObjectiveUnavailable(_)
+                    | Event::ObjectiveProjectionUnavailable(_)
                     | Event::ChoiceObjectiveBoundUnavailable(_)
                     | Event::ObjectiveBoundStopped(_)
                     | Event::ObjectiveTheoryMismatch
@@ -278,6 +279,7 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             Event::StratifiedMembership => writeln!(self, "Membership: stratified normal theory; direct evaluation with original constraints"),
             Event::GeneralMembership(error) => writeln!(self, "Membership: general reduct; optional class certificate refused: {error}"),
             Event::ObjectiveUnavailable(error) => writeln!(self, "Objective preparation unavailable: {error}; detailed scoring is subject to the remaining objective allowance"),
+            Event::ObjectiveProjectionUnavailable(error) => writeln!(self, "Objective projection unavailable: {error}; detailed scoring is subject to the remaining objective allowance"),
             Event::ChoiceObjectiveBoundUnavailable(error) => writeln!(self, "Required-choice objective bound unavailable: {error}; exact objective bounds remain available"),
             Event::ObjectiveBoundStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
             Event::ObjectiveTheoryMismatch => writeln!(self, "Objective pruning stopped: original theory mismatch; exact search continues"),

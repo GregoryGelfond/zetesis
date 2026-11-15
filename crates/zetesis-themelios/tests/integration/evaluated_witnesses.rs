@@ -1,5 +1,6 @@
 //! Local witness rows distinguish captured inputs from closed evaluated values.
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement;
 use crate::support::witnesses::{self, limited};
 use zetesis_reference_support::{canonical, formula, prepare, prepared, resource_limits};
 
@@ -307,33 +308,36 @@ fn negative_witnesses_cannot_supply_inputs() {
 }
 
 #[test]
-fn undefined_arithmetic_requires_a_complete_row() {
+fn an_incomplete_witness_row_reaches_no_division() {
+    // No p atom completes a row, so X/0 is never evaluated and no warning
+    // is kept.
     for source in ["q:-p(X,X/0):#true.", "p(g(1,2)).q:-p(f(X,X/0)):#true."] {
-        assert!(
-            limited(
-                source,
-                ExpansionLimits::default(),
-                &FormulaLimits::default()
-            )
-            .is_ok(),
-            "{source}"
-        );
-    }
-    assert!(matches!(
-        limited(
-            "p(1,2).q:-p(X,X/0):#true.",
+        let admitted = limited(
+            source,
             ExpansionLimits::default(),
-            &FormulaLimits::default()
-        ),
-        Err(FormulaFailure::Expansion(
-            ExpansionFailure::Evaluation { .. }
-        ))
-    ));
+            &FormulaLimits::default(),
+        )
+        .unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert!(admitted.warnings().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn a_witness_row_that_divides_by_zero_is_no_witness() {
+    // The one complete row divides by zero in its evaluated position, so it
+    // supplies no witness: the consequent is false and q is not derived.
+    // The rule keeps the warning, located at its statement.
+    let rule = "q:-p(X,X/0):#true.";
+    for facts in ["p(1,2).", "p(2147483647,0)."] {
+        let admitted = formula(&format!("{facts}{rule}"));
+        assert_eq!(zero_divisor_statement(&admitted), rule, "{facts}");
+        assert_eq!(native(&admitted), native(&formula(facts)), "{facts}");
+    }
 }
 
 #[test]
 fn checked_arithmetic_preserves_failure_provenance() {
-    for expression in ["X+1", "X/0", "X+f(1)"] {
+    for expression in ["X+1", "X+f(1)"] {
         let source = format!("p(2147483647,0).q:-p(X,{expression}):#true.");
         let error = limited(
             &source,

@@ -18,7 +18,10 @@ const ZERO_DIVISOR: &str =
 /// counting repeated evaluations during support completion and grounding.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaWarning {
-    /// A zero divisor occurred in a family that also had defined instances.
+    /// An instance of the statement divided by zero and was omitted. In a
+    /// conditional literal the instance keeps its condition: a consequent
+    /// that divided by zero under a condition binding was read as false
+    /// there, and a head as true.
     ZeroDivisor {
         /// Original statement containing the evaluated operation.
         location: ProgramSite,

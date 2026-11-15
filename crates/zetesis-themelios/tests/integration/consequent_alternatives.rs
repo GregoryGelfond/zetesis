@@ -2,6 +2,7 @@
 use crate::support::finite_bindings as reference;
 use crate::support::formula_trees::{Formula, world};
 use crate::support::upstream;
+use crate::support::warnings::zero_divisor_statement;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
@@ -413,18 +414,19 @@ fn projection_inputs_require_outer_support() {
 }
 
 #[test]
-fn absent_witnesses_do_not_hide_value_errors() {
+fn absent_witnesses_do_not_hide_undefined_values() {
+    // No p atom exists, so a defined projection would be absent. The value
+    // divides by zero under the entered condition X=0, so the consequent is
+    // false there under either negation and q is not derived. The rule
+    // keeps the warning.
     for source in ["q:-not p(f(_,1/X)):X=0.", "q:-not not p(f(_,1/X)):X=0."] {
-        assert!(matches!(
-            limited(
-                source,
-                ExpansionLimits::default(),
-                &FormulaLimits::default()
-            ),
-            Err(FormulaFailure::Expansion(
-                zetesis_themelios::ExpansionFailure::Evaluation { .. }
-            ))
-        ));
+        let admitted = formula(source);
+        assert_eq!(zero_divisor_statement(&admitted), source);
+        assert_eq!(
+            native(&admitted),
+            Models::from([BTreeSet::new()]),
+            "{source}"
+        );
     }
 }
 
@@ -532,17 +534,14 @@ fn empty_conditions_defer_value_errors() {
 }
 
 #[test]
-fn entered_conditions_retain_value_errors() {
-    assert!(matches!(
-        limited(
-            "q:-p((1..2)/X):X=0.",
-            ExpansionLimits::default(),
-            &FormulaLimits::default()
-        ),
-        Err(FormulaFailure::Expansion(
-            zetesis_themelios::ExpansionFailure::Evaluation { .. }
-        ))
-    ));
+fn entered_conditions_evaluate_undefined_values() {
+    // The condition X=0 is entered, so both values of the range are
+    // evaluated and divide by zero. The consequent has no alternative left
+    // and is false, so q is not derived. The rule keeps the warning.
+    let source = "q:-p((1..2)/X):X=0.";
+    let admitted = formula(source);
+    assert_eq!(zero_divisor_statement(&admitted), source);
+    assert_eq!(native(&admitted), Models::from([BTreeSet::new()]));
 }
 
 #[test]

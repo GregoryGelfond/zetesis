@@ -78,3 +78,25 @@ fn phases(out: &mut Buffer, work: PreparationWork) -> Result<(), RunError> {
     out.number_field("root_seed", work.root_seed)?;
     out.text("}")
 }
+
+pub(super) fn root_images(
+    out: &mut Buffer,
+    stats: Option<&zetesis_stable::RootImageStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = stats else {
+        return out.text("null");
+    };
+    out.text("{\"status\":")?;
+    out.string(stats.status.label())?;
+    out.number_field("groups", stats.groups)?;
+    out.number_field("pairs", stats.pairs)?;
+    out.number_field("preparation_work", stats.preparation_work)?;
+    out.number_field("copying_work", stats.copying_work)?;
+    out.number_field("closure_work", stats.closure_work)?;
+    out.number_field("peak_bytes", stats.peak_bytes)?;
+    out.number_field("completed_rounds", stats.completed_rounds)?;
+    out.number_field("applied_cuts", stats.applied_cuts)?;
+    out.text(",\"root_refuted\":")?;
+    out.text(if stats.root_refuted { "true" } else { "false" })?;
+    out.text("}")
+}

@@ -1,9 +1,10 @@
 //! Aggregate reference cases include recursive formulas whose classical truth
 //! tables agree but whose reducts have different subset models.
 //!
-//! The fixture contains 342 sources: 333 admitted comparisons/assignments and
-//! nine explicit refusals, including two unsafe programs. The portable test
-//! compares every admission with independent exhaustive reduct enumeration;
+//! The fixture contains 342 sources: 336 admitted comparisons/assignments and
+//! six explicit refusals, including two unsafe programs. The portable test
+//! compares every admission with independent exhaustive reduct enumeration
+//! and its warnings with the reviewed zero-divisor omissions;
 //! the optional test reruns the full external reference campaign. A recorded
 //! unsupported case is a refusal regression, never a compatibility pass.
 //! Formal references: Ferraris (arXiv:0812.1462),
@@ -12,6 +13,7 @@
 use crate::support::atom_models::atom;
 use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::warnings::zero_divisor_statements;
 use zetesis_reference_support::{admit, formula, resource_limits};
 
 use std::collections::BTreeSet;
@@ -131,20 +133,31 @@ fn expected_refusal(name: &str) -> Option<Refusal> {
         | "set_body_duplicate_atom"
         | "set_body_signed_literal_keys" => Some(Refusal::Unsafe),
         "set_body_excluded_middle" => Some(Refusal::Feature(ProfileFeature::Aggregate)),
-        // Finite aggregate tuple expressions are admitted, but reached 1/0
-        // remains an evaluation failure. clingo's discarded-term result is
-        // retained as reference data, not substituted for this source contract.
-        // An assignment's family is its carrier, the measures of the selections
-        // between its required and possible tuples: when every carrier value
-        // divides by zero, in its own rule or in a rule that reads its head,
-        // the family is entirely undefined and refused,
-        // and clingo's answer, which drops the undefined instances, is
-        // retained as reference data. A carrier value outside i32 is refused;
-        // clingo's recorded answers wrap the sum to -2147483648 in both models.
-        "sum_local_undefined"
-        | "assignment_required_count_zero_divisor"
-        | "assignment_downstream_zero_divisor"
-        | "assignment_required_sum_overflow" => Some(Refusal::Evaluation),
+        // A carrier value outside i32 is refused; clingo's recorded answers
+        // wrap the sum to -2147483648 in both models and are retained as
+        // reference data, not substituted for this source contract.
+        "assignment_required_sum_overflow" => Some(Refusal::Evaluation),
+        _ => None,
+    }
+}
+
+/// The statement from which a reviewed case omits its zero-divisor
+/// instances, with a warning there. No other admitted case keeps a warning.
+fn expected_omission(name: &str) -> Option<&'static str> {
+    match name {
+        // A reached 1/0 omits its instance, as clingo's recorded answer does:
+        // the element of the sum, leaving the empty sum 0.
+        "sum_local_undefined" => Some("n(N) :- N=#sum{1/X:p(X)}."),
+        // An assignment's family is its carrier, the measures of the
+        // selections between its required and possible tuples. Here every
+        // carrier value divides by zero, in the assignment's own rule or in
+        // a rule that reads its head, so that rule contributes nothing.
+        "assignment_required_count_zero_divisor" => Some("q(Y) :- N = #count{1}, Y = 1/(N-1)."),
+        "assignment_downstream_zero_divisor" => Some("q(1/(X-1)) :- p(X)."),
+        // This carrier also holds 0, where the division is defined.
+        "assignment_unrequired_excluded_middle" => {
+            Some("q(Y) :- N = #count{1 : p; 1 : not p}, Y = 1/(N-1).")
+        }
         _ => None,
     }
 }
@@ -190,6 +203,15 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
             refused += 1;
         } else {
             let input = result.unwrap_or_else(|error| panic!("{}: {error}", case.name));
+            assert_eq!(
+                zero_divisor_statements(&input),
+                expected_omission(&case.name)
+                    .into_iter()
+                    .collect::<Vec<_>>(),
+                "{}: {}",
+                case.name,
+                case.source
+            );
             let expected = case
                 .models
                 .iter()
@@ -205,7 +227,7 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
             admitted += 1;
         }
     }
-    assert_eq!((admitted, refused), (333, 9));
+    assert_eq!((admitted, refused), (336, 6));
 }
 
 #[test]

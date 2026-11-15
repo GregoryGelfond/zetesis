@@ -10,7 +10,11 @@ use zetesis_ferraris::{Interpretation, Limits, RegionLimits, models, models_redu
 use crate::test_support::without_pair_exclusions as without;
 
 fn compile(source: &str) -> Compiled {
-    ground(testing::prepare(source), None, None).unwrap()
+    // This suite qualifies the pair collector, which still serves hybrid
+    // emission and complete pair families outside the grouped grammar.
+    super::super::grouped_exclusions::without_grouping(|| {
+        ground(testing::prepare(source), None, None).unwrap()
+    })
 }
 
 fn native_groups(compiled: &Compiled) -> Vec<Vec<usize>> {
@@ -270,7 +274,12 @@ fn native_exclusions_keep_positive_and_tight_certificates() {
 
     // Derived p atoms survive explicit-fact substitution. The violated
     // constraint is a valid completed plan result, not a grammar refusal.
-    let compiled = compile("d(1..3). p(X):-d(X). :-p(X),p(Y),X!=Y.");
+    // Certainty would read every p atom as true and decide the constraint
+    // while grounding it, so it is left out: the plans must still accept a
+    // native constraint over atoms a theory keeps.
+    let compiled = crate::formula_support::certain::testing::without_certainty(|| {
+        compile("d(1..3). p(X):-d(X). :-p(X),p(Y),X!=Y.")
+    });
     let groups = native_groups(&compiled);
     assert_eq!(groups.len(), 1, "native exclusion route exercised");
     assert_eq!(groups[0].len(), 3);

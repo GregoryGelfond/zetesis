@@ -107,8 +107,52 @@ the existing infallible allocation contract. This trades bounded per-child
 storage for fewer repeated producer reads, without changing the original theory
 or the reduct check.
 
-When the complete producer inventory has positive cycles, narrowing also
-restricts candidates by possible founded support. The defining whole relaxation
+Some producers cannot support their head at all. A body requires the atoms
+that are its conjuncts, and an atom is derived only through `a` when it has
+producers and every one of them requires `a`. A producer whose one head is `a`
+is circular when its body requires `a` itself or an atom derived only through
+`a`, as `a ← b` is beside `b ← a` when nothing else produces `b`. Every atom of
+an answer set has a supporting producer that is not circular
+(`ExternalSupport.answer_set_noncircular_support`), so the support scan passes
+over circular producers (`noncircular_unsupported_cut`,
+`noncircular_sole_rule_forces`, `noncircular_sole_choice_forces`). Such an
+alias pair then needs no closure of possible founded support: when the other
+producers of `a` fail, the scan cuts `a` and then `b`, and holding `b` forces
+the one remaining producer of `a`. The marks are made once with the producer
+inventory. The pass reads each body's own operands once for every producer
+sharing the body and, for each head and each atom its body requires, that
+atom's producers up to the first that does not require the head. On the 288
+programs measured for this change that is between 0.4 and 1.4 times the
+extraction's own visits, with a median of 0.8. It is not proportional to
+them: the extraction visits a conjunction once, whatever its width, and one
+large body shared by many rules is read once for each of them. The pass may
+therefore spend at most four times the extraction's visits, and never more
+than the extraction's work ceiling leaves. When it would exceed either it
+marks nothing, and narrowing proceeds as it did before producers were
+marked. Width alone can exceed the share: in a ring where each atom has one
+rule requiring its own head after the next atoms of the ring, bodies of
+seven atoms are marked and bodies of eight are not. The extraction's
+reported work stays within its ceiling, so the walk's opening, which charges
+that work to the budget the ceiling came from, is never refused that charge.
+Under a finite work budget the marking's visits are otherwise spent like any
+others: the rest of the opening has that much less, and the standalone
+membership check, which extracts under a fixed ceiling and charges its own
+budget, can be refused the larger charge although its preparation reads no
+mark. Only producers with one head are marked, and only a body's own atom
+operands are read, so the restriction is used less often than the law
+allows. The roots themselves are unchanged and still propagate as
+implications.
+
+When some positive cycle of the complete producer inventory survives without
+the circular producers, narrowing also restricts candidates by possible
+founded support. A dependency component whose every cycle passes through a
+circular producer is left to the support scan; a component with a surviving
+cycle is closed whole and reads every producer, marked ones included. Its
+closure then differs from one without marks only in its seeds, which include
+the atoms of the components left to the scan. Finding the surviving cycles
+takes a second component search when any producer is marked, over the
+supporting dependencies and then over all of them, and both are charged; an
+inventory without marks is searched once. The defining whole relaxation
 starts empty, propagates possible bodies through positive conjunctions and
 disjunctions, and adds every permitted head of each enabled producer. Other body
 formulas remain possible unless already known false. Held atoms do not seed
@@ -375,9 +419,15 @@ uses the active bound when present, otherwise the latest permanent restriction,
 otherwise the original theory. With no active restriction, complete original
 producer coverage can prepare a generator preference once. It prefers atomic
 choice heads and ordinary disjunctive heads having no ordinary singleton
-producer, then chooses the earliest ground dependency component and lowest atom
-identity within that component. Once no open generator remains, it uses the same
-component order over all open atoms. Both signs of formula operands contribute:
+producer. Among those still open it takes a head of least *choice depth*: the
+length of the longest path of ground dependency components holding such a head
+that the head's own component depends on. Choices that depend on no other have
+depth zero, and where each step of a plan chooses from what the step before
+derived, a step's choices share a depth. Among heads of that depth it takes the
+one for which the chains the region has [shortened](#shortened-chains) weigh the
+most, then the earliest dependency component
+and the lowest atom identity within it. Once no open generator remains, it uses
+the same order over all open atoms. Both signs of formula operands contribute:
 atom-to-occurrence, operand-to-parent and producer-body-to-every-head edges.
 Headless constraints add no producer edge. This is a scheduling dependency graph,
 not positive-program certification or disjunctive shifting. Unused original
@@ -385,9 +435,11 @@ formulas can change ties between incomparable components, but cannot reverse a
 required dependency precedence.
 
 The reusable `GeneratorOrder` keeps the exact original theory identity, packed
-head marks and one rank per atom. Its two temporary compact incidence tables and
-iterative component walks take O(A + N + E + H) work and temporary space; retained
-space is O(A), and a split reads each eligible open atom once. The work quota is
+head marks and one rank and one depth per atom. Its two temporary compact
+incidence tables and iterative component walks take O(A + N + E + H) work and
+temporary space; retained space is O(A). A split reads each eligible open atom
+once, and once more with the parents of each atom of least depth when the region
+has shortened a chain. The work quota is
 streamed and refunded like narrowing, preserving every refused prefix. The
 existing reduct-preparation byte allowance separately bounds named simultaneous
 generator preparation storage. A byte refusal retains the existing preference;
@@ -431,30 +483,72 @@ discards a body falsified by a known negative leaf. The equation checker rereads
 that original clause using the same checked fact owner. Complete definitions
 and guarded counts retain their own source conditions.
 
-Root parity elimination uses packed row XOR. The counting preparation checks
+An equation over one atom decides that atom in every answer set: a fact, an
+atom no rule defines and a constraint over one atom each give one. The original
+theory's preparation keeps such an equation as a root decision and writes no
+row for it, after the same source check as any other. Two decisions that
+disagree refute the root. Each decision is added to the rows over its atom, so
+no row names a decided atom. A row is as wide as the theory has atoms; a
+decision is two words, so a theory's facts cost work and storage in proportion
+to their number and not to that number times the theory's width.
+
+Root parity elimination then uses packed row XOR on the rows over two or more
+atoms. The counting preparation checks
 that proposed lower and upper families are disjoint covers of the same atoms,
 then compares their totals. A guarded bound contributes its unconditional
 fallback while its guard remains open. A proved root contradiction starts no
-candidate walk; otherwise one-atom parity rows seed the root. The original
+candidate walk; otherwise the root decisions and the echelon rows that
+elimination left with one atom seed the root. The original
 theory and frozen-reduct membership checks are unchanged. These preparations
 run once for each original candidate owner, before serial, parallel or device
 candidate scheduling; they are host preparation, not device kernels.
 
-Both systems share an optional allowance of 100,000,000 logical word operations
-and the inherited preparation-byte allowance. Exhausting an optional allowance
-discards the whole preparation and keeps ordinary candidate generation.
-Cancellation, global work refusal, allocation and invalid source reads remain
-typed failures. Only a completed preparation publishes rows or units. The default
-candidate walk uses the prepared root and skips further parity and cardinality
-inspections of candidate regions, even when preparation found a nonempty basis
-or a checked pair of counting families.
+Both systems share an optional allowance of logical word operations and the
+inherited preparation-byte allowance. The work allowance grows with the theory:
+256 operations for each node and each operand occurrence, one table of the
+patterns of the widest parity group, and never fewer than 100,000,000.
+Recognition reads the theory against its groups' patterns, so what it needs
+grows with the theory, and an allowance that did not would decline the largest
+theories, where a completed preparation prunes the most. Checking and
+eliminating among the rows recognized grows with their number times the
+theory's width instead; a theory that yields tens of thousands of equations
+over two or more atoms can still exceed the allowance.
+Exhausting it during
+parity or cardinality preparation discards those preparations and keeps ordinary
+candidate generation. The operations a preparation performs are charged to the
+search's work account whether or not it completes. Under a work limit the
+allowance above 100,000,000 is at most half of what the limit leaves, so the
+optional step is exhausted before the limit is and leaves the walk at least
+what it spent; a walk that needs more than that remainder is stopped by the
+limit. Cancellation, global work refusal, allocation and invalid
+source reads remain typed failures. Only a completed preparation publishes rows
+or units.
 
-With an active restriction or without a prepared generator order, the existing
+An additional original-root image closure combines checked mandatory groups
+with independently read forbidden pairs. If every remaining member of a
+mandatory group excludes an atom, that atom can be cut; an empty mandatory group
+refutes the root. The closure keeps original atom coordinates and works on a
+private root copy. Only a completed result can replace the prior seed or publish
+a refutation. Its selection, pair index, copied root and closure share the same
+remaining work and byte allowances; they do not enter frozen-reduct membership.
+An optional refusal of this additional transaction retains the earlier complete
+preparation. Other typed failures still propagate. This retention choice is
+internal and is not exposed as an execution option. The
+[root-image observations](../rust/outcomes.md#views-and-failures) distinguish
+its private work from publication.
+
+The default candidate walk uses the prepared root and skips further parity and
+cardinality inspections of candidate regions, even when preparation found a
+nonempty basis or a checked pair of counting families.
+
+With an active restriction or without a prepared generator order, the degree
 preference applies. Open atoms that head an atomic choice root of the
 original theory rank first, whether or not the theory lies in the producer
 fragment: deciding the choices leaves the atoms they derive to propagation and,
-where it applies, the support cut. Among atoms of the same kind, the one with the
-most unknown parents in the ranking subject is preferred. When that subject is
+where it applies, the support cut. Without a restriction, the atom for which the
+chains the region has [shortened](#shortened-chains) weigh the most comes first
+among atoms of the same kind. Then the one with the most unknown parents in the
+ranking subject is preferred. When that subject is
 a restriction, the original theory's unknown-parent count breaks ties; the
 lowest atom breaks any remaining tie. Both counts come from the knowledge
 already closed for the region, without preparing another index. Any open
@@ -463,6 +557,42 @@ order changes the regions visited, never the answers. The packed region masks en
 open atoms in ascending order, excluding decided atoms and unused final bits;
 each inspected parent count spends one work permit. The primary count is read
 once per eligible atom; secondary counts are read only to resolve primary ties.
+The countermodel walk of a frozen reduct ranks the same way, with no
+restriction.
+
+<a id="shortened-chains"></a>
+A chain is a conjunction or disjunction read as one node over its operands. In
+a region it has *members* still to be decided: its open operands, and its own
+truth while that is not yet known. A disjunction known to hold needs one of its
+open operands to hold, and a conjunction known to fail needs one to fail; while
+the chain's truth is open it is one more thing the operands decide, as the body
+of `h :- a, b` with `a` held leaves `b` and `h`. A region has *shortened* a
+chain when an operand is settled without settling the chain (a conjunct that
+holds, a disjunct that fails) and two or more members remain. That is where the
+next decision does the most: one more settled the same way brings the chain to
+the single member the closure decides. A chain with every operand open says
+nothing the program's structure does not already say, and the choice depths,
+the component order and the unknown-parent counts read that structure. So an
+atom's score adds, for each of its occurrences in a shortened chain, the
+chain's weight now less its weight with every operand open. A weight is a
+quarter for each member, so one chain down to two members outweighs three down
+to three; chains of sixteen or more members weigh alike. The atom is found as an
+operand of the chain, or under at most two implications whose truth is not yet
+known, which reaches the chains that hold its negation or double negation. In a
+candidate walk an operand is settled by the region's decisions; in a
+countermodel walk the frozen candidate settles the operands it makes false as
+well, so a query's root can already hold a shortened chain.
+
+The closure marks a region's knowledge when it shortens a chain, and the
+region's descendants inherit the mark. Without the mark every score is zero, and
+the ranking reads its static keys alone, once per eligible atom. With it a
+generator order reads its eligible atoms a second time, and either ranking reads
+the parents of each atom it scores, one work permit each. Under a candidate
+restriction or an objective bound the ranking subject is the restriction's own
+knowledge, whose chains are not the original's, so the score is not read there
+and the degree ranking above is unchanged. The score orders an exhaustive
+split; it is no part of narrowing, of a membership check or of any certificate.
+
 The scalar `zetesis_algebra::walk::Walk` covers candidate and proper-subset
 regions with the caller's narrowing. With several workers, `zetesis-stable`'s
 parallel regions walk the same tree: the walk begins on the calling thread,
@@ -501,7 +631,7 @@ candidate's inner subjects are prepared from that closed root: the guards
 whose holding reaches the candidate are cut as units; each clause group's
 patterns that a clause does not already forbid are probed, in at most two
 rounds, by narrowing a copy of the closed root with the guard and the pattern
-decided (a group of one clause cutting its whole support only in the second), and the allowed patterns' affine hull and least and greatest counts, with the cliques of pairwise exclusions
+decided (a group of one clause cutting its whole support only in the second), and the allowed patterns' affine hull and least and greatest counts, with the cliques of pairwise exclusions, at most one atom held, the cliques of covering pairs, at most one atom cut,
 and the trivial bounds completing a partition, supply rows and bounds to the
 parity and cardinality systems for this query. From then on every region of
 the query, inline or served, narrows through the one joint driver with the frozen

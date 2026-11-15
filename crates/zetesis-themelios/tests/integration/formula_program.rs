@@ -18,9 +18,9 @@ use zetesis_themelios::logical::{
 };
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ConstraintCheckCause, ConstraintCheckLimits,
-    ConstraintVerdict, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaMaterialization, ParsedSource, PreparedFormula, ProgramAdmissionOptions,
-    ProgramOriginal, ReconstructionError, prepare_program_formula,
+    ConstraintVerdict, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaMaterialization,
+    FormulaWarning, ParsedSource, PreparedFormula, ProgramAdmissionOptions, ProgramOriginal,
+    ReconstructionError, prepare_program_formula,
 };
 
 const SOURCE: &str = include_str!("../fixtures/formula-program.lp");
@@ -238,7 +238,7 @@ fn constructed_adaptive_receipt_reconstructs_the_original_answer() {
 }
 
 #[test]
-fn late_constructed_refusal_retains_the_original_statement() {
+fn late_constructed_warning_retains_the_original_statement() {
     let x = Term::variable(VarName::new("X").unwrap());
     let p = |value| Atom::new(Name::new("p").unwrap(), [value]);
     let q = Atom::new(Name::new("q").unwrap(), [Term::from(1) / x.clone()]);
@@ -246,38 +246,55 @@ fn late_constructed_refusal_retains_the_original_statement() {
         Rule::fact(p(Term::from(0))),
         Rule::new(q, p(x)),
     ]));
-    let original = Arc::downgrade(&program);
-    let failures = [
-        prepare(Arc::clone(&program)).ground().unwrap_err(),
-        prepare(Arc::clone(&program)).ground_hybrid().unwrap_err(),
-        prepare(Arc::clone(&program)).ground_adaptive().unwrap_err(),
-        prepare(program)
-            .ground_with_count_plan(
-                zetesis_themelios::CountPlanLimits::default(),
-                &Cancellation::default(),
-                None,
-            )
-            .unwrap_err(),
-    ];
-    for failure in failures {
-        let FormulaFailure::Program { program, error } = &failure else {
-            panic!("the consumed input must accompany its refusal");
+    let eager = prepare(Arc::clone(&program)).ground().unwrap();
+    let hybrid = prepare(Arc::clone(&program)).ground_hybrid().unwrap();
+    let FormulaMaterialization::Complete(adaptive) =
+        prepare(Arc::clone(&program)).ground_adaptive().unwrap()
+    else {
+        panic!("a definition with an evaluated head is not deferred");
+    };
+    let planned = prepare(Arc::clone(&program))
+        .ground_with_count_plan(
+            zetesis_themelios::CountPlanLimits::default(),
+            &Cancellation::default(),
+            None,
+        )
+        .unwrap();
+    // Every route reaches the division at X = 0, omits the one instance of
+    // q and keeps the warning on the constructed rule.
+    for (warnings, original, catalog) in [
+        (
+            eager.warnings(),
+            eager.original_program(),
+            eager.atom_catalog(),
+        ),
+        (
+            hybrid.warnings(),
+            hybrid.original_program(),
+            hybrid.atom_catalog(),
+        ),
+        (
+            adaptive.warnings(),
+            adaptive.original_program(),
+            adaptive.atom_catalog(),
+        ),
+        (
+            planned.warnings(),
+            planned.original_program(),
+            planned.atom_catalog(),
+        ),
+    ] {
+        assert!(std::ptr::eq(original, program.as_ref()));
+        let [warning @ FormulaWarning::ZeroDivisor { location }] = warnings else {
+            panic!("one zero-divisor warning: {warnings:?}");
         };
-        assert!(Arc::ptr_eq(program, &original.upgrade().unwrap()));
-        assert!(matches!(
-            error.as_ref(),
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-        ));
-        assert!(failure.site().unwrap().location().is_none());
-        assert!(failure.diagnostics().is_empty());
-        let ProgramOriginal::Statement(statement) = failure.original().unwrap() else {
-            panic!("the failed division belongs to its original rule");
-        };
-        assert!(
-            program
-                .statements()
-                .any(|original| std::ptr::eq(original, statement))
-        );
+        assert!(location.location().is_none());
+        assert!(warning.diagnostic().is_none());
+        let index = location
+            .statement_id()
+            .expect("the omitted division belongs to its original rule")
+            .index();
+        let statement = original.statements().nth(index).unwrap();
         let Statement::Rule(rule) = statement.get() else {
             panic!("rule subject")
         };
@@ -286,6 +303,10 @@ fn late_constructed_refusal_retains_the_original_statement() {
         };
         assert!(
             matches!(&literal.inner, LiteralInner::Atom(atom) if atom.get().name.as_str() == "q")
+        );
+        assert_eq!(
+            catalog.atoms().iter().map(canonical).collect::<Vec<_>>(),
+            ["p(0)"]
         );
     }
 }

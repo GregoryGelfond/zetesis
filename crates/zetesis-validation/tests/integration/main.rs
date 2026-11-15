@@ -23,4 +23,5 @@ mod scalability_limits;
 mod selected_campaign;
 mod series_cells;
 mod series_view;
+mod typed_workloads;
 mod workload_admission;

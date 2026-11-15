@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "parity20.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Historical exhausted all-model clingo count from the frozen suite. Fresh reference qualification required."
+        ]
+      },
+      "files": [
+        {
+          "path": "parity20.lp",
+          "sha256": "f51dec4074fd680426a300e72acd630583522e2dd09468817bbbae8e9e3dbf80",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "parity24.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Historical exhausted all-model clingo count from the frozen suite. Fresh reference qualification required."
+        ]
+      },
+      "files": [
+        {
+          "path": "parity24.lp",
+          "sha256": "0ad5dcd6f9ee7e62255041f155fa0d918e0c2d1b1871a3642c3c93848ced1bf1",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "parity28.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Historical exhausted all-model clingo count from the frozen suite. Fresh reference qualification required."
+        ]
+      },
+      "files": [
+        {
+          "path": "parity28.lp",
+          "sha256": "966d8a6e0e62a412c55756bd54fb18e632cd409caeb5a10b89c3dae6a4ae54cd",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "pigeonhole7.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Historical exhausted all-model clingo count from the frozen suite. Fresh reference qualification required."
+        ]
+      },
+      "files": [
+        {
+          "path": "pigeonhole7.lp",
+          "sha256": "1dfaecf35c08c3da9730e0ab43277ea665fa3856cd6cf5140dcea5605952f8b3",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "pigeonhole8.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Historical exhausted all-model clingo count from the frozen suite. Fresh reference qualification required."
+        ]
+      },
+      "files": [
+        {
+          "path": "pigeonhole8.lp",
+          "sha256": "ca849a10795fcce02620a375d0fcf33b148cc439ba3bed7fd1ae3d88c45203c1",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

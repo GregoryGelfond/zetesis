@@ -135,12 +135,19 @@ impl Shape {
             .and_then(|n| n.checked_add(graph.numeric_work))
             .and_then(|n| n.checked_add(projection))
             .ok_or_else(|| capacity("formula setup work overflows"))?;
+        // Preserve legacy checked arithmetic and its failure order. Only the
+        // fresh general-formula receipt takes this proved row-family discount;
+        // tight checking and frozen sweep tariffs retain their separate owners.
+        shape.setup_work = shape
+            .setup_work
+            .checked_sub(graph.original_discount)
+            .ok_or_else(|| capacity("original numeric discount exceeds setup"))?;
         shape.sweep_work = nodes
             .checked_mul(9)
             .and_then(|n| shape.edges.checked_mul(2).and_then(|e| n.checked_add(e)))
             .and_then(|n| n.checked_add(atoms))
             .and_then(|n| n.checked_add(65))
-            .and_then(|n| n.checked_add(graph.numeric_work))
+            .and_then(|n| n.checked_add(graph.frozen_numeric_work))
             .and_then(|n| n.checked_add(graph.threshold_guard_work))
             .ok_or_else(|| capacity("formula sweep work overflows"))?;
         Ok(shape)

@@ -2,6 +2,7 @@
 
 mod finite_domains;
 mod shared_work;
+mod table_cost;
 
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value};

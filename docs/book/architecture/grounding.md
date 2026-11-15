@@ -28,21 +28,24 @@ aggregate assignment publishes possible heads from its carrier,
 `{measure(S) | R ⊆ S ⊆ P}`, where `P` holds the tuples the completed support
 makes possible and `R` the required ones: a tuple is required when one of its
 elements' conditions consists only of comparisons, intervals and
-`#true`/`#false`, with no atom of either sign. This `R` under-approximates the
+`#true`/`#false`, with no atom of either sign, or of those and positive atoms of
+[certain predicates](#certain-predicates). This `R` under-approximates the
 tuples every interpretation contains: in `#count{1 : p; 1 : not p}` the tuple
-`1` is in every interpretation, but neither condition is atom-free, so it is not
+`1` is in every interpretation, but neither condition qualifies, so it is not
 required. Source validation checks the families that read those heads over the
 carrier's values; that is the definition of the proposal family (see the
 language reference's
 [arithmetic families](../reference/language.md#numeric-boundaries-and-refusal-meaning)),
-and a sound sharpening of `R` redefines it in the same way. Pruning below a
-producer's closure is different. A rule whose body contains `not p` cannot
-contribute an answer-set atom when `p` is a fact, but removing that rule from
-support can hide a later arithmetic error. For example,
-`p. d(2147483647). h(X) :- d(X), not p. k(X+1) :- h(X).` still reaches overflow
-during admission. Such pruning requires a certificate preserving admission
-throughout the affected consumers, not only answer-set equivalence. The current
-grounder retains those support rows.
+and a sound sharpening of `R` redefines it in the same way. A default negation
+that support completion has [decided](#certain-predicates) narrows support in
+the same direction. A rule whose body contains `not p` contributes no
+answer-set atom when `p` is a fact of a certain predicate, and it then supports
+no head: in
+`p. d(2147483647). h(X) :- d(X), not p. k(X+1) :- h(X).` the rule of `k` has no
+instance, so nothing overflows and the program is admitted with its two facts.
+The excluded instance's own body and ordinary head are still validated as
+written, and a negation that is not decided prunes nothing: with `{p}.` in
+place of the fact, `h` stays possible and the overflow is reached.
 
 The [checked source-preparation example](../rust/source.md) follows
 `prepare_formula`, the retained analysis basis, `ground` and a complete CPU
@@ -126,6 +129,202 @@ states the eligibility and costs; the
 [pairwise-exclusion laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PairwiseExclusions.lean)
 prove original and frozen-reduct equivalence for a complete pair family.
 
+A symmetric positive source constraint can also be grouped before enumerating
+its unequal pair product. The eager emitter checks one `X != Y` comparison and
+matching positive flat atom occurrences under X/Y exchange. All other variables
+remain an exact typed shared key. Two fresh one-lane traversals first establish
+which keys have distinct partners, then construct conditions only for those
+keys. Witnesses combine with Any within a lane; different typed lanes remain
+separate unit occurrences even if their condition formulas coincide. The
+common guard stays outside the at-most-one count. Like any body it reads an
+explicit fact or an atom of a [certain predicate](#certain-predicates) as true,
+and nothing else from support. This route preserves semantic atom identity and source provenance
+while permitting different internal indices and search order. Its actual
+one-lane work, substitutions and live storage use the existing allowances.
+The [grouped source contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/docs/grouped-exclusions.md)
+states the exact grammar, failure and ordering boundaries; the
+[grouped witness laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroupedWitnessExclusion.lean)
+separate the mathematical equality from Rust correspondence obligations.
+
+### Certain predicates
+
+The substitution of explicit facts at the head of this section applies also to
+atoms the program derives from its facts alone. A rule is *definite* when it
+has one ordinary head atom and its body holds only positive atoms, comparisons,
+argument checks, guards, binders, intervals, and the decided negations and
+exact assignments defined below. A predicate is *certain* when every rule that
+can derive one of its atoms is definite and reads only certain predicates; a
+predicate only facts define is certain. Any other default negation, a
+projection, a conditional literal, any other aggregate, a head guard or any
+disjunctive, conditional or choice head removes the predicates the rule
+derives, and a predicate that reads a removed one is removed with it.
+
+The rules of the certain predicates are a definite program, and completed
+support derives a head from exactly the rows their positive atoms and
+comparisons admit. The supported atoms of a certain predicate are therefore
+that program's least model: each has a derivation from facts. The roots of those
+rules stay in the theory, so each such atom is forced into every original and
+reduct model, as a fact is, and a positive occurrence of it in a body becomes
+true
+([`CertainAtoms.derived_stable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CertainAtoms.lean)).
+In `c(1..3). d(X) :- c(X). {p}. q :- d(1), p.` the last rule is emitted as
+`q :- p`. The condition of a choice element or of a conditional disjunct is a
+body and is read the same way. Heads and objective queries are emitted as
+written, and so is a default negation that is not decided.
+
+A default negation over a flat atom, at the top level of a rule's body, is
+*decided* when the atom's predicate is certain and its relation is complete
+whenever the rule is read. Support completion
+[waits for that](#completed-possible-support): a rule with a head that
+negates an atom of a certain predicate is not traversed until the dependency
+components of the atoms it negates, where they come before its heads', are
+complete. Over a complete
+relation of a certain predicate a supported atom holds in every answer set and
+an unsupported one in none, so `not a` is false for a supported `a` and true
+otherwise, and `not not a` the reverse. A row of the rule under which such a
+literal is false derives no head, and a rule whose other literals are definite
+keeps its head predicate certain. The direct evaluation of a complete acyclic
+normal source passes over the same rows, so the atoms it publishes are those
+of the completed support. In
+`c(1..3). e(1). d(X) :- c(X), not e(X). {p}. q :- d(2), p.` the support of `d`
+is `d(2)` and `d(3)`, both hold in every answer set, and the last rule is
+emitted as `q :- p`. The certain predicates thus include what follows from a
+program's facts through flat rules and plain assignments that negate only what
+earlier components have settled. A rule with a conditional literal, or an
+aggregate that is no plain assignment, is not definite, so the stratified
+part of a program can be larger than its certain part.
+
+Emission reads the completed support, where it decides a little more. In the
+body of a rule with a head, `not a` is false when `a` is an explicit fact or a
+supported atom of a certain predicate, and true when `a` is outside the
+support, whatever its predicate, since no rule can derive it
+([`DecidedNegation.absent_stable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DecidedNegation.lean)).
+A false literal drops its instance and a true one leaves the body; in neither
+case does the occurrence name its atom. Emission therefore drops every
+instance support completion omitted, and may drop more: it reads the
+completed support whatever the atom's predicate and component, so
+`p :- not q. q :- p, r.` is emitted without `q`, which nothing supports. A
+constraint's body decides a fixed atom only, and a constraint dropped that way
+still names the atoms of its other literals, so that a constraint grounded
+into the theory and one checked against the source name the same atoms. A
+negation whose atom is supported, is no explicit fact and belongs to an
+uncertain predicate is emitted as written, and so is every negation inside a
+conditional literal, a projection such as `not q(_, X)`, or an element of an
+aggregate or a choice.
+
+clingo decides such negations while it grounds, component by component. It
+tracks facts atom by atom where this analysis decides by predicate, so a
+negation over a predicate that a choice also derives stays in the theory here.
+
+An aggregate assignment reads certainty through its elements. A tuple that an
+element yields from certain atoms and comparisons alone is in every
+interpretation, so it is required. That is true of the completed support only:
+a relation that still grows would give too few required tuples. The requirement
+is therefore read only where the relations are complete: by a rule whose
+predicates all lie in dependency components before its heads', which support
+completion [traverses once](#completed-possible-support), after those
+components reached their fixed point; by any other rule with a head, for the
+elements support completion holds it back for; and by a constraint, which is
+grounded after completion. `c(1..3). n(N) :- N = #count{X : c(X)}.`
+supports `n(3)` alone, where a count over an uncertain condition supports each
+of `n(0)` to `n(3)`.
+
+A required tuple can decide whether a recursive assignment reaches a fixed
+point. In `f(3). {p(N)} :- N = #count{V : p(V); V : f(V)}.` the count is at
+least one, because the fact's tuple is required, and its values end at 3, whose
+head adds no tuple: the program has the one answer set `f(3)`. If that tuple
+were optional the count would propose 0, `p(0)` would add a tuple, and every
+round would propose one value more.
+
+A tuple is required through the predicates of its element, never through one
+row, and only through certain predicates. clingo tracks facts atom by atom and
+simplifies as it grounds, so it finishes some programs of this shape that
+still propose without end here:
+
+- a seed of the recursive predicate itself, as a fact or through a rule over
+  facts: `p(1). {p(N)} :- N = #count{V : p(V)}.`, where clingo stops at
+  `p(1)`. A choice or an assignment that also derives the predicate leaves it
+  uncertain;
+- an element over a predicate that a choice also derives, or that the facts
+  decide only through a guard aggregate, a conditional literal or a negation
+  that is not decided;
+- an element whose own condition holds a default negation.
+
+A decided negation in the rule's body does stop its proposals:
+`stop. {p(N)} :- N = #count{V : p(V)}, not stop.` has the one answer set
+`stop`. Counting the seed through a predicate of its own,
+`s(1). p(X) :- s(X). {p(N)} :- N = #count{V : p(V); V : s(V)}.`, makes its
+tuple required.
+
+An assignment is *exact* when every element of it is required in this way. Its one value is then the aggregate's value in every interpretation, the
+rule supports exactly the heads that hold, and its head predicate is certain as
+well: a rank `r(C,R) :- c(C), R = #count{D : c(D), D <= C}` over `n` facts
+supports `n` atoms and feeds certain predicates in turn. An objective's
+assignment is not read this way and substitutes every value its tuples allow.
+
+Certainty changes which atoms an assignment or a rule with a decided negation
+supports, and so which atoms and objective priorities a theory names. It
+changes the answer sets of no admitted program. A positive flat source has
+only certain predicates.
+
+It does decide which programs are admitted, in one direction, because
+arithmetic is evaluated at the values an assignment can still take, and in the
+instances a decided negation leaves, and no other (the
+[language reference](../reference/language.md) states the rule).
+`c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 2000000000 * (4 - N).` is admitted
+with `p(2000000000)`; over an uncertain condition it overflows at the count 0
+and is refused. A zero divisor decides nothing: `Y = 6/(N-3)` in its place has
+the one instance `N = 3`, which divides by zero and is omitted with a warning,
+as it is beside the defined instances that an uncertain count adds.
+
+The same follows wherever those values are read. The assignment's head has
+only the atoms its values support, so a rule, a constraint, a choice body, an
+aggregate element or a weak constraint that reads the head, directly or
+through other rules, has only those instances: after
+`n(N) :- N = #count{X : c(X)}.` the rule
+`z(Y) :- n(N), Y = 2000000000 * (4 - N).` is admitted too, and
+`z(Y) :- n(N), Y = 6/(N-3).` has its one instance omitted with a warning. An
+assignment need not be exact for this: when some of its tuples are required
+and others are not, it takes fewer values than it did. That includes a rule
+held back for its required tuples.
+`f(3). {p(N+1)} :- N = #max{V : p(V); V : f(V)}, N < 6.` is admitted with its
+one answer set `f(3)`, where the empty maximum had refused it at `#inf + 1`.
+In `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)}, N < 2, Y = 6/(N-1).` the
+one value 1 divides by zero, so the rule has no instance and keeps its
+warning.
+
+A decided negation has the same effect on what reads its rule's head. In
+`blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` the rule
+of `h` supports nothing, so the rule of `k` has no instance to overflow in,
+and the program is admitted with its facts as its one answer set. Of the
+instance the negation excludes, the body and an ordinary or disjunctive head
+are still validated as written: `h(X+1) :- d(X), not blocked.` in its place
+overflows and is refused, and `h(1/X) :- d(X), not blocked.` over `d(0)` keeps
+its warning. The elements of a choice, of a head aggregate and of a
+conditional disjunct are a later stage, which an excluded instance does not
+start: `{h(X+1)} :- d(X), not blocked.` is admitted, and a zero divisor in
+such an element still keeps its warning. A growth that a
+decided negation stops ends: `stop. p(0). p(X+1) :- p(X), not stop.` has the
+answer set `{stop, p(0)}`. With a choice `{blocked}.` or `{stop}.` in place of
+the fact nothing is decided, and both programs are as before: the first is
+refused for the overflow, and the second does not finish.
+
+The substitution rests on the roots that derive each atom, so emission checks
+them on the theory it built rather than taking them from the analysis. Every
+instance that derives an atom of a certain predicate has one ordinary head and
+a body read as true, so each of its producers is an unconditional ordinary
+root; an explicit fact has at least its own. Once no further body will be read,
+emission requires exactly that of every atom it read as true, at a positive
+occurrence or under a decided negation, and publishes nothing otherwise. A
+choice, a disjunct, or a negation or an atom left as written in any producer
+of a wrongly certain atom fails the check. It does not examine
+why an exact assignment was emitted as its one value, which rests on the
+listing of its required elements, nor a predicate no body reads. A constraint
+that a hybrid schedule grounds into the core once every producer is emitted
+reads certain atoms as any body does and is covered by the check. A constraint
+that stays streamed is checked against the source as written and reads no
+certain predicate.
+
 ## Shared aggregate guards
 
 Multiple written bounds on one completed nonnegative tuple contribution set use
@@ -174,6 +373,40 @@ guards still select the appropriate formula in each rule instance. These
 families belong to one completed support snapshot; they never carry results
 across growing support rounds. Complete tuple identity and eligibility formulas
 remain unchanged, including their frozen-reduct meaning.
+
+One final builder owns the family's term coordinates and registry. A completed
+candidate-value carrier is its first stage; native tuple conditions and guard
+roots are later stages in the same entry. Independent cursors share the carrier
+but keep their own current frames and traversal positions. Only the explicit
+completed-query capability enables this retention. Growing support and other
+builders keep their existing construction paths, and no formula-node identity
+crosses builders.
+
+For eligible families, the completed producer also retains the ordered tuple
+occurrences, requiredness and local-plan evidence. Final emission still runs its
+joins against the current frame and constructs current eligibility formulas.
+Replay requires the same source, support, vocabulary and projected inputs, plus
+matching element geometry and an immutable local-plan certificate for each
+nonempty condition. Empty conditions have their explicit one-row case. Missing
+or incompatible evidence selects ordinary native construction; a resource or
+cancellation failure propagates instead of selecting a fallback. Matching tuple
+sets alone does not justify ordered replay.
+
+The row and key-byte ceilings apply when a completed family is first retained,
+including a carrier whose later filters emit no formula. Native element and
+guard-root ceilings retain their existing units and publication points. Support
+storage includes actual shared-owner headers and reference-count control words,
+carrier and occurrence buffers, and simultaneous scratch. A requested allocation
+is checked before it contributes to the observed capacity peak. A failed stage
+publishes no partial carrier or native stage; performed work and any already
+interned source coordinates remain accounted.
+
+This is common CPU-side source preparation for subsequent CPU or GPU solving.
+It adds no device-side grounding or parallel join policy. Applicability and
+end-to-end cost still require measurement; carrier reuse does not imply that
+all families can replay their occurrence streams. The [ordered correspondence
+boundary](../lean/correspondence.md#ordered-aggregate-family-replay) separates the
+Lean laws from the remaining concrete Rust obligations.
 
 Assignments coalesce complete tuple keys before constructing proposals, and
 split them into required keys, those with an occurrence from an element whose
@@ -751,12 +984,42 @@ that same substitution is excluded by the ordinary complete-row policy. Matching
 rows still reach every residual check and retain its failures. Tuple comparisons
 and default-negated atoms supply no additional exclusion premise.
 
-The gate covers flat normal bodies with atom, comparison and tuple comparison
-literals and no generated head arguments. Generated bindings and structural or
-nested scopes retain their existing traversal. Family evidence never enables
-numeric probes: it retains every false row. Direct-source exact activity,
-retained emission, hybrid capture and model checks also keep their previous
-traversal, though their support completion can use the support-round route above.
+The source-rule gate covers flat normal bodies with atom, comparison and tuple
+comparison literals and no generated head arguments. Generated bindings and
+structural or nested scopes retain their existing traversal unless an explicit
+consumer establishes the restricted local certificate below. Family evidence
+never enables numeric probes: it retains every false row. Outside those local
+consumers, direct-source exact activity, retained emission, hybrid capture and
+model checks keep their previous traversal, though their support completion can
+use the support-round route above.
+
+Assignment aggregate collection, final aggregate eligibility and ordered family
+replay share a separate local selector with factored rule components. A component
+installs its fixed prefix before selection; its prepared or fresh join order is
+unchanged. The exact local condition must contain only positive flat atoms and
+scalar comparisons whose operands are bare variables. Every comparison input
+must already be bound in that prefix or occur in a positive pattern in the same
+plan. Negative atoms, structural patterns, arithmetic expressions, assignments,
+generators and nested conditions decline this local certificate. A join marked
+as original source evidence cannot select it.
+
+This grammar check does not establish numeric type or a complete assignment.
+The existing query owner still checks the entire indexed source column and the
+current bound. A mixed column or unavailable bound retains ordinary traversal.
+Selected rows keep source order, repeated occurrences, aliases, the occurrence's
+delta interval and all residual comparisons. Aggregate tuple evaluation and fresh
+eligibility use the same passing rows; retained carriers do not replace those
+checks. These shared grounding operations apply before either CPU or GPU solving.
+
+Local admission allocates no new owner, but its inspected literals, input slots
+and pattern columns spend grounding work. Index construction, lookup, temporary
+selected rows and retained capacity use the existing work and storage limits.
+The selector is published only after its whole grammar check succeeds. A work,
+allocation, owner or cancellation failure remains a typed failure, with performed
+work retained; it is not a reason to retry the ordinary join. Different work and
+query costs can move refusal and cancellation boundaries. The
+[local correspondence obligations](../lean/correspondence.md#numeric-selection-in-local-joins)
+distinguish exact successful streams from these concrete execution obligations.
 The [numeric-domain design](https://github.com/GregoryGelfond/zetesis/blob/main/docs/design/numeric-argument-domains.md) states the
 failure inventory and deferred coverage.
 `numeric_index_builds` counts published certificates, `numeric_index_declines`
@@ -861,11 +1124,10 @@ support completion keep their original traversals.
 
 Source-family evidence is finalized over completed support and the original
 source occurrence, not one support round or normalized fragment. Evaluated
-numeric division or remainder by zero omits an instance only when the same
-family also contains a jointly defined instance; a defined false instance is a
-witness. An entirely undefined family refuses admission, while an empty positive
-join is silent. Each local element has a separate family for each fixed outer
-binding. Original objective-element identities keep their pooled fragments
+numeric division or remainder by zero omits its instance, whatever else the
+family holds, and its statement keeps a warning; a family of such instances
+alone contributes nothing. An empty positive join is silent. Each local element
+has a separate family for each fixed outer binding. Original objective-element identities keep their pooled fragments
 together without merging distinct elements. Successful owners retain one typed
 warning per original statement site within the finite warning ceiling.
 
@@ -1007,6 +1269,48 @@ ordinary probes continue to use their requested strategy and both paths share
 one lazy table workspace. No table is prepared when every covered input remains
 allowed or the opposite operand is unavailable. An empty derived domain uses an
 empty probe directly.
+
+A table keeps one row mask for each distinct value of each of its columns, so
+a column of distinct keys over `R` rows costs `R²` bits to hold and as much
+work to fill, where a scan of the relation reads `R` rows. Under the indexed
+strategy the table is only a way to narrow a probe the join can make without
+it, so the selector prepares one at its first probe only while it is small:
+its row masks may take 65536 words of 32 bits. That admits a single column of distinct keys up
+to 1440 rows, and a larger relation only while its columns hold few distinct
+values; a column no join binds has no postings to count and is taken to hold
+a value for each row. Past that bound the derived domain is not used at
+first: the ordinary probe offers its rows and the comparison, which remains a
+residual check, selects among them. `d(0..199999). q(X) :- d(X), X \ 2 = 0.`
+is grounded that way; its table would need about ten gigabytes.
+
+One probe is cheaper as a scan; a probe that a join repeats for every row of
+its outer prefix is not. `q(X,Y) :- m(Y), d(X), X / 3 = Y.` selects from `d`
+once for each row of `m`. The snapshot therefore counts, for each relation,
+the rows its joins read in place of a declined selection: the rows that the
+probe which took its place offered, a scan or a posting of another bound
+column. A numeric index, as in eager emission, already offers the rows its
+equality selects, which the table would offer too, so a probe it serves
+counts nothing. The selector prepares the table once the counted rows,
+weighed at eight words of masks each, have cost what the masks would. The
+joins that share a snapshot add to the one count, so several rules that each
+probe a few times repay the table together, and the table then serves them
+all. A constraint that is streamed lazily is checked over a snapshot of its
+own, and its count is that check's.
+
+Under the indexed strategy a narrowing table is declined when its conservative
+preparation estimate does not fit the current limits and storage share. A table,
+small or not, is prepared only if twice its preparation, with what the tables
+already prepared hold, is within what the support's limits leave. The
+preparation is weighed as the table's accounting charges it: the masks grow
+by doubling, a growth is charged with the buffer it replaces still live, and
+the list that holds the tables grows the same way. Otherwise the table is not
+attempted and the join keeps its scan; a count the limits leave no room for
+is not kept either. A table stays for its snapshot, so what the grounding
+needs afterwards, the atoms its rules append among it, finds less room: by
+this rule, at least as much as the tables hold. A grounding that grows by
+more than that after its last table is refused, where scanning throughout it
+could have grown by twice as much. Under the table strategy the caller asked
+for tables, and none of this applies.
 
 Domain derivation scans the existing input/result coordinates, without another
 value dictionary or reverse-result cache. The first scan locates a rejected
@@ -1252,7 +1556,9 @@ Formula grounding grows possible support by complete rounds. Each round uses an
 immutable snapshot, exhausts the admitted positive joins and binding proposals,
 and collects new positive head atoms. Aggregate and conditional truth remains in
 the emitted formulas; it does not prune possible producers. A proposed aggregate
-assignment value retains its original equality.
+assignment value retains its original equality, unless the assignment is
+[exact](#certain-predicates): it then proposes the one value it has, and that
+equality is emitted as true.
 
 An ordinary nonempty head with a checked aggregate binding plan can reuse a
 completed support continuation when the next positive binding agrees on every
@@ -1340,9 +1646,10 @@ source-to-Rust semantic refinement. Richer programs keep the existing schedule.
 `GroundingWork.support_producer_visits` counts charged producer visits, including
 those skipped by registration. Its disjoint subsets `support_rich_traversals`,
 `support_unchanged_visits` and `support_deferred_visits` count rich visits
-selected for traversal (including the first round), those skipped because no
+selected for traversal (including the first round) with the one traversal the
+component schedule gives each producer that waited, those skipped because no
 registered input changed or a component-scheduled producer was already
-traversed, and those of a component-scheduled producer still waiting;
+traversed, and those of a producer still waiting;
 `support_snapshot_preparations` counts charged growing
 snapshot attempts, including attempts that subsequently fail. These optional
 fields do not retroactively turn missing historical observations into zeros.
@@ -1410,6 +1717,27 @@ occurrences, and a rich producer with its read set, the distinct signed
 predicates of every atom occurrence in its body and its head elements'
 conditions, at every depth and of either sign.
 
+Every registered producer is visited in the first round, in rule order, so
+that a fact block still enters support at its position among the rules.
+After that an ordinary producer is visited only in a round that follows the
+publication of a new row of one of its positive occurrences' predicates. Its
+delta variants join the rows of the last publication alone, so in any other
+round it has no variant and a visit would derive nothing. The registration
+keeps the same reverse postings and packed active set the whole-program plan
+keeps. A rich producer is visited in every round, where its registration
+decides whether it is traversed, and so is an ordinary producer with an
+occurrence whose predicate the dependency graph does not name. An ordinary
+producer that the component schedule holds back is visited like any other:
+such a visit takes no variant and is counted as deferred, and the schedule
+traverses the producer outside the round's visits, whether or not the round
+visited it. A program that grows for many rounds therefore pays in each
+round for the rules that round can affect, and no longer for every rule it
+has. The reverse postings and active set add admitted setup storage and work;
+subsequent rounds charge their actual wake work. At tight work or storage
+ceilings this can change where preparation refuses. A refusal remains a typed
+stop and publishes no completed support; the registration does not fall back to
+an all-producers schedule when its preparation is refused.
+
 A rich producer whose reads all lie in dependency components before its heads'
 components is scheduled by component. Components come from the dependency
 graph's dependency-before-dependent order; a component depends on the
@@ -1426,10 +1754,68 @@ in component order and repeats until no producer is ready; when a round
 proposes nothing, the earliest waiting producer always reads only components
 that reached their fixed point, so completion never ends with one untraversed.
 It costs one visit per pending atom, a signature search per run of one
-predicate, and one visit per component, dependency and deferred read each round,
-until every such producer was traversed.
+predicate, and one visit per component, dependency and waited read each round,
+until every producer that waits was traversed.
 
-Every other rich producer, one that reads its own component or a later one, is
+A rich producer that is not scheduled this way, because it reads its own
+component, a later one or one whose fixed point is not decidable, cannot wait
+for everything it reads, but it is held back for the part an assignment needs
+complete. When one of its assignment aggregates has an element with a tuple key
+and a condition of positive atoms and comparisons, each atom in a decidable
+component before the producer's heads, the producer is not traversed until the
+components those elements read reach their fixed point. It is then traversed
+in full, in that round, as a component-scheduled producer is, and from the
+next round on it is traversed as any other rich producer. Its head components
+wait for that first traversal, so a producer scheduled on them cannot run
+before it. Each traversal therefore reads those elements over final rows: the
+tuples they make required are the same in every one. With the required tuples
+fixed, the values the assignment proposes only grow as the support the rule
+reads grows, whether through its own component or through another relation
+that is still gaining rows, and final grounding's family has a root for each.
+Its visits before the first traversal are counted in `support_deferred_visits`.
+
+A producer that is not scheduled by component also waits for the atoms it
+negates. When a default-negated flat atom at the top level of its body lies in
+a decidable component before the producer's heads, the producer is not
+traversed until that component is complete. It is then traversed
+in full, in that round, and afterwards an ordinary producer takes its delta
+variants, whose new rows are the ones published since that traversal's
+snapshot, and a rich one is traversed as any other rich producer. Each of its
+traversals therefore reads those negated atoms over final rows, which is what
+lets a [decided negation](#certain-predicates) omit a row for good: an
+ordinary producer never revisits a row it has joined. Its head components wait
+for that first traversal, and the components it waits for precede its heads,
+so the argument above covers it. Its visits before the first traversal are
+counted in `support_deferred_visits`.
+
+An ordinary producer that waits only for atoms it negates does not need them
+in the snapshot. It reads a negated atom over the snapshot and the round's
+pending atoms, so it can go as soon as the component is *settled*: decidable,
+with every other dependency at its fixed point, and with nothing to gain
+beyond this round's atoms. That holds when every waiting producer of the
+component was traversed and it either gained no atom this round or has no
+producer that reads the component itself. It also holds when its waiting
+producers are queued by the same readiness test, ahead of the producer that
+asks, and none reads the component itself: they are traversed first. What
+such a component gains this round feeds none of its own producers, so the
+snapshot and the pending atoms are its complete relation. One test thereby
+queues a chain of strata, each negating the one before, in dependency order,
+and the chain is traversed in one round, not in one round for each stratum.
+A stratum that reads itself is complete only in a round in which it gains
+nothing, so strata of that kind follow one another: each begins when the one
+it negates has stopped growing, and their rounds add up where, with the
+negation ignored, they overlapped. A rich producer joins what it waits for,
+and still waits for the fixed point.
+
+Waiting for a negated atom pays only where the atom is decided: support
+completion reads a negated atom to decide it and for nothing else. An
+ordinary producer none of whose negated atoms has a certain predicate would
+keep every row whatever those atoms' support, in whatever round it is
+traversed. The analysis of certain predicates runs before the first round and
+releases such a producer, which is then visited as one that negates nothing:
+`{u(X)} :- c(X). d(X) :- c(X), not u(X).` holds no rule back.
+
+Every other rich producer, and a held-back one after that traversal, is
 traversed after the first round exactly when one of its read predicates gained
 rows at the last publication. Otherwise every relation it reads is the one its
 last traversal read, and support membership only grows, so another traversal
@@ -1441,7 +1827,11 @@ component-scheduled producer runs inside an ordinary round and adds none, though
 the heads it proposes, and so their consumers' rounds, can come later than on
 the per-change schedule. The
 [scheduling law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md)
-covers both registrations.
+covers both registrations: its rule-level form the ordinary producers, which
+their positive occurrences wake, and its general form the rich producers'
+read sets. An ordinary producer held back for the atoms it negates is first
+traversed by the component schedule, as described above, and falls under the
+rule-level form only after that traversal.
 Structural occurrences use the original whole-row capture and the same nested
 constructor, constant, repeated-variable and anonymous-pattern checks. Bound
 structural postings intersect the old/new interval by actual relation row position.
@@ -1451,10 +1841,10 @@ the separate whole-program wake schedule retains its narrower applicability.
 Every selected input still passes the same typed tuple matcher and scalar evaluator.
 An empty proposal set establishes completion only after every required variant
 and conservative producer has finished. Final formula emission visits all
-complete authored-body families and preserves their definedness evidence,
-including jointly defined false instances. Independent relational exclusions
+complete authored-body families and preserves their arithmetic evidence: every
+omitted zero divisor and every fatal failure. Independent relational exclusions
 and empty joins supply no arithmetic failure. Possible support membership alone
-cannot conceal a required arithmetic error or establish an all-undefined family.
+cannot conceal a required arithmetic error or the warning of an omission.
 
 The preservation argument concerns possible heads, not answer-set truth.
 Removing these flat negative non-inputs leaves the positive occurrence order,
@@ -1532,9 +1922,12 @@ source-to-reduct correspondence.
 Before formula emission, the builder records explicit ground facts in an
 owner-checked source selection. Every fact retains its original root, atom and
 provenance. Positive body occurrences are still named and validated, then those
-of recorded facts become true; merely possible support rows do not. The same
-replacement applies inside shared positive producer groups. Negative occurrences,
-heads and objective queries keep their existing representation. Retained facts
+of recorded facts and of supported atoms of
+[certain predicates](#certain-predicates) become true; other possible support
+rows do not. The same
+replacement applies inside shared positive producer groups. Heads and objective
+queries keep their existing representation, and so does a negative occurrence
+unless it is [decided](#certain-predicates). Retained facts
 force their atoms into every original model and every tested reduct model, which
 justifies the replacement in the enclosing formula; a candidate omitting a fact
 fails its unchanged root.
@@ -1543,8 +1936,10 @@ This preparation repeats fact identity reads without copying canonical atom
 payload or assigning formula IDs. It collects R fact occurrences, sorts their
 source IDs with O(R log R) metered work and deduplicates before publishing F
 distinct identities. Temporary and retained capacity is O(R). Each emitted atom
-needs at most one O(log(F + 1)) membership lookup, cached in its existing
-construction metadata; shared group nodes never repeat those lookups. Work and
+needs at most one O(log(F + 1)) membership lookup and, when it is no recorded
+fact, one lookup of its predicate among the P certain ones, O(log(P + 1))
+signature comparisons; both are cached in its existing
+construction metadata, and shared group nodes never repeat those lookups. Work and
 retained selection storage are charged to the existing grounding limits. Collection happens during formula initialization,
 so its located resource or allocation refusal can precede a later ordinary
 formula-emission refusal. Semantic fact admission already completed in support.
@@ -1635,6 +2030,15 @@ and node ceilings are checked before a new ID is published.
 Completed formula theories always include double-negated necessary support
 guards. These guards strengthen candidate checks while preserving reduct subset
 freedom; they are mathematically redundant, not a selectable construction option.
+An atom with an unconditional producer has none. A fact, an atom the program
+derives from its facts, and the head of a choice or disjunction whose body is
+true each have a producer that requires nothing, so their guard would require
+truth itself: every interpretation satisfies it and its frozen form holds in
+every reduct (`SupportTransposition.unconditional_guards_omitted`). Leaving it
+out removes three nodes and a root for each such atom and changes no answer
+set; a theory of facts and what follows from them is less than half the size.
+Finding such a producer reads each of an atom's producers once, before its
+guard does.
 Construction uses one
 [`Metadata` owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/metadata.rs)
 with flat atom headers and shared append arenas. Each header identifies its
@@ -1655,7 +2059,7 @@ Double negation freezes precisely that predicate for every tested interpretation
 so the conjunction of roots has the same original and arbitrary frozen truth.
 Ordinary roots and shared body prefixes are unchanged. No positive support is
 created by the guard disjunction. Multiple recorded producers, even duplicates,
-and constant or missing producers retain their per-atom guard construction.
+and a false or missing producer retain their per-atom guard construction.
 
 Complete singleton producers can also share a condition beneath several nested
 conjunctions. A second pass follows only conjunction edges and can append a
@@ -2067,7 +2471,8 @@ preserves its completed work and capacity receipts.
 and its current prefix, relation/equality metadata, postings, borrowed snapshot
 objects and query capacity, including scratch and named growth overlap. Terms
 and atoms are counted by that authority once; predicate relations and pending
-rounds retain scoped IDs. Allocator/tree/control-runtime overhead and unrelated
+rounds retain scoped IDs. Named shared-family headers and reference-count control
+words are included. Unmodelled allocator/tree/runtime overhead and unrelated
 grounding state remain separate. The independent cumulative source-expansion
 budget still applies, and this support limit is not RSS.
 

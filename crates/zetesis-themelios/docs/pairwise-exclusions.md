@@ -1,8 +1,8 @@
 # Complete pair exclusions
 
 During ordinary materialized constraint grounding, a positive atomic body can
-become exactly two distinct atoms after already-certified explicit facts are
-removed. The compiler retains those exact interned atom-node pairs until the
+become exactly two distinct atoms after the atoms read as true are removed:
+explicit facts, and supported atoms of certain predicates. The compiler retains those exact interned atom-node pairs until the
 whole original constraint join completes. Scalar filters, assignments, source
 atom validation and validation of rejected rows keep their existing execution.
 Bodies with default negation, projections, aggregates or conditional literals

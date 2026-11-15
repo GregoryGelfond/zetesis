@@ -110,12 +110,7 @@ impl TermTable {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
-        self.values
-            .slots()
-            .prefix(0)
-            .expect("the empty prefix always exists")
-            .bind_with(computation.read(), || counters.work(limits, location))
-            .map_err(|error| crate::formula_binding::failure(error, location))?;
+        self.authenticate_owner(computation, limits, counters, location)?;
         counters.work(limits, location)?;
         computation.read().term(key).map_err(|error| {
             crate::formula_binding::assignment(
@@ -124,6 +119,23 @@ impl TermTable {
             )
         })?;
         Ok(())
+    }
+    /// Authenticate this table's own vocabulary even when a caller's selected
+    /// key is empty. This is the same prefix check used by keyed operations.
+    pub(crate) fn authenticate_owner(
+        &self,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        self.values
+            .slots()
+            .prefix(0)
+            .expect("the empty prefix always exists")
+            .bind_with(computation.read(), || counters.work(limits, location))
+            .map_err(|error| crate::formula_binding::failure(error, location))
+            .map(|_| ())
     }
     fn search(
         &self,

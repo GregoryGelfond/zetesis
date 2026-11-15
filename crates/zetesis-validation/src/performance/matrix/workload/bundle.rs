@@ -123,6 +123,7 @@ impl Workload {
                 seals,
                 manifest: None,
             }),
+            selection_manifest: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -139,14 +140,7 @@ impl Workload {
         seal: &FileSeal,
         limit: usize,
     ) -> Result<(), Error> {
-        let mut metadata = self.metadata_bytes;
-        for count in [
-            seal.requested().as_os_str().len(),
-            seal.canonical().as_os_str().len(),
-            seal.sha256().len(),
-        ] {
-            metadata = super::add(metadata, count)?;
-        }
+        let metadata = self.retained_manifest_bytes(seal)?;
         if metadata > limit {
             return Err(Error::Configuration(
                 "bundle manifest seal exceeds metadata ceiling",
@@ -163,11 +157,14 @@ impl Workload {
     pub(in crate::performance::matrix) fn independent_seals(
         &self,
     ) -> impl Iterator<Item = &FileSeal> {
-        self.authored_seal().into_iter().chain(
-            self.bundle
-                .iter()
-                .flat_map(|bundle| bundle.seals.iter().chain(bundle.manifest.iter())),
-        )
+        self.authored_seal()
+            .into_iter()
+            .chain(
+                self.bundle
+                    .iter()
+                    .flat_map(|bundle| bundle.seals.iter().chain(bundle.manifest.iter())),
+            )
+            .chain(self.selection_manifest.iter())
     }
 
     pub(in crate::performance::matrix) fn validate_bundle_campaign(

@@ -3,10 +3,11 @@ use std::cell::Cell;
 use crate::formula::Compiled;
 use crate::formula_ground::{Builder, Purpose, ground};
 use crate::formula_support::testing;
-use crate::test_support::compiled_atoms;
+use crate::test_support::{answer_sets, atom_sets, compiled_atoms, zero_divisor_statements};
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
 use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+use zetesis_test_support::programs::unary;
 
 thread_local! {
     static ENABLED: Cell<bool> = const { Cell::new(true) };
@@ -16,6 +17,8 @@ pub(super) fn enabled() -> bool {
     ENABLED.get()
 }
 
+/// Run without the fixed facts. A fact's predicate may also be certain, which
+/// fixes its atoms by another route, so certainty is left out as well.
 fn without<T>(run: impl FnOnce() -> T) -> T {
     struct Restore(bool);
     impl Drop for Restore {
@@ -24,7 +27,7 @@ fn without<T>(run: impl FnOnce() -> T) -> T {
         }
     }
     let _restore = Restore(ENABLED.replace(false));
-    run()
+    crate::formula_support::certain::testing::without_certainty(run)
 }
 
 fn compile(source: &str) -> Compiled {
@@ -45,83 +48,125 @@ fn interpretations(compiled: &Compiled) -> Vec<Interpretation> {
         .collect()
 }
 
+/// Sources that read a fact at a positive occurrence. A fact under default
+/// negation is decided, which `decided_negation` tests on its own sources.
 const CASES: &[&str] = &[
     "{p}. q :- d,p. d.",
     "{p}. q :- d,p,not r. r :- not p. d.",
-    "{p}. q :- not d,p. d.",
-    "{p}. q :- not not d,p. d.",
     "{p}. q|r :- d,p. d.",
     "{-p}. -q :- -d,-p. -d.",
     "{p(1);p(2)}. q(X) :- d(X),p(X). d(1;2).",
     "{p}. q :- 2 <= #count { a:d; b:p }. d.",
 ];
 
-#[test]
-fn fixed_body_facts_preserve_original_truth() {
+/// Run with the explicit facts fixed and no predicate called certain: the
+/// route this module had before certain predicates joined it.
+fn facts_alone<T>(run: impl FnOnce() -> T) -> T {
+    crate::formula_support::certain::testing::without_certainty(run)
+}
+
+/// Every interpretation satisfies `actual`'s theory exactly when it satisfies
+/// `reference`'s, over the same atoms.
+fn same_original_truth(actual: &Compiled, reference: &Compiled, source: &str) {
     let cancellation = Cancellation::default();
-    for source in CASES {
-        let actual = compile(source);
-        let reference = without(|| compile(source));
+    assert_eq!(
+        compiled_atoms(actual),
+        compiled_atoms(reference),
+        "{source}"
+    );
+    for (actual_i, reference_i) in interpretations(actual)
+        .iter()
+        .zip(interpretations(reference))
+    {
         assert_eq!(
-            compiled_atoms(&actual),
-            compiled_atoms(&reference),
-            "{source}"
+            models(&actual.theory, actual_i, Limits::default(), &cancellation).unwrap(),
+            models(
+                &reference.theory,
+                &reference_i,
+                Limits::default(),
+                &cancellation
+            )
+            .unwrap(),
+            "{source}",
         );
-        for (actual_i, reference_i) in interpretations(&actual)
-            .iter()
-            .zip(interpretations(&reference))
-        {
+    }
+}
+
+/// Every interpretation satisfies the reduct of `actual`'s theory at every
+/// frozen interpretation exactly when it satisfies that of `reference`'s.
+fn same_frozen_truth(actual: &Compiled, reference: &Compiled, source: &str) {
+    let cancellation = Cancellation::default();
+    assert_eq!(
+        compiled_atoms(actual),
+        compiled_atoms(reference),
+        "{source}"
+    );
+    let actual_i = interpretations(actual);
+    let reference_i = interpretations(reference);
+    for (candidate, actual_m) in actual_i.iter().enumerate() {
+        for (tested, actual_j) in actual_i.iter().enumerate() {
             assert_eq!(
-                models(&actual.theory, actual_i, Limits::default(), &cancellation).unwrap(),
-                models(
-                    &reference.theory,
-                    &reference_i,
+                models_reduct(
+                    &actual.theory,
+                    actual_m,
+                    actual_j,
                     Limits::default(),
                     &cancellation
                 )
                 .unwrap(),
-                "{source}",
+                models_reduct(
+                    &reference.theory,
+                    &reference_i[candidate],
+                    &reference_i[tested],
+                    Limits::default(),
+                    &cancellation
+                )
+                .unwrap(),
+                "I={candidate}, J={tested}: {source}",
             );
         }
     }
 }
 
 #[test]
-fn fixed_body_facts_preserve_arbitrary_frozen_truth() {
-    let cancellation = Cancellation::default();
+fn fixed_body_facts_preserve_original_truth() {
     for source in CASES {
-        let actual = compile(source);
+        same_original_truth(&compile(source), &without(|| compile(source)), source);
+    }
+}
+
+#[test]
+fn fixed_body_facts_preserve_arbitrary_frozen_truth() {
+    for source in CASES {
+        same_frozen_truth(&compile(source), &without(|| compile(source)), source);
+    }
+}
+
+#[test]
+fn explicit_facts_alone_preserve_original_truth() {
+    for source in CASES {
+        let actual = facts_alone(|| compile(source));
+        same_original_truth(&actual, &without(|| compile(source)), source);
+    }
+}
+
+#[test]
+fn explicit_facts_alone_preserve_arbitrary_frozen_truth() {
+    for source in CASES {
+        let actual = facts_alone(|| compile(source));
+        same_frozen_truth(&actual, &without(|| compile(source)), source);
+    }
+}
+
+#[test]
+fn explicit_facts_alone_shrink_the_bodies_that_read_them() {
+    for source in CASES {
+        let actual = facts_alone(|| compile(source));
         let reference = without(|| compile(source));
-        assert_eq!(
-            compiled_atoms(&actual),
-            compiled_atoms(&reference),
+        assert!(
+            actual.theory.nodes().len() < reference.theory.nodes().len(),
             "{source}"
         );
-        let actual_i = interpretations(&actual);
-        let reference_i = interpretations(&reference);
-        for (candidate, actual_m) in actual_i.iter().enumerate() {
-            for (tested, actual_j) in actual_i.iter().enumerate() {
-                assert_eq!(
-                    models_reduct(
-                        &actual.theory,
-                        actual_m,
-                        actual_j,
-                        Limits::default(),
-                        &cancellation
-                    )
-                    .unwrap(),
-                    models_reduct(
-                        &reference.theory,
-                        &reference_i[candidate],
-                        &reference_i[tested],
-                        Limits::default(),
-                        &cancellation
-                    )
-                    .unwrap(),
-                    "I={candidate}, J={tested}: {source}",
-                );
-            }
-        }
     }
 }
 
@@ -165,25 +210,55 @@ fn fact_rules_and_blocks_supply_the_same_authority() {
 
 #[test]
 fn fixed_body_facts_keep_independent_scalar_errors() {
-    for source in [
-        "d(0). :- d(X),A=X+1,A=0,Z=1/X.",
-        "d(1). :- d(X),not X/2=0,X+2147483647=0.",
-        "d(0). h(1/X) :- d(X).",
+    let source = "d(1). :- d(X),not X/2=0,X+2147483647=0.";
+    let failure = || {
+        crate::admit_formula(
+            source.into(),
+            crate::AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .expect_err("independent reached scalar failure")
+    };
+    assert_eq!(
+        format!("{:?}", failure()),
+        format!("{:?}", without(failure)),
+        "{source}"
+    );
+}
+
+#[test]
+fn fixed_body_facts_keep_zero_divisor_omissions() {
+    for (source, statement) in [
+        // The comparison `A=0` is false where `Z=1/X` divides by zero: the
+        // instance is omitted with its warning all the same.
+        ("d(0). :- d(X),A=X+1,A=0,Z=1/X.", ":- d(X),A=X+1,A=0,Z=1/X."),
+        ("d(0). h(1/X) :- d(X).", "h(1/X) :- d(X)."),
     ] {
-        let failure = || {
+        let admit = || {
             crate::admit_formula(
                 source.into(),
                 crate::AdmissionOptions::default(),
                 ExpansionLimits::default(),
                 FormulaLimits::default(),
             )
-            .expect_err("independent reached scalar failure")
+            .expect("a zero divisor omits its instance")
         };
-        assert_eq!(
-            format!("{:?}", failure()),
-            format!("{:?}", without(failure)),
-            "{source}"
-        );
+        for admitted in [admit(), without(admit)] {
+            assert_eq!(
+                zero_divisor_statements(source, admitted.warnings()),
+                [statement],
+                "{source}"
+            );
+            // The fact is the one atom and the one answer set: the head has
+            // no instance, and a kept constraint would leave no answer set.
+            assert_eq!(admitted.atoms().len(), 1, "{source}");
+            assert_eq!(
+                answer_sets(admitted.theory(), admitted.atom_catalog()),
+                atom_sets([&[unary("d", 0)]]),
+                "{source}"
+            );
+        }
     }
 }
 

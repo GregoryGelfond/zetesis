@@ -4,7 +4,12 @@
 //! variable. Reversing that finite input/result mapping for one known equality
 //! operand therefore preserves every matching complete row. The maps remain
 //! the sole expression results; this operation owns only transient borrowed
-//! domain lists for the existing finite-table selector.
+//! domain lists for the existing finite-table selector. That selector
+//! declines a relation whose table would not be small until the rows its
+//! snapshot's joins have read in the table's place have cost what the table
+//! would (`Support::select_domains_after`); a declined probe falls to the
+//! join's ordinary one, and the equality that supplied the domain is checked
+//! on each row.
 
 use std::ops::Range;
 
@@ -45,18 +50,30 @@ impl Domains<'_> {
     }
 }
 
+/// What the covered computed domains gave one probe.
+pub(in crate::formula_support) enum Computed<'a, 'source> {
+    /// No covered equality restricts the pattern here.
+    Absent,
+    /// The domains' selection, or no row where one of them is empty.
+    Probe(Probe<'a, 'source>),
+    /// The domains restrict the pattern, and the snapshot left its relation
+    /// to the join's own probe, whose rows count under this ticket
+    /// ([`queries::DomainSelection::Declined`]).
+    Declined(usize),
+}
+
 impl<'a, 'source> Join<'a, 'source> {
     pub(in crate::formula_support) fn computed_probe(
         &self,
         pattern: PositivePattern<'_>,
         source: Option<&'source RelationRows<'source>>,
         mut context: Context<'_, &Computation<'_, '_>>,
-    ) -> Result<Option<Probe<'a, 'source>>, FormulaFailure> {
+    ) -> Result<Computed<'a, 'source>, FormulaFailure> {
         if !self.certified_total || source.is_none() {
-            return Ok(None);
+            return Ok(Computed::Absent);
         }
         let PositivePattern::Flat(flat) = pattern else {
-            return Ok(None);
+            return Ok(Computed::Absent);
         };
         let Some(domains) = self.projections.domains(
             self.literals.get(),
@@ -70,10 +87,10 @@ impl<'a, 'source> Join<'a, 'source> {
             ),
         )?
         else {
-            return Ok(None);
+            return Ok(Computed::Absent);
         };
         if domains.excludes_all(&mut context)? {
-            return Ok(Some(Probe::Indexed(delta::Rows::Posting(&[]))));
+            return Ok(Computed::Probe(Probe::Indexed(delta::Rows::Posting(&[]))));
         }
         let binding = self.values.view(
             context.computation.read(),
@@ -81,9 +98,19 @@ impl<'a, 'source> Join<'a, 'source> {
             context.work.counters,
             context.work.location,
         )?;
-        self.support
-            .select_domains_at(source, pattern, binding, domains.borrowed(), context.work)
-            .map(|rows| rows.map(Probe::Table))
+        Ok(
+            match self.support.select_domains_after(
+                source,
+                pattern,
+                binding,
+                domains.borrowed(),
+                context.work,
+            )? {
+                queries::DomainSelection::Rows(rows) => Computed::Probe(Probe::Table(rows)),
+                queries::DomainSelection::Inapplicable => Computed::Absent,
+                queries::DomainSelection::Declined(ticket) => Computed::Declined(ticket),
+            },
+        )
     }
 }
 

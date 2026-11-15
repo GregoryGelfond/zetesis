@@ -93,8 +93,8 @@ impl Component {
         index: usize,
         prepared: Option<&'cursor mut ComponentPlans<'plan, 'source>>,
     ) -> Result<Join<'cursor, 'source>, FormulaFailure> {
-        if let Some(prepared) = prepared {
-            return prepared.join(
+        let mut join = if let Some(prepared) = prepared {
+            prepared.join(
                 index,
                 ComponentScope {
                     literals: &self.literals,
@@ -109,22 +109,33 @@ impl Component {
                     builder.counters,
                     rule.location,
                 ),
-            );
-        }
-        Join::component(
-            &self.literals,
-            rule.variables,
-            &self.used,
-            fixed,
-            support,
-            builder.budget,
-            Context::new(
-                &*builder.computation,
-                builder.limits,
-                builder.counters,
-                rule.location,
-            ),
-        )
+            )?
+        } else {
+            Join::component(
+                &self.literals,
+                rule.variables,
+                &self.used,
+                fixed,
+                support,
+                builder.budget,
+                Context::new(
+                    &*builder.computation,
+                    builder.limits,
+                    builder.counters,
+                    rule.location,
+                ),
+            )?
+        };
+        // Both constructors preserve the same plan and install the current
+        // fixed head values. The local selector certifies only the scalar
+        // conditions of this component; it grants no whole-rule coverage.
+        join.select_numeric_local(Context::new(
+            &*builder.computation,
+            builder.limits,
+            builder.counters,
+            rule.location,
+        ))?;
+        Ok(join)
     }
 }
 
@@ -260,19 +271,23 @@ fn emit<'plan, 'source>(
             if components.arithmetic {
                 arithmetic::testing::record(arithmetic::testing::Point::Witness);
             }
-            let conjunction = builder.body_from_row(
-                &component.literals,
-                &row,
-                &mut matched,
-                support,
-                rule.location,
-            )?;
+            let conjunction =
+                builder.body_from_row((rule, &component.literals), &row, &mut matched, support)?;
             alternatives = builder.or(alternatives, conjunction, rule.location)?;
         }
-        if alternatives == FALSUM {
+        if alternatives == FALSUM && !matches!(rule.head, HeadIr::Normal(None)) {
             return Ok(());
         }
+        // Every component is inhabited, so a constraint's component without
+        // an alternative had its rows decided false. The instance is dropped
+        // below, after the other components have named their atoms: the
+        // complete join names every atom of every row that passes, as a
+        // streamed constraint's capture does, and the routes publish the
+        // same atoms.
         body = builder.and(body, alternatives, rule.location)?;
+    }
+    if body == FALSUM {
+        return Ok(());
     }
     let HeadIr::Normal(head) = &rule.head else {
         unreachable!("only normal rules have a component plan");
@@ -289,7 +304,7 @@ fn emit<'plan, 'source>(
     let formula = builder.node(Node::Implies(body, head), rule.location)?;
     builder.root(formula, rule)?;
     if head != FALSUM {
-        builder.producer(head, body, rule)?;
+        builder.ordinary_producer(head, body, rule)?;
     }
     Ok(())
 }

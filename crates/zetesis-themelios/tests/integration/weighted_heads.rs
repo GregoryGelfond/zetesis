@@ -10,6 +10,7 @@ mod alias_semantics;
 use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::CASES;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
@@ -395,22 +396,22 @@ fn variable_weights_select_completed_rows() {
 
 #[test]
 fn negative_eligibility_cannot_hide_undefined_weights() {
-    let source = "d(0).e.0#sum{W:a:d(X),W=1/X,not e}0.";
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-        ),
-        "{error}"
+    let head = "0#sum{W:a:d(X),W=1/X,not e}0.";
+    let admitted = input(&format!("d(0).e.{head}"));
+    // The fact e makes the element ineligible, and its weight divides by
+    // zero at the one row. Ineligibility does not hide that: the element is
+    // omitted, so a is not even supported, and the statement keeps the
+    // warning.
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), head);
+    assert_eq!(
+        admitted
+            .atoms()
+            .iter()
+            .map(canonical)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["d(0)".to_owned(), "e".to_owned()])
     );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    assert_eq!(native(&admitted), native(&input("d(0).e.")));
 }
 
 #[test]

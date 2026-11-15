@@ -1,6 +1,6 @@
 //! A whole flat original family can prove that its evidence scan has no error
 //! or warning to discover. Total expressions do not prove a binding exists:
-//! no defined witness is invented, and evidence cursors remain unselected.
+//! no instance is invented, and evidence cursors remain unselected.
 //!
 //! Each fragment borrows the completed support and owns only its ordinary leased
 //! join/projection scratch, released before the next sibling. One decline keeps

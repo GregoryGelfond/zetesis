@@ -151,6 +151,7 @@ impl Compiler<'_> {
                         comparisons: vec![crate::formula_guard::GuardComparison::Range(
                             value, lower, upper,
                         )],
+                        intervals: Vec::new(),
                     }));
                     return Ok(true);
                 }

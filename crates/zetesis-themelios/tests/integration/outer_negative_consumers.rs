@@ -1,7 +1,7 @@
 //! Completed outer values select original negative formulas, never support tests.
 
 use crate::support::admission;
-use zetesis_reference_support::resource_limits;
+use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -9,6 +9,7 @@ use crate::support::finite_bindings as reference;
 use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
+use crate::support::warnings::zero_divisor_statement_in;
 use cases::CASES;
 use reference::{Models, native};
 use themelios_base::source::SourceId;
@@ -127,22 +128,21 @@ fn negative_consumers_preserve_scored_answers() {
 
 #[test]
 fn false_gates_cannot_hide_undefined_arguments() {
-    let source = "p(0).q(N):-N=#count{},not p(N),not p(1/N).";
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-        ),
-        "{error}"
+    let rule = "q(N):-N=#count{},not p(N),not p(1/N).";
+    let admitted = input(&format!("p(0).{rule}"));
+    // The gate `not p(N)` is false at the count's one value, and the gate
+    // beside it divides by zero there. The false gate does not hide that:
+    // the instance is omitted, so q(0) is not even supported, and the rule
+    // keeps the warning.
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), rule);
+    assert_eq!(
+        admitted.atoms().iter().map(canonical).collect::<Vec<_>>(),
+        ["p(0)"]
     );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    assert_eq!(
+        native(&admitted),
+        Models::from([BTreeSet::from(["p(0)".into()])])
+    );
 }
 
 #[test]

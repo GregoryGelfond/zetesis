@@ -16,6 +16,9 @@ pub(crate) struct Input<'a> {
     /// How the key analysis that asked them ended.
     pub(crate) key_analysis: zetesis_themelios::KeyAnalysis,
     pub(crate) objectives: &'a zetesis_objective::ObjectiveProgram,
+    /// Same-owner source authority for projecting optional objective preparation.
+    /// Legacy/custom theory inputs have no such certificate.
+    pub(crate) objective_source: Option<zetesis_themelios::objective_bound::ObjectiveSource<'a>>,
     /// Optional necessary choice facts authenticated to this original theory.
     pub(crate) required_choices: Option<&'a zetesis_themelios::RequiredChoices>,
     /// Source analysis chooses attempt order; each plan checks the whole theory.

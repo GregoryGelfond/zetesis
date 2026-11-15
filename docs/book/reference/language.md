@@ -67,8 +67,12 @@ storage. See [resource controls](commands.md#choose-execution-and-limits).
 
 A conditional disjunct `H:C` contributes `(C → H) ∧ not not C` at each
 completed local binding. Those instances join the same head disjunction;
-an empty family contributes false. Each local condition starts with the same
-outer bindings, and its private variables cannot bind the enclosing rule.
+an empty family contributes false. A binding under which the head divides by
+zero in every instance contributes `not not C` alone, the disjunct of a
+written `#true:C`
+([numeric boundaries](#numeric-boundaries-and-refusal-meaning)). Each local
+condition starts with the same outer bindings, and its private variables
+cannot bind the enclosing rule.
 The condition determines eligibility, while its original implication remains
 in the frozen reduct. A positive head atom obtains support only from its own
 condition together with the rule body; default and double negation retain their
@@ -230,9 +234,9 @@ Comparison consequents use the same inner alternative order. For example,
 one matching value alternative. Comparison alternatives cannot bind a missing
 source name. A range in the middle of a comparison chain chooses one value for
 both adjacent tests. All reached alternatives are checked, including those
-after a true result. A numeric zero divisor contributes to the complete family's
-definedness check; a fatal arithmetic error cannot disappear through a true
-alternative.
+after a true result. A numeric zero divisor is omitted and reported as the
+[family policy](#numeric-boundaries-and-refusal-meaning) states; a fatal
+arithmetic error cannot disappear through a true alternative.
 
 Nested pools distribute through constructors and checked expressions before
 scope compilation. Nested intervals use fresh data slots in that scope; their
@@ -376,9 +380,18 @@ separate these concerns and state the required order and carrier assumptions.
 Within each rule, aggregate assignments may depend on earlier assignments
 through scalar and range values. The binding plan needs a finite dependency
 order. Recursive dependencies between producer rules are admitted when their
-possible-support construction completes within its bounds. A proposed value
-remains guarded by the original aggregate equality; support membership cannot
-replace model-relative truth.
+possible-support construction completes within its bounds. An assignment in a
+rule that reads the predicate it derives proposes only the measures of
+selections that contain its required tuples, when those come from elements
+over earlier certain predicates: a count proposes nothing below their number,
+a minimum nothing above their least value. The
+[grounding chapter](../architecture/grounding.md#certain-predicates)
+states when that makes such an assignment finite and when it does not. A
+proposed value
+remains guarded by the original aggregate equality, and support membership does
+not replace model-relative truth, with one exception described below: an
+assignment every tuple of which is required has one value, which holds in every
+answer set, and its equality is emitted as true.
 
 For a finite selected tuple set `T`, let `V(T)` contain the first values of its
 nonempty tuples. An extremum head uses the least/greatest value in `V(T)`, or
@@ -451,7 +464,7 @@ A resolved nonnumeric weight or priority contributes neither cost nor a priority
 slot after required structure and evaluation checks. Weight, priority and tuple
 fields participate jointly in the arithmetic family policy, including when the
 weight is nonnumeric. Pooled alternatives from one original element share its
-family; a defined element cannot rescue a different entirely undefined element.
+family and its warning.
 For numeric weight and priority pairs, contributions coalesce globally by normalized weight,
 priority and the complete explicit tuple. Maximization negates weights before
 this coalescing; checked overflow remains an error. A numeric zero weight retains
@@ -511,7 +524,13 @@ check full costs, scope, required errors and independent limits.
 
 Transient rich producer and projection-condition validation instead apply
 `theory.max_atoms`, `theory.max_nodes` and `theory.max_operands` independently
-to each temporary builder. They do not add atoms or roots to the original theory.
+to each temporary builder. Rich producer activity reuses one such builder during
+a producer pass, so these ceilings bound the accumulated scratch for that pass;
+projection-condition validation retains its own temporary builder. This scratch
+does not add atoms or roots to the original theory. Cached aggregate families and
+activity readings use the existing source storage allowance. Reuse removes work
+that is no longer performed, but longer-lived scratch can refuse a tight storage
+limit earlier. Refusal remains a typed failure, never partial objective coverage.
 `max_objective_presence_entries` bounds shared source-activity planning slots,
 including predicate and scope traversal and simultaneous old/new activity
 tables, as well as objective-presence carriers. These limits count their stated
@@ -546,8 +565,8 @@ unbounded choices supplies one such refinement. Let R be its required
 complete tuple keys and P its possible keys. The carrier is
 {measure(S) | R ⊆ S ⊆ P}. It includes invariant results as singleton carriers.
 Unique unary renamings preserve the carrier. Original aggregate equalities
-remain in the theory; carrier membership filters objective proposal rows before
-priority evaluation.
+remain in the theory, an exact assignment's as the true formula it is; carrier
+membership filters objective proposal rows before priority evaluation.
 
 The base predicate and each forwarding edge qualify independently. A filtered
 or multiply produced descendant uses its own source-support carrier; observing
@@ -734,23 +753,24 @@ The verdict is taken over the complete substitution, whatever order the
 comparisons are met in, so a failure met before the relation that decides an
 exclusion is still no refusal.
 
-The remaining substitutions are checked as a complete source family. Only an
-evaluated numeric division or remainder with a zero divisor may omit an instance:
+The remaining substitutions are checked as a complete source family. An
+evaluated numeric division or remainder with a zero divisor omits its
+instance, and nothing else does:
 
 | Complete family | Result |
 | --- | --- |
 | Empty positive join | Admit silently; there is no instance to evaluate |
 | Defined instances only | Admit silently |
-| Both defined and zero-divisor instances | Admit the defined instances and retain a typed warning |
-| Zero-divisor instances with no defined instance | Refuse with a typed arithmetic error |
+| Zero-divisor instances, alone or beside defined ones | Omit them, admit the rest and retain a typed warning |
 | Any fatal arithmetic failure | Refuse, even if other instances are defined |
 
-Defined does not mean true. For example,
-`d(0;2). p(X,Y) :- d(X), 1/X=1, Y=X+1.` is admitted with a warning and only the
-two `d` facts. The `X=2` substitution is defined but fails the comparison; it
-still establishes that the family is not entirely undefined. With `d(0..3)`
-instead, the answer also contains `p(1,2)`. With only `d(0)`, admission fails.
-Adding `X != 0` explicitly excludes the bad instance and removes the warning.
+For example, `d(0;2). p(X,Y) :- d(X), 1/X=1, Y=X+1.` is admitted with a warning
+and only the two `d` facts: the `X=0` instance is omitted, and the `X=2`
+substitution is defined but fails the comparison. With `d(0..3)` instead, the
+answer also contains `p(1,2)`. With only `d(0)` the rule contributes nothing,
+and the warning is the same. Adding `X != 0` explicitly excludes the bad
+instance and removes the warning. clingo omits the same instances, with an
+informational message where zetesis keeps a warning.
 The warning reports omitted source instances and suggests guarding the divisor.
 Successful formula owners retain typed warnings, deduplicated by `ProgramSite`
 (original statement identity and any real source coordinate) and bounded by
@@ -762,29 +782,99 @@ logical identity and optional source evidence applies to arithmetic failures.
 
 Local choice and aggregate elements have separate families for each fixed outer
 binding. In `d(0;1). e(0,0). e(1,1).
-{p(K,X):e(K,X),1/X=1} :- d(K).`, the entirely undefined `K=0` family is refused;
-the defined `K=1` family does not rescue it. If no `e(0,X)` fact is present, that
-local family is empty and has no arithmetic error. An absent fact is not an
-undefined arithmetic value.
+{p(K,X):e(K,X),1/X=1} :- d(K).`, the `K=0` family holds one instance, which
+divides by zero and is omitted with a warning; the `K=1` family contributes
+the choice of `p(1,1)`. If no `e(0,X)` fact is present, that local family is
+empty and has no arithmetic warning. An absent fact is not an undefined
+arithmetic value.
+
+One omission keeps no warning. An element of an aggregate assignment that
+divides by zero is omitted from the assignment's values, and its warning is
+kept through the rule's instance: when a later comparison of the rule rejects
+the value the assignment is left with, as `N != 0` does in
+`d(0). {a}. q(N) :- d(X), N = #count{1 : a, 1/X <= 1}, N != 0.`, the rule is
+admitted without one. The answer sets are unaffected.
+
+A conditional literal keeps one instance for each binding of its condition, so
+an instance whose consequent divides by zero is not left out: the condition
+still holds or fails there, and the instance is read by what remains of it.
+
+- In a body, the consequent is the disjunction of the values its alternatives
+  take; pool members, interval values and projected witnesses are
+  alternatives. An alternative that divides by zero takes none. A consequent
+  with no defined alternative is false, whatever its sign, so the literal
+  requires that binding's condition to be false:
+  `{d(0)}. d(1). q(1). p :- q(1/X) : d(X).` derives `p` exactly when `d(0)` is
+  false, and neither `d(0;1). p :- not q(1/X) : d(X).` nor
+  `d(0;1). p :- 1/X >= 0 : d(X).` derives `p`. A defined alternative beside an
+  undefined one decides the consequent: `d(0). q(1). p :- q(1/X;1) : d(X).`
+  derives `p`.
+- In a disjunctive head, a disjunct whose head divides by zero in every
+  instance under a binding is true under that binding, as a written
+  `#true : d(0)` is, and derives no atom: `{d(0)}. d(1). p(1/X) : d(X).` has
+  the answer sets `{d(0), d(1)}` and `{d(1), p(1)}`. The alternatives of a
+  pooled head are read together under one binding, so a defined one is kept
+  and the head is true only where none is: `{d(0)}. p(1/X;2) : d(X).` has the
+  answer set `{d(0), p(2)}`. A value that the condition binds by an interval
+  is a binding of its own: `{d(1)}. p(2/Y) : d(X), Y = 0..X.` has the answer
+  set `{d(1)}`, the head being true under `Y = 0`.
+- A zero divisor in the condition leaves no binding, as in a rule body:
+  `d(0;1). q(1). p :- q(X) : d(X), 1/X = 1.` derives `p`.
+
+Each of these warns once. clingo grounds the same instances as
+`#false : d(0)` and `#true : d(0)`.
 
 An aggregate assignment such as `N = #count{...}` substitutes, under each fixed
 outer binding, its *carrier*: the measure of every selection of its tuples that
 contains the *required* tuples and lies within the possible ones. A tuple is
 required when one of its elements' conditions consists only of comparisons,
 intervals and `#true`/`#false`, with no atom of either sign; such a condition
-holds for every binding its element yields. So
+holds for every binding its element yields. A positive atom of a
+[certain predicate](../architecture/grounding.md#certain-predicates), one the
+program derives from its facts by rules without choice or disjunction that
+negate only what earlier dependency components have settled, holds in every
+answer set and may stand in such a condition too: in a
+constraint, in a rule whose predicates all precede its head in dependency
+order, and in any other rule for the elements support completion
+[holds it back](../architecture/grounding.md#completed-possible-support) for.
+`c(1..3). n(N) :- N = #count{X : c(X)}.` substitutes `N = 3` alone. An
+objective's condition does not read certain predicates this way and substitutes
+every value its tuples allow. The arithmetic of
+such a rule is evaluated at that value and no other, which can decide
+admission: `c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 2000000000 * (4 - N).`
+is admitted with `p(2000000000)`, where the same count over an uncertain
+condition overflows at 0 and is refused. A zero divisor at that value is
+omitted with a warning, as anywhere:
+`c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 6/(N-3).` answers with the three
+facts. So
 `p(M+1) :- M = #min{1; 5}.` substitutes `M = 1` alone and answers `p(2)`
 without evaluating `#sup + 1`; `q :- N = #count{1}, 1/N <= #count{}.` evaluates
 only `N = 1` and retains no warning; and `q(Y) :- N = #count{1}, Y = 1/(N-1).`
-has the single instance `N = 1`, which divides by zero, so its family is
-entirely undefined and refused. The heads an assignment publishes are taken over
+has the single instance `N = 1`, which divides by zero, so the rule contributes
+nothing and warns. The heads an assignment publishes are taken over
 the same values, so the families of the rules that read them follow:
-`p(M) :- M = #count{1}. q(1/(X-1)) :- p(X).` is refused for the same reason, and
-`p(M) :- M = #min{1; 5}. r(X+1) :- p(X).` answers with `p(1)` and `r(2)`.
+`p(M) :- M = #count{1}. q(1/(X-1)) :- p(X).` answers `p(1)` with a warning, and
+`p(M) :- M = #min{1; 5}. r(X+1) :- p(X).` answers with `p(1)` and `r(2)`. So do
+those of everything else that reads the head, directly or through other rules:
+a constraint, a choice body, an aggregate element and a weak constraint.
+
+A [decided default negation](../architecture/grounding.md#certain-predicates)
+narrows what a head supports in the same way. In
+`blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` no answer
+set satisfies `not blocked`, so the rule of `h` supports nothing, the rule of
+`k` has no instance, and the program is admitted with its two facts. Of the
+instance the negation excludes, the body and an ordinary or disjunctive head
+are still validated as written: an overflow in the rule of `h` refuses, and a
+zero divisor there keeps its warning. The elements of a choice, of a head
+aggregate and of a conditional disjunct are a later stage, which an excluded
+instance does not start, so `{h(X+1)} :- d(X), not blocked.` in place of the
+rule of `h` is admitted; a zero divisor in such an element keeps its warning.
+A negation over a chosen atom decides nothing, so with `{blocked}.`
+in place of the fact the overflow in the rule of `k` is reached.
 
 The required tuples under-approximate those present in every interpretation. In
 `{p}. q(Y) :- N = #count{1 : p; 1 : not p}, Y = 1/(N-1).` the tuple `1` is
-present through `p` or through `not p`, but neither condition is atom-free, so
+present through `p` or through `not p`, but neither condition qualifies, so
 `N = 0` is substituted too, divides by zero, and the program is admitted with a
 warning. A sum's values are checked as values:
 `{p; q}. x(V) :- V = #sum{-10,a; 2147483647,b : p; 1,c : q}.` is admitted,
@@ -798,19 +888,72 @@ errors. They cannot be hidden by a defined instance elsewhere. Within a reached
 evaluation phase, a zero divisor does not stop checks of independent branches: an
 overflow in another branch still refuses admission. An operation depending on
 an undefined operand is not evaluated. The same rule applies to independent
-fields of one source instance; a definedness witness requires them to be jointly
-defined, not successful values drawn from different instances. Every arithmetic
+fields of one source instance. Every arithmetic
 intermediate must fit the signed 32-bit carrier; values do not wrap. This differs
 deliberately from clingo 5.8.2's wrapping integer arithmetic. The zero-divisor
-policy also differs from dropping every undefined instance unconditionally:
-an entirely undefined family is treated as a modeling error.
+policy is clingo's for every instance a substitution reaches. A closed term is
+the exception, below.
+
+The links of a comparison chain are separate comparisons, as clingo grounds
+them. A link that is defined and false decides the chain, whatever the chain's
+sign and wherever the link stands, even beside a link that divides by zero:
+`d(0). p :- d(X), not 2<1<1/X.` derives `p`, and `d(0). 2<1<1/X :- d(X).` has
+no answer set, because its head is a violated requirement. Nothing is omitted
+there, so no warning is kept. A chain is undefined only when no link is false
+and one divides by zero: in `d(0). p :- d(X), not 0<1<1/X.` the instance is
+omitted with a warning. A fatal failure in any link still refuses, whatever
+the other links hold. An interval among a chain's terms gives one alternative
+for each of its values, and each is read by its links in the same way:
+`d(0;1). p(X) :- d(X), not 3<2<(1..2)/X.` derives `p(0)` and `p(1)`.
+
+Under a row where an interval of a comparison is empty the comparison has no
+alternative: nothing is omitted there and no warning is kept, so
+`d(0). p :- d(X), 1/X < (3..1).` answers silently. Its other terms are still
+read, as far as the row and the values generated before that interval
+determine them, and a fatal failure met there refuses on whichever side of
+the interval the term stands: `d(0). p :- d(X), X+2147483647+1 < (3..1).` and
+`d(0). p :- d(X), (3..1) > X+2147483647+1.` are both refused. A term that
+needs a value generated after the empty interval has none to fail at:
+`d(0). p :- d(X), (3..1) > (1..2)+X+2147483647.` answers.
+
+Generated before is not written before. A value that another literal of the
+body binds is generated before a comparison's intervals wherever that literal
+stands, so `d(0). p :- d(X), (3..1) > Y+2147483647, Y = X+1.` is refused. The
+intervals of one comparison are generated in the order written. A value that
+an aggregate assigns is generated after them wherever the aggregate stands,
+so `d(0). p :- d(X), N = #count{1 : d(X)}, (3..1) > N+X+2147483647.` answers.
+The order among the intervals of different comparisons is not specified, and
+a comparison's terms are read only where its interval is the first one found
+without a value. A comparison is therefore left unread beside an empty
+interval of another comparison that is generated before its own:
+`d(0). p :- d(X), (3..1) < 4, (1..2) > X+2147483647+1.` answers, and so does
+`d(0). p :- d(X), (3..1) > X+2147483647+1, (3..1) < 4.`
+
+This holds for the interval the comparison itself contains. A comparison over
+a variable that another literal binds by an interval is evaluated under
+complete rows alone. So are a positive equality with an interval in a body,
+which binds its variable or tests membership, and a doubly negated equality
+whose interval has an interval in a bound:
+`d(0). p :- d(X), X+2147483647+1 = (3..1).` and
+`d(0). p :- d(X), not not X+2147483647+1 = ((3..1)..5).` answer, while
+`d(0). p :- d(X), not not X+2147483647+1 = (3..1).` is refused.
+
+A comparison bounds an unresolved variable through an interval where
+its terms are integer-affine in the interval's value:
+`p(X) :- 0 < X < (1..3).` has the answer set `{p(1), p(2)}`. A term that is
+not, such as `(1..4)/2`, gives no bound, and
+`p(X) :- 0 <= X <= (1..4)/2 <= 3.` is refused as unsafe.
 
 A binder, interval check, tuple comparison, aggregate guard or comparison over
 a generated value does not provide the relational exclusion described above.
-Negative gates remain formulas, so `d(0). p(1/X) :- d(X), not d(X).` is refused.
+Nor does a default negation, decided or not: in
+`d(0). p(1/X) :- d(X), not d(X).` the instance `X = 0` is validated, divides by
+zero and is omitted with a warning.
 Closed-term arithmetic is validated as written during source preparation,
-before any substitution exists: `p :- 1 = 2, 1/0 = 1.` is refused. The family
-policy does not weaken this closed-term check or post-solve observation errors.
+before any substitution exists: `p :- 1 = 2, 1/0 = 1.` is refused, and so are
+`p(1/0).` and `p(a..(1/0)).`, where clingo drops the statement with its
+informational message. The family policy does not weaken this closed-term
+check or post-solve observation errors.
 An incomplete positive join with no complete extension creates no obligation.
 
 Evaluation retains its body-before-head and condition-before-consequent stages.
@@ -819,12 +962,13 @@ consequent or objective-field phase; defined false body selection likewise does
 not evaluate a head or consequent. Independent-error checking does not cross
 that boundary. Row-dependent head atom arguments are a later stage: `d(0;1).
 p((X+1)**31):-d(X),X=0.` evaluates the head only for `X=0`. The same
-distinction applies to local choice elements. Negative gates and aggregate
-truth remain formulas and do not prune that stage. Aggregate-head tuple
+distinction applies to local choice elements. A default negation that is not
+decided, and aggregate truth, do not prune that stage; a decided one that
+excludes the instance does, as stated above. Aggregate-head tuple
 contribution checks retain their own scopes.
 The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/arithmetic_validation.rs)
-check defined complete families, incomplete joins, required failures and explicit
-clingo differences.
+check defined complete families, incomplete joins, required failures and
+omitted instances, against clingo where it has a counterpart.
 
 There is also a conservative **numeric endpoint guard**: numeric values
 `-2147483648` and `2147483647` are refused when reached as `#min`/`#max` bounds or

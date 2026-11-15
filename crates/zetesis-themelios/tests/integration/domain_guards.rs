@@ -1,5 +1,6 @@
 //! Optional domains preserve complete theories while avoiding impossible prefixes.
 
+use crate::support::warnings::zero_divisor_statement;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
 use zetesis_reference_support::{prepare, resource_limits};
@@ -154,15 +155,11 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         let after = *on.rules.borrow().last().unwrap();
         // The constant-key postings retain the a, b, c order: eight a/b
         // values, but only four occur in the corresponding c columns.
-        // Only 16 c probes have nonempty postings. Indexed offers one eight-row
-        // posting per probe, then checks the full row; Table intersects both
-        // equalities before offering its one row. A complete c match is not an
-        // Indexed offered-row count. Its guard rejects four marginal rows per
-        // posting; three other locally permitted rows still fail the matcher.
-        let (c_rows, c_rejected) = match strategy {
-            JoinStrategy::Indexed => (16 * 8, 16 * 4),
-            JoinStrategy::Table => (16, 0),
-        };
+        // Only 16 complete c keys are present. Indexed selects each exact row
+        // through existing membership; Table intersects both equalities. Both
+        // still check the offered row, with no marginal c rows for the guard
+        // to reject. The a/b prefixes and probes remain distinct above them.
+        let (c_rows, c_rejected) = (16, 0);
         assert_eq!(before.join_rows, Some(8 + 8 * 8 + c_rows));
         assert_eq!(after.join_rows, Some(8 + 4 * 8 + c_rows));
         assert_eq!(before.join_probes, Some(1 + 8 + 8 * 8));
@@ -387,12 +384,13 @@ fn richer_source_keeps_the_complete_join() {
 #[test]
 fn optional_analysis_changes_no_arithmetic_verdict() {
     // 1 = 2 excludes the only substitution, so nothing in it is reached with
-    // or without the analysis; a reached operation refuses either way.
+    // or without the analysis, and neither grounding keeps a warning.
     for source in ["d(0).p:-d(X),1=2,1/X=1.", "d(0).p:-d(X),1=2,not q(1/X)."] {
         let off = Observation::default();
         let on = Observation::default();
+        let complete = ground(source, JoinStrategy::Indexed, None, &off).unwrap();
         equal(
-            &ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
+            &complete,
             &ground(
                 source,
                 JoinStrategy::Indexed,
@@ -401,19 +399,22 @@ fn optional_analysis_changes_no_arithmetic_verdict() {
             )
             .unwrap(),
         );
+        assert!(complete.warnings().is_empty(), "{source}");
     }
+    // A reached zero divisor is omitted with its rule's warning either way.
     for options in [None, Some(DomainLimits::default())] {
-        assert!(matches!(
-            ground(
-                "d(0).p:-d(X),1/X=1.",
-                JoinStrategy::Indexed,
-                options,
-                &Observation::default()
-            ),
-            Err(FormulaFailure::Expansion(
-                ExpansionFailure::Evaluation { .. }
-            ))
-        ));
+        let admitted = ground(
+            "d(0).p:-d(X),1/X=1.",
+            JoinStrategy::Indexed,
+            options,
+            &Observation::default(),
+        )
+        .unwrap();
+        assert_eq!(zero_divisor_statement(&admitted), "p:-d(X),1/X=1.");
+        assert_eq!(
+            zetesis_reference_support::exhaustive(&admitted),
+            std::collections::BTreeSet::from([(["d(0)".to_owned()].into(), None)])
+        );
     }
 }
 
@@ -453,7 +454,7 @@ fn a_comparison_over_one_variable_narrows_its_candidates() {
 }
 
 #[test]
-fn domain_narrowing_preserves_undefined_family_evidence() {
+fn domain_narrowing_keeps_a_reached_zero_divisor_warning() {
     // 1/X = 1 is undefined at X = 0 and false at X = 2, so the analysis
     // excludes 2 alone; X != 0 then excludes 0. The same substitution is
     // reached, and omitted with a warning, when no comparison excludes it.
@@ -479,7 +480,7 @@ fn domain_narrowing_preserves_undefined_family_evidence() {
         &Observation::default(),
     )
     .unwrap();
-    assert_eq!(mixed.warnings().len(), 1);
+    assert_eq!(zero_divisor_statement(&mixed), "p(X) :- d(X), 1/X = 1.");
     // Different source spans are expected; emitted atoms and formulas agree.
     assert_eq!(mixed.atoms(), narrowed.atoms());
     assert_eq!(
@@ -685,13 +686,52 @@ fn objective_warnings_survive_domain_guards() {
 }
 
 #[test]
+fn objective_sources_keep_reached_zero_divisor_warnings() {
+    // The objective's one row divides by zero. With or without the analysis
+    // it is omitted, its statement keeps the warning and no answer is scored.
+    for (source, atoms) in [
+        (
+            "d(0).p(X):-d(X).#minimize{1/X:p(X)}.",
+            &["d(0)", "p(0)"][..],
+        ),
+        (
+            "d(0..2).e(0).p(X):-d(X),e(X).#minimize{1/X:p(X)}.",
+            &["d(0)", "d(1)", "d(2)", "e(0)", "p(0)"],
+        ),
+    ] {
+        let expected = std::collections::BTreeSet::from([(
+            atoms.iter().map(|atom| (*atom).to_owned()).collect(),
+            None,
+        )]);
+        for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
+            let complete = ground(source, strategy, None, &Observation::default()).unwrap();
+            let on = Observation::default();
+            let narrowed = ground(source, strategy, Some(DomainLimits::default()), &on).unwrap();
+            assert_eq!(on.status.get(), Some(Status::FixedPoint), "{source}");
+            equal(&complete, &narrowed);
+            for admitted in [&complete, &narrowed] {
+                assert_eq!(
+                    zero_divisor_statement(admitted),
+                    "#minimize{1/X:p(X)}.",
+                    "{source}"
+                );
+                assert!(admitted.objectives().templates().is_empty(), "{source}");
+                assert_eq!(
+                    zetesis_reference_support::exhaustive(admitted),
+                    expected,
+                    "{source}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn objective_sources_keep_reached_arithmetic_refusals() {
     for source in [
-        "d(0).p(X):-d(X).#minimize{1/X:p(X)}.",
         "d(0..1).p(X):-d(X).#minimize{1/X+((2147483647+(1-X))\\2):p(X)}.",
         "d(1;foo).p(X):-d(X),X+1>0.#minimize{1:p(X)}.",
         "d(1;foo).p(X):-d(X).#minimize{X+1:p(X)}.",
-        "d(0..2).e(0).p(X):-d(X),e(X).#minimize{1/X:p(X)}.",
         "d(1;foo;2).e(1;foo).p(X):-d(X),e(X).q(X):-p(X),X+1>0.#minimize{1:q(X)}.",
     ] {
         for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {

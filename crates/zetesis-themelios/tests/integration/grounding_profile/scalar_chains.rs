@@ -58,24 +58,43 @@ fn ground(source: &str, hybrid: bool) -> Result<usize, FormulaFailure> {
     }
 }
 
+/// The atoms `source` supports under eager or hybrid grounding, spelled.
+fn atoms(source: &str, hybrid: bool) -> Vec<String> {
+    let prepared = prepare(source).unwrap();
+    if hybrid {
+        let admitted = prepared.ground_hybrid().unwrap();
+        admitted
+            .atom_catalog()
+            .atoms()
+            .iter()
+            .map(zetesis_reference_support::canonical)
+            .collect()
+    } else {
+        let admitted = prepared.ground().unwrap();
+        admitted
+            .atoms()
+            .iter()
+            .map(zetesis_reference_support::canonical)
+            .collect()
+    }
+}
+
 #[test]
 fn generated_false_checks_do_not_hide_zero_division() {
+    // A=0 compares a generated value: it is false and excludes nothing, so
+    // the division is reached in either order. Its instance is omitted,
+    // which leaves p unsupported, and the rule keeps the warning.
     for source in [
         "d(0). p :- d(X), A=X+1, A=0, Z=1/X.",
         "d(0). p :- d(X), Z=1/X, A=0, A=X+1.",
     ] {
         for hybrid in [false, true] {
-            let error = ground(source, hybrid).unwrap_err();
-            assert!(
-                matches!(
-                    error,
-                    FormulaFailure::Expansion(ExpansionFailure::Evaluation {
-                        error: EvaluationError::Undefined,
-                        ..
-                    })
-                ),
-                "{source}, hybrid={hybrid}: {error}"
+            assert_eq!(
+                ground(source, hybrid).unwrap(),
+                1,
+                "{source}, hybrid={hybrid}"
             );
+            assert_eq!(atoms(source, hybrid), ["d(0)"], "{source}, hybrid={hybrid}");
         }
     }
 }

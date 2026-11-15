@@ -123,7 +123,8 @@ impl Model {
     ///
     /// The atoms must be strictly increasing in canonical order; a debug build
     /// checks this, a release build trusts the producer, and a violated
-    /// precondition would make membership queries wrong, not merely slow.
+    /// precondition would make membership queries and the runs of a predicate
+    /// that a display reads wrong, not merely slow.
     ///
     /// # Errors
     /// Returns a selection reservation or canonical catalog admission refusal.

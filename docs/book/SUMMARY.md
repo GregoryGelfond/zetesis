@@ -48,6 +48,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [0.8.0 CPU comparisons](reference/cpu-0.8.0.md)
   - [0.7.0 CPU comparisons](reference/cpu-0.7.0.md)
   - [Final 0.6.0 CPU check](reference/cpu-corpus-final-20261014.md)
   - [CPU corpus comparison, 14 October 2026](reference/cpu-corpus-20261014.md)
@@ -69,7 +70,8 @@
 - [Validating an implementation change](reference/validation.md)
   - [Measurement protocols](reference/measurement-protocols.md)
   - [Source revision identities](reference/source-revisions.md)
-  - [Coverage and Metal qualification](reference/coverage-0.7.0.md)
+  - [Coverage and Metal qualification](reference/coverage-0.8.0.md)
+  - [Version 0.7.0 coverage](reference/coverage-0.7.0.md)
   - [Version 0.6.0 coverage](reference/coverage-0.6.0.md)
   - [Version 0.5.0 coverage](reference/coverage-0.5.0.md)
   - [Version 0.4.0 coverage](reference/coverage-0.4.0.md)

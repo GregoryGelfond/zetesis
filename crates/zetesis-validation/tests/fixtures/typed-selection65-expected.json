@@ -1,0 +1,4531 @@
+{
+  "keys": [
+    "entry",
+    "identity",
+    "sources",
+    "default_contract",
+    "amended",
+    "generated",
+    "manifest_sha256",
+    "source_bytes"
+  ],
+  "workloads": [
+    {
+      "entry": "subset_sum.lp",
+      "identity": "4528512ea6e63aac6df40e5587f98c8a79db05e382b3a02ccfeb0a7961953f14",
+      "sources": [
+        {
+          "path": "subset_sum.lp",
+          "base_sha256": "366ed74d26e462b7f1fc02fc73bf4891daa1843b71a7351b01c8e5c137e627de",
+          "derived_sha256": "de398e54c28d23ce9b44b40cff9a745b43b60bafd51f27c57eeb3215da3c114c",
+          "derived_bytes": 311,
+          "edits": [
+            {
+              "start_byte": 168,
+              "end_byte": 170,
+              "before": "17",
+              "after": "19"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "At n=8 the weights are 9..16. No singleton reaches 17 and the smallest pair weighs 19.",
+          "More generally target=2*n+1 is unattainable; target=2*n+3 selects exactly items 1 and 2 for n>=2."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 622
+    },
+    {
+      "entry": "subset_sum.lp",
+      "identity": "1c1ddaaafcc02966d794d7b1c58c43dc976c98cb4ca3589b30d79d1abedafaef",
+      "sources": [
+        {
+          "path": "subset_sum.lp",
+          "base_sha256": "366ed74d26e462b7f1fc02fc73bf4891daa1843b71a7351b01c8e5c137e627de",
+          "derived_sha256": "bd3eb830a0bd572761a95b10cd8336576644336a35326697a32f40e33b79bdf1",
+          "derived_bytes": 312,
+          "edits": [
+            {
+              "start_byte": 149,
+              "end_byte": 150,
+              "before": "8",
+              "after": "30"
+            },
+            {
+              "start_byte": 168,
+              "end_byte": 170,
+              "before": "17",
+              "after": "61"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "At n=8 the weights are 9..16. No singleton reaches 17 and the smallest pair weighs 19.",
+          "More generally target=2*n+1 is unattainable; target=2*n+3 selects exactly items 1 and 2 for n>=2."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 623
+    },
+    {
+      "entry": "subset_sum.lp",
+      "identity": "e84962371581008ced0b75f9620b2d1a9298d9b8de77873d07d2173f69d3b2fc",
+      "sources": [
+        {
+          "path": "subset_sum.lp",
+          "base_sha256": "366ed74d26e462b7f1fc02fc73bf4891daa1843b71a7351b01c8e5c137e627de",
+          "derived_sha256": "8a34e8bcb33cec40898d5d03fea86e798eeff4a0a5b77be19dced3ad6b2e59be",
+          "derived_bytes": 312,
+          "edits": [
+            {
+              "start_byte": 149,
+              "end_byte": 150,
+              "before": "8",
+              "after": "30"
+            },
+            {
+              "start_byte": 168,
+              "end_byte": 170,
+              "before": "17",
+              "after": "63"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "At n=8 the weights are 9..16. No singleton reaches 17 and the smallest pair weighs 19.",
+          "More generally target=2*n+1 is unattainable; target=2*n+3 selects exactly items 1 and 2 for n>=2."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 623
+    },
+    {
+      "entry": "two_qbf.lp",
+      "identity": "8a6cd61066fff38319ca467bd0ea738f2492973a237c063c08882f8d15b1769a",
+      "sources": [
+        {
+          "path": "two_qbf.lp",
+          "base_sha256": "c9dc3cf1c650fae86a0d7fa5827c531a8b415eb3dfdcd200cfef47a8dbed7e44",
+          "derived_sha256": "b7dec4b454d6202a56735c5b752b5d4f6d7377a2b1cd7c0a5887ce34994bd87b",
+          "derived_bytes": 2454,
+          "edits": [
+            {
+              "start_byte": 797,
+              "end_byte": 799,
+              "before": "68",
+              "after": "52"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)",
+            "nx(3)"
+          ],
+          [
+            "nx(3)",
+            "x(1)",
+            "x(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Three existential and eight universal variables; 68 terms, each one existential and three universal literals; seed 1. Two existential assignments make the formula hold for every universal assignment.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment falsifies the formula: the frozen reduct's proper-subset query, which the frozen-positive certificate declines."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4908
+    },
+    {
+      "entry": "two_qbf.lp",
+      "identity": "3f86daf0f048ee8eb55fd7f4cb03f93d7657d28d00dc3560a54687f5a3b91771",
+      "sources": [
+        {
+          "path": "two_qbf.lp",
+          "base_sha256": "c9dc3cf1c650fae86a0d7fa5827c531a8b415eb3dfdcd200cfef47a8dbed7e44",
+          "derived_sha256": "9e76545e93a5dea338ddebeae57e5aeb6111807699b800f8e4db41bfd3612b66",
+          "derived_bytes": 2454,
+          "edits": [
+            {
+              "start_byte": 815,
+              "end_byte": 816,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)",
+            "nx(3)"
+          ],
+          [
+            "nx(3)",
+            "x(1)",
+            "x(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Three existential and eight universal variables; 68 terms, each one existential and three universal literals; seed 1. Two existential assignments make the formula hold for every universal assignment.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment falsifies the formula: the frozen reduct's proper-subset query, which the frozen-positive certificate declines."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4908
+    },
+    {
+      "entry": "two_qbf.lp",
+      "identity": "7c9aeedfec3482af64da9b250550a17f4a3381a652ca029df723c810e6a397f4",
+      "sources": [
+        {
+          "path": "two_qbf.lp",
+          "base_sha256": "c9dc3cf1c650fae86a0d7fa5827c531a8b415eb3dfdcd200cfef47a8dbed7e44",
+          "derived_sha256": "794f590fd48d3d1ad01d66e919cc63aad8239b7cd0a7e64a1800608847ac969f",
+          "derived_bytes": 2454,
+          "edits": [
+            {
+              "start_byte": 742,
+              "end_byte": 743,
+              "before": "3",
+              "after": "2"
+            },
+            {
+              "start_byte": 797,
+              "end_byte": 799,
+              "before": "68",
+              "after": "40"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)",
+            "nx(3)"
+          ],
+          [
+            "nx(3)",
+            "x(1)",
+            "x(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Three existential and eight universal variables; 68 terms, each one existential and three universal literals; seed 1. Two existential assignments make the formula hold for every universal assignment.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment falsifies the formula: the frozen reduct's proper-subset query, which the frozen-positive certificate declines."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4908
+    },
+    {
+      "entry": "two_qbf.lp",
+      "identity": "1c36291d4929894bc9d369be58dd68ffc17df8e09aa53f4237d2d37a4fddd97b",
+      "sources": [
+        {
+          "path": "two_qbf.lp",
+          "base_sha256": "c9dc3cf1c650fae86a0d7fa5827c531a8b415eb3dfdcd200cfef47a8dbed7e44",
+          "derived_sha256": "d04b629f12d7e10baf2ac367ac254dae8378111cd6f0c3c4b7590afc88a09551",
+          "derived_bytes": 2455,
+          "edits": [
+            {
+              "start_byte": 761,
+              "end_byte": 762,
+              "before": "8",
+              "after": "10"
+            },
+            {
+              "start_byte": 797,
+              "end_byte": 799,
+              "before": "68",
+              "after": "85"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)",
+            "nx(3)"
+          ],
+          [
+            "nx(3)",
+            "x(1)",
+            "x(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Three existential and eight universal variables; 68 terms, each one existential and three universal literals; seed 1. Two existential assignments make the formula hold for every universal assignment.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment falsifies the formula: the frozen reduct's proper-subset query, which the frozen-positive certificate declines."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4909
+    },
+    {
+      "entry": "two_qbf_parity.lp",
+      "identity": "ffa0ceb57240763e5480533ed49000c6bac40ab25f9efc5e7cb98fa00de37189",
+      "sources": [
+        {
+          "path": "two_qbf_parity.lp",
+          "base_sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "derived_sha256": "60cc22ef128bb0bd236c334baf70651a051677c9af71391ad64ca25aa5a3e13b",
+          "derived_bytes": 4331,
+          "edits": [
+            {
+              "start_byte": 1101,
+              "end_byte": 1102,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 8662
+    },
+    {
+      "entry": "two_qbf_parity.lp",
+      "identity": "444c019bfaeadbc5755a623adf964cf76af9c74b05d86d72769ddce755dec53f",
+      "sources": [
+        {
+          "path": "two_qbf_parity.lp",
+          "base_sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "derived_sha256": "ba81e84d134c20b8f0693f05d6f49e23db4812c1dffb34f41c04938dab2e408a",
+          "derived_bytes": 4331,
+          "edits": [
+            {
+              "start_byte": 1101,
+              "end_byte": 1102,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 8662
+    },
+    {
+      "entry": "two_qbf_parity.lp",
+      "identity": "92838da19289bd5cb5ed3f3054c102725848104043158328bc073abfbb0aaa1f",
+      "sources": [
+        {
+          "path": "two_qbf_parity.lp",
+          "base_sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "derived_sha256": "accd629b5667e092997d134fe6e60ed43faeade33ce85664361a32743ec7f04f",
+          "derived_bytes": 4331,
+          "edits": [
+            {
+              "start_byte": 1082,
+              "end_byte": 1083,
+              "before": "2",
+              "after": "3"
+            },
+            {
+              "start_byte": 1101,
+              "end_byte": 1102,
+              "before": "1",
+              "after": "3"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 8662
+    },
+    {
+      "entry": "two_qbf_parity.lp",
+      "identity": "df1ee060ca189691e0e679ec564376ace79bfdb22362428b633e93970d0a97ce",
+      "sources": [
+        {
+          "path": "two_qbf_parity.lp",
+          "base_sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "derived_sha256": "1ffa876c913f8d4bc38167a3299d4dade29ca8d0d9b8364b77e0eddce2404efc",
+          "derived_bytes": 4331,
+          "edits": [
+            {
+              "start_byte": 1101,
+              "end_byte": 1102,
+              "before": "1",
+              "after": "4"
+            },
+            {
+              "start_byte": 1115,
+              "end_byte": 1116,
+              "before": "6",
+              "after": "5"
+            },
+            {
+              "start_byte": 1132,
+              "end_byte": 1133,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 8662
+    },
+    {
+      "entry": "two_qbf_tseitin.lp",
+      "identity": "19dbc75f5194bef58ef7bb19c8020860ef7c70779ebbac19ad3d4c4ee9f81964",
+      "sources": [
+        {
+          "path": "two_qbf_tseitin.lp",
+          "base_sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "derived_sha256": "d424c2f2029457b42323d90a225bcf9714ba830af3f6b1d1754b3685eef3508a",
+          "derived_bytes": 6173,
+          "edits": [
+            {
+              "start_byte": 1147,
+              "end_byte": 1148,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 12346
+    },
+    {
+      "entry": "two_qbf_tseitin.lp",
+      "identity": "2a13dd54a9d68493fcb1ff0eccadcba98c8c41e3cbb4fdbc06ecd70d771b3fda",
+      "sources": [
+        {
+          "path": "two_qbf_tseitin.lp",
+          "base_sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "derived_sha256": "18ddd79caebf5f7b99e10dc0ea240fd47c8d344d142d4b0c37307744fe488fef",
+          "derived_bytes": 6173,
+          "edits": [
+            {
+              "start_byte": 1147,
+              "end_byte": 1148,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 12346
+    },
+    {
+      "entry": "two_qbf_tseitin.lp",
+      "identity": "75c7d8911086a40bdc976831115ce28cfbfaa24f329579127f6a69b6f9493497",
+      "sources": [
+        {
+          "path": "two_qbf_tseitin.lp",
+          "base_sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "derived_sha256": "67f62f0e2ddf12f84eea9c280c98d478e88eeedb10aa2effc12a033a4c2bf330",
+          "derived_bytes": 6173,
+          "edits": [
+            {
+              "start_byte": 1128,
+              "end_byte": 1129,
+              "before": "2",
+              "after": "3"
+            },
+            {
+              "start_byte": 1147,
+              "end_byte": 1148,
+              "before": "1",
+              "after": "3"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 12346
+    },
+    {
+      "entry": "two_qbf_tseitin.lp",
+      "identity": "d69294edac02a984cb635b78e3c0c662671cbc5d617d47b09e1f9300e42b0a9c",
+      "sources": [
+        {
+          "path": "two_qbf_tseitin.lp",
+          "base_sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "derived_sha256": "fc70fbcf558bac514605b36d5ad865b76bcf39fb80a4cbb57f330a351546a0f1",
+          "derived_bytes": 6173,
+          "edits": [
+            {
+              "start_byte": 1147,
+              "end_byte": 1148,
+              "before": "1",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 12346
+    },
+    {
+      "entry": "two_qbf_pigeonhole.lp",
+      "identity": "515afcbbc246f35837ad0c0dc0535296bf66fadde59c1424233b6bc0e2a5606b",
+      "sources": [
+        {
+          "path": "two_qbf_pigeonhole.lp",
+          "base_sha256": "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
+          "derived_sha256": "0b63148f6ec0cc2f0e01f20cb2bbb6cf7810d87e63bae297d367a7925beba0af",
+          "derived_bytes": 3135,
+          "edits": [
+            {
+              "start_byte": 986,
+              "end_byte": 987,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is the pigeonhole formula with 5 pigeons and 4 holes (20 universal variables, 45 clauses). The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every candidate's minimality check carries work, since the satisfiable cores are hard to search too. At 6 holes the subset queries walk about 33,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6270
+    },
+    {
+      "entry": "two_qbf_pigeonhole.lp",
+      "identity": "37ec36b1c1fc22b3de66ab67c2e61fcc7034faacb9fe41737d162a959e8fdf4f",
+      "sources": [
+        {
+          "path": "two_qbf_pigeonhole.lp",
+          "base_sha256": "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
+          "derived_sha256": "9f78a5512fd5315bb0570b29aa219008a35a405582258560e79a9f8c4b87169f",
+          "derived_bytes": 3135,
+          "edits": [
+            {
+              "start_byte": 986,
+              "end_byte": 987,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is the pigeonhole formula with 5 pigeons and 4 holes (20 universal variables, 45 clauses). The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every candidate's minimality check carries work, since the satisfiable cores are hard to search too. At 6 holes the subset queries walk about 33,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6270
+    },
+    {
+      "entry": "two_qbf_pigeonhole.lp",
+      "identity": "ebdd75b7b632c421738319c30f4ad169fba56dd67bd0ca08bd3628f6e3a70f46",
+      "sources": [
+        {
+          "path": "two_qbf_pigeonhole.lp",
+          "base_sha256": "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
+          "derived_sha256": "311d3e812423843d3bfaaf010976814540fafe0909b472dec59e73e763c220ae",
+          "derived_bytes": 3135,
+          "edits": [
+            {
+              "start_byte": 967,
+              "end_byte": 968,
+              "before": "2",
+              "after": "3"
+            },
+            {
+              "start_byte": 986,
+              "end_byte": 987,
+              "before": "1",
+              "after": "3"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is the pigeonhole formula with 5 pigeons and 4 holes (20 universal variables, 45 clauses). The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every candidate's minimality check carries work, since the satisfiable cores are hard to search too. At 6 holes the subset queries walk about 33,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6270
+    },
+    {
+      "entry": "two_qbf_pigeonhole.lp",
+      "identity": "73e9512d22db139a9f19df2aa18265d770e9ca2be7bd31ea30ac2566cfd19e1c",
+      "sources": [
+        {
+          "path": "two_qbf_pigeonhole.lp",
+          "base_sha256": "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
+          "derived_sha256": "e03f98319b6104c9d1a2a259e04f6c16005087b4a520213949fbd77b0e108ea4",
+          "derived_bytes": 3135,
+          "edits": [
+            {
+              "start_byte": 986,
+              "end_byte": 987,
+              "before": "1",
+              "after": "4"
+            },
+            {
+              "start_byte": 1004,
+              "end_byte": 1005,
+              "before": "4",
+              "after": "3"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is the pigeonhole formula with 5 pigeons and 4 holes (20 universal variables, 45 clauses). The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every candidate's minimality check carries work, since the satisfiable cores are hard to search too. At 6 holes the subset queries walk about 33,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6270
+    },
+    {
+      "entry": "two_qbf_parity.lp",
+      "identity": "0582ef4e6ac76ee8cbad5211621915b5d82f1872f8a403600f4cf491aad25f85",
+      "sources": [
+        {
+          "path": "two_qbf_parity.lp",
+          "base_sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "derived_sha256": "b60e0039e062c30b3fbdbe13cfce0f72ec82c22fa24f4e8fae0b1a58bc882098",
+          "derived_bytes": 4332,
+          "edits": [
+            {
+              "start_byte": 1115,
+              "end_byte": 1116,
+              "before": "6",
+              "after": "10"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 8663
+    },
+    {
+      "entry": "two_qbf_parity.lp",
+      "identity": "76c7419fcdab3075fc009c3f01ec4d5a75222dd1e35f2fda471913b1a9bede45",
+      "sources": [
+        {
+          "path": "two_qbf_parity.lp",
+          "base_sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "derived_sha256": "c7ea1188ab90ce2470851105c960c3d1225202c18f73bb01e537313a999b8049",
+          "derived_bytes": 4332,
+          "edits": [
+            {
+              "start_byte": 1115,
+              "end_byte": 1116,
+              "before": "6",
+              "after": "14"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 8663
+    },
+    {
+      "entry": "two_qbf_parity.lp",
+      "identity": "de3274629ea639e8097f552df74677ea2363e950fa3fe3f9f4bbf34f50529502",
+      "sources": [
+        {
+          "path": "two_qbf_parity.lp",
+          "base_sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "derived_sha256": "7782f7714a096b42ec58fc8def9262fa48d518d16eb400a691f12912dd72bd59",
+          "derived_bytes": 4332,
+          "edits": [
+            {
+              "start_byte": 1115,
+              "end_byte": 1116,
+              "before": "6",
+              "after": "16"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 8663
+    },
+    {
+      "entry": "two_qbf_tseitin.lp",
+      "identity": "6181bda8c13bb1fdc205172335093f00a259bf87f4c9b7b37c79b2d6147948c1",
+      "sources": [
+        {
+          "path": "two_qbf_tseitin.lp",
+          "base_sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "derived_sha256": "62ae5f26e0118ec9a6c439179534157a4dd80e50127f9cf88a01a496a46499d1",
+          "derived_bytes": 6173,
+          "edits": [
+            {
+              "start_byte": 1168,
+              "end_byte": 1170,
+              "before": "12",
+              "after": "18"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 12346
+    },
+    {
+      "entry": "two_qbf_tseitin.lp",
+      "identity": "d7633f671b83f3278027f92f2a3d6379604db98777a7d7f6343b1e260ba34dea",
+      "sources": [
+        {
+          "path": "two_qbf_tseitin.lp",
+          "base_sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "derived_sha256": "d7525041a7df0077ef8597b3bb8bde899335b7aa93b81ae03a20a0959bcccd78",
+          "derived_bytes": 6173,
+          "edits": [
+            {
+              "start_byte": 1168,
+              "end_byte": 1170,
+              "before": "12",
+              "after": "24"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 12346
+    },
+    {
+      "entry": "two_qbf_tseitin.lp",
+      "identity": "db12612e485be34cd8cc9d62cea40850b0b9f1741d5265318f7b48c328f7789d",
+      "sources": [
+        {
+          "path": "two_qbf_tseitin.lp",
+          "base_sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "derived_sha256": "c42a90c2930ca0bc7ebe4a9b682c7adbe9602a558f1b063a34b08fccb4748144",
+          "derived_bytes": 6173,
+          "edits": [
+            {
+              "start_byte": 1168,
+              "end_byte": 1170,
+              "before": "12",
+              "after": "30"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 12346
+    },
+    {
+      "entry": "two_qbf_pigeonhole.lp",
+      "identity": "376eae3986994d8abf0c7a9621ed5085de275aca3068f5c036337ab1cbbb8843",
+      "sources": [
+        {
+          "path": "two_qbf_pigeonhole.lp",
+          "base_sha256": "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
+          "derived_sha256": "e406b69b4c831065a2c0bf42e92c0eafdbec0e12e7c6f5d3957082a31573b296",
+          "derived_bytes": 3135,
+          "edits": [
+            {
+              "start_byte": 1004,
+              "end_byte": 1005,
+              "before": "4",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is the pigeonhole formula with 5 pigeons and 4 holes (20 universal variables, 45 clauses). The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every candidate's minimality check carries work, since the satisfiable cores are hard to search too. At 6 holes the subset queries walk about 33,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6270
+    },
+    {
+      "entry": "two_qbf_pigeonhole.lp",
+      "identity": "bc9b1a2400d06234c24caf391a37f1eaba9df536b9add18f1abd28de587f909b",
+      "sources": [
+        {
+          "path": "two_qbf_pigeonhole.lp",
+          "base_sha256": "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
+          "derived_sha256": "83582fcf93312993140a8be14c5a7e6fbdc0734199857e828490ed8c09226026",
+          "derived_bytes": 3135,
+          "edits": [
+            {
+              "start_byte": 1004,
+              "end_byte": 1005,
+              "before": "4",
+              "after": "6"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is the pigeonhole formula with 5 pigeons and 4 holes (20 universal variables, 45 clauses). The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every candidate's minimality check carries work, since the satisfiable cores are hard to search too. At 6 holes the subset queries walk about 33,000 regions."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6270
+    },
+    {
+      "entry": "strategic_companies.lp",
+      "identity": "bfe3bdd3a1d75b2ae4dd87b46b94f1ce8e1dbfe1fbf90bf73b5e35d76d9f038b",
+      "sources": [
+        {
+          "path": "strategic_companies.lp",
+          "base_sha256": "cf562da040add78158e15760e7cdd2c2fa859bb9dd7e2c4f1194494a6cf8cc93",
+          "derived_sha256": "736f46b0c25963ef797cd659cf41f27419a5e6e2800859344b93d32c77149b7a",
+          "derived_bytes": 2037,
+          "edits": [
+            {
+              "start_byte": 674,
+              "end_byte": 675,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 29,
+        "cost": null,
+        "witnesses": [
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(6)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(2)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(2)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(4)",
+            "strat(5)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(5)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Twelve companies and 24 products, each produced by four companies; one company in three jointly controlled by four others; seed 1. The 29 answer sets are the strategic sets.",
+          "Disjunctive heads with control rules through strategic companies: every candidate runs the proper-subset query over its frozen reduct."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4074
+    },
+    {
+      "entry": "strategic_companies.lp",
+      "identity": "091f101e63a07ea743dbc7c982d4d7920a9468e2f6026cd474256fea9546962e",
+      "sources": [
+        {
+          "path": "strategic_companies.lp",
+          "base_sha256": "cf562da040add78158e15760e7cdd2c2fa859bb9dd7e2c4f1194494a6cf8cc93",
+          "derived_sha256": "09287c1d001de1c7d1a2e055116dff302abc170138b8acdcdff005be77414603",
+          "derived_bytes": 2036,
+          "edits": [
+            {
+              "start_byte": 634,
+              "end_byte": 636,
+              "before": "12",
+              "after": "8"
+            },
+            {
+              "start_byte": 656,
+              "end_byte": 658,
+              "before": "24",
+              "after": "16"
+            },
+            {
+              "start_byte": 674,
+              "end_byte": 675,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 29,
+        "cost": null,
+        "witnesses": [
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(6)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(2)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(2)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(4)",
+            "strat(5)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(5)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Twelve companies and 24 products, each produced by four companies; one company in three jointly controlled by four others; seed 1. The 29 answer sets are the strategic sets.",
+          "Disjunctive heads with control rules through strategic companies: every candidate runs the proper-subset query over its frozen reduct."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4073
+    },
+    {
+      "entry": "strategic_companies.lp",
+      "identity": "1764cedf31110d3549c7413b6a7366a1435c248a21d246ae1768e947dcda1ab9",
+      "sources": [
+        {
+          "path": "strategic_companies.lp",
+          "base_sha256": "cf562da040add78158e15760e7cdd2c2fa859bb9dd7e2c4f1194494a6cf8cc93",
+          "derived_sha256": "53b1a4fbc66b02926e68eaab3afb98bb313d6aecbcb61a86d0b81580359fdb35",
+          "derived_bytes": 2037,
+          "edits": [
+            {
+              "start_byte": 634,
+              "end_byte": 636,
+              "before": "12",
+              "after": "10"
+            },
+            {
+              "start_byte": 656,
+              "end_byte": 658,
+              "before": "24",
+              "after": "20"
+            },
+            {
+              "start_byte": 674,
+              "end_byte": 675,
+              "before": "1",
+              "after": "3"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 29,
+        "cost": null,
+        "witnesses": [
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(6)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(2)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(2)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(4)",
+            "strat(5)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(5)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Twelve companies and 24 products, each produced by four companies; one company in three jointly controlled by four others; seed 1. The 29 answer sets are the strategic sets.",
+          "Disjunctive heads with control rules through strategic companies: every candidate runs the proper-subset query over its frozen reduct."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4074
+    },
+    {
+      "entry": "strategic_companies.lp",
+      "identity": "72fb8cbe3df2a631c39dec086554f616a1f7e87a4b0997863ccdf127ee681c27",
+      "sources": [
+        {
+          "path": "strategic_companies.lp",
+          "base_sha256": "cf562da040add78158e15760e7cdd2c2fa859bb9dd7e2c4f1194494a6cf8cc93",
+          "derived_sha256": "18c1d607c30160303a14cd2f208cb69bbc295fbb48e9a2c42d31fd94615b801a",
+          "derived_bytes": 2037,
+          "edits": [
+            {
+              "start_byte": 634,
+              "end_byte": 636,
+              "before": "12",
+              "after": "16"
+            },
+            {
+              "start_byte": 656,
+              "end_byte": 658,
+              "before": "24",
+              "after": "32"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 29,
+        "cost": null,
+        "witnesses": [
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(6)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(2)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(2)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(4)",
+            "strat(5)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(5)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Twelve companies and 24 products, each produced by four companies; one company in three jointly controlled by four others; seed 1. The 29 answer sets are the strategic sets.",
+          "Disjunctive heads with control rules through strategic companies: every candidate runs the proper-subset query over its frozen reduct."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4074
+    },
+    {
+      "entry": "strategic_companies.lp",
+      "identity": "9484b690da841b2e79dd5aa6425cd61b48c749dfbd60fa9dc679be1f8a42878e",
+      "sources": [
+        {
+          "path": "strategic_companies.lp",
+          "base_sha256": "cf562da040add78158e15760e7cdd2c2fa859bb9dd7e2c4f1194494a6cf8cc93",
+          "derived_sha256": "21647fa64850ab5ffaf8384bf3baf732d18929f61ff6cbedeca5354732e4696b",
+          "derived_bytes": 2037,
+          "edits": [
+            {
+              "start_byte": 634,
+              "end_byte": 636,
+              "before": "12",
+              "after": "20"
+            },
+            {
+              "start_byte": 656,
+              "end_byte": 658,
+              "before": "24",
+              "after": "40"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 29,
+        "cost": null,
+        "witnesses": [
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(6)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(2)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(2)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(4)",
+            "strat(5)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(5)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Twelve companies and 24 products, each produced by four companies; one company in three jointly controlled by four others; seed 1. The 29 answer sets are the strategic sets.",
+          "Disjunctive heads with control rules through strategic companies: every candidate runs the proper-subset query over its frozen reduct."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 4074
+    },
+    {
+      "entry": "parity_tseitin.lp",
+      "identity": "8f99ce9306e3f9b0159d64d2dac0dfc2a1e2ea69c4737c2923bbd579b2f59b3f",
+      "sources": [
+        {
+          "path": "parity_tseitin.lp",
+          "base_sha256": "4c22676741999506ad9074b7ee85c43d2e39d30cdd34ba44e5348a44abb7b142",
+          "derived_sha256": "a13849602794415777078c62e454f74a1aa7d28d118b998319c864ba7cd8d040",
+          "derived_bytes": 2502,
+          "edits": [
+            {
+              "start_byte": 1219,
+              "end_byte": 1220,
+              "before": "5",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula on the 3-regular graph with p = 5: 10 vertices, 15 edge atoms and 40 constraints, four per vertex, with an odd total charge. Summing the vertex equations counts every edge twice, so no choice of edges satisfies them.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps on expanding graphs as p grows."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 5004
+    },
+    {
+      "entry": "parity_tseitin.lp",
+      "identity": "5d95ce9e2cdc30a1b9c71fb30c151b8dc7b3b01fd6a95bc100f5686c3d3b5576",
+      "sources": [
+        {
+          "path": "parity_tseitin.lp",
+          "base_sha256": "4c22676741999506ad9074b7ee85c43d2e39d30cdd34ba44e5348a44abb7b142",
+          "derived_sha256": "46b3b3491603464e7a68d8948d46648492f6f0cffad38dbe665a61b33ff7ae7a",
+          "derived_bytes": 2502,
+          "edits": [
+            {
+              "start_byte": 1219,
+              "end_byte": 1220,
+              "before": "5",
+              "after": "3"
+            },
+            {
+              "start_byte": 1252,
+              "end_byte": 1253,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula on the 3-regular graph with p = 5: 10 vertices, 15 edge atoms and 40 constraints, four per vertex, with an odd total charge. Summing the vertex equations counts every edge twice, so no choice of edges satisfies them.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps on expanding graphs as p grows."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 5004
+    },
+    {
+      "entry": "parity_tseitin.lp",
+      "identity": "c822f75db54ef07f3620fa0a82dd11b54e2094345cb66ee2d8a71236baeee825",
+      "sources": [
+        {
+          "path": "parity_tseitin.lp",
+          "base_sha256": "4c22676741999506ad9074b7ee85c43d2e39d30cdd34ba44e5348a44abb7b142",
+          "derived_sha256": "64c10a5eb67626fbacbe2663fb41c2e05daf56f1ddf07c62d3dd77257c6a1d03",
+          "derived_bytes": 2502,
+          "edits": [
+            {
+              "start_byte": 1236,
+              "end_byte": 1237,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula on the 3-regular graph with p = 5: 10 vertices, 15 edge atoms and 40 constraints, four per vertex, with an odd total charge. Summing the vertex equations counts every edge twice, so no choice of edges satisfies them.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps on expanding graphs as p grows."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 5004
+    },
+    {
+      "entry": "parity_chain.lp",
+      "identity": "e186d1338328e0e5700b195c0ff0876c37f272fbc2509cb14278213411ed76af",
+      "sources": [
+        {
+          "path": "parity_chain.lp",
+          "base_sha256": "3be3da465bf6270d2d01dd87b1bdb2b6c3196024daee692152cefbda54ffbfda",
+          "derived_sha256": "3a166d4ae71bbb95509b54dbba959cdfecbb07fc85f6fcedb79da849b386f2e7",
+          "derived_bytes": 2564,
+          "edits": [
+            {
+              "start_byte": 1105,
+              "end_byte": 1106,
+              "before": "5",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Two parity chains over the inputs x(1..5), the second in the order of the permutation (I + 1)^3 + 7 mod 5: 13 atoms and 34 constraints. Both chains compute the exclusive-or of every input, so their results cannot differ.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps as p grows."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 5128
+    },
+    {
+      "entry": "parity_chain.lp",
+      "identity": "42bbf82301a54e93ae035d557e935e5619cf0289286902cc07fee571886cfd01",
+      "sources": [
+        {
+          "path": "parity_chain.lp",
+          "base_sha256": "3be3da465bf6270d2d01dd87b1bdb2b6c3196024daee692152cefbda54ffbfda",
+          "derived_sha256": "74120987d32e01504e00e1f8f3c0f9736643e5606ee5aeec8a2a4645d7663d18",
+          "derived_bytes": 2564,
+          "edits": [
+            {
+              "start_byte": 1105,
+              "end_byte": 1106,
+              "before": "5",
+              "after": "3"
+            },
+            {
+              "start_byte": 1141,
+              "end_byte": 1142,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Two parity chains over the inputs x(1..5), the second in the order of the permutation (I + 1)^3 + 7 mod 5: 13 atoms and 34 constraints. Both chains compute the exclusive-or of every input, so their results cannot differ.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps as p grows."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 5128
+    },
+    {
+      "entry": "parity_chain.lp",
+      "identity": "c86f63a66e54865dcf8946e317de1b5cfd9c4c590d498f3cfd0d21ee7d8db431",
+      "sources": [
+        {
+          "path": "parity_chain.lp",
+          "base_sha256": "3be3da465bf6270d2d01dd87b1bdb2b6c3196024daee692152cefbda54ffbfda",
+          "derived_sha256": "c68132fc045a20da5930ab09011666f66833791a35b2ec753dc36362ce2df9c0",
+          "derived_bytes": 2564,
+          "edits": [
+            {
+              "start_byte": 1122,
+              "end_byte": 1123,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Two parity chains over the inputs x(1..5), the second in the order of the permutation (I + 1)^3 + 7 mod 5: 13 atoms and 34 constraints. Both chains compute the exclusive-or of every input, so their results cannot differ.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps as p grows."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 5128
+    },
+    {
+      "entry": "pigeonhole_clauses.lp",
+      "identity": "7b3d6cc0f9092353a9b9ad231e6e226765a578ab26b8a7c3a1e410c4fd1c83ab",
+      "sources": [
+        {
+          "path": "pigeonhole_clauses.lp",
+          "base_sha256": "f5d8004a9928415ecbc604c7f3c3ac8e697d54aeee15eb58bc1a85a668ebc6aa",
+          "derived_sha256": "5a2bf10d7cc7db45d99815ab0bff3f29d3204b8b6fdd6e1f3b31c1d9980826c1",
+          "derived_bytes": 1176,
+          "edits": [
+            {
+              "start_byte": 877,
+              "end_byte": 878,
+              "before": "4",
+              "after": "3"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Five pigeons and four holes as clauses over 20 choice atoms: one constraint per pigeon that it occupies no hole and one per pair of pigeons sharing a hole, 45 in all.",
+          "Counting the incidences once by pigeon and once by hole refutes the conditions at once; resolution needs exponentially many steps as the holes grow."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 2352
+    },
+    {
+      "entry": "pigeonhole_clauses.lp",
+      "identity": "1dcce6c7598c1873caf6ce3d8f00c5651a4ecf358aec3d8d28469a01e606600b",
+      "sources": [
+        {
+          "path": "pigeonhole_clauses.lp",
+          "base_sha256": "f5d8004a9928415ecbc604c7f3c3ac8e697d54aeee15eb58bc1a85a668ebc6aa",
+          "derived_sha256": "4f2a93f9daa91128cc0777914b74be791c8062fb36c5b027e4887dc9882b283e",
+          "derived_bytes": 1176,
+          "edits": [
+            {
+              "start_byte": 877,
+              "end_byte": 878,
+              "before": "4",
+              "after": "3"
+            },
+            {
+              "start_byte": 895,
+              "end_byte": 896,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Five pigeons and four holes as clauses over 20 choice atoms: one constraint per pigeon that it occupies no hole and one per pair of pigeons sharing a hole, 45 in all.",
+          "Counting the incidences once by pigeon and once by hole refutes the conditions at once; resolution needs exponentially many steps as the holes grow."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 2352
+    },
+    {
+      "entry": "pigeonhole_clauses.lp",
+      "identity": "d6439f25215d518597aadc2b5d1eebd7f65140836f612090f4ca3ded8dcb4a07",
+      "sources": [
+        {
+          "path": "pigeonhole_clauses.lp",
+          "base_sha256": "f5d8004a9928415ecbc604c7f3c3ac8e697d54aeee15eb58bc1a85a668ebc6aa",
+          "derived_sha256": "76bda3aaa7d33aaf5885df39c7b56ff0e27ec985fe851226317378c783b98595",
+          "derived_bytes": 1176,
+          "edits": [
+            {
+              "start_byte": 877,
+              "end_byte": 878,
+              "before": "4",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Five pigeons and four holes as clauses over 20 choice atoms: one constraint per pigeon that it occupies no hole and one per pair of pigeons sharing a hole, 45 in all.",
+          "Counting the incidences once by pigeon and once by hole refutes the conditions at once; resolution needs exponentially many steps as the holes grow."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 2352
+    },
+    {
+      "entry": "parity_mixed.lp",
+      "identity": "258736c54a778a54f17e3868d830b1c7a168291ec326b30988e4b185da0f499f",
+      "sources": [
+        {
+          "path": "parity_mixed.lp",
+          "base_sha256": "850168bb72c8068b6f9e067400a688293df88b5187409093c1be88754cbd80fe",
+          "derived_sha256": "e5608f2ce9f5cdca095c0de64e802ed2c9b426ff642a708e1cf60e3409d92a1c",
+          "derived_bytes": 3147,
+          "edits": [
+            {
+              "start_byte": 947,
+              "end_byte": 948,
+              "before": "8",
+              "after": "0"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 21,
+        "cost": null,
+        "witnesses": [
+          [
+            "on(1)",
+            "on(10)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(10)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(3)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(14)",
+            "on(15)",
+            "on(4)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(4)",
+            "on(6)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula with every vertex charged 0 on the 3-regular graph with p = 5, whose 64 solutions are the graph's even subgraphs, cut down to 21 by eight random three-literal clauses over the 15 edge atoms.",
+          "The parity constraints form a linear system over GF(2); the random clauses do not, so the even subgraphs the clauses allow must still be searched."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6294
+    },
+    {
+      "entry": "parity_mixed.lp",
+      "identity": "ba8cc83b2de845e6e6cd3810e4eeb9d9afc093aa60c396f9399e8351ff177b07",
+      "sources": [
+        {
+          "path": "parity_mixed.lp",
+          "base_sha256": "850168bb72c8068b6f9e067400a688293df88b5187409093c1be88754cbd80fe",
+          "derived_sha256": "346e9ecd36132c8f396aa126cca3310151e4d045c673d79b6117a15fbedbc3a7",
+          "derived_bytes": 3147,
+          "edits": [
+            {
+              "start_byte": 964,
+              "end_byte": 965,
+              "before": "1",
+              "after": "2"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 21,
+        "cost": null,
+        "witnesses": [
+          [
+            "on(1)",
+            "on(10)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(10)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(3)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(14)",
+            "on(15)",
+            "on(4)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(4)",
+            "on(6)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula with every vertex charged 0 on the 3-regular graph with p = 5, whose 64 solutions are the graph's even subgraphs, cut down to 21 by eight random three-literal clauses over the 15 edge atoms.",
+          "The parity constraints form a linear system over GF(2); the random clauses do not, so the even subgraphs the clauses allow must still be searched."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6294
+    },
+    {
+      "entry": "parity_mixed.lp",
+      "identity": "c4db205e2793d540bbb6c6372ae225145519ab285af90160d12ce769c394f2d1",
+      "sources": [
+        {
+          "path": "parity_mixed.lp",
+          "base_sha256": "850168bb72c8068b6f9e067400a688293df88b5187409093c1be88754cbd80fe",
+          "derived_sha256": "23e09789a84cbc3f6351231f79e3480e654f99583a6564d30071fbdbc882577d",
+          "derived_bytes": 3147,
+          "edits": [
+            {
+              "start_byte": 927,
+              "end_byte": 928,
+              "before": "5",
+              "after": "3"
+            },
+            {
+              "start_byte": 947,
+              "end_byte": 948,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 21,
+        "cost": null,
+        "witnesses": [
+          [
+            "on(1)",
+            "on(10)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(10)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(3)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(14)",
+            "on(15)",
+            "on(4)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(4)",
+            "on(6)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula with every vertex charged 0 on the 3-regular graph with p = 5, whose 64 solutions are the graph's even subgraphs, cut down to 21 by eight random three-literal clauses over the 15 edge atoms.",
+          "The parity constraints form a linear system over GF(2); the random clauses do not, so the even subgraphs the clauses allow must still be searched."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6294
+    },
+    {
+      "entry": "parity_mixed.lp",
+      "identity": "f1fd428ef1c17f55af7b75d3fc8328717582c6cbcc49feb4a2d28f0f73606c8e",
+      "sources": [
+        {
+          "path": "parity_mixed.lp",
+          "base_sha256": "850168bb72c8068b6f9e067400a688293df88b5187409093c1be88754cbd80fe",
+          "derived_sha256": "84e3c7bb1a7dc96f489e2e00525b203e61e45f27e233d3a61782ab7793b2ba35",
+          "derived_bytes": 3148,
+          "edits": [
+            {
+              "start_byte": 947,
+              "end_byte": 948,
+              "before": "8",
+              "after": "20"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 21,
+        "cost": null,
+        "witnesses": [
+          [
+            "on(1)",
+            "on(10)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(10)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(3)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(14)",
+            "on(15)",
+            "on(4)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(4)",
+            "on(6)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula with every vertex charged 0 on the 3-regular graph with p = 5, whose 64 solutions are the graph's even subgraphs, cut down to 21 by eight random three-literal clauses over the 15 edge atoms.",
+          "The parity constraints form a linear system over GF(2); the random clauses do not, so the even subgraphs the clauses allow must still be searched."
+        ]
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": null,
+      "source_bytes": 6295
+    },
+    {
+      "entry": "standalone/n-queens/variant-01.lp",
+      "identity": "e276aa369c2c3e38e91ba773e9765433f8ef5f35a0fb337c34b2770f25735b97",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-01.lp",
+          "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+          "derived_sha256": "8f2e74498e90654a3104a5e19da2b194463e203074ddae7968eaaa2b58505be0",
+          "derived_bytes": 858,
+          "edits": [
+            {
+              "start_byte": 368,
+              "end_byte": 369,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1716
+    },
+    {
+      "entry": "standalone/n-queens/variant-01.lp",
+      "identity": "aa760ff38bb0c5f71a0bc02e284b56082160172462591ae49d096d2d2199fbb9",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-01.lp",
+          "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+          "derived_sha256": "e8631546a74c2a3cfe347975cfcda287d703b6882f7b6d5570a33712d6a8425e",
+          "derived_bytes": 858,
+          "edits": [
+            {
+              "start_byte": 368,
+              "end_byte": 369,
+              "before": "8",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1716
+    },
+    {
+      "entry": "standalone/n-queens/variant-01.lp",
+      "identity": "155037c717c75311eb22e619be5be73a8d414c1956c4afc440dd01e9e3850bd8",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-01.lp",
+          "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+          "derived_sha256": "c6780ebfce8b135845fac7ec0994474cd3ac19f9832dfbd0e38b0ab25f7bf52a",
+          "derived_bytes": 858,
+          "edits": [
+            {
+              "start_byte": 368,
+              "end_byte": 369,
+              "before": "8",
+              "after": "6"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1716
+    },
+    {
+      "entry": "standalone/n-queens/variant-03.lp",
+      "identity": "d14da1dae17b0817496d63af7e190cb47d81cf8a2c3ac63362e7e1f8c33b0a78",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-03.lp",
+          "base_sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6",
+          "derived_sha256": "256809734d135d6ee298de7f32e0fc30bfdc5c0a31146c860eec779a0bfdbb66",
+          "derived_bytes": 878,
+          "edits": [
+            {
+              "start_byte": 389,
+              "end_byte": 390,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1756
+    },
+    {
+      "entry": "standalone/n-queens/variant-03.lp",
+      "identity": "97a972e67982e028e58b80e6a88351a9e1c197c2b5f71f0741acc04b2daf02ee",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-03.lp",
+          "base_sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6",
+          "derived_sha256": "845557649b9d92a362ba492dcb675e780dc77224007f52c7314a0684b27fd5a6",
+          "derived_bytes": 878,
+          "edits": [
+            {
+              "start_byte": 389,
+              "end_byte": 390,
+              "before": "8",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1756
+    },
+    {
+      "entry": "standalone/n-queens/variant-03.lp",
+      "identity": "bca0a92c5d5e84e15cd3126afd32567f64866b4b708a698625f169e5a04939c3",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-03.lp",
+          "base_sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6",
+          "derived_sha256": "a8007cbb5c2b5876790727fdab1da82f4aef97bf71f1f0061011ef34e0b69805",
+          "derived_bytes": 878,
+          "edits": [
+            {
+              "start_byte": 389,
+              "end_byte": 390,
+              "before": "8",
+              "after": "6"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1756
+    },
+    {
+      "entry": "standalone/n-queens/variant-02.lp",
+      "identity": "e5d1dd056876167f3a8fea78d72dbeb03f7942169f4e1b25287fc0c235d288e5",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-02.lp",
+          "base_sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02",
+          "derived_sha256": "a80305b9b16f080233ee1107c310290e1db3d312e3689f9a75366e02252a9b50",
+          "derived_bytes": 960,
+          "edits": [
+            {
+              "start_byte": 430,
+              "end_byte": 431,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1920
+    },
+    {
+      "entry": "standalone/n-queens/variant-02.lp",
+      "identity": "7ce045dbdc5d6ec4ecc340ea2cd9649527c8c5b13caa54301724fb81f367779f",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-02.lp",
+          "base_sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02",
+          "derived_sha256": "1d66f49646baa1ccc22e742a8097e12d67bcbc6970b57fd985eacbd2c4d84236",
+          "derived_bytes": 960,
+          "edits": [
+            {
+              "start_byte": 430,
+              "end_byte": 431,
+              "before": "8",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1920
+    },
+    {
+      "entry": "standalone/n-queens/variant-04.lp",
+      "identity": "e6501c397aa49ef87032d5596190d9cc637ef377c9c3819d4306b5e6607138ec",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-04.lp",
+          "base_sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295",
+          "derived_sha256": "d219f47ae6e7761735b6b34fc21f55c09f7ef102f2ba54e92f86f4c19e08162c",
+          "derived_bytes": 919,
+          "edits": [
+            {
+              "start_byte": 389,
+              "end_byte": 390,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1838
+    },
+    {
+      "entry": "standalone/n-queens/variant-04.lp",
+      "identity": "5034f6d224787eb02b2325bdbf9df03bc1e8003c22057f0b79ea6ef2f23c12c9",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-04.lp",
+          "base_sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295",
+          "derived_sha256": "046055457d2d8d065a27fa426f04ec44ef714fd7d7106b6eb438e7c8e4f5af21",
+          "derived_bytes": 919,
+          "edits": [
+            {
+              "start_byte": 389,
+              "end_byte": 390,
+              "before": "8",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 1838
+    },
+    {
+      "entry": "standalone/n-queens/variant-05.lp",
+      "identity": "1bf9ad9804cf60149add8107b8719f213aec78346422bdd2ad243e908a678b75",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-05.lp",
+          "base_sha256": "42475b96940e06b957f45441cb5de66681a509d35f1c41ddc72fc36899cbfaaa",
+          "derived_sha256": "8521ca30019bc24c474f7207f8ebd8f061e2d3aaaf6ad63e0db0bf0e47686dd3",
+          "derived_bytes": 1078,
+          "edits": [
+            {
+              "start_byte": 327,
+              "end_byte": 328,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 2156
+    },
+    {
+      "entry": "standalone/n-queens/variant-05.lp",
+      "identity": "df4ce0987f9c56500a76db64036e9c0338d689b1fec534517f0f175b238fe2df",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-05.lp",
+          "base_sha256": "42475b96940e06b957f45441cb5de66681a509d35f1c41ddc72fc36899cbfaaa",
+          "derived_sha256": "68e8323f7b0117099a70dc5b26aa364f2828c483efaaaeddb14753f47f11afc7",
+          "derived_bytes": 1078,
+          "edits": [
+            {
+              "start_byte": 327,
+              "end_byte": 328,
+              "before": "8",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 2156
+    },
+    {
+      "entry": "standalone/n-queens/variant-06.lp",
+      "identity": "7b205afd1161823a8b394a1496741f99b670a273d21090bb2c8880bdaed4ff84",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-06.lp",
+          "base_sha256": "9d6ff26ac9bec747f4a237145ea732fd689d065545254186375afc682604fc3c",
+          "derived_sha256": "a0e69f93aecc8e5f0bd88149ff007c018cf2084e6ffc883041514e6bb54788ad",
+          "derived_bytes": 1116,
+          "edits": [
+            {
+              "start_byte": 409,
+              "end_byte": 410,
+              "before": "8",
+              "after": "4"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 2232
+    },
+    {
+      "entry": "standalone/n-queens/variant-06.lp",
+      "identity": "402994d0ec9a525cbefe5f655e14a37f47b9c40a6851970e2e6ff227eab12653",
+      "sources": [
+        {
+          "path": "standalone/n-queens/variant-06.lp",
+          "base_sha256": "9d6ff26ac9bec747f4a237145ea732fd689d065545254186375afc682604fc3c",
+          "derived_sha256": "65a3a7988178e08f91fb40bfb1cd3812f1a38d0eced6417870563d8e023c6db8",
+          "derived_bytes": 1116,
+          "edits": [
+            {
+              "start_byte": 409,
+              "end_byte": 410,
+              "before": "8",
+              "after": "5"
+            }
+          ]
+        }
+      ],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 92,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": true,
+      "generated": null,
+      "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+      "source_bytes": 2232
+    },
+    {
+      "entry": "generated/monotone-choices-6.lp",
+      "identity": "14a5f22782e95dd950212b46af853f131f91c0aed8d116502eb30f4c7a6f72f1",
+      "sources": [],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 7,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": false,
+      "generated": {
+        "family": "monotone-choices",
+        "size": 6,
+        "sha256": "1779f05ccf84d6f7bb3b2cd744fb764830a23e64e28b418b0c818b2d9b105d03",
+        "bytes": 52
+      },
+      "manifest_sha256": null,
+      "source_bytes": 52
+    },
+    {
+      "entry": "generated/monotone-choices-8.lp",
+      "identity": "f9ff5f3d937deb3d1bd014c4a481bc08e64b70b761be78ecef9e2f2ed62acd3f",
+      "sources": [],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 9,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": false,
+      "generated": {
+        "family": "monotone-choices",
+        "size": 8,
+        "sha256": "2cfba88c69c4ed7e79b57fa554f397698cd95797b0e612f821d2f0665491e7e7",
+        "bytes": 52
+      },
+      "manifest_sha256": null,
+      "source_bytes": 52
+    },
+    {
+      "entry": "generated/monotone-choices-10.lp",
+      "identity": "bdb6866915a4626ee9a0636e36ba58109184c76d136daca55631b058b9431a08",
+      "sources": [],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 11,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": false,
+      "generated": {
+        "family": "monotone-choices",
+        "size": 10,
+        "sha256": "bcd279fa60e261d914ad40963f05f627f3aceab2afd0517df47f9e49b8e8c979",
+        "bytes": 53
+      },
+      "manifest_sha256": null,
+      "source_bytes": 53
+    },
+    {
+      "entry": "generated/redundant-transitivity-8.lp",
+      "identity": "6e980b9a3cf35e2f0e8e0fd88a740d20a602fe16059dc2eaa39a1a55b7751722",
+      "sources": [],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": false,
+      "generated": {
+        "family": "redundant-transitivity",
+        "size": 8,
+        "sha256": "25436491cbd00d90378e5651257ae6cb11c9431d4d9c2291b3a082583529fd0e",
+        "bytes": 69
+      },
+      "manifest_sha256": null,
+      "source_bytes": 69
+    },
+    {
+      "entry": "generated/redundant-transitivity-12.lp",
+      "identity": "c9e6a0a3a6376399f06b37aba7c755a294646609491c21b923b67341c0105968",
+      "sources": [],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": false,
+      "generated": {
+        "family": "redundant-transitivity",
+        "size": 12,
+        "sha256": "9465ccc41493a9d53b6daba847c611c79b04bb0ef5e3afa501debff056f2edd3",
+        "bytes": 70
+      },
+      "manifest_sha256": null,
+      "source_bytes": 70
+    },
+    {
+      "entry": "generated/redundant-transitivity-16.lp",
+      "identity": "eafed4f9af5aa4069cbeb156aacef6f9b4033a57911be52b836a0b6fc729df92",
+      "sources": [],
+      "default_contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": []
+      },
+      "amended": false,
+      "generated": {
+        "family": "redundant-transitivity",
+        "size": 16,
+        "sha256": "bd07679ea30509256b6a33a64d247ed68dfef39e713832aac92660cda9723cef",
+        "bytes": 70
+      },
+      "manifest_sha256": null,
+      "source_bytes": 70
+    }
+  ]
+}

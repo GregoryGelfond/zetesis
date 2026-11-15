@@ -1,8 +1,8 @@
 //! Immutable local join plans owned by one support snapshot.
 //!
 //! A key borrows its nonempty IR frame for the snapshot lifetime. Address and
-//! length identify that frame; variables and the exact prefix bound pattern
-//! cover the remaining planner inputs. Components and row counts belong to
+//! length identify that frame; variables, prefix length and the bound bits read
+//! by the common local planner cover the remaining planner inputs. Components and row counts belong to
 //! this snapshot, and local joins always offer full rows (no delta pivot).
 //! Different call sites may share a frame; a different prefix shape uses an
 //! owned plan without replacing the first entry. No bindings or rows are kept.
@@ -46,6 +46,19 @@ impl<'a> Deref for Plan<'a> {
     }
 }
 
+/// A live handle to exactly the immutable plan selected from one source
+/// snapshot. Retention does not copy its vectors or invent a second key.
+pub(crate) struct Certificate<'source> {
+    plan: Rc<order::Plan<'source>>,
+}
+impl<'source> Certificate<'source> {
+    pub(super) fn retain(plan: &Rc<order::Plan<'source>>) -> Self {
+        Self {
+            plan: Rc::clone(plan),
+        }
+    }
+}
+
 pub(super) struct Table<'source> {
     state: RefCell<State<'source>>,
 }
@@ -56,7 +69,8 @@ struct State<'source> {
 struct Entry<'source> {
     literals: &'source [LiteralIr],
     variables: usize,
-    bound: Vec<u8>,
+    // None is outside the common local planner footprint; Some retains its bit.
+    bound: Vec<Option<bool>>,
     plan: Rc<order::Plan<'source>>,
 }
 impl Entry<'_> {
@@ -88,11 +102,36 @@ fn same_binding_pattern(
     }
     for (slot, &bound) in entry.bound.iter().enumerate() {
         charge_planning(budget, 1, location)?;
-        if (bound != 0) != prefix.is_bound(slot, location)? {
+        if let Some(bound) = bound
+            && bound != prefix.is_bound(slot, location)?
+        {
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+impl State<'_> {
+    /// The same source-frame search serves preparation and read-only proof
+    /// checking. Its insertion coordinate never names a source row.
+    fn search(
+        &self,
+        sought: (usize, usize, usize),
+        budget: &mut Budget,
+        location: ProgramSite,
+    ) -> Result<Result<usize, usize>, FormulaFailure> {
+        let (mut left, mut right) = (0, self.entries.len());
+        while left < right {
+            charge_planning(budget, 1, location)?;
+            let middle = left + (right - left) / 2;
+            match self.entries[middle].key().cmp(&sought) {
+                std::cmp::Ordering::Less => left = middle + 1,
+                std::cmp::Ordering::Greater => right = middle,
+                std::cmp::Ordering::Equal => return Ok(Ok(middle)),
+            }
+        }
+        Ok(Err(left))
+    }
 }
 
 impl<'source> Table<'source> {
@@ -104,6 +143,32 @@ impl<'source> Table<'source> {
                 lease: workspace.lease(),
             }),
         }
+    }
+
+    /// Read only a previously retained source-plan certificate. Missing or
+    /// different geometry declines reuse; typed control/owner failures propagate.
+    /// No preparation, allocation, Join or event claiming a new plan occurs.
+    pub(super) fn certifies(
+        &self,
+        certificate: &Certificate<'source>,
+        literals: &'source [LiteralIr],
+        prefix: &Binding,
+        variables: usize,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        let Context { computation, work } = context;
+        let state = self.state.borrow();
+        computation.allowance(&state.lease, work.limits, work.location)?;
+        let Ok(slot) = state.search(key(literals, variables), budget, work.location)? else {
+            return Ok(false);
+        };
+        let entry = &state.entries[slot];
+        if !same_binding_pattern(entry, prefix, budget, work.location)? {
+            return Ok(false);
+        }
+        charge_planning(budget, 1, work.location)?;
+        Ok(Rc::ptr_eq(&entry.plan, &certificate.plan))
     }
 
     /// None means the frame already has another bound pattern. A failed build
@@ -126,26 +191,19 @@ impl<'source> Table<'source> {
         let sought = key(literals, variables);
         let insertion = {
             let state = self.state.borrow();
-            let (mut left, mut right) = (0, state.entries.len());
-            while left < right {
-                charge_planning(budget, 1, location)?;
-                let middle = left + (right - left) / 2;
-                match state.entries[middle].key().cmp(&sought) {
-                    std::cmp::Ordering::Less => left = middle + 1,
-                    std::cmp::Ordering::Greater => right = middle,
-                    std::cmp::Ordering::Equal => {
-                        let entry = &state.entries[middle];
-                        if !same_binding_pattern(entry, prefix, budget, location)? {
-                            return Ok(None);
-                        }
-                        counters.record(Event::LocalPlanReuse);
-                        #[cfg(test)]
-                        tests::hit();
-                        return Ok(Some(Rc::clone(&entry.plan)));
+            match state.search(sought, budget, location)? {
+                Ok(slot) => {
+                    let entry = &state.entries[slot];
+                    if !same_binding_pattern(entry, prefix, budget, location)? {
+                        return Ok(None);
                     }
+                    counters.record(Event::LocalPlanReuse);
+                    #[cfg(test)]
+                    tests::hit();
+                    return Ok(Some(Rc::clone(&entry.plan)));
                 }
+                Err(insertion) => insertion,
             }
-            left
         };
         let plan = order::Plan::new(
             literals,
@@ -175,10 +233,11 @@ impl<'source> Table<'source> {
             plan_bytes,
             Context::new(computation, limits, counters, location),
         )?;
-        for slot in 0..prefix.len() {
+        for _ in 0..prefix.len() {
             charge_planning(budget, 1, location)?;
-            bound.push(u8::from(prefix.is_bound(slot, location)?));
+            bound.push(None);
         }
+        plan.local_prefix_requirements(literals, prefix, &mut bound, budget, location)?;
         // Rc owns one Plan header and its strong/weak counts. No clone of the
         // plan vectors is made, and joins charge only their Rc handle inline.
         let header = shared_header(location)?;

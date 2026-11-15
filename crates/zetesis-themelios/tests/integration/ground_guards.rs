@@ -7,6 +7,7 @@ use zetesis_reference_support::{BundleFixture, resource_limits};
 use crate::support::clingo_reports::{enumerated, expected};
 use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
 use crate::support::sourced_admission::{SOURCE, input, options};
+use crate::support::warnings::zero_divisor_statement_in;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
@@ -152,8 +153,6 @@ fn undefined_or_overflowing_guard_values_never_become_boolean_false() {
         "{p:not 1/0=0}.",
         "p:-#count{1:not 1/0=0}=1.",
         "d(2147483647).p:-d(X),not X+1=0.",
-        "d(0).p:-d(X),not (1,2)=(1,2,1/X).",
-        "d(0).p:-d(X),not not (1,2,1/X)!=(1,2).",
     ] {
         let error = input(source).unwrap_err();
         assert!(
@@ -164,6 +163,24 @@ fn undefined_or_overflowing_guard_values_never_become_boolean_false() {
             "{source}: {error}"
         );
         assert!(!error.diagnostics().is_empty());
+    }
+}
+
+#[test]
+fn undefined_guard_fields_omit_their_instances() {
+    // The tuples differ in shape whatever the division yields, which would
+    // make each negated guard true. The field divides by zero at the one
+    // binding, so the instance is omitted instead and p is not derived. The
+    // rule keeps the warning.
+    for rule in [
+        "p:-d(X),not (1,2)=(1,2,1/X).",
+        "p:-d(X),not not (1,2,1/X)!=(1,2).",
+    ] {
+        let program = input(&format!("d(0).{rule}")).unwrap();
+        assert_eq!(zero_divisor_statement_in(SOURCE, &program), rule);
+        let expected = native(&input("d(0).").unwrap());
+        assert_eq!(native(&program), expected, "{rule}");
+        assert_eq!(exhaustive(&program), expected, "{rule}");
     }
 }
 

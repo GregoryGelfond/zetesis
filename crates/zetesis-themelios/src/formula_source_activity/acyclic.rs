@@ -68,12 +68,12 @@ pub(crate) fn evaluate_acyclic(
     let mut consistent = true;
     for &(_, position) in plan.items() {
         match source.items().get(position) {
-            Item::Rule(_, rule) => {
+            Item::Rule(index, rule) => {
                 context.location = rule.location;
                 consistent &= profile.phase(
                     GroundingPhase::RuleInstantiation,
                     Some(rule.location),
-                    || result.rule_exact(rule, support, context),
+                    || result.rule_exact((index, rule), support, context),
                 )?;
             }
             Item::Facts(block) => {
@@ -113,9 +113,17 @@ impl SourceEligibility {
         Ok(())
     }
 
+    /// Stage the heads of the rule at position `index` among the rules, and
+    /// report whether no instance of it is a violated constraint. A row
+    /// under which a decided default-negated atom fails is passed over as
+    /// support completion passed over it
+    /// (`formula_support::decided_negations_hold`): its body is absent, and
+    /// its head, which no other row derives, lies outside the completed
+    /// support and is not named here. The join has read the row's head
+    /// arguments by then, so a fatal failure among them still refuses.
     fn rule_exact(
         &mut self,
-        rule: &crate::formula_ir::RuleIr,
+        (index, rule): (usize, &crate::formula_ir::RuleIr),
         support: &crate::formula_support::Support<'_>,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<bool, FormulaFailure> {
@@ -148,6 +156,18 @@ impl SourceEligibility {
                     rule.location,
                     |variable, location| FormulaFailure::UnsafeVariable { variable, location },
                 )?;
+                continue;
+            }
+            if let Some(certainty) = support.certainty()
+                && !crate::formula_support::decided_negations_hold(
+                    rule,
+                    certainty.decided(index),
+                    &row.values,
+                    context.computation,
+                    context.limits,
+                    context.counters,
+                )?
+            {
                 continue;
             }
             let body = self.fold_activity(&rule.body, &row.values, true, context)?;

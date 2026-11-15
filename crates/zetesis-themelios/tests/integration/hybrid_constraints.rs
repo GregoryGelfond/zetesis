@@ -1,5 +1,6 @@
 //! Hybrid admission preserves original source validation and candidate identity.
 
+use crate::support::warnings::zero_divisor_statement;
 use std::cell::Cell;
 use std::fmt::Write;
 use zetesis_reference_support::{hybrid, prepare, prepared};
@@ -233,19 +234,47 @@ fn mixed_undefined_instances_warn_before_checking() {
 }
 
 #[test]
-fn defined_false_instances_witness_arithmetic_admission() {
+fn a_defined_false_instance_does_not_hide_an_omitted_one() {
+    // The constraint divides by zero at X = 0 and is defined and false at
+    // X = 2. The false instance rejects nothing and does not remove the
+    // warning the omitted one leaves on the constraint, so the candidate
+    // that holds both atoms satisfies it.
     let owner = hybrid("d(0;2). {p(X)}:-d(X). :-p(X),1/X=1.");
-    assert_eq!(owner.warnings().len(), 1);
+    assert_eq!(zero_divisor_statement(&owner), ":-p(X),1/X=1.");
     assert_eq!(
         verdict(&owner, &["d(0)", "d(2)", "p(0)", "p(2)"]),
         ConstraintVerdict::Satisfied
     );
 }
 
+/// The family of these answer sets, spelled.
+fn family(
+    answer_sets: &[&[&str]],
+) -> std::collections::BTreeSet<std::collections::BTreeSet<String>> {
+    answer_sets
+        .iter()
+        .map(|atoms| atoms.iter().map(|atom| (*atom).to_owned()).collect())
+        .collect()
+}
+
+#[test]
+fn candidate_gates_cannot_hide_a_zero_divisor() {
+    // An interpretation can omit p, but the constraint's arithmetic is
+    // validated before every candidate. Its one instance divides by zero:
+    // it is omitted with a warning at admission, so no candidate violates
+    // the constraint.
+    let owner = hybrid("d(0). {p(X)}:-d(X). :-p(X),1/X=1.");
+    assert_eq!(zero_divisor_statement(&owner), ":-p(X),1/X=1.");
+    assert_eq!(
+        verdict(&owner, &["d(0)", "p(0)"]),
+        ConstraintVerdict::Satisfied
+    );
+    assert_eq!(full_family(&owner), family(&[&["d(0)"], &["d(0)", "p(0)"]]));
+}
+
 #[test]
 fn candidate_gates_cannot_hide_fatal_source_arithmetic() {
     for source in [
-        "d(0). {p(X)}:-d(X). :-p(X),1/X=1.",
         "d(1). {p(X)}:-d(X). :-p(X),X+2147483647=0.",
         "d(0). {p(X)}:-d(X). :-p(X),1/X-(2147483647+1)=0.",
     ] {
@@ -265,14 +294,13 @@ fn candidate_gates_cannot_hide_fatal_source_arithmetic() {
 }
 
 #[test]
-fn independent_constraint_families_do_not_rescue_undefined_ones() {
-    let result = prepared("d(0). {p(X)}:-d(X). :-p(X),1/X=1. :-p(X),X=1.").ground_hybrid();
-    assert!(matches!(
-        result,
-        Err(FormulaFailure::Expansion(
-            ExpansionFailure::Evaluation { .. }
-        ))
-    ));
+fn an_independent_constraint_does_not_hide_an_omitted_one() {
+    // The second constraint is defined at X = 0 and false there. It is a
+    // separate statement: the first constraint's one instance is still
+    // omitted under its own warning, and neither constraint rejects p(0).
+    let owner = hybrid("d(0). {p(X)}:-d(X). :-p(X),1/X=1. :-p(X),X=1.");
+    assert_eq!(zero_divisor_statement(&owner), ":-p(X),1/X=1.");
+    assert_eq!(full_family(&owner), family(&[&["d(0)"], &["d(0)", "p(0)"]]));
 }
 
 #[test]

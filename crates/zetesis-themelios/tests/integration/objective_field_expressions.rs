@@ -1,6 +1,7 @@
 //! Evaluated objective fields share one complete source binding.
 
 use crate::support::source_cases;
+use crate::support::warnings::zero_divisor_statement;
 use zetesis_reference_support::resource_limits;
 
 use std::collections::BTreeSet;
@@ -40,24 +41,38 @@ fn evaluated_fields_match_fresh_clingo() {
 }
 
 #[test]
-fn eligible_field_arithmetic_keeps_located_failures() {
-    for source in [
-        "d(0).#minimize{1/X:d(X)}.",
-        "d(0).#minimize{1,1/X:d(X)}.",
-        "d(2147483647).#minimize{X+1:d(X)}.",
-    ] {
-        let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
-        assert!(
-            matches!(
-                error,
-                zetesis_themelios::FormulaFailure::Expansion(
-                    zetesis_themelios::ExpansionFailure::Evaluation { .. }
-                )
-            ),
-            "{source}: {error}"
+fn eligible_field_zero_divisors_omit_their_rows() {
+    // The weight or the tuple field divides by zero at the one eligible row.
+    // The row is omitted, so no answer is scored, and the objective keeps
+    // the warning.
+    for objective in ["#minimize{1/X:d(X)}.", "#minimize{1,1/X:d(X)}."] {
+        let source = format!("d(0).{objective}");
+        let input = reference::admit(&source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert_eq!(zero_divisor_statement(&input), objective);
+        assert_eq!(
+            reference::exhaustive(&input),
+            Records::from([(BTreeSet::from(["d(0)".into()]), None)]),
+            "{source}"
         );
-        assert!(!error.diagnostics().is_empty());
+        assert!(input.objectives().priorities().is_empty(), "{source}");
     }
+}
+
+#[test]
+fn eligible_field_overflow_keeps_its_located_failure() {
+    let source = "d(2147483647).#minimize{X+1:d(X)}.";
+    let error = reference::admit(source, &FormulaLimits::default()).unwrap_err();
+    assert!(
+        matches!(
+            error,
+            zetesis_themelios::FormulaFailure::Expansion(
+                zetesis_themelios::ExpansionFailure::Evaluation { .. }
+            )
+        ),
+        "{source}: {error}"
+    );
+    assert!(!error.diagnostics().is_empty());
 }
 
 #[test]
@@ -70,17 +85,8 @@ fn mixed_field_carriers_preserve_complete_scored_answers() {
     ]);
     assert_eq!(reference::exhaustive(&input), expected);
     assert_eq!(input.objectives().priorities(), [0]);
-    let [warning] = input.warnings() else {
-        panic!("one omitted source-carrier instance");
-    };
-    assert!(
-        input
-            .source()
-            .expect("source input")
-            .slice(warning.location().expect("parsed source").span)
-            .unwrap()
-            .contains("#minimize")
-    );
+    // One source-carrier instance is omitted, at the objective.
+    assert!(zero_divisor_statement(&input).contains("#minimize"));
 }
 
 #[test]

@@ -429,7 +429,13 @@ pub(crate) fn required(key: &AggregateKey, condition: &[LiteralIr]) -> bool {
 /// head guard selects emitted constraints rather than rows, so source-evidence
 /// traversals do not decide it.
 fn decided_by_join(condition: &[LiteralIr]) -> bool {
-    condition.iter().all(|literal| match literal {
+    condition.iter().all(decided)
+}
+
+/// Whether the join that yields a binding decides `literal` for it, whatever
+/// the interpretation: the literals [`decided_by_join`] names.
+pub(crate) fn decided(literal: &LiteralIr) -> bool {
+    match literal {
         LiteralIr::Compare(..)
         | LiteralIr::ArgumentCheck { .. }
         | LiteralIr::TupleCompare(..)
@@ -442,7 +448,7 @@ fn decided_by_join(condition: &[LiteralIr]) -> bool {
         | LiteralIr::HeadGuard(_)
         | LiteralIr::Conditional(_)
         | LiteralIr::Aggregate(_) => false,
-    })
+    }
 }
 pub(crate) enum AggregateKey {
     Tuple(Vec<CoreTerm>),

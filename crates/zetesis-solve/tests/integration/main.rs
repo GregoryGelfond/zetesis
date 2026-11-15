@@ -16,6 +16,7 @@ mod positive_sessions;
 mod stratified_sessions;
 mod projected_reference;
 mod projected_sessions;
+mod projected_objectives;
 mod region_workers;
 mod retained_models;
 mod retention_limits;

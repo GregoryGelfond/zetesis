@@ -1,3 +1,5 @@
+mod original_work;
+
 use super::super::preparation::{Preparation, PreparedGraph};
 use super::*;
 use zetesis_ferraris::{AdmissionLimits, Node};
@@ -704,5 +706,78 @@ fn residual_decode_cannot_borrow_one_extra_byte_reserved_for_the_next_slate() {
     assert_eq!(
         admit_decode_storage(other, u128::from(stage) + 1, output.accounted),
         Err(Stop::StorageLimit)
+    );
+}
+
+#[test]
+fn shared_threshold_sweeps_keep_exact_receipt_boundaries() {
+    use zetesis_ferraris::{FormulaNodes, FormulaParts};
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap());
+    let mut transaction = nodes.transaction();
+    let roots = transaction
+        .push_threshold_family(&[0, 1], &[1, 2], &[1, 2], usize::MAX, usize::MAX)
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(2, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+    let graph = graph(&theory, &device()).unwrap();
+    // The original pass still charges both guards. Only one weighted row
+    // bounds/forcing scan belongs to each frozen sweep; both guard checks stay.
+    assert_eq!(graph.schedule.setup_work, 278);
+    assert_eq!(graph.shape.sweep_work, 383);
+    assert_eq!(graph.schedule.levels, 2);
+    for sweeps in [1_u32, 2] {
+        for below in [0_u32, 1] {
+            let limits = FormulaLimits {
+                max_work_per_candidate: 278 + sweeps * 385 - below,
+                ..Default::default()
+            };
+            let plan = Plan::new(&graph, 1, limits, &device(), false, 1).unwrap();
+            assert_eq!((plan.setup, plan.sweep), (278, 385));
+            let completed = sweeps - below;
+            let work = plan.setup + completed * plan.sweep;
+            let words = [1, 0, 5, completed, work, MAGIC, 0, 0];
+            let rows = decode(
+                &words,
+                &plan,
+                &[3],
+                &zetesis_algebra::Cancellation::default(),
+            )
+            .unwrap();
+            assert!(matches!(
+                rows[0].verdict(),
+                FormulaVerdict::Residual(ResidualReason::WorkLimit, _)
+            ));
+            let mut wrong = words;
+            wrong[4] += 1;
+            assert_eq!(
+                decode(
+                    &wrong,
+                    &plan,
+                    &[3],
+                    &zetesis_algebra::Cancellation::default()
+                )
+                .unwrap_err()
+                .kind(),
+                GpuErrorKind::Readback
+            );
+        }
+    }
+    assert_eq!(
+        Plan::new(
+            &graph,
+            1,
+            FormulaLimits {
+                max_work_per_candidate: 277,
+                ..Default::default()
+            },
+            &device(),
+            false,
+            1
+        )
+        .err()
+        .unwrap()
+        .kind(),
+        GpuErrorKind::Capacity
     );
 }

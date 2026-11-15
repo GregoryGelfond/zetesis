@@ -1,6 +1,7 @@
 //! Scalar data evaluation retains complete original and frozen source semantics.
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement_in;
 
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
@@ -114,7 +115,6 @@ fn arithmetic_refusals_retain_the_source_rule() {
         ("d(-2147483647-1). p(X\\(-1)):-d(X).", EvalError::Overflow),
         ("d(-2147483647-1). p(-X):-d(X).", EvalError::Overflow),
         ("d(-2147483647-1). p(|X|):-d(X).", EvalError::Overflow),
-        ("d(0). p(1/X):-d(X).", EvalError::Undefined),
         ("d(-1). p(2**X):-d(X).", EvalError::Undefined),
         ("d(a). p(X+1):-d(X).", EvalError::Undefined),
         ("d(f(1)). p(X+1):-d(X).", EvalError::Undefined),
@@ -147,6 +147,23 @@ fn arithmetic_refusals_retain_the_source_rule() {
             "exact source rule location: {source}"
         );
     }
+}
+
+#[test]
+fn a_zero_divisor_warning_retains_the_source_rule() {
+    let source = "d(0). p(1/X):-d(X).";
+    let source_id = SourceId::new(29);
+    let admitted = admission::admitted(source_id, source);
+    // The head divides by zero at the one row: the instance is omitted, and
+    // the warning is located at exactly the rule.
+    assert_eq!(
+        zero_divisor_statement_in(source_id, &admitted),
+        &source[source.find("p(").unwrap()..],
+        "exact source rule location"
+    );
+    let expected = reference::native(&formula("d(0)."));
+    assert_eq!(reference::native(&admitted), expected);
+    assert_eq!(reference::exhaustive(&admitted), expected);
 }
 
 #[test]

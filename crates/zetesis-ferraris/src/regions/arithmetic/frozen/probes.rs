@@ -127,7 +127,7 @@ impl<'a> Probe<'a> {
         let mut storage = Storage::with_live_bytes(storage.bytes());
         let mut known = None;
         loop {
-            let attempt = self.narrower.narrow_frozen_known_reserved(
+            let attempt = self.narrower.propagate_frozen_known_reserved(
                 self.subject,
                 &mut self.region,
                 &mut self.retired,

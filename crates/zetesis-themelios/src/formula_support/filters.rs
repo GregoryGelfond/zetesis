@@ -17,6 +17,8 @@ pub(super) enum Selection {
     Defined(bool),
     Excluded,
     Zero(ExpansionFailure),
+    /// The row holds; only the guard checked beside it divides by zero.
+    UndefinedGuard(ExpansionFailure),
 }
 
 impl Join<'_, '_> {
@@ -98,15 +100,11 @@ impl Join<'_, '_> {
                 &mut failure,
             )?;
         }
-        for expression in self.head_bounds.iter().map(|guard| &guard.bound).chain(
-            self.checked_guard
-                .into_iter()
-                .flat_map(crate::formula_guard::Guard::expressions),
-        ) {
+        for guard in self.head_bounds {
             let result = self
                 .evaluation
                 .source_expression(
-                    expression,
+                    &guard.bound,
                     |variable| binding.key(variable, location),
                     computation,
                     limits,
@@ -122,7 +120,18 @@ impl Join<'_, '_> {
             )?;
         }
         match failure {
-            None => Ok(Selection::Defined(passes)),
+            None if passes => {
+                // The guard is a consequent, read only under a row that
+                // holds: its condition comes first.
+                let undefined = consequent_zero(
+                    self.checked_guard,
+                    &mut self.evaluation,
+                    &binding,
+                    super::Context::new(computation, limits, counters, location),
+                )?;
+                Ok(undefined.map_or(Selection::Defined(true), Selection::UndefinedGuard))
+            }
+            None => Ok(Selection::Defined(false)),
             Some(_) if excluded => Ok(Selection::Excluded),
             Some((error, true)) => Ok(Selection::Zero(error)),
             Some((error, false)) => Err(error.into()),
@@ -130,10 +139,61 @@ impl Join<'_, '_> {
     }
 }
 
+/// The zero divisor that `guard`, checked beside a row that holds, meets
+/// under `binding`, if it leaves the guard undefined. The guard is a
+/// consequent, not part of the row, and is evaluated as its consumer
+/// evaluates it, so a chain that a false link decides is no zero divisor
+/// here either. Its fatal failure is returned and refuses as the row's own
+/// would. Its zero divisor is returned apart: the row stays, and the
+/// consequent is read as false.
+fn consequent_zero(
+    guard: Option<&crate::formula_guard::Guard>,
+    evaluation: &mut Evaluation,
+    binding: &Binding,
+    context: super::Context<'_, &mut Computation<'_, '_>>,
+) -> Result<Option<ExpansionFailure>, FormulaFailure> {
+    let super::Context {
+        computation,
+        work:
+            super::GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    let Some(guard) = guard else {
+        return Ok(None);
+    };
+    match guard.evaluate_in(binding, evaluation, computation, limits, counters, location) {
+        Ok(_) => Ok(None),
+        Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. }))
+            if evaluation.zero_divisor() =>
+        {
+            Ok(Some(error))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// The checks of a row whose generators gave it no binding: the join's
+/// literals, what each prefix of its order decides, and the consequent guard
+/// checked beside the row, if one is.
+pub(super) type Checks<'a> = (
+    &'a [LiteralIr],
+    &'a super::order::Decisions,
+    Option<&'a crate::formula_guard::Guard>,
+);
+
 /// Available checks may exclude a failed generator. A failed check never
-/// excludes, and an unavailable generated input is not read here.
+/// excludes, and an unavailable generated input is not read here. `checked`
+/// is the consequent guard checked beside the row. It is read here only when
+/// the failed generator is an interval of its own: no frame will then read
+/// it, so its terms are read with the row's checks, and a fatal failure in
+/// one refuses as theirs does. A guard that owns no failed interval is a
+/// consequent beside its condition's rows, and a row that a failed
+/// generator omits does not reach its consequent.
 pub(super) fn excludes(
-    (literals, decisions): (&[LiteralIr], &super::order::Decisions),
+    (literals, decisions, checked): Checks<'_>,
     evaluation: &mut Evaluation,
     binding: &Binding,
     computation: &mut Computation<'_, '_>,
@@ -162,10 +222,155 @@ pub(super) fn excludes(
             Err(error) => return Err(error),
         }
     }
+    if let Some(guard) = checked
+        && lacks_interval(guard, binding, location)?
+        && let Some(error) = fatal_term(
+            guard,
+            binding,
+            evaluation,
+            computation,
+            limits,
+            counters,
+            location,
+        )?
+    {
+        fatal.get_or_insert(error);
+    }
     if !excluded && let Some(error) = fatal {
         return Err(error.into());
     }
     Ok(excluded)
+}
+
+/// The generator of `slot` has no value under `binding`, which holds the
+/// values of the generators before it: an interval is empty there. A guard
+/// that owns the interval has no instance under those values, and no frame
+/// will evaluate its other terms. They are read here, as `excludes` reads
+/// them when a generator fails: a fatal failure in one refuses, whatever
+/// order the terms stand in, unless an available comparison excludes the
+/// row. A zero divisor is not kept, since nothing is omitted where there is
+/// no instance. Every other check is left to the frames that evaluate it.
+pub(super) fn valueless(
+    (literals, decisions, checked): Checks<'_>,
+    slot: usize,
+    evaluation: &mut Evaluation,
+    binding: &Binding,
+    context: super::Context<'_, &mut Computation<'_, '_>>,
+) -> Result<(), FormulaFailure> {
+    let super::Context {
+        computation,
+        work:
+            super::GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    let mut fatal = None;
+    let guards = literals.iter().filter_map(|literal| match literal {
+        LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => Some(guard),
+        _ => None,
+    });
+    for guard in guards.chain(checked) {
+        if !guard.owns(slot) {
+            continue;
+        }
+        if let Some(error) = fatal_term(
+            guard,
+            binding,
+            evaluation,
+            computation,
+            limits,
+            counters,
+            location,
+        )? {
+            fatal.get_or_insert(error);
+        }
+    }
+    let Some(error) = fatal else {
+        return Ok(());
+    };
+    if excludes(
+        (literals, decisions, None),
+        evaluation,
+        binding,
+        computation,
+        limits,
+        counters,
+        location,
+    )? {
+        return Ok(());
+    }
+    Err(error.into())
+}
+
+/// Whether an interval among `guard`'s own terms has no value in `binding`.
+fn lacks_interval(
+    guard: &crate::formula_guard::Guard,
+    binding: &Binding,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    for &slot in guard.intervals() {
+        if partial_input(binding, slot, location)?.is_none() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The fatal failure of a term of `guard` under `binding`, an absent
+/// generated value being an unavailable input. A zero divisor is none.
+fn fatal_term(
+    guard: &crate::formula_guard::Guard,
+    binding: &Binding,
+    evaluation: &mut Evaluation,
+    computation: &mut Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Option<ExpansionFailure>, FormulaFailure> {
+    match pending_guard(
+        guard,
+        binding,
+        evaluation,
+        computation,
+        limits,
+        counters,
+        location,
+    ) {
+        Ok(()) => Ok(None),
+        Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
+            Ok((!evaluation.zero_divisor()).then_some(error))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Read every term of `guard` under `binding`, an absent generated value
+/// being an unavailable input, and return the first failure: a fatal one
+/// before a zero divisor.
+fn pending_guard(
+    guard: &crate::formula_guard::Guard,
+    binding: &Binding,
+    evaluation: &mut Evaluation,
+    computation: &mut Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    let mut failures = Failures::default();
+    for expression in guard.expressions() {
+        let result = evaluation.source_partial(
+            expression,
+            |slot| partial_input(binding, slot, location),
+            computation,
+            limits,
+            counters,
+            location,
+        );
+        failures.value(result, evaluation.zero_divisor())?;
+    }
+    failures.finish(evaluation)
 }
 
 fn retain(
@@ -234,6 +439,20 @@ fn pending_check(
         let right = resolve(read, &right, limits, counters, location)?;
         return compare(left, relation, right, limits, counters, location);
     }
+    if let LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) = literal {
+        pending_guard(
+            guard,
+            binding,
+            evaluation,
+            computation,
+            limits,
+            counters,
+            location,
+        )?;
+        // A guard is no ordinary relational comparison and cannot exclude
+        // arithmetic in a neighboring expression, whatever its truth value.
+        return Ok(true);
+    }
     let mut failures = Failures::default();
     let mut visit = |expression: &Expression| -> Result<(), FormulaFailure> {
         let result = evaluation.source_partial(
@@ -250,11 +469,6 @@ fn pending_check(
     match literal {
         LiteralIr::TupleCompare(left, _, right) => {
             for expression in left.iter().chain(right) {
-                visit(expression)?;
-            }
-        }
-        LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => {
-            for expression in guard.expressions() {
                 visit(expression)?;
             }
         }

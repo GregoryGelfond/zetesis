@@ -94,15 +94,20 @@ pub struct FormulaLimits {
     /// relation/equality metadata, postings, borrowed snapshot objects, reusable
     /// query-workspace/index capacity and simultaneous row masks, including
     /// named query frames, aggregate coordinate/cache buffers, contribution
-    /// buffers, operation scratch and growth overlap. The authority
-    /// counts canonical payload once. Allocator/tree/control-runtime overhead
-    /// and other grounding state remain separate; this is not a total-memory
-    /// or process RSS ceiling.
+    /// buffers, operation scratch and growth overlap. Shared aggregate-family
+    /// owners include their named headers, reference-count control words and
+    /// retained carrier/occurrence capacity. Canonical payload is counted once.
+    /// Unmodelled allocator/tree/runtime overhead and other grounding state
+    /// remain separate; this is not a total-memory or process RSS ceiling.
     pub max_support_bytes: usize,
-    /// Distinct aggregate/outer-binding entries retained during final grounding.
+    /// Distinct aggregate/input entries retained during final grounding.
+    /// A completed candidate carrier consumes one row before native conditions
+    /// or guard roots are emitted, even if later filters emit no formula.
+    /// Its native stage shares that row; incomplete stages are not published.
     pub max_aggregate_cache_rows: usize,
     /// Retained aggregate context rows, key-coordinate pool and lookup index
-    /// capacities. Canonical payload is shared with support; allocator overhead
+    /// capacities, including rows that retain a completed carrier before native
+    /// emission. Canonical payload is shared with support; allocator overhead
     /// is excluded. Replacement overlap is checked by `max_support_bytes`.
     pub max_aggregate_cache_key_bytes: usize,
     /// Total coalesced tuple conditions retained by the final grounding cache.
@@ -228,7 +233,8 @@ pub enum FormulaResource {
     SupportIndexEntries,
     /// Live authored support snapshot, membership-index and query capacity.
     SupportBytes,
-    /// Final-grounding aggregate binding cache entries.
+    /// Final-grounding aggregate/input entries, including completed carriers
+    /// whose native conditions and guard roots have not yet been emitted.
     AggregateCacheRows,
     /// Distinct owned elements in one unconditional disjunctive head.
     DisjunctionElements,
@@ -847,6 +853,13 @@ impl AdmittedFormula {
     pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
         &self.compiled.objectives
     }
+
+    /// Authenticated source for bounded objective read-set projection.
+    /// The borrow retains this owner's complete catalog and original theory.
+    #[must_use]
+    pub fn objective_source(&self) -> crate::objective_bound::ObjectiveSource<'_> {
+        crate::objective_bound::ObjectiveSource::from_compiled(&self.compiled)
+    }
     /// Original objective element origins, parallel to active objective templates.
     #[must_use]
     pub fn objective_origins(&self) -> &[Vec<ProgramSite>] {
@@ -1012,6 +1025,13 @@ impl AdmittedFormulaBundle {
     pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
         &self.compiled.objectives
     }
+
+    /// Authenticated source for bounded objective read-set projection.
+    /// The borrow retains this owner's complete catalog and original theory.
+    #[must_use]
+    pub fn objective_source(&self) -> crate::objective_bound::ObjectiveSource<'_> {
+        crate::objective_bound::ObjectiveSource::from_compiled(&self.compiled)
+    }
     /// Original objective element origins, parallel to active objective templates.
     #[must_use]
     pub fn objective_origins(&self) -> &[Vec<ProgramSite>] {
@@ -1135,7 +1155,9 @@ pub(crate) struct Compiled {
 /// positive atom permissions are still validated and compiled separately.
 /// Conditional local joins inherit the complete
 /// outer binding; neither local witnesses nor vacuity establishes an aggregate
-/// equality. Every generated rule retains its original equalities.
+/// equality. Every generated rule retains its original equalities; an
+/// assignment every tuple of which is required over certain predicates has
+/// one value, and its equality is emitted as the true formula it is.
 /// Default-negated anonymous consequent positions project the complete finite
 /// witness family before applying `not` or `not not`. Anonymous positions may
 /// occur inside positive function or tuple constructors; named and evaluated
@@ -1186,7 +1208,7 @@ pub(crate) struct Compiled {
 /// contribute no key after arithmetic validation. Weight, priority and tuple
 /// fields participate jointly in the source-family policy below, including
 /// when the weight is nonnumeric. Pooled fragments of one original objective
-/// element share its family; distinct elements cannot rescue each other.
+/// element share its family and its one warning.
 /// Dynamic priorities read ordinary bound positions or generated values with a
 /// completed source-carrier certificate. Eligibility precision is selected per
 /// objective: qualified positive dependencies can use a tighter carrier, while
@@ -1205,8 +1227,8 @@ pub(crate) struct Compiled {
 ///
 /// # Errors
 /// Returns a typed located refusal on diagnostics, unsupported syntax, unsafe
-/// variables, fatal arithmetic, an entirely undefined source family, or any
-/// exceeded source/expansion/formula limit.
+/// variables, fatal arithmetic, or any exceeded source/expansion/formula
+/// limit.
 /// A comparison over relationally bound variables that is defined and false
 /// excludes its substitution, and nothing in an excluded substitution is
 /// reached. Arithmetic is checked on every complete possible-positive
@@ -1223,12 +1245,14 @@ pub(crate) struct Compiled {
 /// the admitted program. Rule-body scratch uses the existing theory atom/node
 /// ceilings; objective-body scratch retains its independent ceilings. Cumulative
 /// source work still applies, including atom-key argument scans.
-/// Only evaluated numeric division or remainder by zero may omit a source
-/// instance. Admission requires a jointly defined instance in that same complete
-/// original family; a defined but false instance is a witness. An empty positive
-/// join is silent. Each local choice or aggregate element has a separate family
-/// for each fixed outer binding. Successful owners retain typed warnings,
-/// deduplicated by statement site and bounded by [`FormulaLimits::max_warnings`].
+/// Only evaluated numeric division or remainder by zero omits a source
+/// instance. It does so whatever else the instance's family holds: a family of
+/// zero-divisor instances alone contributes none, and the program is admitted.
+/// A conditional literal keeps the instance under its condition, with a false
+/// consequent in a body and a true one in a head. An empty positive join is
+/// silent. Successful owners retain typed warnings for the statements that
+/// omitted an instance, deduplicated by statement site and bounded by
+/// [`FormulaLimits::max_warnings`].
 /// Overflow, nonnumeric arithmetic and invalid exponents remain fatal. Source
 /// evaluation checks independent expression branches and fields after a zero
 /// divisor within each reached phase. An operation depending on an undefined

@@ -25,6 +25,7 @@ fn input(admitted: &AdmittedFormula) -> Input<'_> {
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: admitted.objectives(),
+        objective_source: None,
         required_choices: admitted.required_choices(),
         certificate_order: zetesis_stable::CertificateOrder::TightFirst,
     }

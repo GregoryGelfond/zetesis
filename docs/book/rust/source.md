@@ -582,19 +582,36 @@ Configure eager support storage through `FormulaLimits::max_support_bytes`
 before preparation. The default is 128 MiB for the support authority's canonical
 payload, identity indexes and current prefix, plus relation metadata, postings,
 borrowed snapshots, query capacity and construction scratch. Canonical support
-payload is counted by its authority once. Allocator/tree/control-runtime overhead
-and unrelated grounding state remain separate; this is not a total-memory bound.
+payload is counted by its authority once. Shared aggregate-family headers,
+reference-count control words and retained carrier/occurrence buffers are named
+support storage. Unmodelled allocator/tree/runtime overhead and unrelated
+grounding state remain separate; this is not a total-memory bound.
 For the ordinary resource policy, use `zetesis_solve::Resources` to derive
 admission, expansion, formula and session settings from one memory allowance
 and thread count. The CLI uses this same policy. `SolveConfig` alone applies
 after the formula owner has already been constructed.
+
+During final grounding, `max_aggregate_cache_rows` and
+`max_aggregate_cache_key_bytes` include completed candidate carriers before
+native aggregate emission. Later conditions and guard roots share that entry;
+their element/root limits keep their native units. A carrier may consume a row
+even when a later filter emits no instance, so a tight limit can refuse earlier.
+These are the same typed, cumulative source limits; refusal does not silently
+disable family retention or publish an incomplete stage.
 
 Choose positive joins separately through the preparation's
 `with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` method.
 The default `Indexed` strategy probes existing value postings. After a flat
 constraint establishes finite arithmetic totality, a computed equality may
 supply a necessary input domain to the shared table selector under either
-strategy. Unrestricted probes still follow the requested strategy. `Table`
+strategy. Under `Indexed` the selector prepares a table at once only while
+its row masks are small. It leaves a larger relation to the ordinary probe
+and the residual comparison, and prepares its table once the rows the
+snapshot's joins have read in its place have cost what the table would. A
+table is prepared only while the tables take at most half of the room the
+support's limits leave, and otherwise the join scans
+([source instances](../architecture/grounding.md#source-instances-as-a-composition)).
+Unrestricted probes still follow the requested strategy. `Table`
 reuses support masks for all applicable flat positive patterns over completed
 eager support; structural patterns and support-growth rounds keep indexed joins. The bundle
 preparation exposes the same method, and the CLI maps `--formula-joins table`
@@ -602,8 +619,8 @@ to it. The choice retains the preparation's source identity and remaining budget
 
 The private query workspace owns cached indices and accounts for simultaneous
 selected masks, scratch and cumulative work. These capacities compose with the
-same support authority's payload charge. Allocator/tree/control-runtime overhead
-and other grounding state remain separate; the limit is not RSS. An exhausted table operation returns
+same support authority's payload charge. Unmodelled allocator/tree/runtime
+overhead and other grounding state remain separate; the limit is not RSS. An exhausted table operation returns
 a located failure without silently choosing a different strategy. The existing
 matcher and required authored-body validation remain shared. Choosing table joins
 does not launch ordinary Rayon or GPU grounding; later answer-set execution has
@@ -716,11 +733,10 @@ for the exact named-capacity scope and preservation premises.
 ## Partial arithmetic families
 
 Only an evaluated numeric division or remainder by zero can omit a source
-instance. A nonempty original rule family needs at least one complete
-substitution whose reached arithmetic is jointly defined; a defined comparison
-that is false still supplies that witness. Thus `d(0;2). p(X):-d(X),1/X=1.`
-keeps just the facts and reports a warning, whereas the same rule over `d(0)`
-is refused. Empty positive joins are valid and silent. An ordinary comparison
+instance, and it always does: the instance is dropped and its statement
+reports a warning. Thus `d(0;2). p(X):-d(X),1/X=1.` keeps just the facts and
+reports a warning, and so does the same rule over `d(0)`, whose family has no
+other instance. Empty positive joins are valid and silent. An ordinary comparison
 over relationally bound variables, such as `X!=0`, explicitly excludes that
 substitution and produces no warning for its zero divisor.
 
@@ -741,10 +757,12 @@ The decisive traversal reads completed support, before formula emission.
 It does not use comparison-pruned candidate domains, support delta partitions
 or already-produced-head shortcuts as family evidence. Normalized fragments of
 one original rule combine their evidence. Each nested choice, aggregate or
-conditional local family is judged separately for its fixed outer binding, so
-a valid family at another outer binding cannot rescue it. Alternatives of one
-authored local element share evidence; distinct authored elements do not. An
-undefined conditional consequent omits its whole local implication. Defined
+conditional local family is traversed for its fixed outer binding. The
+alternatives of one authored conditional consequent belong to one instance: it
+keeps the alternatives that are defined, and when every one divides by zero
+the consequent is false, so the implication requires its condition to be
+false. The head of a conditional disjunct that divides by zero in every
+instance under a condition binding is true under that binding. Defined
 false consequents and empty nonarithmetic witness sets retain their logical
 meaning, including under default negation. The additional complete
 traversal spends the existing grounding work and substitution ceilings;

@@ -1,15 +1,16 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use reference::{Models, exhaustive, holds, native, values};
+use crate::support::warnings::zero_divisor_statement_in;
+use reference::{Models, exhaustive, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use themelios_base::source::SourceId;
-use zetesis_reference_support::{canonical, resource_limits};
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 use crate::support::objective_dependency_records as objective_dependencies;
@@ -224,48 +225,7 @@ fn stability_matches_subset_enumeration() {
 
 #[test]
 fn frozen_truth_matches_finite_substitutions() {
-    let mut pairs = 0;
-    for &(source, expanded) in CASES {
-        let left = input(source);
-        let right = input(expanded);
-        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
-        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
-        assert_eq!(
-            names.iter().collect::<BTreeSet<_>>(),
-            other.iter().collect(),
-            "{source}"
-        );
-        assert!(names.len() <= 7);
-        let remap = |mask: usize| {
-            names.iter().enumerate().fold(0, |result, (index, name)| {
-                result
-                    | (usize::from(mask & (1 << index) != 0)
-                        << other.iter().position(|other| other == name).unwrap())
-            })
-        };
-        for outer in 0..1 << names.len() {
-            let a = values(left.theory(), outer, None);
-            let b = values(right.theory(), remap(outer), None);
-            assert_eq!(
-                holds(left.theory(), &a),
-                holds(right.theory(), &b),
-                "{source}"
-            );
-            // All M/J pairs cover the required subset pairs and other contexts.
-            for inner in 0..1 << names.len() {
-                assert_eq!(
-                    holds(left.theory(), &values(left.theory(), inner, Some(&a))),
-                    holds(
-                        right.theory(),
-                        &values(right.theory(), remap(inner), Some(&b))
-                    ),
-                    "{source}: M={outer} J={inner}"
-                );
-                pairs += 1;
-            }
-        }
-    }
-    println!("source_pairs={} frozen_pairs={pairs}", CASES.len());
+    reference::frozen_truth_matches(CASES.iter().copied(), input);
 }
 
 #[test]
@@ -345,18 +305,15 @@ fn empty_maximum_allows_every_finite_choice_count() {
 }
 
 #[test]
-fn undefined_consumers_refuse_the_complete_input() {
-    let error = admit_formula(
-        "q(N/0):-N=#count{}.".into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(
-        error,
-        FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-    ));
+fn an_undefined_consumer_omits_its_only_instance() {
+    let source = "q(N/0):-N=#count{}.";
+    let admitted = input(source);
+    // The count's one value divides by zero in the head, so the rule has no
+    // instance and keeps the warning.
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), source);
+    let expected = Models::from([BTreeSet::new()]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
 }
 
 #[test]
@@ -372,18 +329,7 @@ fn mixed_consumers_keep_the_defined_family() {
     let source = "{p}.q(Y):-N=#count{1:p},N>0,Y=1/N.";
     let admitted = input(source);
     // N is generated, so N>0 does not exclude the zero proposal from the family.
-    let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
-        panic!("one zero-divisor warning: {:?}", admitted.warnings());
-    };
-    assert_eq!(location.location().expect("parsed source").source, SOURCE);
-    assert_eq!(
-        admitted
-            .source()
-            .expect("source input")
-            .slice(location.location().expect("parsed source").span)
-            .unwrap(),
-        &source[4..]
-    );
+    assert_eq!(zero_divisor_statement_in(SOURCE, &admitted), &source[4..]);
     let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into(), "q(1)".into()])]);
     assert_eq!(native(&admitted), expected);
     assert_eq!(exhaustive(&admitted), expected);

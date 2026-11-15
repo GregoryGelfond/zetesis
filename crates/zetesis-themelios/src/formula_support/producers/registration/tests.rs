@@ -3,6 +3,7 @@
 //! nothing new.
 
 use std::cell::Cell;
+use std::fmt::Write as _;
 
 use super::{Producer, Registration, testing};
 use crate::formula::{Compiled, Preparation};
@@ -73,7 +74,7 @@ fn a_flat_normal_rule_is_certified_with_its_positive_occurrences() {
     let registration = registered(&preparation);
     let rule = &preparation.program.rules_without_facts()[0];
     let positive: Vec<_> = (0..rule.body.len())
-        .filter(|&occurrence| super::positive(&rule.body[occurrence]))
+        .filter(|&occurrence| super::positive(&rule.body[occurrence]).is_some())
         .collect();
     assert_eq!(positive.len(), 2);
     assert_eq!(registration.producers, [Producer::Certified(0..2)]);
@@ -328,14 +329,44 @@ fn equivalent(source: &str) -> u64 {
 /// The support, theory and atoms of `source` agree with the reference that
 /// traverses every rich producer in every round, which skips nothing. Returns
 /// the visits the schedule skipped.
+///
+/// The comparison runs as a solve does, with certainty, unless the source
+/// lists an assignment element. A deferred producer's assignment over certain
+/// atoms then proposes one value where the reference, which defers nothing
+/// and so lists nothing, proposes every value its tuples allow: the supports
+/// differ by design. For such a source both sides run without certainty, the
+/// shipped route is checked to support nothing the reference does not, and
+/// `formula_support::certain` compares the answer sets.
 fn agrees_with_reference(source: &str) -> u64 {
-    let (actual, published, skipped) = ground(source);
-    let (reference, expected, traversed) = testing::with_every_round_traversed(|| ground(source));
+    use crate::formula_support::certain::testing::without_certainty;
     let support = |rounds: Vec<Vec<String>>| {
         let mut atoms: Vec<String> = rounds.into_iter().flatten().collect();
         atoms.sort();
         atoms
     };
+    let every_round = || testing::with_every_round_traversed(|| ground(source));
+    let narrowed = crate::formula_support::testing::certainty(source)
+        .is_some_and(|certainty| !certainty.elements().is_empty());
+    if narrowed {
+        let (_, shipped, _) = ground(source);
+        let (_, reference, _) = every_round();
+        let allowed = support(reference);
+        assert!(
+            support(shipped)
+                .iter()
+                .all(|atom| allowed.binary_search(atom).is_ok()),
+            "certainty supports an atom the reference does not"
+        );
+    }
+    let configured = |run: &dyn Fn() -> (Compiled, Vec<Vec<String>>, u64)| {
+        if narrowed {
+            without_certainty(run)
+        } else {
+            run()
+        }
+    };
+    let (actual, published, skipped) = configured(&|| ground(source));
+    let (reference, expected, traversed) = configured(&every_round);
     assert_eq!(support(published), support(expected));
     let atoms = |compiled: &Compiled| {
         compiled
@@ -454,6 +485,246 @@ fn a_producer_reading_its_own_component_keeps_traversing_on_change() {
     // The count reads s and derives s: one component, so the producer cannot
     // wait for it and is traversed whenever s gains rows.
     let source = "s(0). s(N) :- N = #count{X : s(X)}, N < 4.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert!(traversals > 1, "{traversals}");
+    assert_eq!(deferred, 0);
+}
+
+/// A count over the predicate its rule derives and over the fact `f`, which
+/// an earlier component holds.
+const HELD_BACK: &str = "f(1). {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 5.";
+
+#[test]
+fn the_visits_of_a_held_back_producer_follow_its_gate() {
+    // Round one: waiting, while the fact enters. Round two: still waiting at
+    // its own visit; `f` gained nothing, so the schedule traverses the rule
+    // after the round's other producers and it derives `p(1)`. Round three:
+    // `p` gained a row, so the rule is traversed as any rich producer is.
+    agrees_with_reference(HELD_BACK);
+    let (traversals, deferred) = rich_visits(HELD_BACK);
+    assert_eq!(traversals, 2);
+    assert_eq!(deferred, 2);
+}
+
+#[test]
+fn a_producer_held_back_is_first_traversed_when_its_element_is_complete() {
+    // `f` grows for four rounds. The count's rule is held back until then and
+    // is traversed once in full, deriving `p(4)` from the four required
+    // tuples, and then once for each head it derived, `p(4)` and `p(5)`:
+    // every change of `f` would otherwise traverse it as well.
+    let source = "f(0). f(Y) :- f(X), X < 3, Y = X + 1. \
+                  {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 6.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert_eq!(traversals, 3);
+    assert!(deferred >= 4, "{deferred}");
+}
+
+#[test]
+fn a_producer_held_back_for_an_uncertain_element_supports_what_the_reference_does() {
+    // The element reads a choice, so nothing is required; the rule only
+    // waits, and derives the same heads later.
+    equivalent("d(1). {g(X) : d(X)}. {p(N)} :- N = #count { V : p(V); V : g(V) }, N < 3.");
+}
+
+#[test]
+fn a_reader_of_a_held_back_producers_head_waits_for_it() {
+    // `q` counts `p`. Its rule is deferred, and `p`'s component cannot reach
+    // its fixed point before the held-back rule has been traversed.
+    let source = format!("{HELD_BACK} q(M) :- M = #count {{ V : p(V) }}.");
+    agrees_with_reference(&source);
+    let (compiled, _, _) = ground(&source);
+    let counts: Vec<_> = compiled
+        .atoms
+        .atoms()
+        .iter()
+        .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+        .filter(|atom| atom.predicate().name() == "q")
+        .map(|atom| atom.values().to_vec())
+        .collect();
+    assert_eq!(
+        counts,
+        [
+            vec![zetesis_core::Value::Number(0)],
+            vec![zetesis_core::Value::Number(1)]
+        ]
+    );
+}
+
+#[test]
+fn a_chain_of_strata_is_traversed_in_one_round() {
+    // Each rule negates the head of the one before. A rule reads the atoms
+    // it negates over the snapshot and the round's pending atoms, so one
+    // test queues the whole chain in dependency order: the rounds that
+    // publish atoms do not grow with the chain's length.
+    let rounds = |length: usize| {
+        let mut source = String::from("d(1..2). p0(X) :- d(X), X < 2.");
+        for stratum in 1..=length {
+            write!(source, " p{stratum}(X) :- d(X), not p{}(X).", stratum - 1).unwrap();
+        }
+        ground(&source).1.len()
+    };
+    assert_eq!(rounds(2), rounds(8));
+}
+
+#[test]
+fn a_rule_negating_no_decided_atom_is_not_held_back() {
+    // `u` is chosen, so no negation of it can be decided. The rule of `d`
+    // would wait for `u`'s component and gain nothing by it: it is released
+    // before the first round and visited as any certified rule, with no
+    // deferred visit and no traversal by the schedule.
+    let source = "c(1). {u(1)}. d(X) :- c(X), not u(X).";
+    agrees_with_reference(source);
+    assert_eq!(rich_visits(source), (0, 0));
+}
+
+#[test]
+fn a_rule_negating_a_decided_atom_is_held_back_beside_an_undecided_one() {
+    // `e` is certain, so the rule of `d` waits to decide its negation, and
+    // waits for `u` with it: it is visited without a traversal while the
+    // facts and `e` enter, and the schedule then traverses it once. No row
+    // is blocked, so the support is the reference's.
+    let source = "c(1). f(2). {u(1)}. e(X) :- f(X). d(X) :- c(X), not e(X), not u(X).";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert_eq!(traversals, 1);
+    assert!(deferred >= 1, "{deferred}");
+}
+
+#[test]
+fn a_held_certified_producer_is_visited_only_when_a_predicate_it_reads_grows() {
+    // `s` is certain and grows for four rounds, so the rule of `d` waits
+    // that long to decide its negation. Its one positive occurrence reads
+    // the fact `c`: the rule is visited in the first round and in the one
+    // after `c` entered, both times without a variant, and in no other
+    // round until the schedule traverses it, once. `s(9)` never holds, so
+    // no row is blocked and the support is the reference's.
+    let source = format!("{GROWING} c(9). d(X) :- c(X), not s(X).");
+    agrees_with_reference(&source);
+    let (traversals, deferred) = rich_visits(&source);
+    assert_eq!(traversals, 1);
+    assert_eq!(deferred, 2);
+}
+
+#[test]
+fn the_wake_set_is_counted_with_the_registration() {
+    // Three predicates, two rules and one positive occurrence: the wake set
+    // keeps its header, an entry for each predicate, one posting and one
+    // word of active rules. The graph's nodes and the occurrence lists it
+    // was prepared from are released.
+    let owner = prepare("p(1). {c}. a(X) :- p(X).");
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let view = owner
+        .catalog
+        .component_view(&limits, &mut counters, owner.location)
+        .unwrap()
+        .unwrap();
+    let mut registration = registered(&owner);
+    let before = registration.bytes();
+    registration
+        .wake(
+            &owner.program,
+            view,
+            0,
+            (&limits, &mut counters, owner.location),
+        )
+        .unwrap();
+    let predicate = size_of::<usize>() + size_of::<std::ops::Range<usize>>();
+    assert_eq!(
+        registration.bytes() - before,
+        size_of::<super::Visits<'_>>() + 3 * predicate + size_of::<usize>() + size_of::<u64>()
+    );
+}
+
+#[test]
+fn the_readiness_test_charges_nothing_once_no_producer_waits() {
+    // `m` waits for the fact's component. `q` is certified, so the schedule
+    // never holds it, and it must not keep the test running.
+    let mut owner = prepare("e(1). t(1). m(N) :- N = #count{X : e(X)}. q(X) :- t(X).");
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let view = owner
+        .catalog
+        .component_view(&limits, &mut counters, owner.location)
+        .unwrap();
+    let mut registration = Registration::prepare(
+        owner.program.rules_without_facts(),
+        view,
+        0,
+        &limits,
+        &mut counters,
+        owner.location,
+    )
+    .unwrap();
+    registration
+        .schedule(
+            &owner.program,
+            view.unwrap(),
+            0,
+            (&limits, &mut counters, owner.location),
+        )
+        .unwrap();
+    let (_relations, delta) = owner
+        .catalog
+        .split(&limits, &mut counters, owner.location)
+        .unwrap();
+    // A round that derived nothing: every component passes and `m` is ready.
+    let ready = |counters: &mut Counters| {
+        registration
+            .mark_ready(&delta, &limits, counters, owner.location)
+            .unwrap()
+    };
+    assert!(ready(&mut counters));
+    assert_eq!(registration.take_ready(), Some(0));
+    assert!(!registration.pending());
+    let before = counters.accounting.work;
+    assert!(!ready(&mut counters));
+    assert_eq!(counters.accounting.work, before);
+}
+
+#[test]
+fn a_producer_past_its_gate_is_traversed_only_when_its_reads_change() {
+    // `s` grows for eight rounds and the count's rule reads none of it: after
+    // its first traversal and the one its own head causes, it is skipped
+    // while `s` keeps the completion going.
+    let source = format!("{HELD_BACK} s(0). s(Y) :- s(X), X < 7, Y = X + 1.");
+    agrees_with_reference(&source);
+    let (traversals, deferred) = rich_visits(&source);
+    assert_eq!(traversals, 2);
+    assert_eq!(deferred, 2);
+}
+
+#[test]
+fn an_element_reading_its_producers_own_component_holds_it_back_for_nothing() {
+    // The element reads the earlier `c` and `n`, which its rule derives: no
+    // fixed point of `c` makes its tuples final, so the rule is traversed
+    // from the first round.
+    let source = "c(1..3). n(0). n(N) :- n(M), M < 2, N = #count { X : c(X), n(X) }.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert!(traversals > 1, "{traversals}");
+    assert_eq!(deferred, 0);
+}
+
+#[test]
+fn an_element_with_a_default_negation_holds_no_producer_back() {
+    // The second element reads the earlier `d`, but also `g` under negation,
+    // which no relation's fixed point decides: the rule is traversed from the
+    // first round, as any rule that reads its own component.
+    let source = "d(1..2). {g(1)}. {p(N)} :- N = #count { V : p(V); V : d(V), not g(V) }, N < 4.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert!(traversals > 1, "{traversals}");
+    assert_eq!(deferred, 0);
+}
+
+#[test]
+fn a_guard_aggregate_holds_no_producer_back() {
+    // The count binds nothing, so it proposes no value and needs no tuple
+    // complete.
+    let source = "d(1..2). p(0). {p(N)} :- p(M), #count { V : d(V) } >= 2, N = M + 1, N < 3.";
     agrees_with_reference(source);
     let (traversals, deferred) = rich_visits(source);
     assert!(traversals > 1, "{traversals}");

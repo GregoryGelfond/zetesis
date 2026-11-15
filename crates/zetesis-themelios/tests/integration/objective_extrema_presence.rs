@@ -33,10 +33,13 @@ fn flat_extrema_preserve_full_model_cost_records() {
 
 #[test]
 fn presence_keeps_the_original_reduct_subject() {
-    for program in [
-        "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).",
-        "{a}.n(N):-N=#max{2:a;foo:a}.p(X):-n(X).",
-        "b.{a}.n(N):-N=#min{2:b;foo:a}.p(X):-n(X).",
+    // Each program with a proposal its assignment supports. In the first two
+    // no answer realizes `n(2)`: `b` is chosen and required to hold, so its
+    // tuple is not required although every answer has it.
+    for (program, proposal) in [
+        ("1{b}1.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).", "n(2)"),
+        ("{a}.n(N):-N=#max{2:a;foo:a}.p(X):-n(X).", "n(2)"),
+        ("b.{a}.n(N):-N=#min{2:b;foo:a}.p(X):-n(X).", "n(2)"),
     ] {
         let original = admit(program, &FormulaLimits::default()).unwrap();
         let observed = admit(
@@ -57,7 +60,8 @@ fn presence_keeps_the_original_reduct_subject() {
             observed
                 .atoms()
                 .iter()
-                .any(|atom| reference::canonical(atom) == "n(2)")
+                .any(|atom| reference::canonical(atom) == proposal),
+            "{program}"
         );
     }
 }

@@ -9,6 +9,7 @@ use zetesis_objective::Score;
 use zetesis_stable::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundError, ObjectiveBoundLimits, ObjectivePlan, ObjectivePlanLimits,
+    ObjectiveProjectionError,
 };
 
 /// A single preparation shared by score reads and optional bound generation.
@@ -17,6 +18,7 @@ pub(crate) struct Preparation {
     plan: Option<ObjectivePlan>,
     work: u64,
     refusal: Option<ObjectiveBoundError>,
+    projection_refusal: Option<ObjectiveProjectionError>,
     choice_refusal: Option<ObjectiveBoundError>,
 }
 
@@ -30,12 +32,29 @@ impl Preparation {
             plan: None,
             work: 0,
             refusal: None,
+            projection_refusal: None,
             choice_refusal: None,
         };
         if !input.objectives.is_present() || options.max_objective_work == 0 {
             return state;
         }
         let limits = plan_limits(options, 0);
+        if let Some(source) = input.objective_source {
+            // Projection owns a separately bounded optional workspace, not a
+            // debit from a global candidate-memory pool. Never retry the legacy
+            // constructor here: exact detailed scoring retains the remaining
+            // objective allowance after this single preparation attempt.
+            let attempt = ObjectivePlan::new_projected(
+                source,
+                limits,
+                options.max_candidate_bytes as u128,
+                cancellation,
+            );
+            state.work = attempt.receipt().statistics().work;
+            state.projection_refusal = attempt.error();
+            state.plan = attempt.into_parts().0.ok();
+            return state;
+        }
         match ObjectivePlan::new(
             input.theory,
             input.atoms.atoms(),
@@ -95,6 +114,9 @@ impl Preparation {
     pub(crate) fn observe(&self, observations: &mut impl ExecutionSink) -> Result<(), SolveError> {
         if let Some(error) = self.refusal {
             observations.record(Event::ObjectiveUnavailable(error))?;
+        }
+        if let Some(error) = self.projection_refusal {
+            observations.record(Event::ObjectiveProjectionUnavailable(error))?;
         }
         if let Some(error) = self.choice_refusal {
             observations.record(Event::ChoiceObjectiveBoundUnavailable(error))?;

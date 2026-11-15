@@ -209,16 +209,20 @@ impl Rows {
         Ok(())
     }
 
-    /// Conservative guard-family supplement to `numeric_work`.
-    /// Every live guard checks ownership; a shared owner scans G bounds twice.
-    /// The 64 units per guard cover four-limb comparisons, descriptor/mask
-    /// reads and one intersection. Condition visits and forcing arithmetic
-    /// remain covered by `numeric_work`; this supplement adds no storage.
-    pub(super) fn threshold_guard_work(
+    /// The existing weighted owner scans one row per sweep; every live guard
+    /// still checks ownership and a shared owner scans G bounds twice. Retain
+    /// the four-limb row tariff and the complete existing guard supplement.
+    /// No candidate state or second row directory is allocated here.
+    /// The final scalar discounts only fresh general original evaluation, under
+    /// the same row/family allowances; legacy and frozen tariffs stay separate.
+    pub(super) fn threshold_work(
         &self,
+        theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<u32, GpuError> {
+    ) -> Result<(u32, u32, u32), GpuError> {
+        let mut rows = 0_u32;
         let mut work = 0_u32;
+        let mut discount = 0_u32;
         for entry in &self.entries {
             poll(cancellation)?;
             if !matches!(entry.summary, Summary::Weights(_)) {
@@ -231,12 +235,27 @@ impl Rows {
             } else {
                 Some(0)
             };
-            work = checks
+            let guard_work = checks
                 .and_then(|n| family.and_then(|family| n.checked_add(family)))
-                .and_then(|n| work.checked_add(n))
                 .ok_or_else(|| capacity("threshold guard work overflows"))?;
+            work = work
+                .checked_add(guard_work)
+                .ok_or_else(|| capacity("threshold guard work overflows"))?;
+            if guards != 0 {
+                // An all-constant row may remain in this directory beside a
+                // live row. It has no shader owner and performs no row scan.
+                let length = address(theory.parts().rows()[entry.source].length)?;
+                rows = length
+                    .checked_mul(48)
+                    .and_then(|n| n.checked_add(32))
+                    .and_then(|n| rows.checked_add(n))
+                    .ok_or_else(|| capacity("shared threshold row work overflows"))?;
+                discount = discount
+                    .checked_add(original_discount(length, guards, guard_work)?)
+                    .ok_or_else(|| capacity("original numeric discount overflows"))?;
+            }
         }
-        Ok(work)
+        Ok((rows, work, discount))
     }
 
     /// The owner column of the packed live rows: each row's source index and
@@ -285,6 +304,27 @@ impl Rows {
         Ok(self.entries[self.entry(row)?].offset)
     }
 }
+// Fresh weighted truth performs one measure and one guard-publication pass.
+// The existing frozen tariff covers two condition scans and the stronger two
+// guard passes. Keep the smaller legacy allowance when it already suffices.
+// The ordinary shape walk has admitted every live guard's legacy row charge
+// before this helper runs; the discount cannot exceed that admitted charge.
+fn original_discount(length: u32, guards: u32, guard_work: u32) -> Result<u32, GpuError> {
+    let row = length
+        .checked_mul(48)
+        .and_then(|n| n.checked_add(32))
+        .ok_or_else(|| capacity("numeric row work overflows"))?;
+    let legacy = row
+        .checked_mul(guards)
+        .ok_or_else(|| capacity("numeric formula work overflows"))?;
+    let shared = u64::from(row)
+        .checked_add(u64::from(guard_work))
+        .ok_or_else(|| capacity("shared original row work overflows"))?;
+    let retained = u64::from(legacy).min(shared);
+    u32::try_from(u64::from(legacy) - retained)
+        .map_err(|_| capacity("original numeric discount exceeds u32"))
+}
+
 fn directory_bytes(rows: usize, guards: usize) -> Result<u64, GpuError> {
     rows.checked_mul(size_of::<Row>())
         .and_then(|n| n.checked_add(guards.checked_mul(size_of::<(usize, u32)>())?))

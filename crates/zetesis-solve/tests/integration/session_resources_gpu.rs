@@ -762,9 +762,12 @@ fn vulkan_formula_profiles_preserve_independent_sessions() {
 }
 
 const UNSEEDED_CYCLE: &str = "a :- b. b :- a.";
-// The seed reaches the cycle through a derived atom. Substituting explicit
-// facts therefore leaves the a/b dependency cycle intact for general checking.
-const SEEDED_CYCLE: &str = "seed. a :- seed. b :- a. a :- b.";
+// The seed is chosen, so no atom it reaches is certain and grounding leaves
+// the a/b dependency cycle intact for general checking.
+const SEEDED_CYCLE: &str = "{seed}. a :- seed. b :- a. a :- b.";
+// With a fact for its seed every atom of the cycle is certain: grounding
+// reads each body as true and the theory is three facts.
+const CERTAIN_CYCLE: &str = "seed. a :- seed. b :- a. a :- b.";
 
 // Parity preparation refutes the first program before a membership certificate
 // is needed. The second still visits a candidate region on the tight route.
@@ -823,15 +826,18 @@ fn unseeded_cycle_has_one_empty_answer_set() {
 }
 
 #[test]
-fn seeded_cycle_preserves_positive_nontight_class() {
+fn seeded_cycle_keeps_its_nontight_general_class() {
     let owner = formula(SEEDED_CYCLE);
     assert_eq!(owner.theory().atom_count(), 3);
-    zetesis_ferraris::PositivePlan::compile(
-        owner.theory(),
-        zetesis_ferraris::PositivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap();
+    // The choice is not a positive root, and the cycle is not tight.
+    assert!(matches!(
+        zetesis_ferraris::PositivePlan::compile(
+            owner.theory(),
+            zetesis_ferraris::PositivePlanLimits::default(),
+            &Cancellation::default(),
+        ),
+        Err(zetesis_ferraris::PositiveError::UnsupportedRoot { .. })
+    ));
     assert!(matches!(
         zetesis_ferraris::TightPlan::compile(
             owner.theory(),
@@ -840,6 +846,35 @@ fn seeded_cycle_preserves_positive_nontight_class() {
         ),
         Err(zetesis_ferraris::TightError::PositiveCycle { .. })
     ));
+}
+
+#[test]
+fn a_cycle_seeded_by_a_fact_is_decided_while_grounding() {
+    let owner = formula(CERTAIN_CYCLE);
+    assert_eq!(owner.theory().atom_count(), 3);
+    // Three facts: positive, and with no dependency left for a cycle.
+    zetesis_ferraris::PositivePlan::compile(
+        owner.theory(),
+        zetesis_ferraris::PositivePlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    zetesis_ferraris::TightPlan::compile(
+        owner.theory(),
+        zetesis_ferraris::TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let original = Original::Theory(owner.theory().clone());
+    let capture = solve(
+        PreparedInput::formula(&owner),
+        &original,
+        config(Backend::Cpu),
+        &ExecutionResources::default(),
+        AnswerSelection::All,
+    );
+    assert_eq!(capture.records.len(), 1);
+    assert_eq!(capture.records[0].atoms.atoms().iter().count(), 3);
 }
 
 fn tight_families(device: GpuApi) {

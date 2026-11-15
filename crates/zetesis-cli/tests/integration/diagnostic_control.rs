@@ -69,7 +69,7 @@ fn diagnostic_refusal(options: &zetesis_cli::PublicationConfig, marker: &str, ca
 fn preparation_refusal_preserves_diagnostic_failure() {
     let mut options = zetesis_cli::PublicationConfig::from(&options());
     options.solve.max_objective_keys = 0;
-    diagnostic_refusal(&options, "Objective preparation unavailable:", "Keys");
+    diagnostic_refusal(&options, "Objective projection unavailable:", "Keys");
 }
 
 #[test]

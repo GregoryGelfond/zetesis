@@ -55,6 +55,7 @@ impl Compiler<'_> {
         let Guard::Comparisons {
             negation: DefaultNegation::None | DefaultNegation::NotNot,
             comparisons,
+            ..
         } = guard
         else {
             return Ok(None);
@@ -227,6 +228,7 @@ impl Compiler<'_> {
                         guard @ Guard::Comparisons {
                             negation: DefaultNegation::None | DefaultNegation::NotNot,
                             comparisons,
+                            ..
                         },
                     ) if self.only_missing(guard, target, variables)? => {
                         for comparison in comparisons {

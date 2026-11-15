@@ -4,7 +4,9 @@ use std::cell::Cell;
 use crate::formula::Compiled;
 use crate::formula_ground::{ground, ground_hybrid};
 use crate::formula_support::testing;
+use crate::test_support::{answer_sets, atom_sets, zero_divisor_statements};
 use crate::{GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, ProgramSite};
+use zetesis_test_support::programs::unary;
 
 const DIAGONAL: &str = include_str!("../../../tests/fixtures/expression-keys/diagonal.lp");
 const ALIAS: &str = include_str!("../../../tests/fixtures/expression-keys/alias.lp");
@@ -136,27 +138,20 @@ fn certified_generated_equalities_use_expression_postings() {
 }
 
 #[test]
-fn source_admission_keeps_undefined_families() {
-    let reference =
-        controlled(true, || ground(testing::prepare(UNDEFINED), None, None)).unwrap_err();
+fn source_admission_omits_undefined_families() {
+    let reference = controlled(true, || ground(testing::prepare(UNDEFINED), None, None)).unwrap();
     let receipts = Receipts::default();
-    let selected = ground(testing::prepare(UNDEFINED), Some(&receipts), None).unwrap_err();
-    match (reference, selected) {
-        (
-            FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation {
-                error: before,
-                location: before_site,
-            }),
-            FormulaFailure::Expansion(crate::ExpansionFailure::Evaluation {
-                error: after,
-                location: after_site,
-            }),
-        ) => {
-            assert_eq!(before, after);
-            assert_eq!(before_site, after_site);
-        }
-        other => panic!("expected matching undefined-family failures: {other:?}"),
-    }
+    let selected = ground(testing::prepare(UNDEFINED), Some(&receipts), None).unwrap();
+    assert_same_program(&reference, &selected);
+    assert_eq!(
+        zero_divisor_statements(UNDEFINED, &selected.warnings),
+        [":- p(X), 1/X = 1."]
+    );
+    // The constraint has no instance: one kept would leave no answer set.
+    assert_eq!(
+        answer_sets(&selected.theory, &selected.atoms),
+        atom_sets([&[unary("p", 0)]])
+    );
     assert_eq!(receipts.emission.get().expression_key_probes, Some(0));
 }
 
@@ -303,6 +298,9 @@ fn arithmetic_heads_keep_the_original_traversal() {
     }
 }
 
+mod certificates;
+mod local;
+mod components;
 mod ranges;
 mod rounds;
 

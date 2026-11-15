@@ -1,3 +1,4 @@
+mod promotion_tests;
 mod storage_tests;
 
 use zetesis_algebra::{Cancellation, Countermodels, Failure, Meter, Stop};
@@ -1377,6 +1378,143 @@ fn a_missing_pair_leaves_no_clique() {
     assert!(!preparation.root_refuted());
 }
 
+/// The pigeonhole core read in the other polarity: the atom `p · holes + k`
+/// is held when pigeon `p` is not in hole `k`. Each pigeon's clause then
+/// forbids holding all of its atoms, and each pair of pigeons in one hole
+/// forbids cutting both.
+fn complemented_pigeonhole(holes: usize) -> (usize, Vec<Vec<(usize, bool)>>) {
+    let (n, clauses) = pigeonhole(holes);
+    let complemented = clauses
+        .into_iter()
+        .map(|clause| {
+            clause
+                .into_iter()
+                .map(|(atom, held)| (atom, !held))
+                .collect()
+        })
+        .collect();
+    (n, complemented)
+}
+
+#[test]
+fn a_holes_covering_pairs_are_a_lower_bound() {
+    // In the other polarity the pairs of one hole each forbid cutting both.
+    // They grow into the hole's clique of four pigeons, of which at most one
+    // is cut: at least three are held.
+    let (n, clauses) = complemented_pigeonhole(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let holes: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Lower && bound.3 == 4)
+        .collect();
+    assert_eq!(
+        holes,
+        (0..3)
+            .map(|hole| (
+                BoundSide::Lower,
+                (0..4).map(|pigeon| pigeon * 3 + hole).collect(),
+                3,
+                4
+            ))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn the_double_count_refutes_the_complemented_root() {
+    // The holes' covering cliques, three held of four in each of three
+    // holes, and the pigeons' tables, two held of three for each of four
+    // pigeons, partition the same atoms: nine at least against eight at most.
+    // Less one pigeon's clause the counts no longer conflict.
+    let (n, mut clauses) = complemented_pigeonhole(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert!(preparation.cardinality().unwrap().root_refuted());
+    assert!(attempt.statistics.root_refuted);
+    clauses.remove(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    assert!(!attempt.result.unwrap().unwrap().root_refuted());
+}
+
+#[test]
+fn renaming_the_atoms_keeps_the_complemented_refutation() {
+    // The cliques are read from the pairs, not from the atoms' numbering:
+    // the same core under the reversed numbering refutes the root as well.
+    let (n, clauses) = complemented_pigeonhole(3);
+    let renamed: Vec<Vec<(usize, bool)>> = clauses
+        .into_iter()
+        .map(|clause| {
+            let mut clause: Vec<_> = clause
+                .into_iter()
+                .map(|(atom, held)| (n - 1 - atom, held))
+                .collect();
+            clause.sort_unstable();
+            clause
+        })
+        .collect();
+    let fixture = Saturation::build(n, &renamed, &[]);
+    let attempt = fixture.prepared();
+    assert!(attempt.result.unwrap().unwrap().root_refuted());
+}
+
+#[test]
+fn a_missing_covering_pair_leaves_no_clique() {
+    // Without the pair of pigeons 0 and 1 in hole 0, a countermodel may cut
+    // both their atoms there. No clique holds both, the hole's pairs grow
+    // into two cliques of three, and the root stands.
+    let (n, mut clauses) = complemented_pigeonhole(3);
+    let position = clauses
+        .iter()
+        .position(|clause| clause == &vec![(0, false), (3, false)])
+        .unwrap();
+    clauses.remove(position);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let lower: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Lower)
+        .collect();
+    assert!(
+        lower
+            .iter()
+            .all(|bound| !(bound.1.contains(&0) && bound.1.contains(&3)))
+    );
+    assert!(lower.contains(&(BoundSide::Lower, vec![0, 6, 9], 2, 3)));
+    assert!(lower.contains(&(BoundSide::Lower, vec![3, 6, 9], 2, 3)));
+    assert!(!preparation.root_refuted());
+}
+
+#[test]
+fn a_lone_covering_pair_keeps_one_lower_bound() {
+    // Two clauses, each forbidding both of its own two atoms cut. Each
+    // table's least count already says that one of its pair is held, so the
+    // clique of that pair alone adds no second bound over it.
+    let fixture = Saturation::build(
+        4,
+        &[vec![(0, false), (1, false)], vec![(2, false), (3, false)]],
+        &[],
+    );
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let lower: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Lower)
+        .collect();
+    assert_eq!(
+        lower,
+        vec![
+            (BoundSide::Lower, vec![0, 1], 1, 2),
+            (BoundSide::Lower, vec![2, 3], 1, 2),
+        ]
+    );
+    assert_eq!(attempt.statistics.cardinality.lower, 2);
+}
+
 #[test]
 fn a_tables_greatest_allowed_count_is_an_upper_bound() {
     // Over three atoms, the clauses forbidding all held and none held leave
@@ -1559,4 +1697,158 @@ fn a_pigeonhole_beyond_the_group_width_is_refuted_at_the_root() {
     let statistics = fixture.prepared().statistics;
     assert_eq!(statistics.unsupported_clauses, 10, "{statistics:?}");
     assert!(statistics.root_refuted, "{statistics:?}");
+}
+
+#[test]
+fn later_round_retains_nonlocal_refutations_of_the_same_group() {
+    // The three-atom group directly forbids 000 and 111. Through the fourth
+    // atom, a -> d and d -> c also forbid 001 and 011. Its remaining four
+    // patterns are not affine. The independent exact gate supplies a parity
+    // row, so a second round runs without changing those first three groups.
+    // Round one: the guard, six triple probes, two times three pair probes,
+    // and four exact-gate probes. Round two: four triple probes and the six
+    // pair probes. The two already refuted triples are not run again.
+    let fixture = nonlocal_probe_fixture();
+    let attempt = fixture.prepared();
+    assert_eq!(attempt.statistics.rounds, 2);
+    assert_eq!(attempt.statistics.probes, 1 + 6 + 2 * 3 + 4 + 4 + 2 * 3);
+    assert_eq!(attempt.statistics.inexact_hulls, 3);
+    assert!(!attempt.statistics.root_refuted);
+    assert!(attempt.result.unwrap().is_some());
+}
+
+fn nonlocal_probe_fixture() -> Saturation {
+    let mut clauses = vec![
+        vec![(0, false), (1, false), (2, false)],
+        vec![(0, true), (1, true), (2, true)],
+        vec![(0, true), (3, false)],
+        vec![(3, true), (2, false)],
+    ];
+    clauses.extend(gate(4, 5, 6));
+    Saturation::build(7, &clauses, &[])
+}
+
+/// Probe the same authenticated three-atom table from fresh query copies.
+/// The caller supplies only refutations established by the fixture's clauses
+/// or by an earlier successful call for this same fixture and group.
+fn run_nonlocal_table(
+    fixture: &Saturation,
+    known: &super::probes::Table,
+    allowance: u64,
+    cancellation: &Cancellation,
+) -> (
+    Result<super::probes::Probed, super::super::budget::BudgetError<Stop>>,
+    super::probes::Table,
+    u64,
+    u64,
+) {
+    let proposals = fixture.propose();
+    let group = proposals
+        .parity
+        .iter()
+        .find(|group| group.support.len == 3 && group.support.atoms[..3] == [0, 1, 2])
+        .expect("the original three-atom group");
+    let (narrower, root, knowledge) = fixture.closed();
+    let mut probe = super::probes::Probe::new(&narrower, fixture.subject(), &root, &knowledge);
+    let mut quota = Allowance {
+        remaining: allowance,
+        failure: Stop::WorkLimit,
+    };
+    let mut forbidden = super::probes::Table::new([0; 4]);
+    let (result, work) = {
+        let mut meter = Meter::reserved(&mut quota);
+        let mut budget = Budget::new(&mut meter, u64::MAX, usize::MAX, cancellation);
+        let storage = super::Storage::with_live_bytes(probe.live_bytes());
+        let result = probe.table(
+            super::probes::Target {
+                group,
+                known,
+                forbidden: &mut forbidden,
+            },
+            None,
+            &mut NarrowingScratch::default(),
+            cancellation,
+            &storage,
+            &mut budget,
+        );
+        budget.finish();
+        let work = budget.work();
+        (result, work)
+    };
+    (result, forbidden, work, allowance - quota.remaining)
+}
+
+fn clause_known_triples() -> super::probes::Table {
+    let mut known = super::probes::Table::new([0; 4]);
+    known.insert(0);
+    known.insert(7);
+    known
+}
+
+#[test]
+fn fresh_and_retained_probe_tables_agree_exactly() {
+    let fixture = nonlocal_probe_fixture();
+    let cancellation = Cancellation::default();
+    let (fresh, table, work, charged) =
+        run_nonlocal_table(&fixture, &clause_known_triples(), u64::MAX, &cancellation);
+    let fresh = fresh.unwrap();
+    assert_eq!((fresh.run, fresh.refuted), (6, 4));
+    assert_eq!(work, charged);
+    assert_eq!(
+        (0..8)
+            .filter(|&pattern| table.contains(pattern))
+            .collect::<Vec<_>>(),
+        vec![0, 1, 3, 7]
+    );
+    let (retained, again, retained_work, charged) =
+        run_nonlocal_table(&fixture, &table, u64::MAX, &cancellation);
+    let retained = retained.unwrap();
+    assert_eq!((retained.run, retained.refuted), (4, 4));
+    assert_eq!(again.storage(), table.storage());
+    assert_eq!(retained_work, charged);
+    assert!(retained_work < work);
+}
+
+#[test]
+fn retained_table_refusal_preserves_exact_performed_work() {
+    use super::super::budget::BudgetError;
+    let fixture = nonlocal_probe_fixture();
+    let cancellation = Cancellation::default();
+    let (_, known, _, _) =
+        run_nonlocal_table(&fixture, &clause_known_triples(), u64::MAX, &cancellation);
+    let (complete, expected, total, charged) =
+        run_nonlocal_table(&fixture, &known, u64::MAX, &cancellation);
+    let complete = complete.unwrap();
+    assert_eq!(charged, total);
+    for allowance in 0..total {
+        let (result, _, work, charged) =
+            run_nonlocal_table(&fixture, &known, allowance, &cancellation);
+        assert!(
+            matches!(result, Err(BudgetError::Refused(Stop::WorkLimit))),
+            "allowance {allowance}"
+        );
+        assert_eq!(work, charged, "allowance {allowance}");
+        assert!(work <= allowance, "allowance {allowance}");
+    }
+    let (exact, actual, work, charged) = run_nonlocal_table(&fixture, &known, total, &cancellation);
+    let exact = exact.unwrap();
+    assert_eq!((exact.run, exact.refuted), (complete.run, complete.refuted));
+    assert_eq!(actual.storage(), expected.storage());
+    assert_eq!((work, charged), (total, total));
+}
+
+#[test]
+fn retained_table_cancellation_does_not_publish_a_verdict() {
+    use super::super::budget::BudgetError;
+    let fixture = nonlocal_probe_fixture();
+    let cancellation = Cancellation::default();
+    let (_, known, _, _) =
+        run_nonlocal_table(&fixture, &clause_known_triples(), u64::MAX, &cancellation);
+    cancellation.cancel();
+    let (result, _, work, charged) = run_nonlocal_table(&fixture, &known, u64::MAX, &cancellation);
+    assert!(matches!(result, Err(BudgetError::Stopped(Stop::Cancelled))));
+    // Table scratch admission polls before any probe copy or decision.
+    // No table verdict or performed-work prefix is published on this stop.
+    assert_eq!(work, 0);
+    assert_eq!(work, charged);
 }

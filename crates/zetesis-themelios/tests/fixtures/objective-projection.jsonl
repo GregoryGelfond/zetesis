@@ -1,0 +1,11 @@
+{"name":"sparse","source":"padding(1..16).{wanted(2);wanted(7)}.#minimize{X@0,X:wanted(X)}."}
+{"name":"signed_arity","source":"{padding;p(1);-p(1);p(1,2)}.#minimize{3@0,k:p(1);-2@0,k: -p(1);5@1,k:p(1,2)}."}
+{"name":"negative_ties","source":"{padding;a;b;c}.#minimize{-3@2,k:a;2@2,k:b;1@1,k:c}."}
+{"name":"coalesced","source":"{padding;a;b}.#minimize{2@0,k:a;2@0,k:b;2@0,other:a;-2@0,k:b}."}
+{"name":"closed_negative","source":"{padding;a;b}.#minimize{2@1,k:not a;3@1,l:not not b;1@0,k:a,not b}."}
+{"name":"closed_disjunction","source":"{padding;p(1);p(2)}.#minimize{1:not p(_)}."}
+{"name":"missing_closed","source":"padding.#minimize{1:not missing}."}
+{"name":"constant","source":"{padding}.#minimize{-2@7,k;0@1,k}."}
+{"name":"empty","source":"{padding}.#minimize{}."}
+{"name":"no_objective","source":"{padding}."}
+{"name":"choice","source":"padding(1..4).1{a;b}1.#minimize{1:a;2:b}."}

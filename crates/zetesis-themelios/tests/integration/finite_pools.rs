@@ -1,5 +1,6 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
+use crate::support::warnings::zero_divisor_statement;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
@@ -376,19 +377,16 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
 }
 
 #[test]
-fn entirely_undefined_conditional_ranges_remain_errors() {
-    let source = "d(0).q:-1=(1..2)/X:d(X).";
-    let error = limited(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Evaluation { location, .. })
-        if !location.location().expect("parsed source").span.is_empty()),
-        "{source}: {error}"
-    );
+fn entirely_undefined_conditional_ranges_are_false() {
+    // Both values of the range divide by zero under the condition d(0), so
+    // the consequent has no alternative left and is false there: q is not
+    // derived. The rule keeps the warning, located at its statement.
+    let rule = "q:-1=(1..2)/X:d(X).";
+    let program = formula(&format!("d(0).{rule}"));
+    assert_eq!(zero_divisor_statement(&program), rule);
+    let expected = native(&formula("d(0)."));
+    assert_eq!(native(&program), expected);
+    assert_eq!(exhaustive(&program), expected);
 }
 
 #[test]

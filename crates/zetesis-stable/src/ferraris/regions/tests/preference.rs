@@ -393,3 +393,158 @@ fn active_restrictions_keep_primary_preference() {
         assert_eq!(entry.split_atom(), Some(expected));
     }
 }
+
+/// The split `reading`'s walk installs under `conditions` for the open region
+/// of four atoms, or for that region with `decided` applied first.
+fn installed_split(
+    reading: CandidateReading<'_>,
+    conditions: &Conditions<(Theory, Narrower)>,
+    decided: Option<(usize, bool)>,
+    cancellation: &Cancellation,
+) -> Option<usize> {
+    let mut region = Region::all_open(4);
+    if let Some((atom, held)) = decided {
+        assert!(if held {
+            region.hold(atom)
+        } else {
+            region.cut(atom)
+        });
+    }
+    let mut entry = Entry::new(region, CandidateKnowledge::default());
+    let result = narrow(
+        reading,
+        conditions,
+        &mut entry,
+        &mut NarrowingScratch::default(),
+        &mut budget(cancellation, u64::MAX),
+        &mut RegionCounts::default(),
+        None,
+    );
+    assert!(matches!(result.unwrap(), Narrowing::Fixed { .. }));
+    entry.split_atom()
+}
+
+/// Four independent choices, and no answer set holds 0, 1 and 2 together.
+fn constrained_choices() -> Theory {
+    zetesis_theory_support::theories::theory(
+        4,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::atom(3),
+            Node::falsum(),
+            Node::implies(0, 4),
+            Node::or_pair([0, 5]),
+            Node::implies(1, 4),
+            Node::or_pair([1, 7]),
+            Node::implies(2, 4),
+            Node::or_pair([2, 9]),
+            Node::implies(3, 4),
+            Node::or_pair([3, 11]),
+            Node::and_pair([1, 2]),
+            Node::and_pair([0, 13]),
+            Node::implies(14, 4),
+        ],
+        vec![6, 8, 10, 12, 15],
+    )
+}
+
+#[test]
+fn a_generator_order_reads_what_the_region_shortened() {
+    // 3's component is the earliest, so the open region splits on it. With 0
+    // held the constraint keeps two operands, and one of them comes first.
+    let original = constrained_choices();
+    let cancellation = Cancellation::default();
+    let mut opening = budget(&cancellation, u64::MAX);
+    let opened =
+        super::super::open(&original, u64::MAX, LearningLimits::DEFAULT, &mut opening).unwrap();
+    let narrower = Narrower::new(&original);
+    let reading = opened.parts.reading(&original, &narrower).unwrap();
+    assert!(reading.original.generator_order().is_some());
+    let free = Conditions::default();
+    assert_eq!(
+        installed_split(reading, &free, None, &cancellation),
+        Some(3)
+    );
+    assert_eq!(
+        installed_split(reading, &free, Some((0, true)), &cancellation),
+        Some(2)
+    );
+}
+
+#[test]
+fn a_restriction_ranks_by_its_own_degree_beside_a_shortened_chain() {
+    // The restriction reads 3 in two implications that stay unknown and each
+    // other atom in at most one, so it prefers 3. The original's constraint
+    // is down to two operands with 0 held, which the restricted ranking does
+    // not read.
+    let original = constrained_choices();
+    let restriction = zetesis_theory_support::theories::theory(
+        4,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::atom(3),
+            Node::implies(3, 1),
+            Node::implies(3, 2),
+            Node::implies(4, 2),
+            Node::implies(5, 1),
+        ],
+        vec![6, 7],
+    );
+    let cancellation = Cancellation::default();
+    let mut opening = budget(&cancellation, u64::MAX);
+    let opened =
+        super::super::open(&original, u64::MAX, LearningLimits::DEFAULT, &mut opening).unwrap();
+    let narrower = Narrower::new(&original);
+    let reading = opened.parts.reading(&original, &narrower).unwrap();
+    let restricted = Conditions {
+        permanent: vec![permanent(restriction)],
+        bound: None,
+    };
+    assert_eq!(
+        installed_split(reading, &restricted, Some((0, true)), &cancellation),
+        Some(3)
+    );
+}
+
+#[test]
+fn a_walk_without_an_order_reads_what_the_region_shortened() {
+    // `0 ∨ 1 ∨ 2`, and three implications from 3 that no root reads: 3 has
+    // the most unknown parents, so the open region splits on it. With 0 cut
+    // the disjunction keeps two operands, and the lower of them comes first.
+    let original = zetesis_theory_support::theories::theory(
+        4,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::atom(3),
+            Node::or_pair([1, 2]),
+            Node::or_pair([0, 4]),
+            Node::implies(3, 0),
+            Node::implies(3, 1),
+            Node::implies(3, 2),
+        ],
+        vec![5],
+    );
+    let narrower = Narrower::new(&original);
+    let choices = ChoiceHeads::default();
+    let reading = CandidateReading {
+        original: OriginalSubject::new(&original, None).with_choices(&choices),
+        narrower: &narrower,
+        arithmetic: None,
+    };
+    let cancellation = Cancellation::default();
+    let free = Conditions::default();
+    assert_eq!(
+        installed_split(reading, &free, None, &cancellation),
+        Some(3)
+    );
+    assert_eq!(
+        installed_split(reading, &free, Some((0, false)), &cancellation),
+        Some(1)
+    );
+}

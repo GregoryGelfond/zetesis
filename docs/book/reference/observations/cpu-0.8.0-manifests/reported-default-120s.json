@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "five_crosser_light_mode_a_verify_v2.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": null,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Reported program, exact original contents; satisfiability is an expectation to qualify freshly with clingo. No authored count or cost assumed."
+        ]
+      },
+      "files": [
+        {
+          "path": "five_crosser_light_mode_a_verify_v2.lp",
+          "sha256": "ab5f1ea354332b86f21b9102dded64e9a2cb65fd40eab342e938ae4cb4b9d3ed",
+          "includes": [
+            {
+              "spelling": "five_crosser_light_complete_domain.lp",
+              "target": "five_crosser_light_complete_domain.lp"
+            }
+          ]
+        },
+        {
+          "path": "five_crosser_light_complete_domain.lp",
+          "sha256": "16fe0461efb92eb85688785f5fb07fdef065d4a8423a9b3951b7a71d38cbbe7b",
+          "includes": [
+            {
+              "spelling": "eec_htp_integration_v5v6.lp",
+              "target": "eec_htp_integration_v5v6.lp"
+            },
+            {
+              "spelling": "sample_facts.lp",
+              "target": "sample_facts.lp"
+            }
+          ]
+        },
+        {
+          "path": "eec_htp_integration_v5v6.lp",
+          "sha256": "db92add1270a5fb525f2662a7b10b44a15b67531c3bb49255bfc987d2d13e753",
+          "includes": []
+        },
+        {
+          "path": "sample_facts.lp",
+          "sha256": "e6e6da24d0a9e709d2a70e6a17c7c4a80dfd4d0b808b9a7bfad764b6a3c6ca44",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "five_crosser_light_mode_b_plan.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "optimal",
+        "model_count": null,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Reported program, exact original contents; satisfiability is an expectation to qualify freshly with clingo. No authored count or cost assumed."
+        ]
+      },
+      "files": [
+        {
+          "path": "five_crosser_light_mode_b_plan.lp",
+          "sha256": "d2807afa3c2c4c297ddac1a3e23c880ba0f30f2fa6864aaa28c571c28dfe8e96",
+          "includes": [
+            {
+              "spelling": "five_crosser_light_complete_domain.lp",
+              "target": "five_crosser_light_complete_domain.lp"
+            }
+          ]
+        },
+        {
+          "path": "five_crosser_light_complete_domain.lp",
+          "sha256": "16fe0461efb92eb85688785f5fb07fdef065d4a8423a9b3951b7a71d38cbbe7b",
+          "includes": [
+            {
+              "spelling": "eec_htp_integration_v5v6.lp",
+              "target": "eec_htp_integration_v5v6.lp"
+            },
+            {
+              "spelling": "sample_facts.lp",
+              "target": "sample_facts.lp"
+            }
+          ]
+        },
+        {
+          "path": "eec_htp_integration_v5v6.lp",
+          "sha256": "db92add1270a5fb525f2662a7b10b44a15b67531c3bb49255bfc987d2d13e753",
+          "includes": []
+        },
+        {
+          "path": "sample_facts.lp",
+          "sha256": "e6e6da24d0a9e709d2a70e6a17c7c4a80dfd4d0b808b9a7bfad764b6a3c6ca44",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

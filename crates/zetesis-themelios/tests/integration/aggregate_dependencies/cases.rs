@@ -113,4 +113,24 @@ pub(super) const CASES: &[(&str, &str)] = &[
         "{q(1)}.q(M):-N=#count{1:q(1)},M=#count{N:q(1)}.",
         "{q(1)}.q(0):-0=#count{1:q(1)},0=#count{0:q(1)}.q(1):-0=#count{1:q(1)},1=#count{0:q(1)}.q(0):-1=#count{1:q(1)},0=#count{1:q(1)}.q(1):-1=#count{1:q(1)},1=#count{1:q(1)}.",
     ),
+    // A count over the predicate its rule derives. The tuple from the certain
+    // `f` is required, which bounds the values: the last one's head adds no
+    // tuple.
+    (
+        "f(3).{p(N)}:-N=#count{V:p(V);V:f(V)}.",
+        "f(3).{p(1)}:-1=#count{1:p(1);2:p(2);3:p(3);3:f(3)}.{p(2)}:-2=#count{1:p(1);2:p(2);3:p(3);3:f(3)}.{p(3)}:-3=#count{1:p(1);2:p(2);3:p(3);3:f(3)}.",
+    ),
+    (
+        "f(1).{p(N)}:-N=#count{V:p(V);V:f(V)}.",
+        "f(1).{p(1)}:-1=#count{1:p(1);1:f(1)}.",
+    ),
+    (
+        "g(3).f(X):-g(X).{p(N)}:-N=#count{V:p(V);V:f(V)}.",
+        "g(3).f(3):-g(3).{p(1)}:-1=#count{1:p(1);2:p(2);3:p(3);3:f(3)}.{p(2)}:-2=#count{1:p(1);2:p(2);3:p(3);3:f(3)}.{p(3)}:-3=#count{1:p(1);2:p(2);3:p(3);3:f(3)}.",
+    ),
+    // The same count under a normal head has no answer set.
+    (
+        "f(2).p(N):-N=#count{V:p(V);V:f(V)}.",
+        "f(2).p(1):-1=#count{1:p(1);2:p(2);2:f(2)}.p(2):-2=#count{1:p(1);2:p(2);2:f(2)}.",
+    ),
 ];

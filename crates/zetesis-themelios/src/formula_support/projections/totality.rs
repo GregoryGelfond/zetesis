@@ -41,7 +41,7 @@ pub(in crate::formula_support) use numeric::positive_bounds;
 
 /// Preparation serves either partial scalar families or total arithmetic whose
 /// certificate admits incremental source checking. This does not redefine which
-/// source families require a defined witness: that remains `family::partial`.
+/// source families can meet a zero divisor: that remains `family::partial`.
 pub(in crate::formula_support) fn needed(literals: &[LiteralIr]) -> bool {
     let arithmetic = |expression: &Expression| expression.nodes.iter().any(numeric::arithmetic);
     crate::formula_support::family::partial(literals)
@@ -100,7 +100,7 @@ impl<'a> Projections<'a> {
     /// the generated head suffix. A growing round may select only its current
     /// snapshot. Completed-family admission additionally needs the full key and
     /// head obligations in `total_family`, for every normalized sibling. This
-    /// proof supplies no defined witness and no guarantee about partial prefixes.
+    /// proof supplies no instance and no guarantee about partial prefixes.
     pub(in crate::formula_support) fn total_body(
         &mut self,
         rule: &'a RuleIr,

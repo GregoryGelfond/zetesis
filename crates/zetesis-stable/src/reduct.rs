@@ -48,7 +48,8 @@ pub struct ReductStatistics {
 #[non_exhaustive]
 pub struct InnerPreparationStatistics {
     /// Query roots prepared — the inline root, a served root or a residual
-    /// root — after a closure that did not refute them.
+    /// root — after a closure that left them open and unrefuted. A decided
+    /// root goes directly to the existing leaf check without preparation.
     pub attempts: u64,
     /// Preparations that installed units, rows or bounds.
     pub prepared: u64,
@@ -83,8 +84,9 @@ pub struct InnerPreparationStatistics {
     /// Probed groups whose allowed patterns are not affine.
     pub inexact_hulls: u64,
     /// Count bounds loaded: a table's least and greatest allowed counts, a
-    /// clause's lower bound among them, the cliques' upper bounds, and the
-    /// trivial bounds completing a partition.
+    /// clause's lower bound among them, the excluding cliques' upper bounds,
+    /// the covering cliques' lower bounds, and the trivial bounds completing a
+    /// partition.
     pub bounds: u64,
     /// Count bounds from below.
     pub lower: u64,

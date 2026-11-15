@@ -580,13 +580,16 @@ fn threshold_inputs_and_outputs_wake_shared_owner() {
         .with_propagation(crate::GpuPropagation::ChangedDependencies)
         .finish(&device, &Cancellation::default())
         .unwrap();
+    // Two guards share one four-condition threshold row. Original setup
+    // still reserves both row occurrences; each sweep visits the row owner
+    // once and retains both guard checks. The saved row tariff is 48*4+32.
     assert_eq!(
         (dense.setup, dense.sweep),
-        (setup_with_projection(490, 3), 772)
+        (setup_with_projection(410, 3), 548)
     );
     assert_eq!(
         (dirty.setup, dirty.sweep),
-        (setup_with_projection(492, 3), 938)
+        (setup_with_projection(412, 3), 714)
     );
     let incidence = prepared.graph.schedule.incidence.as_ref().unwrap();
     let offset = incidence.offset as usize;

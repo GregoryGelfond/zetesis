@@ -44,6 +44,7 @@ pub use argument_unification::{UnificationError, UnificationFailure};
 pub use atom_key::{AtomKey, BindingView};
 pub use atom_lookup::{
     AtomIndex, AtomIndexError, AtomLookup, AtomRow, AtomRows, CatalogIndex, PredicateLookup,
+    SelectedAtomIndexError, SelectedAtomIndexErrorKind,
 };
 pub use model::{
     AtomCatalog, Interpretation, Model, ModelAtoms, ModelError, ModelFailure, ModelIter,

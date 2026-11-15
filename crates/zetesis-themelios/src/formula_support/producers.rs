@@ -38,9 +38,11 @@ use crate::formula_domains::PositiveSource;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::{FormulaFailure, FormulaLimits};
 
-/// How a completion selects its producers and prepares their visits: the
-/// positive-flat plan wakes only the rules whose inputs changed; otherwise
-/// every rule is visited in every round, with its registration.
+/// How a completion selects its producers and prepares their visits. The
+/// positive-flat plan wakes only the rules whose inputs changed. A
+/// registration visits every rule in the first round and afterwards wakes
+/// its certified producers the same way, while every other producer is
+/// visited in every round.
 pub(super) enum Producers<'source> {
     Planned(ProducerPlan<'source>),
     Registered(Registration<'source>),
@@ -82,6 +84,7 @@ impl<'source> Producers<'source> {
         )?;
         if let Some(view) = view {
             registration.schedule(prepared, view, external, (limits, counters, location))?;
+            registration.wake(prepared, view, external, (limits, counters, location))?;
         }
         Ok(Self::Registered(registration))
     }
@@ -97,7 +100,7 @@ impl<'source> Producers<'source> {
     pub(super) fn schedule(&self) -> Schedule<'_> {
         match self {
             Self::Planned(plan) => plan.schedule(),
-            Self::Registered(registration) => Schedule::all(registration.rules()),
+            Self::Registered(registration) => registration.round(),
         }
     }
 
@@ -105,8 +108,39 @@ impl<'source> Producers<'source> {
         matches!(self, Self::Planned(_))
     }
 
-    /// Mark ready the deferred rich producers whose read components reached
-    /// their fixed point, given this round's pending atoms. A plan has none.
+    /// The certain predicates of the source ([`super::certain`]), or `None`
+    /// when no component view resolves its predicates. A plan certifies a
+    /// positive flat source, every rule of which is definite: all of its
+    /// predicates are certain, and it holds no aggregate.
+    pub(super) fn certainty(
+        &self,
+        prepared: &'source Prepared,
+        catalog: &SupportCatalog,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<super::certain::Certainty>, FormulaFailure> {
+        match self {
+            Self::Planned(_) => {
+                counters.work(limits, location)?;
+                Ok(Some(super::certain::Certainty::all()))
+            }
+            Self::Registered(registration) => {
+                let Some(view) = catalog.component_view(limits, counters, location)? else {
+                    return Ok(None);
+                };
+                let external = catalog.bytes(location)? as u128
+                    + counters.accounting.workspace.bytes() as u128;
+                registration
+                    .certainty(prepared, view, external, (limits, counters, location))
+                    .map(Some)
+            }
+        }
+    }
+
+    /// Mark ready the producers the schedule holds whose waited components
+    /// reached their fixed point, given this round's pending atoms. A plan
+    /// has none.
     pub(super) fn mark_ready(
         &self,
         delta: &SupportAppend<'_>,
@@ -122,7 +156,7 @@ impl<'source> Producers<'source> {
         }
     }
 
-    /// The next ready deferred producer, now marked traversed.
+    /// The next ready producer the schedule holds, now marked traversed.
     pub(super) fn take_ready(&self) -> Option<usize> {
         match self {
             Self::Planned(_) => None,
@@ -130,7 +164,7 @@ impl<'source> Producers<'source> {
         }
     }
 
-    /// Whether a deferred producer has not yet been traversed.
+    /// Whether a producer the schedule holds has not yet been traversed.
     pub(super) fn pending(&self) -> bool {
         match self {
             Self::Planned(_) => false,
@@ -138,11 +172,21 @@ impl<'source> Producers<'source> {
         }
     }
 
-    /// The plan, whose wake set each round advances.
-    pub(super) fn plan_mut(&mut self) -> Option<&mut ProducerPlan<'source>> {
+    /// Build the next round's wake set from this complete round's proposed
+    /// new atoms. No consumer reads it until all corresponding catalog
+    /// insertions succeed.
+    pub(super) fn advance<'atoms>(
+        &mut self,
+        delta: impl Iterator<Item = AtomRef<'atoms>>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
         match self {
-            Self::Planned(plan) => Some(plan),
-            Self::Registered(_) => None,
+            Self::Planned(plan) => plan.advance(delta, limits, counters, location),
+            Self::Registered(registration) => {
+                registration.advance(delta, limits, counters, location)
+            }
         }
     }
 
@@ -307,8 +351,8 @@ impl<'source> ProducerPlan<'source> {
         }
         let wake = Wake::prepare(
             &nodes,
-            &rules,
-            &input_predicates,
+            (&rules, &input_predicates),
+            true,
             &mut memory,
             limits,
             counters,

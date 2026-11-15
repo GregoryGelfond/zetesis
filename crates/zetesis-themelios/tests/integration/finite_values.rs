@@ -1,6 +1,7 @@
 //! Constructed values remain data in original and frozen source interpretations.
 use crate::support::finite_bindings as reference;
 use crate::support::upstream;
+use crate::support::warnings::zero_divisor_statement;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
@@ -331,13 +332,25 @@ fn anonymous_constructor_facts_remain_refused() {
 }
 
 #[test]
-fn scalar_failures_remain_admission_errors() {
-    for source in [
-        "d(a).p(f(X+1)):-d(X).",
-        "d(1).q:-not p(f(X/0)),d(X).",
-        "d(0).q:-d(X),not p(1/X).",
-        "d(2147483647).p(f(X+1)):-d(X).",
+fn undefined_negative_arguments_omit_their_instances() {
+    // The argument of the negated atom divides by zero at the one binding.
+    // The instance is omitted, not read as the absence of p, so q is not
+    // derived. The rule keeps the warning.
+    for (facts, rule) in [
+        ("d(1).", "q:-not p(f(X/0)),d(X)."),
+        ("d(0).", "q:-d(X),not p(1/X)."),
     ] {
+        let admitted = formula(&format!("{facts}{rule}"));
+        assert_eq!(zero_divisor_statement(&admitted), rule);
+        let expected = native(&formula(facts));
+        assert_eq!(native(&admitted), expected, "{rule}");
+        assert_eq!(exhaustive(&admitted), expected, "{rule}");
+    }
+}
+
+#[test]
+fn scalar_failures_remain_admission_errors() {
+    for source in ["d(a).p(f(X+1)):-d(X).", "d(2147483647).p(f(X+1)):-d(X)."] {
         assert!(
             matches!(
                 limited(

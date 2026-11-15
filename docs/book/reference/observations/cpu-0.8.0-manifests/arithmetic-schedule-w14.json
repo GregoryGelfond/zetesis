@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "S3-h20-d4.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "start(1,0)",
+            "start(2,4)",
+            "start(3,8)",
+            "start(4,12)",
+            "start(5,16)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Complete displayed family independently generated and matched to clingo5.8.2; no timing claim."
+        ]
+      },
+      "files": [
+        {
+          "path": "S3-h20-d4.lp",
+          "sha256": "264be2b183849e0edc83b37eae903f2be8d8b6a1abe302bca8fea6b6433cd98f",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "S3-h19-d4.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete displayed family independently generated and matched to clingo5.8.2; no timing claim."
+        ]
+      },
+      "files": [
+        {
+          "path": "S3-h19-d4.lp",
+          "sha256": "786dd79503b035f710fc00e9936d90eea2d011ae0d221fdb1068b720fb33bf74",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "S3-h100-d20.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "start(1,0)",
+            "start(2,20)",
+            "start(3,40)",
+            "start(4,60)",
+            "start(5,80)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Complete displayed family independently generated and matched to clingo5.8.2; no timing claim."
+        ]
+      },
+      "files": [
+        {
+          "path": "S3-h100-d20.lp",
+          "sha256": "05a37d41714ef0b1ed78271f51a2df87ab974dc5c29334105c7fa39e652a0c62",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "S3-h99-d20.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete displayed family independently generated and matched to clingo5.8.2; no timing claim."
+        ]
+      },
+      "files": [
+        {
+          "path": "S3-h99-d20.lp",
+          "sha256": "b4ce0ad2cc8ccd52dbca83d4c6eba65bfdac438508c5b92c9a2150eabef30e6e",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "S3-h400-d80.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "start(1,0)",
+            "start(2,80)",
+            "start(3,160)",
+            "start(4,240)",
+            "start(5,320)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Complete displayed family independently generated and matched to clingo5.8.2; no timing claim."
+        ]
+      },
+      "files": [
+        {
+          "path": "S3-h400-d80.lp",
+          "sha256": "42f780afc36656c8fc974d72087aa1e28ca1b16656948f712f4e048e9af685f2",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "S3-h399-d80.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete displayed family independently generated and matched to clingo5.8.2; no timing claim."
+        ]
+      },
+      "files": [
+        {
+          "path": "S3-h399-d80.lp",
+          "sha256": "4428c8526d917f5c48c231dab75dbd645536dc8a53a821d76fbb531c7d6518d0",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

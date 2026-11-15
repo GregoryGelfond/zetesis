@@ -54,6 +54,16 @@ fat LTO    d54b261b40dc78bf30130379ac589e811bd59d5e048503d77ae722eb0ea5cf25
 
 ## Recorded comparisons
 
+The [0.8.0 CPU comparison](cpu-0.8.0.md) accounts for all 315 distinct inputs
+at 14 zetesis workers and one clingo worker. The 299 complete paired timings
+give 214 zetesis wins, nine close and 76 clingo wins under the existing 3% band.
+The other 16 inputs retain unavailable clingo references. These are one-round
+process observations, with complete enumeration and optimal ties required;
+the band describes the observations rather than statistical equivalence.
+The full table includes planning, Poker, USA, wide Mastermind, quantified and
+arithmetic inputs. Its inventory and reference deadlines differ from 0.7.0,
+so changes in the headline counts are not a matched release comparison.
+
 The [0.7.0 CPU comparison](cpu-0.7.0.md) records outcomes for all 299 distinct inputs at 14 zetesis workers and one clingo worker. Among 286 comparable cases the 3% band gave 200 zetesis wins, 11 close and 75 clingo wins. The per-case record includes the quantified inputs, Family Crossing, USA, both large Mastermind encodings, Poker and arithmetic.
 
 The [final 0.6.0 CPU check](cpu-corpus-final-20261014.md) records all 94 cases at

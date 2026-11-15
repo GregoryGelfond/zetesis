@@ -5,6 +5,7 @@ use serde_json::Value;
 use zetesis_backend::GpuApi;
 
 mod hybrid;
+mod root_images;
 mod source;
 mod terminal;
 
@@ -24,6 +25,7 @@ pub(super) fn observe_with_source(
 ) -> Result<Observation, String> {
     let mut observation = route(document, stderr, request)?;
     super::handovers::attach(&mut observation.execution.device, document, source)?;
+    observation.root_images = root_images::read(document, source, stderr)?;
     Ok(observation)
 }
 
@@ -126,6 +128,7 @@ fn route(document: &Value, stderr: &[u8], request: NativeExecution) -> Result<Ob
         hybrid,
         terminal,
         source_evaluation: None,
+        root_images: None,
         execution: Execution {
             backend,
             procedure,

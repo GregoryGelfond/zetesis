@@ -132,7 +132,9 @@ impl Builder<'_, '_, '_> {
         let (transaction, build) = {
             let inputs = family_inputs(
                 elements,
-                &self.terms,
+                &*self
+                    .families
+                    .terms(GroundingWork::new(self.limits, self.counters, location))?,
                 values,
                 Context::new(&*self.computation, self.limits, self.counters, location),
             )?;

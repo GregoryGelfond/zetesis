@@ -246,8 +246,20 @@ pub(super) fn tick<S: State, E>(
     refill: impl FnOnce(&mut S) -> Result<(), E>,
 ) -> Result<(), E> {
     if state.available() == 0 {
-        refill(state)?;
+        return refill_and_tick(state, refill);
     }
+    state.consume(1);
+    Ok(())
+}
+
+// Finish consumption on the refill path so its caller can return the final
+// outcome directly, without inspecting an intermediate refill result.
+#[cold]
+fn refill_and_tick<S: State, E>(
+    state: &mut S,
+    refill: impl FnOnce(&mut S) -> Result<(), E>,
+) -> Result<(), E> {
+    refill(state)?;
     state.consume(1);
     Ok(())
 }

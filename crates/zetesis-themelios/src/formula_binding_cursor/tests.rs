@@ -319,3 +319,284 @@ fn support_rounds_recompute_proposal_carriers() {
     let (actual, _) = rows("p(1). p(2) :- n(1). n(N) :- N=#count{X:p(X)}.", false);
     assert_eq!(actual, [Ok(vec![0]), Ok(vec![1]), Ok(vec![2])]);
 }
+
+#[derive(Clone, Copy)]
+enum Mismatch {
+    Aggregate,
+    Inputs,
+}
+
+fn mismatched_carrier_is_absent(mismatch: Mismatch) {
+    with_cursor(
+        "{a}. q(A,B) :- A=#count{1:a}, B=#sum{A:a}.",
+        false,
+        |cursor, evaluation, budget, context| {
+            let Context {
+                computation,
+                work:
+                    GroundingWork {
+                        limits,
+                        counters,
+                        location,
+                    },
+            } = context;
+            let binding = cursor
+                .next(evaluation, computation, limits, budget, counters, location)
+                .unwrap()
+                .unwrap();
+            let LiteralIr::Aggregate(aggregate) = cursor.generators[1].literal.get() else {
+                panic!("second dependent aggregate")
+            };
+            cursor
+                .assignment_carrier(
+                    aggregate,
+                    &binding,
+                    cursor.support,
+                    Context::new(computation, limits, counters, location),
+                )
+                .unwrap()
+                .expect("the control has a matching successful carrier");
+            match mismatch {
+                Mismatch::Aggregate => {
+                    // Equal source ids do not authenticate another generator.
+                    let other = AggregateIr {
+                        id: aggregate.id,
+                        binding: aggregate.binding,
+                        family_inputs: aggregate.family_inputs.clone(),
+                        negation: aggregate.negation,
+                        function: aggregate.function,
+                        guards: Vec::new(),
+                        elements: Vec::new(),
+                    };
+                    assert!(
+                        cursor
+                            .assignment_carrier(
+                                &other,
+                                &binding,
+                                cursor.support,
+                                Context::new(computation, limits, counters, location),
+                            )
+                            .unwrap()
+                            .is_none()
+                    );
+                }
+                Mismatch::Inputs => {
+                    let mut changed = binding;
+                    let one = computation.number(1, limits, counters, location).unwrap();
+                    changed
+                        .set(aggregate.family_inputs[0], &one, limits, counters, location)
+                        .unwrap();
+                    assert!(
+                        cursor
+                            .assignment_carrier(
+                                aggregate,
+                                &changed,
+                                cursor.support,
+                                Context::new(computation, limits, counters, location),
+                            )
+                            .unwrap()
+                            .is_none()
+                    );
+                }
+            }
+        },
+    );
+}
+
+#[test]
+fn borrowed_carriers_require_the_exact_aggregate() {
+    mismatched_carrier_is_absent(Mismatch::Aggregate);
+}
+
+#[test]
+fn borrowed_carriers_require_the_same_support_owner() {
+    // Both query owners borrow one visible completed Relations. Constructing
+    // the second owner inside with_cursor would incorrectly require its
+    // shorter cursor borrow to become the source catalog's lifetime.
+    let preparation = testing::prepare("{a}. q(N) :- N=#sum{2:a}.");
+    let program = preparation.program;
+    let limits = preparation.limits;
+    let location = preparation.location;
+    let mut budget = preparation.budget;
+    let mut counters = Counters::resume(
+        preparation.accounting,
+        crate::grounding_observer::Work::default(),
+    );
+    let mut completed = crate::formula_support::build(
+        preparation.catalog,
+        &program,
+        None,
+        &limits,
+        &mut budget,
+        &mut counters,
+        location,
+    )
+    .unwrap();
+    let (relations, mut append) = completed.split(&limits, &mut counters, location).unwrap();
+    let queries = relations
+        .queries(crate::JoinStrategy::Indexed, &limits, &counters, location)
+        .unwrap();
+    let other_queries = relations
+        .queries(crate::JoinStrategy::Indexed, &limits, &counters, location)
+        .unwrap();
+    let support = queries.support();
+    let separate = other_queries.support();
+    let mut computation = Computation::new(&mut append, support);
+    let rule = program
+        .rules_without_facts()
+        .iter()
+        .find(|rule| rule.bindings.is_some())
+        .unwrap();
+    let aggregate = rule
+        .body
+        .iter()
+        .find_map(|literal| match literal {
+            LiteralIr::Aggregate(aggregate) => Some(aggregate),
+            _ => None,
+        })
+        .unwrap();
+    let mut join = crate::formula_support::Join::rule(
+        Ir::Source(rule),
+        support,
+        &computation,
+        &limits,
+        &mut budget,
+        &mut counters,
+    )
+    .unwrap();
+    let row = join
+        .next_matched_row(
+            &mut budget,
+            Context::new(&mut computation, &limits, &mut counters, rule.location),
+        )
+        .unwrap()
+        .expect("the assignment has a completed row");
+    assert!(row.passes);
+    let cursor = row
+        .carriers
+        .expect("the row still borrows its completed carrier");
+    assert!(
+        cursor
+            .assignment_carrier(
+                aggregate,
+                &row.values,
+                support,
+                Context::new(&computation, &limits, &mut counters, rule.location),
+            )
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        cursor
+            .assignment_carrier(
+                aggregate,
+                &row.values,
+                separate,
+                Context::new(&computation, &limits, &mut counters, rule.location),
+            )
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn changed_family_inputs_prevent_carrier_reuse() {
+    mismatched_carrier_is_absent(Mismatch::Inputs);
+}
+
+#[test]
+fn incomplete_assignment_states_do_not_supply_carriers() {
+    with_cursor(INDEPENDENT, false, |cursor, _, _, context| {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        let LiteralIr::Aggregate(aggregate) = cursor.generators[0].literal.get() else {
+            panic!("first aggregate")
+        };
+        assert!(
+            cursor
+                .assignment_carrier(
+                    aggregate,
+                    &cursor.values,
+                    cursor.support,
+                    Context::new(computation, limits, counters, location),
+                )
+                .unwrap()
+                .is_none()
+        );
+    });
+}
+
+#[test]
+fn failed_carrier_loans_preserve_the_owner() {
+    for cancelled in [false, true] {
+        with_cursor(INDEPENDENT, false, |cursor, evaluation, budget, context| {
+            let Context {
+                computation,
+                work:
+                    GroundingWork {
+                        limits,
+                        counters,
+                        location,
+                    },
+            } = context;
+            let binding = cursor
+                .next(evaluation, computation, limits, budget, counters, location)
+                .unwrap()
+                .unwrap();
+            let LiteralIr::Aggregate(aggregate) = cursor.generators[0].literal.get() else {
+                panic!("first aggregate")
+            };
+            let before = counters.accounting.work;
+            let bytes = counters.workspace_bytes();
+            let exhausted = FormulaLimits {
+                max_work: before,
+                ..*limits
+            };
+            if cancelled {
+                let cancellation = zetesis_algebra::Cancellation::default();
+                cancellation.cancel();
+                counters.attach_test_control(&cancellation);
+            }
+            let stopped = cursor.assignment_carrier(
+                aggregate,
+                &binding,
+                cursor.support,
+                Context::new(computation, &exhausted, counters, location),
+            );
+            if cancelled {
+                assert!(matches!(
+                    stopped,
+                    Err(FormulaFailure::Interrupted {
+                        reason: zetesis_algebra::Stop::Cancelled,
+                        ..
+                    })
+                ));
+            } else {
+                assert!(matches!(stopped, Err(FormulaFailure::Limit {
+                    resource: FormulaResource::Work, observed, limit, ..
+                }) if observed == u128::from(before) + 1 && limit == u128::from(before)));
+            }
+            assert_eq!(counters.accounting.work, before);
+            assert_eq!(counters.workspace_bytes(), bytes);
+            counters.detach_test_control();
+            assert!(
+                cursor
+                    .assignment_carrier(
+                        aggregate,
+                        &binding,
+                        cursor.support,
+                        Context::new(computation, limits, counters, location),
+                    )
+                    .unwrap()
+                    .is_some()
+            );
+        });
+    }
+}

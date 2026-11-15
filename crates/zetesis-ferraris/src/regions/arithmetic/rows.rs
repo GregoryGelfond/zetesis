@@ -2,8 +2,16 @@
 //!
 //! Clause records are sorted by canonical support with a charged stable merge
 //! sort. Definition records name an exact-owner complete producer span. Every
-//! proposed equation is materialized in the original atom coordinates and then
-//! checked by rereading its own sources. Only checked rows reach elimination.
+//! proposed equation is checked by rereading its own sources, and only a
+//! checked equation is kept.
+//!
+//! An equation over two or more atoms is materialized in the original atom
+//! coordinates and kept as a row for elimination. An equation over one atom
+//! decides that atom in every answer set: recognition keeps it as a [`Unit`]
+//! and writes no row for it, so a theory's facts cost what they are, one
+//! decision each, and not a row of the theory's width each. The inner
+//! preparation keeps its one-atom equations as rows, because its rows are
+//! read at each region and none is seeded at a root.
 
 use zetesis_algebra::Quota;
 
@@ -50,6 +58,24 @@ pub(super) struct Equation {
     pub constant: bool,
 }
 
+/// A checked equation over one atom: `atom` has `value` in every answer set
+/// of the exact owner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Unit {
+    pub atom: usize,
+    pub value: bool,
+}
+
+/// What the checker reads of a proposal, which is what recognition keeps of
+/// it: its row in the owner's atom coordinates, or the atom of a unit, which
+/// has no row. Either is read against the support its source has when read
+/// again, so the checker trusts no coordinate the proposal computed.
+#[derive(Clone, Copy)]
+enum Coefficients<'a> {
+    Row(&'a Words<u64>),
+    Unit(usize),
+}
+
 #[derive(Default, Debug)]
 pub(super) struct Counts {
     pub groups: u64,
@@ -71,6 +97,16 @@ pub(super) struct Recognized {
     pub counts: Counts,
 }
 
+/// What recognition found in the original theory: its checked rows, and its
+/// checked one-atom equations in the order found. Two units may name one
+/// atom; elimination keeps one of them, or refutes the root when they
+/// disagree. `counts` covers both: a unit is a checked row over one atom.
+#[derive(Debug)]
+pub(super) struct Recognition {
+    pub rows: Recognized,
+    pub units: Vec<Unit>,
+}
+
 impl Recognized {
     pub(super) fn retained_bytes(&self) -> u128 {
         (size_of::<Self>() - size_of::<CheckedRootFacts>()) as u128
@@ -90,7 +126,7 @@ pub(super) fn recognize<Q: Quota + ?Sized>(
     producers: Option<&Producers>,
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
-) -> Result<Recognized, BudgetError<Q::Error>> {
+) -> Result<Recognition, BudgetError<Q::Error>> {
     storage.admit_record(
         (size_of::<Recognized>() - size_of::<CheckedRootFacts>() - 2 * size_of::<Vec<Clause>>())
             as u128,
@@ -99,6 +135,9 @@ pub(super) fn recognize<Q: Quota + ?Sized>(
     let facts = root_facts::build(theory, storage, budget)?;
     let mut clauses = storage.reserve(0, budget)?;
     let mut equations = storage.reserve(0, budget)?;
+    // The units' header is accounted here and passes to the prepared system
+    // with them; the recognized record holds none.
+    let mut units = storage.reserve(0, budget)?;
     budget.charge(9)?;
     let mut counts = Counts::default();
     for root in 0..theory.roots().len() {
@@ -119,7 +158,7 @@ pub(super) fn recognize<Q: Quota + ?Sized>(
         &facts,
         producers,
         &clauses,
-        &mut equations,
+        (&mut equations, &mut units),
         &mut counts,
         storage,
         budget,
@@ -128,17 +167,20 @@ pub(super) fn recognize<Q: Quota + ?Sized>(
         &facts,
         producers,
         &clauses,
-        &mut equations,
+        (&mut equations, &mut units),
         &mut counts,
         storage,
         budget,
     )?;
     budget.charge(1)?; // publish the successful tag; facts already retain the owner
-    Ok(Recognized {
-        facts,
-        clauses,
-        equations,
-        counts,
+    Ok(Recognition {
+        rows: Recognized {
+            facts,
+            clauses,
+            equations,
+            counts,
+        },
+        units,
     })
 }
 
@@ -147,7 +189,7 @@ fn from_clauses<Q: Quota + ?Sized>(
     facts: &CheckedRootFacts,
     producers: Option<&Producers>,
     clauses: &[Clause],
-    equations: &mut Vec<Equation>,
+    (equations, units): (&mut Vec<Equation>, &mut Vec<Unit>),
     counts: &mut Counts,
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
@@ -179,25 +221,52 @@ fn from_clauses<Q: Quota + ?Sized>(
             propose(support, forbidden.storage(), counts, budget)
         })?;
         for &local in proposed.equations() {
-            let words = materialize(theory, support, local, storage, budget)?;
-            budget.charge(5)?; // the constant; the reread source's tag, range start and length
+            let sources = Sources {
+                facts,
+                producers,
+                clauses,
+            };
             let reread = Reread::Clauses {
                 first,
                 count: end - first,
             };
+            if let Some(atom) = sole_atom(support, local, budget)? {
+                budget.charge(5)?; // the constant; the reread source's tag, range start and length
+                let valid = budget.in_phase(Phase::Provenance, |budget| {
+                    storage.with_record(
+                        source::CHECK_SCRATCH_BYTES as u128,
+                        budget,
+                        |storage, budget| {
+                            check(
+                                &sources,
+                                reread,
+                                Coefficients::Unit(atom),
+                                local.constant,
+                                support,
+                                storage.bytes(),
+                                budget,
+                            )
+                        },
+                    )
+                })?;
+                let unit = Unit {
+                    atom,
+                    value: local.constant,
+                };
+                retain_unit(valid, unit, units, counts, storage, budget)?;
+                continue;
+            }
+            let words = materialize(theory, support, local, storage, budget)?;
+            budget.charge(5)?; // the constant; the reread source's tag, range start and length
             let valid = budget.in_phase(Phase::Provenance, |budget| {
                 storage.with_record(
                     source::CHECK_SCRATCH_BYTES as u128,
                     budget,
                     |storage, budget| {
                         check(
-                            &Sources {
-                                facts,
-                                producers,
-                                clauses,
-                            },
+                            &sources,
                             reread,
-                            &words,
+                            Coefficients::Row(&words),
                             local.constant,
                             support,
                             storage.bytes(),
@@ -231,7 +300,7 @@ fn from_definitions<Q: Quota + ?Sized>(
     facts: &CheckedRootFacts,
     producers: Option<&Producers>,
     clauses: &[Clause],
-    equations: &mut Vec<Equation>,
+    (equations, units): (&mut Vec<Equation>, &mut Vec<Unit>),
     counts: &mut Counts,
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
@@ -253,18 +322,39 @@ fn from_definitions<Q: Quota + ?Sized>(
                     propose(group.support, group.forbidden.storage(), counts, budget)
                 })?;
             for &local in proposed.equations() {
+                let sources = Sources {
+                    facts,
+                    producers: Some(producers),
+                    clauses,
+                };
+                let reread = Reread::Definition { head };
+                if let Some(atom) = sole_atom(group.support, local, budget)? {
+                    budget.charge(3)?; // the constant; the reread source's tag and head
+                    let valid = budget.in_phase(Phase::Provenance, |budget| {
+                        check(
+                            &sources,
+                            reread,
+                            Coefficients::Unit(atom),
+                            local.constant,
+                            group.support,
+                            storage.bytes(),
+                            budget,
+                        )
+                    })?;
+                    let unit = Unit {
+                        atom,
+                        value: local.constant,
+                    };
+                    retain_unit(valid, unit, units, counts, storage, budget)?;
+                    continue;
+                }
                 let words = materialize(theory, group.support, local, storage, budget)?;
                 budget.charge(3)?; // the constant; the reread source's tag and head
-                let reread = Reread::Definition { head };
                 let valid = budget.in_phase(Phase::Provenance, |budget| {
                     check(
-                        &Sources {
-                            facts,
-                            producers: Some(producers),
-                            clauses,
-                        },
+                        &sources,
                         reread,
-                        &words,
+                        Coefficients::Row(&words),
                         local.constant,
                         group.support,
                         storage.bytes(),
@@ -331,13 +421,29 @@ pub(super) fn materialize<Q: Quota + ?Sized>(
     Ok(words)
 }
 
-/// Whether an equation over `support` with `words` and `constant` follows
-/// from `reread`, read again from the formulas: a clause range's table, or a
-/// definition's completion when the theory's roots are rules.
+/// The atom of an equation over exactly one coordinate of `support`.
+fn sole_atom<Q: Quota + ?Sized>(
+    support: Support,
+    local: LocalEquation,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<usize>, BudgetError<Q::Error>> {
+    budget.charge(2)?; // population count and its comparison
+    if local.coefficients.count_ones() != 1 {
+        return Ok(None);
+    }
+    budget.charge(2)?; // the coordinate and its atom
+    let coordinate = local.coefficients.trailing_zeros() as usize;
+    Ok(support.atoms[..support.len].get(coordinate).copied())
+}
+
+/// Whether an equation over `support` with `coefficients` and `constant`
+/// follows from `reread`, read again from the formulas: a clause range's
+/// table, or a definition's completion when the theory's roots are rules.
+/// A unit's constant is its value.
 fn check<Q: Quota + ?Sized>(
     sources: &Sources<'_>,
     reread: Reread,
-    words: &Words<u64>,
+    coefficients: Coefficients<'_>,
     constant: bool,
     support: Support,
     live_bytes: u128,
@@ -354,15 +460,27 @@ fn check<Q: Quota + ?Sized>(
                 .clauses
                 .get(first..end)
                 .ok_or(BudgetError::Stopped(zetesis_algebra::Stop::InvalidProgram))?;
-            source::check_clause_equation(
-                theory,
-                sources.facts,
-                roots,
-                support,
-                (words, constant),
-                &mut Storage::with_live_bytes(live_bytes),
-                budget,
-            )
+            let mut storage = Storage::with_live_bytes(live_bytes);
+            match coefficients {
+                Coefficients::Row(words) => source::check_clause_equation(
+                    theory,
+                    sources.facts,
+                    roots,
+                    support,
+                    (words, constant),
+                    &mut storage,
+                    budget,
+                ),
+                Coefficients::Unit(atom) => source::check_clause_unit(
+                    theory,
+                    sources.facts,
+                    roots,
+                    support,
+                    (atom, constant),
+                    &mut storage,
+                    budget,
+                ),
+            }
         }
         Reread::Definition { head } => {
             let Some(producers) = sources.producers else {
@@ -378,9 +496,20 @@ fn check<Q: Quota + ?Sized>(
             if order != Ordering::Equal {
                 return Ok(false);
             }
-            let Some(coefficients) = source::local_coefficients(theory, support, words, budget)?
-            else {
-                return Ok(false);
+            let coefficients = match coefficients {
+                Coefficients::Row(words) => {
+                    let Some(local) = source::local_coefficients(theory, support, words, budget)?
+                    else {
+                        return Ok(false);
+                    };
+                    local
+                }
+                Coefficients::Unit(atom) => {
+                    let Some(local) = source::unit_coefficients(support, atom, budget)? else {
+                        return Ok(false);
+                    };
+                    local
+                }
             };
             source::implied_by_table(
                 definition.forbidden.storage(),
@@ -429,6 +558,29 @@ pub(super) fn retain<Q: Quota + ?Sized>(
     }
     storage.push(equations, candidate, 7, budget)?;
     storage.embed::<u64>().map_err(BudgetError::Stopped)
+}
+
+/// Keep a checked one-atom equation as a unit. It counts as a checked row
+/// over one atom, as [`retain`] counts one.
+fn retain_unit<Q: Quota + ?Sized>(
+    valid: bool,
+    unit: Unit,
+    units: &mut Vec<Unit>,
+    counts: &mut Counts,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
+    budget.charge(1)?;
+    if !valid {
+        budget.charge(1)?;
+        counts.provenance_rejected += 1;
+        debug_assert!(valid, "a proposed equation must follow from its sources");
+        return Ok(());
+    }
+    budget.charge(4)?; // the row counter; the width's test and its counter
+    counts.rows += 1;
+    counts.one += 1;
+    storage.push(units, unit, 2, budget)
 }
 
 fn compare_support<Q: Quota + ?Sized>(

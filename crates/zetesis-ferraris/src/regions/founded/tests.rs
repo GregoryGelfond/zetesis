@@ -8,6 +8,7 @@ use crate::{
 };
 use zetesis_algebra::Cancellation;
 
+mod circular;
 mod projected_heads;
 mod projected_parents;
 mod reuse;
@@ -64,7 +65,7 @@ impl Scratch {
 }
 
 fn producers(owner: &Theory) -> Producers {
-    crate::producers(owner, RegionLimits::default(), &Cancellation::default())
+    crate::regions::unmarked_producers(owner, RegionLimits::default(), &Cancellation::default())
         .unwrap()
         .producers
         .unwrap()

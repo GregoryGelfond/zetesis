@@ -4,6 +4,475 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+## 0.8.0 — 2026-11-15
+
+Zetesis 0.8.0 reduces repeated grounding, support and candidate-checking work,
+and improves arithmetic and conditional-literal handling. Programs with settled
+predicates and recursive aggregate assignments can build smaller theories or
+finish grounding where earlier versions did not. Search retains the shared
+region algebra and reduct-defined answer-set membership.
+
+The release also improves aggregate-family and join reuse, objective-bound
+preparation, support scheduling, split ranking and large answer enumeration.
+`zetesis-bench` accepts typed workload manifests through its existing comparison
+engine. GPU accounting now charges shared aggregate reductions once per row;
+this does not introduce a new device search mode.
+
+### Compatibility and limits
+
+- Some previously incorrect answer families change: conditional literals with
+  undefined consequents and comparison chains now follow their corrected
+  grounding semantics. Some formerly refused arithmetic families are admitted;
+  some unsafe or overflowing cases are correctly refused. Details and examples
+  below identify these changes.
+- Substituted instances that divide by zero are omitted with a warning. Closed
+  undefined terms and zero divisors in `#show` retain their documented refusal
+  behavior. Overflow, invalid exponents and noninteger arithmetic still refuse.
+  The stages validated for a negation-excluded instance remain as documented.
+- Rust callers must review the changed split-ranking signatures, added
+  preparation statistics and projected-objective interfaces, including
+  `ObjectiveProjectionAttempt`, `ObjectiveProjectionReceipt` and
+  `ExecutionObservation::ObjectiveProjectionUnavailable`. Exhaustive matches
+  and struct literals may need changes. The typed workload manifest is an
+  additional input schema; existing bundle manifests remain supported.
+- Exact work receipts and tight-limit refusal points change with the operations
+  and storage actually used. Optional preparation may decline; ordinary exact
+  solving remains available where its own limits permit. Reserving half of the
+  available storage for narrowing tables does not guarantee that later required
+  allocations fit. Complete answer families and all optimal ties remain required.
+
+### Added
+
+- `zetesis-bench run --workloads` accepts typed selections of authored, corpus
+  and generated workloads, including bounded amendments. These selections use
+  the existing benchmark engine and complete answer-family checks. Reports
+  retain the selection manifest's provenance; existing bundle manifests remain
+  supported.
+
+### Changed
+
+- Writing an answer reads only the atoms it shows. A model view found an
+  answer's shown atoms by testing every atom of the model against the `#show`
+  selection, and a human record is written twice, once to measure it and once
+  to fill it. A model keeps its atoms in order of signed predicate and a
+  selection keeps its signatures in the same order, so the atoms of each shown
+  signature are one run of the model, which two binary searches find. A view
+  reads them that way when the searches compare fewer atoms than the model
+  holds, and tests every atom otherwise. The atoms shown and their order do
+  not change. An enumeration of 24,412 answer sets that each show 14 of 1,330
+  atoms retires 54.7 G instructions where it retired 64.2 G; a program that
+  shows most of what it holds, or has few answers, gains nothing.
+- The frozen-positive certificate declines at once where it declined for the
+  candidate before. It decides a candidate by the least consequences of its
+  frozen reduct and needs every live rule to have one live head. A candidate
+  with two true head atoms in one rule declined it only after every node of
+  the theory had been classified, and the general check then decided; most
+  candidates of a disjunctive program are of that kind. An attempt now
+  remembers the rule at which it declined for two live heads, and the next
+  one tests that rule first. No verdict changes: a decline is the absence of
+  the certificate. The enumeration above retires 46.9 G instructions where
+  the first entry left 54.7 G, and the same instance with its facts given
+  directly 8.6 G where it retired 9.9 G.
+- A support round visits the rules it can affect. Where a program has no
+  whole-program producer plan, which is every program with a choice, a
+  negation, an aggregate or an objective, each round of support completion
+  visited every rule. An ordinary rule is now visited in the first round and
+  afterwards only in a round that follows the publication of a new row of
+  one of its positive body predicates: its delta variants join new rows
+  alone, so any other visit had no variant and derived nothing. Rules with
+  aggregates, conditional literals or projections are still visited in every
+  round, where their registration decides whether they are traversed. An
+  ordinary rule that waits for the atoms it negates is visited like any
+  other, without a variant, until the schedule traverses it. A
+  program that grows for many rounds pays in each round for the rules that
+  round can affect: a transitive closure of 200 rounds beside 2,000 unrelated
+  rules grounds in 192 ms where it took 347 ms, and twenty recursive strata
+  chained by negation beside 5,000 rules, which the decided negations had
+  slowed from 314 ms to 2,289 ms, ground in 252 ms. No support, theory or
+  answer changes. `support_producer_visits` is lower, and reported
+  production and wake work change with it; `support_deferred_visits` is
+  lower for a rule that waits through rounds in which nothing it reads
+  grows. Preparing the reverse postings and active set adds admitted work and
+  storage, so exact tight-limit refusals can change even though the completed
+  support and answer families do not.
+- Ordering a model's atoms costs less when they are already in order. The
+  order of an answer's atoms is prepared by a stable merge sort over the
+  whole atom catalog, which compared half the atoms in every pass whatever
+  their order. Two runs whose last and first atoms are already in order are
+  now copied without comparing their cells, so a catalog in semantic order
+  costs fewer comparisons than it has atoms. The source-evaluation route
+  publishes its atoms nearly in that order: for a program of 160,000 atoms
+  the solving stage, which is this preparation, fell from 81 ms to 15 ms.
+  The order is unchanged, and so is every answer; `model_construction` work
+  is lower. Atom lookup preparation uses the same sort.
+- Grounding shares complete aggregate value families, term coordinates and tuple
+  discovery between compatible consumers. Reusable join-plan keys retain only
+  the inputs their planner inspects.
+- Aggregate and factored-component joins reuse numeric range indexes. Eligible
+  pairwise exclusions become guarded native cardinality constraints with their
+  original source provenance.
+- Original-root arithmetic preparation can combine certified mandatory groups
+  and exclusions to narrow candidate domains. Statistics distinguish its
+  preparation, copying, closure and published results.
+- Optional objective bounds use certified choice groups to account for
+  increasing minimum costs, preserving lexicographic priorities and all optimal
+  ties.
+- Frozen-reduct preparation reuses completed probe results within the same query
+  and skips preparation for decided roots and ranking for unused splits.
+- Grounding selects the row of a completely bound flat pattern among a short
+  posting's candidates by comparing the equality identifiers its probe already
+  resolved, instead of the ordered point lookup by term comparison. Longer
+  postings keep that lookup; both select the same row
+  (`ColumnRelations.accepts_exact`). Reported grounding work counts the
+  comparisons performed, so it changes where this selection applies.
+- Grounding reads the atoms a program derives from its facts alone as true.
+  A predicate is certain when every rule deriving it has one ordinary head over
+  positive atoms of certain predicates and comparisons; its supported atoms
+  hold in every answer set, so a positive occurrence in a body, or in the
+  condition of a choice element or conditional disjunct, is emitted as true,
+  as an explicit fact's already was (`CertainAtoms.derived_stable`). An
+  aggregate assignment over such atoms, in a constraint or in a rule whose
+  predicates all precede its head in dependency order, takes one value and
+  supports that value alone instead of every value from none to all: a rank
+  `r(C,R) :- c(C), R = #count{D : c(D), D <= C}` over `n` facts supports `n`
+  atoms where it supported about `n * n / 2`. An objective's assignment still
+  substitutes every value. No admitted program's answer sets change. See
+  [certain predicates](docs/book/architecture/grounding.md#certain-predicates).
+  Observable effects other than time:
+  - Arithmetic is evaluated only at the values such an assignment can still
+    take: one when every tuple is required, fewer than before when some are.
+    That holds for the assignment's own rule and for whatever reads its head,
+    directly or through other rules: a rule, a constraint, a choice body, an
+    aggregate element or a weak constraint. A family that overflowed only at
+    values that could not occur is admitted. A family that divides by zero at
+    each of the remaining values contributes no instance and keeps its
+    warning, by the zero-divisor entry below:
+    `c(1..3). n(N) :- N = #count{D : c(D)}. z(X) :- n(N), X = 6/(N-3).`
+    answers without an atom of `z`, as does `X = 60/((N-3)*(N-4)*(N-5))` over
+    a count that can be 3, 4 or 5.
+  - A warning that only an unrealized value raised is no longer given.
+  - The atoms and nodes a theory reports change, as do the objective
+    priorities it retains: a priority only an unrealized value would open is
+    no longer reported with cost zero.
+  - Reported grounding work changes by the analysis, one predicate lookup for
+    each atom a body names that is no explicit fact, one unit for each atom
+    in the check below, and one unit for each tuple of an assignment family.
+  - Before a theory is published, emission checks that every atom it read as
+    true is derived by unconditional ordinary roots, and refuses with the
+    source-activity failure otherwise.
+- Grounding decides a default negation over what the program has settled. A
+  default negation at the top level of a rule's body, over a flat atom of a
+  certain predicate in an earlier dependency component, is read while
+  grounding: it is false where the atom is supported and true otherwise. A
+  rule with a head that negates an atom of a certain predicate waits until
+  the components of the atoms it negates are complete, a row under which such
+  a negation is false derives no head, and a
+  rule whose other literals are definite keeps its head predicate certain. The
+  certain predicates therefore include what a program's flat rules and plain
+  assignments derive through stratified negation, no longer only the part
+  without negation. When the theory is emitted, the body of a
+  rule with a head also reads `not a` as true for an atom `a` outside the
+  completed support, which no rule can derive
+  (`DecidedNegation.absent_stable`), and drops the instance where `a` is a
+  fact or a supported atom of a certain predicate; a constraint's body drops
+  its instance in the second case only. A program whose rules negate only
+  settled predicates is emitted as its facts and the roots that derive them.
+  No admitted program's answer sets change. See
+  [certain predicates](docs/book/architecture/grounding.md#certain-predicates).
+  Observable effects other than time:
+  - **Programs that were refused are admitted.** Arithmetic downstream of a
+    rule that a decided negation leaves without instances is not reached:
+    `blocked. d(2147483647). h(X) :- d(X), not blocked. k(X+1) :- h(X).` was
+    refused for the overflow in the rule of `k` and now answers with its two
+    facts, as clingo does. A recursion that a decided negation stops ends:
+    `stop. p(0). p(X+1) :- p(X), not stop.` did not finish, and was refused
+    where a ceiling on support rounds is set; it now answers `{stop, p(0)}`,
+    and
+    `stop. {p(N)} :- N = #count{V : p(V)}, not stop.` answers `{stop}`. An
+    aggregate assignment over a predicate that a decided negation keeps
+    certain takes its exact value, with the effects the entry on certain
+    predicates describes:
+    `c(1). d(5). r(X,Y) :- c(X), d(Y), not u(Y). k(X,M) :- c(X), N = #min{Y : r(X,Y)}, M = N+1, not z.`
+    was refused for the arithmetic on an empty minimum and now answers with
+    `k(1,6)`. Of the instance a decided negation excludes, the body and an
+    ordinary or disjunctive head are still validated as written: an overflow
+    there refuses. The elements of a choice, of a head aggregate and of a
+    conditional disjunct are a later stage, which an excluded instance does
+    not start: `blocked. d(2147483647). {h(X+1)} :- d(X), not blocked.` was
+    refused for the overflow and is admitted. A zero divisor anywhere in the
+    excluded instance keeps its warning.
+  - A warning that only an instance downstream of such a rule raised is no
+    longer given.
+  - The atoms and nodes a theory reports change: an atom that only decided
+    negations read is no atom of the theory, and the direct evaluation of an
+    acyclic normal source publishes no atom for a row such a negation
+    excludes.
+  - Support completion's visits change. A rule waiting for the atoms it
+    negates is counted in `support_deferred_visits` until the round of its
+    first traversal, and that traversal in `support_rich_traversals`. A rule
+    with an assignment aggregate that waits this way is traversed one round
+    after the component it negates is complete, so such a program can take a
+    round more for each stratum of them; an ordinary rule is traversed in the
+    round the component is complete. An ordinary rule none of whose negated
+    atoms has a certain predicate does not wait. A stratum that reads itself
+    is complete only in a round in which it gains nothing, so recursive
+    strata chained by negation follow one another and their rounds add up,
+    where they overlapped while the negation was ignored: twenty such strata
+    of forty rounds each take about 820 rounds where they took 43.
+    Reported grounding work changes by the analysis and by one support lookup
+    for each decided negation of each complete row.
+- An instance that divides by zero is always omitted, with a warning. A
+  rule, constraint, choice element, aggregate element or objective element
+  whose every instance divides by zero was refused as an entirely undefined
+  family. It now contributes no instance and its statement warns, as it
+  already did when the family also held a defined instance; clingo omits the
+  same instances with an informational message. Overflow, arithmetic on a
+  value that is no number and an invalid exponent still refuse. So does an
+  undefined closed term such as `p(1/0).`, which is checked as written before
+  any substitution exists and which clingo drops, and a zero divisor in a
+  `#show` term or its condition, which stays an observation refusal where
+  clingo leaves the shown tuple out. See
+  [numeric boundaries](docs/book/reference/language.md#numeric-boundaries-and-refusal-meaning).
+  - Programs refused for an entirely undefined family are now admitted.
+  - **The answer sets of some admitted programs change.** A conditional
+    literal keeps one instance for each binding of its condition, so a
+    consequent that divides by zero cannot be left out. It was: the
+    implication of a body conditional, or the disjunct of a head conditional,
+    disappeared for that binding. A body consequent with no defined
+    alternative is now false under its condition, and such a head is true
+    under it, as clingo grounds `#false : condition` and `#true : condition`.
+    `d(0;1). q(1). p :- q(1/X) : d(X).` derived `p` and no longer does;
+    `d(0;1). p(1/X) : d(X).` derived `p(1)` and no longer does. The earlier
+    answers disagreed with clingo. The alternatives of a pooled head are read
+    together under one binding: `{d(0)}. p(1/X;2) : d(X).` keeps `p(2)`, and
+    the head is true only where no alternative is defined. A value that the
+    condition binds by an interval is a binding of its own:
+    `{d(1)}. p(2/Y) : d(X), Y = 0..X.` has the answer set `{d(1)}`.
+  - A comparison consequent is read only under a binding whose condition
+    holds. It was evaluated beside every binding no comparison excluded, so
+    under a binding that failed another part of its condition, or whose
+    condition divided by zero, a zero divisor in it warned and an overflow
+    in it refused:
+    `d(0;1). p :- 1/X=1 : d(X), (X,1)!=(0,1).` no longer warns.
+  - **So do those of admitted programs with a comparison chain** that holds
+    a link dividing by zero beside a link that is defined and false. The
+    links are separate comparisons, as clingo grounds them, so the false link
+    decides the chain; the chain was read as one literal and its instance
+    omitted. `d(0;3). p(X) :- d(X), not 2<X<6/X.` now derives `p(0)` as well
+    as `p(3)`, and `d(0;1). 1<=X<=5/X :- d(X).` has no answer set where it
+    had one. A chain with no false link is undefined where a link divides by
+    zero, as before, and a fatal failure in any link still refuses. A chain
+    with an interval among its terms is read the same way under each value
+    of the interval: `d(0;1). p(X) :- d(X), not 3<2<(1..2)/X.` derives `p(0)`
+    and `p(1)`.
+  - A comparison with an interval reads its terms as written, and no longer
+    through a generated value for each. Two things follow. It bounds an
+    unresolved variable through the interval where its terms are
+    integer-affine in the interval's value, and no longer through a term
+    that is not: `p(X) :- 0 < X < (1..3).` was refused as unsafe and has
+    the answer set `{p(1), p(2)}`, as in clingo, while
+    `p(X) :- 0 <= X <= (1..4)/2 <= 3.` and
+    `p(X) :- 0 <= X+0 = (2..4)/2 <= 3.` were admitted and are refused as
+    unsafe; clingo refuses the first and admits the second. And under a row
+    where the interval is empty, a fatal failure in another term of the
+    comparison, where the row and the values generated before the interval
+    determine that term, refuses on whichever side of the interval the term
+    stands: `d(0). p :- d(X), (3..1) > X+2147483647+1.` was admitted and is
+    refused, as `d(0). p :- d(X), X+2147483647+1 < (3..1).` was and is. A
+    positive equality with an interval in a body takes another route and is
+    unchanged. Where an empty interval of another comparison is generated
+    first, the comparison is not read:
+    `d(0). p :- d(X), (3..1) < 4, (1..2) > X+2147483647+1.` was refused for
+    the overflow and has the answer set `{d(0)}`, as in clingo. The order
+    among the intervals of different comparisons is not specified.
+  - A source family's evidence records only whether a substitution divided
+    by zero (`ArithmeticFamilies`).
+- A walk orders its splits by what its region has decided. A chain is a
+  conjunction or disjunction read over its operands; the region has shortened
+  it when an operand is settled without settling the chain and two or more of
+  its members, the open operands and its own truth while unknown, remain.
+  Under a prepared generator order a walk takes an open generating head of
+  least choice depth, the longest path of choosing components below the head,
+  and among those the head for which the shortened chains weigh the most; the
+  component order breaks ties as before. Walks without a generator order, the
+  countermodel walk of a frozen reduct among them, rank by shortened chains
+  before unknown-parent counts. Under a candidate restriction or an objective
+  bound the ranking is unchanged: its subject is the restriction's own
+  knowledge, so once an optimization holds an incumbent its splits are chosen
+  as before. Every answer set and every optimum is unchanged. The order in
+  which answers are found changes, and with it the regions visited and the
+  search work reported. Where a region has shortened a chain, a generator
+  order reads its eligible atoms a second time, and either ranking reads the
+  parents of the atoms it scores, one unit each. The generator order retains
+  one more word for each atom and its preparation holds nine more bytes for
+  each atom and node, so a theory at the edge of the preparation byte
+  allowance can now decline it. `GeneratorOrder::preferred_atom_reserved` and
+  `Knowledge::preferred_atom_reserved` now take the theory's `Narrower`, and
+  the former the region's closed `Knowledge`; see the
+  [library map](docs/book/rust/libraries.md). See
+  [shortened chains](docs/book/architecture/execution.md#shortened-chains).
+- The optional original-root arithmetic preparation's work allowance grows
+  with its theory: 256 operations for each node and each operand occurrence,
+  and never fewer than the 100,000,000 it was, which declined the preparation
+  of the largest theories, where its cuts decide the most. The operations
+  performed are charged to the search's work account as before. Under a work
+  limit the allowance above 100,000,000 is at most half of what the limit
+  leaves, so the optional preparation is exhausted before the limit is; it
+  may take up to that half where it took 100,000,000, and a walk that needs
+  more than the remainder is then stopped by the limit. A preparation that
+  exceeds its allowance is declined and the walk runs without it, as before.
+- The original-root arithmetic preparation keeps an equation over one atom as
+  a root decision and no longer writes a row of the theory's width for it: a
+  fact, an atom no rule defines and a constraint over one atom each give one.
+  It is checked against its source and decides its atom in the prepared root
+  as before, and it is added to the rows over its atom before elimination, so
+  two that disagree, or a row they contradict, still refute the root. The work
+  and storage of these equations now grow with their number, where they grew
+  with that number times the theory's atoms. A transitive closure over a chain
+  of 200 nodes, 20,099 derived facts, needed 103,734,645 operations and
+  104 MB, more than the default allowance, so its preparation was declined
+  after spending all of it; it now completes in 13,811,036 operations and
+  4 MB. No answer set changes. In the reported parity statistics `rank`
+  counts the atoms these equations decide with the echelon pivots of the
+  rest, `units` counts each decided atom once, a refuted root reports no
+  unit and counts none in its rank, and preparation work and peak bytes
+  fall. `ParitySystem::units` yields the recognized decisions first, then the
+  one-atom echelon rows. `ParitySystem::inspect_reserved` on an original
+  theory's system no longer forces the atom of a one-atom equation: such an
+  equation is no row, and the prepared root holds it, so a region that was
+  not narrowed from that root is not given it. `consistent_in_reserved` reads
+  these decisions against its region.
+- A theory no longer carries a support guard for an atom with an
+  unconditional producer: a fact, an atom the program derives from its facts,
+  or the head of a choice or disjunction whose body is true. Such a guard
+  requires truth itself, so every interpretation satisfies it and every
+  reduct keeps it true (`SupportTransposition.unconditional_guards_omitted`).
+  No answer set changes. Each such atom has three nodes and one root fewer:
+  the transitive closure above goes from 100,497 nodes and 40,198 roots to
+  40,200 and 20,099. The reported formula sizes fall, and with them the
+  search work that reads the roots. The work allowance of the optional
+  original-root arithmetic preparation is proportional to the theory's size,
+  so it falls too, and a preparation that needed nearly all of it can now be
+  declined. Grounding work rises by one read for each producer of an atom
+  that keeps its guard.
+- Candidate narrowing no longer counts a producer as support when its body
+  requires its own head, or an atom that only that head can derive, as in the
+  alias pair `a :- b.` `b :- a.` with one other rule for `a`
+  (`ExternalSupport.answer_set_noncircular_support`). A loop whose every cycle
+  passes through such a producer is decided by the support cut and no longer
+  starts the closure of possible founded support, whose reported work falls to
+  its cycle test on programs with no other loop. A loop with another cycle is
+  still closed, reading every producer, and its cycle test then searches the
+  dependencies twice, so that work rises there. Marking is charged with the
+  producer inventory, so reported search work rises by its visits, up to four
+  times the extraction's own and within the extraction's ceiling; beyond that
+  nothing is marked. A large body shared by many rules exceeds that share, and
+  so do rules with wide bodies: in a tested ring of rules, bodies of seven
+  atoms are marked and bodies of eight are not. A work budget within that
+  margin of exhaustion is spent sooner. No support explanation is learned for a
+  loop the support cut now decides.
+- Frozen-reduct preparation bounds pairwise constraints in both polarities. Pairs
+  no countermodel cuts together grow into cliques with a lower count bound, as
+  pairs none holds together already grow into cliques with an upper one
+  (`AlgebraicRows.lower_of_cover`), so a quantified pigeonhole core whose
+  clauses fit the eight-atom tables is decided at the root whichever way its
+  atoms are read. A wider clause still gives a bound only when it forbids
+  cutting all of its atoms.
+
+### Fixed
+
+- Circular-support preparation now charges inspections of non-atomic
+  conjunction operands. Wide shared bodies could previously perform these
+  reads without consuming their work allowance or advancing cancellation
+  checks. Exhausting the optional marking allowance retains the complete
+  unmarked producer inventory; answer-set semantics are unchanged.
+
+- A rule with an arithmetic equality over a large relation is grounded within
+  its memory. `d(0..199999). q(X) :- d(X), X \ 2 = 0.` was refused: the
+  equality selected the rows of `d` through a table that keeps a row mask for
+  each distinct value of each column, which for 200,000 distinct values needs
+  about ten gigabytes, over the default ceiling on support bytes. Where
+  ordinary joins are indexed, that selection is now made at once only while
+  the table is small (its masks may take 65536 words of 32 bits); past that
+  the join offers its rows and the equality is checked on each, as it always
+  was. Joins that repeat the probe, as `q(X,Y) :- m(Y), d(X), X / 3 = Y.`
+  does for each row of `m`, prepare the table once the rows they have read in
+  its place have cost what the table would, a row weighed as eight words of
+  masks. The count is the snapshot's, so several rules that probe one
+  relation repay its table together; a probe that a numeric index serves
+  counts nothing. Small or not, a table is attempted only if twice its
+  estimated preparation, with what the tables already hold and the growth
+  of their list, is within what the
+  support's limits leave, weighed as the table's own accounting charges it,
+  and otherwise the join keeps its scan. Immediately after preparation the
+  retained tables take at most half of the room beside other live storage.
+  Later required growth can still refuse where scanning throughout would
+  fit; work-limit refusals also remain possible during preparation.
+  The answer sets do not change. `table_preparations` and
+  `table_index_bytes` are lower for a
+  rule that probes once, and its reported work changes with them. Under
+  `--formula-joins table` nothing changes.
+- An overflow or an invalid exponent in an assignment aggregate refuses
+  whatever the rule's other arithmetic does. It was read as a zero divisor,
+  and its instance omitted with a warning, when the last operation evaluated
+  before it had divided by zero: in an earlier generator of the same row, or
+  in the head, a choice bound or a comparison head of the row before.
+  `d(0;1;2). {q}. h(2/(X-1),V) :- d(X), V = #sum{X*1073741824,a : q}.` was
+  admitted with a warning and is now refused for the overflow at `X = 2`.
+- Grounding finishes for a recursive assignment whose values a required tuple
+  bounds. `f(3). {p(N)} :- N = #count{V : p(V); V : f(V)}.` did not finish
+  grounding, and now has its one answer set, `f(3)`. A rule that reads the
+  predicate it derives proposed its assignment's values before the fact's
+  tuple was known to be required: it proposed 0, `p(0)` added a tuple, and
+  every round proposed one value more. Support completion now holds such a
+  rule back until the components its assignment's other elements read have
+  reached their fixed point, and reads their tuples as required when their
+  conditions hold certain atoms. No admitted program's answer sets change.
+  Observable effects:
+  - Such a rule takes fewer values, with the effects the entry on certain
+    predicates above describes for a rule traversed once; the same holds for
+    whatever reads its head.
+    `f(3). {p(N+1)} :- N = #max{V : p(V); V : f(V)}, N < 6.` was refused at
+    `#inf + 1` and now has its answer set `f(3)`. In
+    `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)}, N < 2, Y = 6/(N-1).` the
+    one value is now 1, which divides by zero, so the rule has no instance
+    and keeps its warning.
+  - Reported support work changes for these rules: their first traversal
+    comes later, and they propose fewer values.
+  - A tuple is required only through certain predicates, so these forms still
+    do not finish where clingo does: a seed that is a fact, or a consequence of
+    facts, of the recursive predicate itself
+    (`p(1). {p(N)} :- N = #count{V : p(V)}.`); an element over a predicate
+    that a choice also derives, or that the facts decide only through a
+    negation, a guard aggregate or a conditional literal; and an element whose
+    condition holds a default negation. The
+    [grounding chapter](docs/book/architecture/grounding.md#certain-predicates)
+    states the rule and the rewrite that makes a seed required.
+- Support completion stops testing which dependency components reached their
+  fixed point once every rule it held back for them was traversed. The test
+  ran in every later round of a completion that also had a rule it never
+  holds. Support and the emitted theory are unchanged; reported support work
+  falls by the test's charge in those rounds.
+- Source-activity preparation reuses immutable aggregate families across a
+  producer's bindings and evaluates shared numeric rows once per activity
+  snapshot. This removes repeated grounding work in aggregate-dependent
+  objectives while preserving the original program, complete answers and
+  optimal ties. Retained scratch storage remains subject to the existing
+  limits; work receipts reflect the operations actually performed.
+- Fully bound flat joins refine wider value postings through the relation's
+  existing exact tuple lookup. Empty and singleton postings retain their
+  original query work. Selected rows keep their original identity and delta
+  partition, and still pass ordinary matching and filtering checks. Partial
+  queries retain indexed postings.
+- Source-backed objective bounds select the complete predicate families read
+  by the objectives before building their index. Unrelated atoms no longer
+  consume the optional plan's atom allowance. Original atom identities, exact
+  costs and optimal ties are preserved; declined preparation retains its work
+  receipt and falls back to exact scoring under the remaining allowance.
+- GPU setup and propagation accounting charges shared aggregate reductions once
+  per row, with separate per-guard costs. Admission uses the existing work and
+  memory limits; no device execution mode or shader is changed.
+
 ## 0.7.0 — 2026-11-08
 
 Zetesis 0.7.0 brings candidate search and reduct checking onto the same

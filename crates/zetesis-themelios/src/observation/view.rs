@@ -3,14 +3,14 @@
 use std::fmt;
 
 use themelios_program::symbol::{Sign as SymbolSign, Symbol};
-use zetesis_algebra::{Cancellation, Meter, MeterBytes, Stop};
+use zetesis_algebra::{Cancellation, CancellationPoll, Meter, MeterBytes, Stop};
 use zetesis_core::catalog::{AtomRef, TermRef};
-use zetesis_core::{Model, Sign, ValueNodeRef};
+use zetesis_core::{Model, ModelAtoms, ModelIter, Sign, ValueNodeRef};
 use zetesis_objective::Score;
 
 use super::json::AtomTable;
 use super::{ConstructionLimits, Error, Evaluation, Limits, ObservationProgram, Statistics};
-use crate::{OutputSelection, PreparedSelection};
+use crate::{OutputSelection, PreparedSelection, Signatures};
 
 /// A full supplied model beside its independent observation and objective channels.
 /// Construction evaluates observations only; the caller establishes stability and
@@ -31,6 +31,15 @@ pub(super) enum AtomChannel<'a> {
     Policy(&'a OutputSelection),
     Prepared(&'a PreparedSelection<'a>),
 }
+impl<'a> AtomChannel<'a> {
+    /// The policy both forms decide by.
+    fn policy(self) -> &'a OutputSelection {
+        match self {
+            Self::Policy(selection) => selection,
+            Self::Prepared(selection) => selection.selection(),
+        }
+    }
+}
 impl AtomChannel<'_> {
     fn includes<'a>(self, atom: impl Into<AtomRef<'a>>) -> bool {
         match self {
@@ -48,6 +57,72 @@ impl AtomChannel<'_> {
             Self::Prepared(selection) => selection.try_includes(atom, charge),
         }
     }
+}
+
+/// The atoms of one model that a selection shows, in the model's order.
+enum ShownAtoms<'a> {
+    /// Every atom is tested: an implicit selection shows each one, and an
+    /// explicit one decides each.
+    Tested {
+        atoms: ModelIter<'a>,
+        selection: AtomChannel<'a>,
+    },
+    /// The atoms of each signature are read as one run of the model, the
+    /// signatures in their order; `run` is the unread rest of the current one.
+    Runs {
+        atoms: ModelAtoms<'a>,
+        signatures: Signatures<'a>,
+        next: usize,
+        run: Option<ModelIter<'a>>,
+    },
+}
+impl<'a> ShownAtoms<'a> {
+    fn new(atoms: ModelAtoms<'a>, selection: AtomChannel<'a>) -> Self {
+        let policy = selection.policy();
+        let signatures = policy.signatures();
+        if policy.is_explicit() && runs_compare_fewer(signatures.len(), atoms.len()) {
+            Self::Runs {
+                atoms,
+                signatures,
+                next: 0,
+                run: None,
+            }
+        } else {
+            Self::Tested {
+                atoms: atoms.iter(),
+                selection,
+            }
+        }
+    }
+}
+impl<'a> Iterator for ShownAtoms<'a> {
+    type Item = AtomRef<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Tested { atoms, selection } => atoms.find(|atom| selection.includes(*atom)),
+            Self::Runs {
+                atoms,
+                signatures,
+                next,
+                run,
+            } => loop {
+                if let Some(atom) = run.as_mut().and_then(Iterator::next) {
+                    return Some(atom);
+                }
+                let signature = signatures.at(*next)?;
+                *next += 1;
+                *run = Some(atoms.of_predicate(signature).iter());
+            },
+        }
+    }
+}
+
+/// Whether finding every signature's run compares fewer atoms than the model
+/// holds: two binary searches of `atoms` atoms for each of `signatures`
+/// signatures, each of at most `floor(log2(atoms)) + 1` comparisons.
+fn runs_compare_fewer(signatures: usize, atoms: usize) -> bool {
+    let comparisons = (usize::BITS - atoms.leading_zeros()) as usize;
+    signatures.saturating_mul(2).saturating_mul(comparisons) < atoms
 }
 
 impl ObservationProgram {
@@ -192,15 +267,20 @@ impl ModelView<'_> {
     }
 
     /// Selected original atoms in full-model order; no term-channel deduplication.
-    /// Constructing the iterator takes constant time and allocates nothing. A full
-    /// traversal scans all atoms; for explicit selection each atom reads a prepared
-    /// decision or, outside the prepared vocabulary, performs a binary lookup whose
-    /// predicate comparisons inspect name bytes.
+    /// Constructing the iterator takes constant time and allocates nothing.
+    ///
+    /// An explicit selection with few signatures beside the model's atoms reads
+    /// each signature's atoms as one run of the model: the model orders its
+    /// atoms by signed predicate first and the selection orders its signatures
+    /// the same way, so the runs, taken in signature order, are the selected
+    /// atoms in model order. Each run is found by two binary searches of the
+    /// model, whose comparisons inspect predicate name bytes; the atoms that
+    /// are not shown are not visited. Any other traversal scans all atoms; for
+    /// explicit selection each atom reads a prepared decision or, outside the
+    /// prepared vocabulary, performs a binary lookup whose predicate
+    /// comparisons inspect name bytes.
     pub fn shown_atoms(&self) -> impl Iterator<Item = AtomRef<'_>> {
-        self.model
-            .atoms()
-            .iter()
-            .filter(|atom| self.selection.includes(*atom))
+        ShownAtoms::new(self.model.atoms(), self.selection)
     }
 
     /// Distinct enabled terms. Equal symbols in the atom channel remain separate.
@@ -463,7 +543,7 @@ fn sign(value: Sign) -> &'static str {
 struct Buffer<'a> {
     text: String,
     limits: ViewLimits,
-    cancellation: &'a Cancellation,
+    cancellation: CancellationPoll<'a>,
     work: u64,
 }
 impl<'a> Buffer<'a> {
@@ -471,7 +551,7 @@ impl<'a> Buffer<'a> {
         Self {
             text: String::new(),
             limits,
-            cancellation,
+            cancellation: cancellation.polling(),
             work: 0,
         }
     }
@@ -701,5 +781,7 @@ impl<'a> Buffer<'a> {
     }
 }
 
+#[cfg(test)]
+mod shown_tests;
 #[cfg(test)]
 mod tests;

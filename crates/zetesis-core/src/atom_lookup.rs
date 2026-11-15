@@ -1,5 +1,9 @@
 //! Borrowed predicate windows and exact keys over one authoritative atom owner.
 
+mod selected;
+
+pub use selected::{SelectedAtomIndexError, SelectedAtomIndexErrorKind};
+
 use std::{cmp::Ordering, fmt, iter::FusedIterator, slice};
 
 use crate::{
@@ -255,20 +259,33 @@ impl Orders {
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Self, AtomIndexError<E>> {
         let mut checked = || before().map_err(AtomIndexError::Stopped);
-        let mut keys = positions(atoms.len(), &mut checked)?;
-        let mut rows = positions(atoms.len(), &mut checked)?;
-        let mut scratch = positions(atoms.len(), &mut checked)?;
+        let keys = positions(atoms.len(), &mut checked)?;
+        let rows = positions(atoms.len(), &mut checked)?;
+        let scratch = positions(atoms.len(), &mut checked)?;
+        Self::finish(atoms, keys, rows, scratch, &mut checked)
+    }
+
+    // Dense and selected construction differ only in their checked seed. The
+    // stable sorts, typed identity checks and resulting original coordinates
+    // have one implementation. This adds no calls to the dense callback path.
+    fn finish<E>(
+        atoms: Source<'_>,
+        mut keys: Vec<usize>,
+        mut rows: Vec<usize>,
+        mut scratch: Vec<usize>,
+        checked: &mut impl FnMut() -> Result<(), AtomIndexError<E>>,
+    ) -> Result<Self, AtomIndexError<E>> {
         sort(
             &mut keys,
             &mut scratch,
             atoms,
             SortOrder::Identity,
-            &mut checked,
+            &mut *checked,
         )?;
         for pair in keys.windows(2) {
             if atoms
                 .at(pair[0])
-                .equals_ref_with(atoms.at(pair[1]), &mut checked)?
+                .equals_ref_with(atoms.at(pair[1]), &mut *checked)?
             {
                 return Err(AtomIndexError::Duplicate {
                     first: pair[0],
@@ -281,7 +298,7 @@ impl Orders {
             &mut scratch,
             atoms,
             SortOrder::Predicate,
-            &mut checked,
+            &mut *checked,
         )?;
         Ok(Self {
             keys,

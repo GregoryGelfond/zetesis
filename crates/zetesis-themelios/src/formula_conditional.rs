@@ -1,4 +1,11 @@
 //! Finite universal conditionals retain each original condition implication.
+//!
+//! A consequent is the disjunction of its alternatives over the values they
+//! take. An alternative that divides by zero takes none, so a consequent
+//! whose every alternative does is false, whatever its sign: the implication
+//! then requires its condition to be false. clingo grounds the same instance
+//! as `#false : condition`. A condition that divides by zero has no instance
+//! at all.
 
 use crate::formula_binding::Binding;
 
@@ -6,30 +13,13 @@ use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
 use zetesis_ferraris::NodeView as Node;
 
-use crate::FormulaFailure;
 use crate::formula_conditional_ir::{
     Alternative, ConditionalIr, Consequent, ConsequentOperand, GuardAlternative,
 };
 use crate::formula_ground::{Builder, FALSUM, VERUM, boolean};
-use crate::formula_support::family::Evidence;
-use crate::formula_support::{Context, Ir, Join, Support};
-
-/// Arithmetic omission removes the whole local implication. A defined false
-/// consequent, including an empty witness disjunction, remains a formula value.
-enum ConsequentInstance {
-    Defined(usize),
-    Omitted,
-}
-
-impl ConsequentInstance {
-    fn alternatives(value: usize, evidence: &Evidence) -> Self {
-        if evidence.zero.is_some() && !evidence.defined {
-            Self::Omitted
-        } else {
-            Self::Defined(value)
-        }
-    }
-}
+use crate::formula_guard::Guard;
+use crate::formula_support::{Context, Evaluation, Ir, Join, Support};
+use crate::{ExpansionFailure, FormulaFailure};
 
 impl<'source> Builder<'_, '_, 'source> {
     pub(super) fn conditional(
@@ -91,16 +81,7 @@ impl<'source> Builder<'_, '_, 'source> {
                     support,
                     location,
                 )?,
-                Consequent::Guard(guard) => ConsequentInstance::Defined(boolean(guard.evaluate(
-                    &binding,
-                    self.computation,
-                    self.limits,
-                    self.counters,
-                    location,
-                )?)),
-            };
-            let ConsequentInstance::Defined(consequent) = consequent else {
-                continue;
+                Consequent::Guard(guard) => boolean(self.guard_holds(guard, &binding, location)?),
             };
             let implication = self.node(Node::Implies(condition, consequent), location)?;
             result = self.and(result, implication, location)?;
@@ -117,9 +98,8 @@ impl<'source> Builder<'_, '_, 'source> {
         binding: &Binding,
         support: &Support<'source>,
         location: ProgramSite,
-    ) -> Result<ConsequentInstance, FormulaFailure> {
+    ) -> Result<usize, FormulaFailure> {
         let mut disjunction = FALSUM;
-        let mut evidence = Evidence::default();
         for alternative in alternatives.iter() {
             let mut rows = Join::local(
                 alternative.map(|alternative| alternative.bindings.as_slice()),
@@ -160,9 +140,8 @@ impl<'source> Builder<'_, '_, 'source> {
                 }
                 disjunction = self.or(disjunction, value, location)?;
             }
-            evidence.merge(rows.take_family());
         }
-        Ok(ConsequentInstance::alternatives(disjunction, &evidence))
+        Ok(disjunction)
     }
 
     fn guard_consequent(
@@ -171,9 +150,8 @@ impl<'source> Builder<'_, '_, 'source> {
         binding: &Binding,
         support: &Support<'source>,
         location: ProgramSite,
-    ) -> Result<ConsequentInstance, FormulaFailure> {
+    ) -> Result<usize, FormulaFailure> {
         let mut value = false;
-        let mut evidence = Evidence::default();
         for alternative in alternatives.iter() {
             let mut rows = Join::local(
                 alternative.map(|alternative| alternative.bindings.as_slice()),
@@ -194,16 +172,36 @@ impl<'source> Builder<'_, '_, 'source> {
                 // Every value alternative is evaluated, including those after
                 // a true result: errors cannot disappear.
                 self.work(location)?;
-                value |= alternative.guard.evaluate(
-                    &row,
-                    self.computation,
-                    self.limits,
-                    self.counters,
-                    location,
-                )?;
+                value |= self.guard_holds(&alternative.guard, &row, location)?;
             }
-            evidence.merge(rows.take_family());
         }
-        Ok(ConsequentInstance::alternatives(boolean(value), &evidence))
+        Ok(boolean(value))
+    }
+
+    /// Whether `guard` holds under `binding`. A guard that divides by zero
+    /// does not hold; the family scan reports that zero divisor as its
+    /// statement's warning. Any other failure is returned.
+    fn guard_holds(
+        &mut self,
+        guard: &Guard,
+        binding: &Binding,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        let mut evaluation = Evaluation::default();
+        match guard.evaluate_in(
+            binding,
+            &mut evaluation,
+            self.computation,
+            self.limits,
+            self.counters,
+            location,
+        ) {
+            Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. }))
+                if evaluation.zero_divisor() =>
+            {
+                Ok(false)
+            }
+            result => result,
+        }
     }
 }

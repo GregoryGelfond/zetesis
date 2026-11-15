@@ -7,6 +7,7 @@ mod scalar_chains;
 mod support_demand;
 mod unchanged_visits;
 
+use crate::support::warnings::zero_divisor_statement;
 use std::cell::{Cell, RefCell};
 use zetesis_reference_support::resource_limits;
 
@@ -360,9 +361,40 @@ fn only_rule_phases_claim_a_source_location() {
 }
 
 #[test]
-fn undefined_family_validation_retains_its_failed_phase() {
+fn undefined_family_validation_completes_its_phase() {
     let observer = Observer::default();
     let source = "p(0). :- p(X), 1/X=0.";
+    let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+    let plain = compile(source, &FormulaLimits::default(), None).unwrap();
+    assert_eq!(measured.warnings(), plain.warnings());
+    assert_eq!(zero_divisor_statement(&measured), ":- p(X), 1/X=0.");
+    // The constraint's one instance is omitted, so the fact is the only root.
+    assert_eq!(measured.atoms(), plain.atoms());
+    assert_eq!(measured.theory().roots(), plain.theory().roots());
+    assert_eq!(measured.theory().roots().len(), 1);
+    let records = observer.records.borrow();
+    // Family validation is the last support-completion phase. It evaluated
+    // the division and emitted no root, and no phase failed.
+    let validation = records
+        .iter()
+        .rfind(|record| record.phase == GroundingPhase::SupportCompletion)
+        .unwrap();
+    assert!(validation.work.expression_nodes.unwrap() > 0);
+    assert_eq!(validation.work.roots, Some(0));
+    assert!(
+        records
+            .iter()
+            .all(|record| record.outcome == GroundingOutcome::Completed)
+    );
+    assert!(!observer.active.get());
+}
+
+#[test]
+fn fatal_family_validation_retains_its_failed_phase() {
+    // The division's operand is no number: unlike a zero divisor, this
+    // refuses the family, in the phase that validates it.
+    let observer = Observer::default();
+    let source = "p(a). :- p(X), 1/X=0.";
     let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap_err();
     let plain = compile(source, &FormulaLimits::default(), None).unwrap_err();
     assert_eq!(measured.to_string(), plain.to_string());
@@ -445,8 +477,9 @@ fn coherence_preserves_the_cumulative_root_limit() {
 
 #[test]
 fn support_guards_preserve_the_cumulative_root_limit() {
-    // A fact consumes the allowance before its necessary-support guard.
-    root_refusal("p.", 1, GroundingPhase::SupportGuards);
+    // A rule consumes the allowance before its head's necessary-support
+    // guard. The head needs one: its only producer has a condition.
+    root_refusal("p :- not p.", 1, GroundingPhase::SupportGuards);
 }
 
 #[test]

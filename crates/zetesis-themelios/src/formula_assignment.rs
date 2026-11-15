@@ -16,6 +16,7 @@ use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{AggregateIr, AggregateKey};
+use crate::formula_support::certain::Certainty;
 use crate::formula_support::components::Term;
 use crate::formula_support::{
     Buffer, Computation, Context, Counters, GroundingWork, Ir, Join, Support, TermSelection,
@@ -30,8 +31,13 @@ use zetesis_ferraris::AggregateExtremum;
 /// The proposed values of the assignment `aggregate` under the outer
 /// `assignment`, in ascending term order: the carrier of the full tuples its
 /// elements' local joins yield over `support`, each coalesced once. A tuple is
-/// required when an element whose condition the join decides yields it, so no
-/// support changes the required tuples. Final grounding's assignment family is
+/// required when an element yields it whose condition the join decides, which
+/// no support changes, or whose condition holds certain atoms and decided
+/// literals where `support` lists the element (`formula_support::certain`).
+/// An element is listed only where it is read over complete relations, by a
+/// producer traversed once or by one held back until they are complete, so
+/// later support changes its required tuples no more than the first kind's.
+/// Final grounding's assignment family is
 /// the carrier of the same required tuples over a support that contains this
 /// one, and a carrier only grows with its possible tuples, so the family has a
 /// root for every value proposed here. Charges work and storage as it reduces
@@ -50,20 +56,165 @@ pub(crate) fn values<'a, 'source: 'a>(
         counters,
         location,
     } = work;
+    let mut observer = IgnoreTuples;
+    let collected = collect(
+        aggregate,
+        assignment,
+        support,
+        budget,
+        &mut observer,
+        Context::new(&mut *computation, limits, counters, location),
+    )?;
+    collected.carrier(
+        Kind::of(aggregate.function),
+        Context::new(computation, limits, counters, location),
+    )
+}
+
+/// The common successful tuple collection. Its original owner and ordering are
+/// used by both ordinary construction and the final-family retention visitor.
+pub(crate) struct Collected {
+    pub(crate) tuples: Binding<'static>,
+    pub(crate) required: TermSelection,
+}
+impl Collected {
+    pub(crate) fn carrier(
+        &self,
+        kind: Kind,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Binding<'static>, FormulaFailure> {
+        let Context { computation, work } = context;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let contributions = split(
+            kind,
+            &self.tuples,
+            &self.required,
+            computation,
+            limits,
+            counters,
+            location,
+        )?;
+        carrier(
+            contributions.streams(),
+            computation,
+            limits,
+            counters,
+            location,
+        )
+    }
+}
+
+/// Statically dispatched observation of the actual complete local joins. The
+/// ordinary instance retains nothing; no second join implementation is present.
+pub(crate) trait TupleRows<'source> {
+    const RETAIN: bool;
+    fn retaining(&self) -> bool;
+    fn begin(
+        &mut self,
+        certificate: Option<crate::formula_support::LocalPlanCertificate<'source>>,
+        prefix_len: usize,
+        empty: bool,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure>;
+    fn row(
+        &mut self,
+        tuple: &TermKey,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure>;
+    fn end(&mut self, context: Context<'_, &Computation<'_, '_>>) -> Result<(), FormulaFailure>;
+}
+struct IgnoreTuples;
+impl<'source> TupleRows<'source> for IgnoreTuples {
+    const RETAIN: bool = false;
+    fn retaining(&self) -> bool {
+        false
+    }
+    fn begin(
+        &mut self,
+        _: Option<crate::formula_support::LocalPlanCertificate<'source>>,
+        _: usize,
+        _: bool,
+        _: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        Ok(())
+    }
+    fn row(
+        &mut self,
+        _: &TermKey,
+        _: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        Ok(())
+    }
+    fn end(&mut self, _: Context<'_, &Computation<'_, '_>>) -> Result<(), FormulaFailure> {
+        Ok(())
+    }
+}
+
+pub(crate) fn collect<'a, 'source: 'a, O: TupleRows<'source>>(
+    aggregate: Ir<'a, 'source, AggregateIr>,
+    assignment: &Binding,
+    support: &Support<'source>,
+    budget: &mut Budget,
+    observer: &mut O,
+    context: Context<'_, &mut Computation<'_, '_>>,
+) -> Result<Collected, FormulaFailure> {
+    let Context { computation, work } = context;
+    let GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
     let mut tuples = TermSelection::new(computation, limits, counters, location)?;
     // The tuples with an occurrence from an element whose condition the local
-    // join decides: present in every interpretation for this binding.
+    // join decides, or whose condition holds certain atoms and decided literals
+    // only over relations that reached their fixed point
+    // (`formula_support::certain`): present in every interpretation for this
+    // binding.
     let mut required_tuples = TermSelection::new(computation, limits, counters, location)?;
-    for element in aggregate
+    let certainty = support.certainty();
+    for (position, element) in aggregate
         .map(|aggregate| aggregate.elements.as_slice())
         .iter()
+        .enumerate()
     {
-        let mut local = Join::local(
-            element.map(|element| element.condition.as_slice()),
-            assignment,
-            element.variables,
-            support,
-            budget,
+        let required = Certainty::requires(certainty, aggregate.id, position, &element);
+        let retain = if O::RETAIN {
+            counters.work(limits, location)?;
+            observer.retaining()
+        } else {
+            false
+        };
+        let (mut local, certificate) = if retain {
+            Join::local_certified(
+                element.map(|element| element.condition.as_slice()),
+                assignment,
+                element.variables,
+                support,
+                budget,
+                Context::new(&*computation, limits, counters, location),
+            )?
+        } else {
+            (
+                Join::local(
+                    element.map(|element| element.condition.as_slice()),
+                    assignment,
+                    element.variables,
+                    support,
+                    budget,
+                    Context::new(&*computation, limits, counters, location),
+                )?,
+                None,
+            )
+        };
+        local.select_numeric_local(Context::new(&*computation, limits, counters, location))?;
+        observer.begin(
+            certificate,
+            assignment.len(),
+            element.condition.is_empty(),
             Context::new(&*computation, limits, counters, location),
         )?;
         while let Some(binding) = local.next(computation, limits, budget, counters, location)? {
@@ -71,13 +222,17 @@ pub(crate) fn values<'a, 'source: 'a>(
                 unreachable!("assignment is a function aggregate")
             };
             let tuple = tuple(terms, &binding, computation, limits, counters, location)?;
+            observer.row(
+                &tuple,
+                Context::new(&*computation, limits, counters, location),
+            )?;
             tuples.insert(
                 &tuple,
                 FormulaResource::AggregateElements,
                 limits.aggregate.max_elements,
                 Context::new(&*computation, limits, counters, location),
             )?;
-            if element.required {
+            if required {
                 required_tuples.insert(
                     &tuple,
                     FormulaResource::AggregateElements,
@@ -86,24 +241,13 @@ pub(crate) fn values<'a, 'source: 'a>(
                 )?;
             }
         }
+        observer.end(Context::new(&*computation, limits, counters, location))?;
     }
     let tuples = tuples.ordered(true, computation, limits, counters, location)?;
-    let contributions = split(
-        Kind::of(aggregate.function),
-        &tuples,
-        &required_tuples,
-        computation,
-        limits,
-        counters,
-        location,
-    )?;
-    carrier(
-        contributions.streams(),
-        computation,
-        limits,
-        counters,
-        location,
-    )
+    Ok(Collected {
+        tuples,
+        required: required_tuples,
+    })
 }
 
 /// What an aggregate's function reduces each of its tuples to, with the

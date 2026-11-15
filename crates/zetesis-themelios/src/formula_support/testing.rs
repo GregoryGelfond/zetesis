@@ -253,6 +253,31 @@ pub(crate) fn prepare(text: &str) -> crate::formula::Preparation {
     }
 }
 
+/// The certainty support completion installs for `text`, or none when no
+/// component view resolves its predicates.
+pub(crate) fn certainty(text: &str) -> Option<super::certain::Certainty> {
+    let preparation = prepare(text);
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let producers = super::producers::Producers::prepare(
+        &preparation.program,
+        &preparation.catalog,
+        &limits,
+        &mut counters,
+        preparation.location,
+    )
+    .unwrap();
+    producers
+        .certainty(
+            &preparation.program,
+            &preparation.catalog,
+            &limits,
+            &mut counters,
+            preparation.location,
+        )
+        .unwrap()
+}
+
 /// Complete source support and lend its canonical query and computation owners.
 pub(crate) fn with_completed_source(
     text: &str,
@@ -333,4 +358,9 @@ pub(crate) fn numbers(values: &[i32]) -> Vec<Value> {
 /// Tests taking differences must leave canonical storage unchanged between reads.
 pub(crate) fn live_bytes(support: &Support<'_>) -> usize {
     support.live_bytes()
+}
+
+/// Exercise the existing owned-plan reference route without changing runtime policy.
+pub(crate) fn without_local_plans<T>(action: impl FnOnce() -> T) -> T {
+    super::local_plans::tests::without_cache(action)
 }

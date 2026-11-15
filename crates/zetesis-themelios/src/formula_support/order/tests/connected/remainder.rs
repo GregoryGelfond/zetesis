@@ -42,31 +42,25 @@ fn fixture(divisors: &[i32], empty: bool, overflow: bool) -> (Fixture, Vec<Liter
 }
 
 #[test]
-fn reordered_remainders_keep_undefined_complete_families() {
+fn reordered_remainders_omit_undefined_complete_families() {
+    // Every complete row takes a remainder by zero: under each order the
+    // family yields no row and reports the omission.
     let (mut fixture, literals) = fixture(&[0], false, false);
     for permutation in [None, Some(&[0, 1, 2][..]), Some(&[1, 0, 2][..])] {
-        assert!(matches!(
-            execute(&mut fixture, &literals, 3, permutation).result,
-            Err(FormulaFailure::Expansion(
-                crate::ExpansionFailure::Evaluation {
-                    error: themelios_program::term::EvalError::Undefined,
-                    ..
-                }
-            ))
-        ));
+        let run = execute(&mut fixture, &literals, 3, permutation);
+        assert!(run.result.unwrap().is_empty());
+        assert!(run.omitted);
     }
 }
 
 #[test]
 fn empty_later_relations_do_not_publish_prefix_arithmetic_errors() {
+    // No row is complete, so the prefix's zero divisor is no omission either.
     let (mut fixture, literals) = fixture(&[0], true, true);
     for permutation in [None, Some(&[0, 1, 2][..]), Some(&[1, 0, 2][..])] {
-        assert!(
-            execute(&mut fixture, &literals, 3, permutation)
-                .result
-                .unwrap()
-                .is_empty()
-        );
+        let run = execute(&mut fixture, &literals, 3, permutation);
+        assert!(run.result.unwrap().is_empty());
+        assert!(!run.omitted);
     }
 }
 

@@ -363,6 +363,16 @@ fn scalar(
 
 #[test]
 fn filtered_rankings_match_all_small_score_orderings() {
+    // The count tables have shortened no chain, so the index is not read.
+    let narrower = Narrower::new(
+        &Theory::new(
+            3,
+            FormulaParts::new(vec![], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap(),
+    );
     for first in 0..27 {
         let primary = digits(first);
         let primary_known = counts(primary);
@@ -406,6 +416,7 @@ fn filtered_rankings_match_all_small_score_orderings() {
                     if second == 0 {
                         let attempt = crate::test_support::stop_preference(
                             &primary_known.preferred_atom_reserved(
+                                &narrower,
                                 &region,
                                 &choices,
                                 &Cancellation::default(),
