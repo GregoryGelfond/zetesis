@@ -157,30 +157,31 @@ impl Executor {
         // The coordinator runs the first task itself instead of waiting idle,
         // so a one-task batch never enters the pool.
         if tasks.is_empty() {
-            *first_slot = Some(self.tracked(|| run(first)));
+            *first_slot = Some(Self::tracked(self, || run(first)));
             return;
         }
         self.in_place(|scope| {
             let run = &run;
             for (task, slot) in tasks.iter().zip(slots.iter_mut()) {
                 scope.spawn(move |_| {
-                    *slot = Some(self.tracked(|| run(task)));
+                    *slot = Some(Self::tracked(self, || run(task)));
                 });
             }
-            *first_slot = Some(self.tracked(|| run(first)));
+            *first_slot = Some(Self::tracked(self, || run(first)));
         });
     }
 
     /// Run one task, recording it in the test receipts.
-    #[cfg_attr(not(test), allow(clippy::unused_self))]
-    fn tracked<R>(&self, task: impl FnOnce() -> R) -> R {
+    fn tracked<R>(executor: &Self, task: impl FnOnce() -> R) -> R {
         #[cfg(test)]
         let _active = {
-            self.submissions.fetch_add(1, Ordering::Relaxed);
-            let active = self.active.fetch_add(1, Ordering::Relaxed) + 1;
-            self.peak.fetch_max(active, Ordering::Relaxed);
-            Active(self)
+            executor.submissions.fetch_add(1, Ordering::Relaxed);
+            let active = executor.active.fetch_add(1, Ordering::Relaxed) + 1;
+            executor.peak.fetch_max(active, Ordering::Relaxed);
+            Active(executor)
         };
+        #[cfg(not(test))]
+        let _ = executor;
         task()
     }
 }
