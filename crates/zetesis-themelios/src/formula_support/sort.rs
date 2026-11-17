@@ -57,5 +57,53 @@ fn sift<T>(
     Ok(())
 }
 
+/// Bottom-up merge sort over block widths 1, 2, 4, ...
+///
+/// The comparisons performed depend only on the input and the fixed block
+/// boundaries, so the merges of one width are independent and may run on
+/// separate workers with identical charged work. One permit per comparison
+/// (the comparator admits its own navigation) and one per merged block. It
+/// performs at most n * ceil(log2 n) comparisons, about half of heapsort's,
+/// in sequential passes over contiguous memory. `scratch` must be empty with
+/// capacity for `values`; each pass writes it and then swaps, so a refusal
+/// leaves `values` an intact permutation of the population.
+pub(crate) fn merge_by<T: Copy>(
+    values: &mut Vec<T>,
+    scratch: &mut Vec<T>,
+    mut work: GroundingWork<'_>,
+    mut compare: impl FnMut(&T, &T, &mut GroundingWork<'_>) -> Result<Ordering, FormulaFailure>,
+) -> Result<(), FormulaFailure> {
+    let count = values.len();
+    debug_assert!(scratch.is_empty() && scratch.capacity() >= count);
+    let mut width = 1;
+    while width < count {
+        scratch.clear();
+        let mut start = 0;
+        while start < count {
+            work.counters.work(work.limits, work.location)?;
+            let middle = (start + width).min(count);
+            let end = (start + 2 * width).min(count);
+            let (mut left, mut right) = (start, middle);
+            while left < middle && right < end {
+                work.counters.work(work.limits, work.location)?;
+                if compare(&values[right], &values[left], &mut work)?.is_lt() {
+                    scratch.push(values[right]);
+                    right += 1;
+                } else {
+                    scratch.push(values[left]);
+                    left += 1;
+                }
+            }
+            scratch.extend_from_slice(&values[left..middle]);
+            scratch.extend_from_slice(&values[right..end]);
+            start = end;
+        }
+        std::mem::swap(values, scratch);
+        width *= 2;
+    }
+    scratch.clear();
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests;
