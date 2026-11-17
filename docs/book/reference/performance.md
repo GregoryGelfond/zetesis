@@ -183,8 +183,9 @@ It refuses to overwrite an existing report. Without clingo, it times zetesis
 alone and checks its answers against the ones each workload records.
 
 Omit `--suite baseline` to run the full corpus. Select CPU threads or a backend
-explicitly when comparing configurations. `--threads` sizes both the search
-workers and the eager grounding pool; use `--threads 14` to reproduce the
+explicitly when comparing configurations. `--threads` caps every solver thread, the
+main thread included: grounding uses the main thread plus N-1 pool threads and
+search N-1 region walkers beside it. Use `--threads 14` to reproduce the
 fourteen-worker tables:
 
 ```sh
