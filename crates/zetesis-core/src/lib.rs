@@ -27,6 +27,7 @@ mod argument_unification;
 mod admission;
 mod model;
 pub mod catalog;
+pub mod intern;
 pub mod retention;
 pub mod table;
 mod identity;
