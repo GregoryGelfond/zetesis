@@ -11,7 +11,8 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use rayon::{Scope, ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
+use rayon::{Scope, ThreadPool, ThreadPoolBuildError};
+use zetesis_algebra::threads;
 
 /// Logical task geometry is independent of the matched physical worker count.
 pub(super) const TASKS: usize = 14;
@@ -19,13 +20,33 @@ pub(super) const TASKS: usize = 14;
 pub(crate) struct Executor {
     /// `None`: one requested thread; the caller runs every task in slot
     /// order with the same task geometry and receipts, spawning no thread.
-    pool: Option<ThreadPool>,
+    pool: Option<Pool>,
     #[cfg(test)]
     submissions: AtomicUsize,
     #[cfg(test)]
     active: AtomicUsize,
     #[cfg(test)]
     peak: AtomicUsize,
+}
+
+/// The pool's threads: counted and joined on drop in production; a test may
+/// inject a plain Rayon pool to exercise build and spawn failures.
+enum Pool {
+    Counted(threads::Pool),
+    #[cfg(test)]
+    Plain(ThreadPool),
+}
+
+impl std::ops::Deref for Pool {
+    type Target = ThreadPool;
+
+    fn deref(&self) -> &ThreadPool {
+        match self {
+            Self::Counted(pool) => pool,
+            #[cfg(test)]
+            Self::Plain(pool) => pool,
+        }
+    }
 }
 
 /// Pool threads for a requested host-thread count (`--threads`, or the
@@ -131,16 +152,20 @@ impl Executor {
     /// Once per preparation owner. Failure precedes cursor claim and may select
     /// the ordinary serial path under the proposed private admission contract.
     pub(super) fn new(workers: NonZeroUsize) -> Result<Self, ThreadPoolBuildError> {
-        Self::with_factory(workers, |workers| {
-            ThreadPoolBuilder::new().num_threads(workers.get()).build()
-        })
+        threads::Pool::new(workers, |index| format!("zetesis-ground-{index}"))
+            .map(|pool| Self::with_pool(Pool::Counted(pool)))
     }
 
+    #[cfg(test)]
     fn with_factory(
         workers: NonZeroUsize,
         build: impl FnOnce(NonZeroUsize) -> Result<ThreadPool, ThreadPoolBuildError>,
     ) -> Result<Self, ThreadPoolBuildError> {
-        build(workers).map(|pool| Self {
+        build(workers).map(|pool| Self::with_pool(Pool::Plain(pool)))
+    }
+
+    fn with_pool(pool: Pool) -> Self {
+        Self {
             pool: Some(pool),
             #[cfg(test)]
             submissions: AtomicUsize::new(0),
@@ -148,7 +173,7 @@ impl Executor {
             active: AtomicUsize::new(0),
             #[cfg(test)]
             peak: AtomicUsize::new(0),
-        })
+        }
     }
 
     /// The caller alone, for a one-thread request: no pool thread exists.
