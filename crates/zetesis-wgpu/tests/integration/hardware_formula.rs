@@ -4,6 +4,7 @@
 mod agreement;
 mod handover;
 mod native;
+mod source;
 
 use crate::support::physical;
 
@@ -28,6 +29,10 @@ fn oracle(backend: GpuApi, projection: GateProjection) -> GpuFormulaOracle {
     )
     .unwrap();
     assert_eq!(oracle.projection(), projection);
+    assert_eq!(
+        oracle.compiled_profile().kernel_options(),
+        GpuKernelOptions::default()
+    );
     physical::verify(backend, oracle.info());
     oracle
 }
@@ -429,6 +434,9 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
     assert!(totals.0 > 0 && totals.1 > 0);
     println!("completed refutations={} residuals={}", totals.0, totals.1);
     qualify_root_propagation(&mut oracle);
+    if projection == GateProjection::default() {
+        source::qualify(&oracle);
+    }
     qualify_kernel_options(&mut oracle);
     handover::check_subset_cut(&mut oracle);
 }

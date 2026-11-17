@@ -72,8 +72,17 @@ impl GpuFormulaProfile {
     /// # Errors
     /// The typed failures of the constructor matching `source`, at the same step.
     pub(crate) fn from_source(source: GpuDeviceSource<'_>) -> Result<Self, GpuError> {
+        Self::from_source_with_kernel(source, crate::GpuKernelOptions::default())
+    }
+
+    /// Retain the source's selection and timing contract with explicit physical
+    /// options, compiling the default projection exactly once.
+    pub(crate) fn from_source_with_kernel(
+        source: GpuDeviceSource<'_>,
+        options: crate::GpuKernelOptions,
+    ) -> Result<Self, GpuError> {
         let projection = GateProjection::default();
-        Self::open(source, projection, Self::descriptor(projection)?)
+        Self::open(source, projection, Self::descriptor(projection, options)?)
     }
 
     /// Select a native device and compile exactly the requested implementation's
@@ -97,7 +106,7 @@ impl GpuFormulaProfile {
                 timing: false,
             },
             projection,
-            Self::descriptor(projection)?,
+            Self::descriptor(projection, crate::GpuKernelOptions::default())?,
         )
     }
 
@@ -146,9 +155,11 @@ impl GpuFormulaProfile {
         projection: GateProjection,
         options: crate::GpuKernelOptions,
     ) -> Result<Self, GpuError> {
-        let mut descriptor = Self::descriptor(projection)?;
-        descriptor.kernel = crate::kernel::Kernel::Formula(options);
-        Self::open(GpuDeviceSource::Context(context), projection, descriptor)
+        Self::open(
+            GpuDeviceSource::Context(context),
+            projection,
+            Self::descriptor(projection, options)?,
+        )
     }
 
     fn open(
@@ -199,7 +210,10 @@ impl GpuFormulaProfile {
         Arc::ptr_eq(&self.runtime, &other.runtime)
     }
 
-    fn descriptor(projection: GateProjection) -> Result<DeviceProfile, GpuError> {
+    fn descriptor(
+        projection: GateProjection,
+        options: crate::GpuKernelOptions,
+    ) -> Result<DeviceProfile, GpuError> {
         Ok(DeviceProfile {
             device_label: "zetesis frozen formula device",
             shader_label: "frozen formula propagation",
@@ -208,7 +222,7 @@ impl GpuFormulaProfile {
             entry_point: "propagate",
             dense_entry_point: None,
             validate_limits: check_limits,
-            kernel: crate::kernel::Kernel::Formula(crate::GpuKernelOptions::default()),
+            kernel: crate::kernel::Kernel::Formula(options),
         })
     }
 }
@@ -255,7 +269,9 @@ mod tests {
     #[test]
     fn every_formula_projection_translates_to_spirv() {
         for projection in GateProjection::ALL {
-            let profile = GpuFormulaProfile::descriptor(projection).unwrap();
+            let profile =
+                GpuFormulaProfile::descriptor(projection, crate::GpuKernelOptions::default())
+                    .unwrap();
             crate::spirv_translation::assert_profile_translates(&profile);
         }
     }

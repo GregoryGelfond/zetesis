@@ -756,6 +756,16 @@ The profile includes its exact context and gate projection. It cannot be paired
 with a different device through an independent field. The builder clones shared
 handles, so the original variables need not outlive the session.
 
+At the formula-primitive boundary, `GpuFormulaOracle::from_source_with_kernel`
+accepts a `GpuDeviceSource` and explicit `GpuKernelOptions` with the default gate
+projection. It preserves selected/discovered adapter eligibility, the exact
+retained context and the source's timestamp request. It opens that source and
+compiles once, without constructing an intermediate default oracle. Existing default
+constructors retain Dense propagation. Requested selective propagation still
+uses its existing admission and fallback rules; inspect batch statistics for
+the actual mode. A supplied formula profile remains exact, including its kernel
+options. This constructor adds no device qualification or performance claim.
+
 `ExecutionResources::discovering(&config)` retains no device: for a GPU
 configuration it begins that backend's adapter enumeration on a background
 thread, which the command line does after validating its configuration and

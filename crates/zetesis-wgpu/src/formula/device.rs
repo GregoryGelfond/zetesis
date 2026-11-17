@@ -87,7 +87,38 @@ impl GpuFormulaOracle {
     /// # Errors
     /// The typed failures of the constructor matching `source`, at the same step.
     pub fn from_source(source: crate::GpuDeviceSource<'_>) -> Result<Self, GpuError> {
-        Ok(Self::with_profile(GpuFormulaProfile::from_source(source)?))
+        Self::from_source_with_kernel(source, crate::GpuKernelOptions::default())
+    }
+
+    /// Construct on `source` with explicit physical kernel options and the
+    /// default gate projection.
+    ///
+    /// Adapter selection, prefetched discovery, context identity and timestamp
+    /// requests follow [`Self::from_source`]. The source is opened once through
+    /// the same formula capability check; no intermediate default kernel or
+    /// generic context is constructed. Kernel options are validated against the
+    /// selected device's granted limits. A retained context is leased and its
+    /// health checked before those options are validated.
+    ///
+    /// Fitted pipelines compile at first use, as [`GpuFormulaProfile`] documents.
+    /// The requested propagation mode can fall back under the existing transport
+    /// admission rules; batch statistics report the actual mode. Construction
+    /// neither dispatches nor changes theory, frozen reduct or dispatch limits.
+    /// Existing default constructors retain their default kernel options.
+    ///
+    /// # Errors
+    /// Returns the source, capability, allocation and compilation failures of
+    /// [`Self::from_source`] in their existing order, including refusal of a
+    /// workgroup size exceeding the device's granted limits. Shader or pipeline
+    /// compilation failure invalidates the context; a fitted pipeline's failure
+    /// occurs at first use.
+    pub fn from_source_with_kernel(
+        source: crate::GpuDeviceSource<'_>,
+        options: crate::GpuKernelOptions,
+    ) -> Result<Self, GpuError> {
+        Ok(Self::with_profile(
+            GpuFormulaProfile::from_source_with_kernel(source, options)?,
+        ))
     }
 
     /// Create an independently owned native device and kernel for this projection.

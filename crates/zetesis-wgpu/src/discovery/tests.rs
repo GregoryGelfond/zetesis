@@ -56,6 +56,29 @@ fn a_prefetched_enumeration_failure_is_the_consumer_failure() {
     assert!(refusing.served());
     assert_eq!(error.kind(), GpuErrorKind::AdapterUnavailable);
     assert_eq!(error.to_string(), refused().to_string());
+    for propagation in [
+        crate::GpuPropagation::Dense,
+        crate::GpuPropagation::ChangedDependencies,
+    ] {
+        let refusing = GpuDiscovery::with_state(METAL, finished());
+        let result = crate::GpuFormulaOracle::from_source_with_kernel(
+            GpuDeviceSource::Discovered {
+                discovery: &refusing,
+                options: GpuOptions::default(),
+                timing: true,
+            },
+            crate::GpuKernelOptions {
+                propagation,
+                ..crate::GpuKernelOptions::default()
+            },
+        );
+        let error = result
+            .err()
+            .expect("refused discovery cannot create a kernel");
+        assert!(refusing.served());
+        assert_eq!(error.kind(), GpuErrorKind::AdapterUnavailable);
+        assert_eq!(error.to_string(), refused().to_string());
+    }
 }
 
 #[test]
@@ -83,35 +106,69 @@ type Construct = fn(GpuDeviceSource<'_>) -> crate::GpuInfo;
 fn discovered_adapter(api: GpuApi) {
     let selection = GpuSelection { api };
     let options = GpuOptions::default();
-    let primitives: [Construct; 2] = [
-        |source| {
-            crate::GpuFormulaOracle::from_source(source)
-                .unwrap()
-                .info()
-                .clone()
-        },
-        |source| {
-            crate::GpuTightOracle::from_source(source)
-                .unwrap()
-                .info()
-                .clone()
-        },
+    let primitives: [(Construct, bool); 3] = [
+        (
+            |source| {
+                let oracle = crate::GpuFormulaOracle::from_source(source).unwrap();
+                assert_eq!(
+                    oracle.compiled_profile().kernel_options(),
+                    crate::GpuKernelOptions::default()
+                );
+                oracle.info().clone()
+            },
+            false,
+        ),
+        (
+            |source| {
+                crate::GpuTightOracle::from_source(source)
+                    .unwrap()
+                    .info()
+                    .clone()
+            },
+            false,
+        ),
+        (explicit_formula_adapter, true),
     ];
-    for construct in primitives {
+    for (construct, timing) in primitives {
         let independent = construct(GpuDeviceSource::Selected {
             options,
             selection,
-            timing: false,
+            timing,
         });
         let discovery = GpuDiscovery::spawn(selection);
         let discovered = construct(GpuDeviceSource::Discovered {
             discovery: &discovery,
             options,
-            timing: false,
+            timing,
         });
         assert!(discovery.served());
         assert_eq!(discovered, independent);
     }
+}
+
+// Exercise the source-aware options through both selection and prefetched
+// discovery. The requested timestamps belong to the exact opened context.
+fn explicit_formula_adapter(source: GpuDeviceSource<'_>) -> crate::GpuInfo {
+    let options = crate::GpuKernelOptions {
+        propagation: crate::GpuPropagation::ChangedDependencies,
+        ..crate::GpuKernelOptions::default()
+    };
+    let oracle = crate::GpuFormulaOracle::from_source_with_kernel(source, options).unwrap();
+    assert_eq!(oracle.compiled_profile().kernel_options(), options);
+    assert_eq!(oracle.projection(), crate::GateProjection::default());
+    assert_eq!(
+        oracle.context().compute_timing(),
+        if oracle
+            .context()
+            .features()
+            .contains(wgpu::Features::TIMESTAMP_QUERY)
+        {
+            zetesis_backend::ComputeTimingStatus::Enabled
+        } else {
+            zetesis_backend::ComputeTimingStatus::Unsupported
+        }
+    );
+    oracle.info().clone()
 }
 
 #[test]

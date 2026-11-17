@@ -621,6 +621,7 @@ fn profile_lifecycle(backend: GpuApi) {
         assert!(matches!(GpuFormulaOracle::from_profile(&profile),
             Err(error) if error.kind() == GpuErrorKind::Busy));
         assert!(context.check_health().is_ok());
+        source_kernel_refuses(context, GpuErrorKind::Busy);
     }
     let mut oracle = GpuFormulaOracle::from_profile(&profile).unwrap();
     {
@@ -628,9 +629,11 @@ fn profile_lifecycle(backend: GpuApi) {
         context.invalidate();
         assert!(matches!(GpuFormulaOracle::from_profile(&profile),
             Err(error) if error.kind() == GpuErrorKind::Busy));
+        source_kernel_refuses(context, GpuErrorKind::Busy);
     }
     assert!(matches!(GpuFormulaOracle::from_profile(&profile),
         Err(error) if error.kind() == GpuErrorKind::Device));
+    source_kernel_refuses(context, GpuErrorKind::Device);
     let empty = Theory::new(
         0,
         zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
@@ -647,6 +650,22 @@ fn profile_lifecycle(backend: GpuApi) {
     );
     assert_eq!(oracle.epoch, 0);
     assert!(oracle.resident.is_none());
+}
+
+fn source_kernel_refuses(context: &crate::GpuContext, expected: GpuErrorKind) {
+    for propagation in [
+        crate::GpuPropagation::Dense,
+        crate::GpuPropagation::ChangedDependencies,
+    ] {
+        let result = GpuFormulaOracle::from_source_with_kernel(
+            crate::GpuDeviceSource::Context(context),
+            crate::GpuKernelOptions {
+                propagation,
+                ..crate::GpuKernelOptions::default()
+            },
+        );
+        assert_eq!(result.err().map(|error| error.kind()), Some(expected));
+    }
 }
 
 #[test]

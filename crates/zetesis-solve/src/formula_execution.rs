@@ -470,7 +470,13 @@ impl Execution {
         // A supplied profile is used exactly, with its shader and pipelines.
         let oracle = match resources.formula_profile() {
             Some(profile) => zetesis_wgpu::GpuFormulaOracle::from_profile(profile),
-            None => zetesis_wgpu::GpuFormulaOracle::from_source(source),
+            None => zetesis_wgpu::GpuFormulaOracle::from_source_with_kernel(
+                source,
+                zetesis_wgpu::GpuKernelOptions {
+                    propagation: zetesis_wgpu::GpuPropagation::ChangedDependencies,
+                    ..zetesis_wgpu::GpuKernelOptions::default()
+                },
+            ),
         }
         .map_err(SolveError::Gpu)?;
         let adapter = format!(
