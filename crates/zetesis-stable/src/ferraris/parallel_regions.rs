@@ -515,7 +515,14 @@ impl Shared {
                 let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
                 ([cut, held], ())
             }) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                self.frontier.shed_beyond(
+                    index,
+                    super::region_frontier::KEPT_KNOWLEDGE,
+                    super::region_frontier::shed,
+                );
+                Ok(())
+            }
             Err((error, parent)) => {
                 *pending = Some(parent);
                 Err(error)

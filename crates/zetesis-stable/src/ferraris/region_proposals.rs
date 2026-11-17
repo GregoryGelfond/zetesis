@@ -724,7 +724,14 @@ impl<'filter> SlateFill<'_, 'filter> {
                 let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
                 ([cut], held)
             }) {
-            Ok(held) => Ok(held),
+            Ok(held) => {
+                self.frontier.shed_beyond(
+                    self.home(index),
+                    super::region_frontier::KEPT_KNOWLEDGE,
+                    super::region_frontier::shed,
+                );
+                Ok(held)
+            }
             Err((error, parent)) => {
                 *pending = Some(parent);
                 Err(error)

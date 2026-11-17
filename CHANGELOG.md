@@ -6,6 +6,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Candidate search keeps the knowledge of only the newest 64 pending regions
+  per worker; older pending regions recompute it when visited. Peak memory
+  no longer grows with search depth times workers: on a 1,000-node coloring
+  with 14 threads it falls from about 1.3 GB to about 0.3 GB.
 - Join ordering defers an independent generator while a remaining connected
   generator binds one of its variables, instead of first joining it with the
   whole prefix because it decides a comparison. Arithmetic joins such as

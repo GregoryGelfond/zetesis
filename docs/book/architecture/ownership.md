@@ -165,6 +165,18 @@ storage. Children retain independent ownership and no more vector capacity than
 a fresh copy. This saves allocation work, not the linear cost of copying the
 parent, and can retain one extra knowledge bundle per worker between splits.
 
+Pending candidate regions keep their knowledge only near the top of each
+worker's deque or stack: the newest 64 entries (`KEPT_KNOWLEDGE`). When a split
+pushes an entry further below, its knowledge is replaced by the root's empty
+state, and the region's first narrowing recreates every slot and learns all of
+its decisions, as the root's narrowing does; the root's knowledge holds in
+every region. A depth-first walk therefore retains at most 64 knowledge bundles
+per worker instead of one per open split, and the deepest entries, which a peer
+steals first, are the ones recomputed. Regions, their order and the visited
+family are unchanged; recomputation is ordinary narrowing work on the lease of
+the worker that visits the region, and the frontier's retained-byte receipts
+record each exchange (`Frontier::shed_beyond`, `Walk::with_recomputation`).
+
 Region queries check retained workspace storage before evaluation and before
 returning a successful verdict. The final check includes scratch grown by the
 query; every attempt records its retained peak, including a failed attempt.
