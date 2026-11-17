@@ -27,5 +27,5 @@ draws exactly.
 
 `manifest.json` places the first nine in the maintained benchmark corpus.
 `cover90.lp` and `pigeonhole13.lp` exceed the corpus's ten-second child
-timeout, so they are kept in the separately selected
+timeout, so they are kept, with reconstructed `sg1k`, in the separately selected
 [`vaelii-slow`](../vaelii-slow/manifest.json) supplement instead.

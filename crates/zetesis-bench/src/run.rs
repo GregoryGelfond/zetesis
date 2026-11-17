@@ -22,7 +22,7 @@ mod tests;
 /// Maintained source selections; every cell retains complete selected families.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Suite {
-    /// All 118 maintained corpus entries, including Family Crossing, the reconstructed Vaelii-shaped workloads and the exact Vaelii test programs.
+    /// All 117 maintained corpus entries, including Family Crossing, the reconstructed Vaelii-shaped workloads and the exact Vaelii test programs.
     #[default]
     Corpus,
     /// SEND, queens variant 02 and task allocation.

@@ -324,7 +324,7 @@ fn prepare<'a>(
         || workloads.len() > request.limits.corpus.cases.min(super::super::MAX_CASES)
     {
         return Err(Error::Configuration(
-            "explicit workload population must fit 1..=118",
+            "explicit workload population must fit 1..=117",
         ));
     }
     let mut metadata = 0usize;

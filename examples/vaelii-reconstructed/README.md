@@ -21,8 +21,10 @@ is a random DAG with 1,000 or 10,000 edges.
 | `stratrec1k.lp`, `stratrec10k.lp` | recursion through a negated lower stratum, then a second recursive stratum |
 | `queens12.lp` | complete enumeration of the 14,200 twelve-queens solutions |
 
-The maintained benchmark corpus includes them after the 94 catalog cases and
-Family Crossing. The adjacent manifest records each file's bytes and the
+The maintained benchmark corpus includes all but `sg1k` after the 94 catalog
+cases and Family Crossing; `sg1k`'s single answer exceeds the corpus capture
+limit, so it runs in the [`vaelii-slow`](../vaelii-slow/manifest.json)
+supplement. The adjacent manifest records each file's bytes and the
 expected complete family; each campaign requires a fresh clingo comparison.
 
 ```sh

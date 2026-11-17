@@ -181,9 +181,9 @@ are different protocols, not interchangeable timing populations.
 
 `--suite queens` selects the maintained queens encodings;
 `--suite corpus` selects the 94-case correctness catalog, the unchanged
-integrated Family Crossing bundle, the 14 reconstructed Vaelii-shaped
+integrated Family Crossing bundle, 13 of the 14 reconstructed Vaelii-shaped
 workloads and the 9 exact Vaelii test programs. The bundles are included in
-the same 118-case totals and require
+the same 117-case totals and require
 fresh clingo qualification. Library consumers use
 `performance::corpus::workloads` to prepare that selection. The profile axes
 (`--compare-backends`, `--compare-grounders`, `--compare-threads`) select

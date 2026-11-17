@@ -355,7 +355,7 @@ fn maintained_corpus_appends_family_and_vaelii_to_the_original_catalog() {
     )
     .unwrap();
     assert_eq!(catalog.cases().len(), 94);
-    assert_eq!(workloads.len(), 118);
+    assert_eq!(workloads.len(), 117);
     for (workload, case) in workloads[..94].iter().zip(catalog.cases()) {
         assert_eq!(workload.entry(), case.path());
         assert_eq!(workload.contract(), Some(case.contract()));
@@ -367,9 +367,9 @@ fn maintained_corpus_appends_family_and_vaelii_to_the_original_catalog() {
     assert_eq!(workloads[94].entry(), "family-crossing/integrated.lp");
     assert_eq!(workloads[94].identity(), family_crossing().identity());
     assert_eq!(workloads[95].entry(), "vaelii-reconstructed/arith1k.lp");
-    assert_eq!(workloads[108].entry(), "vaelii-reconstructed/queens12.lp");
-    assert_eq!(workloads[109].entry(), "vaelii-exact/fact.lp");
-    assert_eq!(workloads[117].entry(), "vaelii-exact/cover60.lp");
+    assert_eq!(workloads[107].entry(), "vaelii-reconstructed/queens12.lp");
+    assert_eq!(workloads[108].entry(), "vaelii-exact/fact.lp");
+    assert_eq!(workloads[116].entry(), "vaelii-exact/cover60.lp");
     assert!(workloads[95..].iter().all(Workload::is_bundle));
     assert_eq!(
         workloads
@@ -377,7 +377,7 @@ fn maintained_corpus_appends_family_and_vaelii_to_the_original_catalog() {
             .map(Workload::identity)
             .collect::<BTreeSet<_>>()
             .len(),
-        118
+        117
     );
 }
 

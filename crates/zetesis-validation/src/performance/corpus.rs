@@ -14,12 +14,13 @@ use crate::examples;
 const FAMILY_MANIFEST_SHA256: &str =
     "92a39c82c8bebb5f17323db9e61084f2b713628b574690bcc0312147395d3f26";
 const VAELII_MANIFEST_SHA256: &str =
-    "2e5d4d7c1884dd5ddbf86a3d7387baceb24a859e2e575f7334150176e86c7d0d";
+    "f057110412bffe057aa4823df2020adb50bbe7bede33c4a663040cd20f16f526";
 const VAELII_EXACT_MANIFEST_SHA256: &str =
     "4d3c20133189f46128d0a487e536b3c6ee20cb1a3baf153415be7f20976080fa";
 
-/// Assemble the original 94 cases, integrated Family Crossing, the 14
-/// reconstructed Vaelii-shaped workloads and the 9 exact Vaelii test programs
+/// Assemble the original 94 cases, integrated Family Crossing, 13 of the 14
+/// reconstructed Vaelii-shaped workloads (`sg1k` is in the `vaelii-slow`
+/// supplement) and the 9 exact Vaelii test programs
 /// in that order.
 ///
 /// `root` is the examples directory containing `correctness`,
