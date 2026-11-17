@@ -1,4 +1,5 @@
 //! Prepared scopes preserve exact traversal, emitted graphs and failure boundaries.
+#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
 
 use super::testing as route;
 use super::*;

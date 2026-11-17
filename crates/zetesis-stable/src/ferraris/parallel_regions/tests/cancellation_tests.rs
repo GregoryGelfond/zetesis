@@ -1,4 +1,5 @@
 //! Cancellation settles leases before the native iterator exposes its final receipt.
+#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
 
 use super::*;
 use crate::ferraris::{Proposer, StableModels};
