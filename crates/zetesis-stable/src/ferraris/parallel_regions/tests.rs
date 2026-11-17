@@ -1,5 +1,8 @@
 //! Fault injection at the production worker accounting and failure boundaries.
-#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests start their own threads and pools"
+)]
 
 use super::*;
 use zetesis_algebra::region::Narrowing;

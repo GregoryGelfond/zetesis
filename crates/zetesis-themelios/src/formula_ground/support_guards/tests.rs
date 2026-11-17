@@ -1,6 +1,9 @@
 //! Synchronous reference calls change only guard representation. The scoped
 //! control restores on unwind and is not inherited by newly spawned threads.
-#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests start their own threads and pools"
+)]
 use crate::test_support::interpretation;
 use std::cell::RefCell;
 

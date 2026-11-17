@@ -1,5 +1,8 @@
 //! Work-stealing coordination and termination for the region scheduler.
-#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests start their own threads and pools"
+)]
 
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;

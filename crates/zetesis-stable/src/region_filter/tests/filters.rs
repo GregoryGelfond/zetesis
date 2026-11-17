@@ -1,5 +1,8 @@
 //! Original region constraints compose with candidate coverage, never reduct queries.
-#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests start their own threads and pools"
+)]
 
 use std::collections::BTreeSet;
 use std::sync::atomic::Ordering;
