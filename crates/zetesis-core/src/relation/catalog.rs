@@ -226,6 +226,7 @@ impl Catalog {
             self.layout.columns.len() as u128
                 + self.ordered.level_count() as u128
                 + index.identities.clear_work()
+                + index.content.clear_work()
                 + RESET_BOOKKEEPING,
         )
         .map_err(|error| self.failed(error, &work))?;
@@ -238,8 +239,8 @@ impl Catalog {
         self.rows.path.clear();
         self.rows.root = None;
         self.last_row = None;
-        index.order.clear();
         index.identities.clear();
+        index.content.clear();
         self.layout.dictionary.clear();
         for column in &mut self.layout.columns {
             column.clear();
@@ -363,7 +364,6 @@ impl Catalog {
         let mut route = Directions::default();
         work.tick(1)?;
         let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
-        index_values(&mut self.layout, atoms, work)?;
         let value = |column| atom.values().at(column).expect("checked atom arity");
         // A row beyond the last in order is placed without a search.
         let last =
@@ -418,74 +418,6 @@ impl Catalog {
     }
 }
 
-/// Order the values appended since the last batch, if an ordered lookup
-/// has asked for them: sort the suffix as one batch, then merge equal-level
-/// runs. Each comparison and each written identity is charged; work tracks
-/// the batch (amortized O(log n) merge levels per value), not the catalog.
-fn index_values(layout: &mut Layout, atoms: Atoms<'_>, work: &mut Work) -> Result<(), Failure> {
-    let Layout {
-        dictionary, index, ..
-    } = layout;
-    let DictionaryIndex::Append(index) = index else {
-        return Err(Failure::Dictionary);
-    };
-    let len = dictionary.len();
-    if !*index.order.demanded.get_mut() || index.order.indexed == len {
-        return Ok(());
-    }
-    let dictionary = &*dictionary;
-    let value = |id: u32| {
-        let cell = dictionary[id as usize];
-        atoms
-            .at(cell.row)
-            .and_then(|atom| atom.values().get(cell.column))
-            .ok_or(Failure::Dictionary)
-    };
-    let compare = |work: &mut Work, left: u32, right: u32| {
-        let (left, right) = (value(left)?, value(right)?);
-        work.compare(left, right)
-    };
-    // The batch, its sort scratch and each merge output are admitted against
-    // the byte limit before allocation; scratch and merged-away runs are
-    // released, so the retained runs remain counted as catalog bytes.
-    let count = len - index.order.indexed;
-    let mut batch: Vec<u32> = work.reserve(count)?;
-    for id in index.order.indexed..len {
-        batch.push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
-    }
-    let mut scratch: Vec<u32> = work.reserve(count)?;
-    super::dictionary::sort_ids(&mut batch, &mut scratch, &mut |left, right| {
-        compare(work, left, right)
-    })?;
-    work.release(scratch);
-    // The sorted batch is published as a run before any merge, so a refused
-    // merge leaves every value reachable through some run.
-    work.grow(&mut index.order.levels, 1)?;
-    index.order.levels.push(batch);
-    index.order.indexed = len;
-    *index.order.demanded.get_mut() = false;
-    work.tick(count as u128)?;
-    let levels = &mut index.order.levels;
-    while levels.len() >= 2 && levels[levels.len() - 2].len() <= 2 * levels[levels.len() - 1].len()
-    {
-        let (left, right) = (&levels[levels.len() - 2], &levels[levels.len() - 1]);
-        let mut merged: Vec<u32> = work.reserve(left.len() + right.len())?;
-        let result = super::dictionary::merge_into(left, right, &mut merged, &mut |l, r| {
-            compare(work, l, r)
-        });
-        if let Err(error) = result {
-            work.release(merged);
-            return Err(error);
-        }
-        let right = levels.pop().expect("two runs");
-        let left = levels.pop().expect("two runs");
-        work.release(left);
-        work.release(right);
-        levels.push(merged);
-    }
-    Ok(())
-}
-
 impl Catalog {
     fn reserve(
         &mut self,
@@ -501,6 +433,7 @@ impl Catalog {
             return Err(Failure::Dictionary);
         };
         index.identities.reserve(plan.added.len(), work)?;
+        index.content.reserve(plan.added.len(), work)?;
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
             column.reserve(id, work)?;
         }
@@ -535,6 +468,7 @@ impl Catalog {
             let equality =
                 u32::try_from(self.layout.dictionary.len()).expect("admitted equality ID");
             index.identities.publish(added.term, equality);
+            index.content.publish(added.hash, equality);
             self.layout.dictionary.push(added.cell);
         }
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
@@ -639,7 +573,7 @@ impl Catalog {
             + self.layout.dictionary.capacity() * size_of::<Cell>()
             + match &self.layout.index {
                 DictionaryIndex::Sorted(ids) => ids.capacity() * size_of::<u32>(),
-                DictionaryIndex::Append(index) => index.order.bytes() + index.identities.bytes(),
+                DictionaryIndex::Append(index) => index.identities.bytes() + index.content.bytes(),
             }
             + self.layout.columns.capacity() * size_of::<OwnedColumn>()
             + self

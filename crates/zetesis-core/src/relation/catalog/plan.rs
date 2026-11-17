@@ -1,10 +1,11 @@
-//! A one-tuple transaction containing only equality IDs and tentative AVL nodes.
+//! A one-tuple transaction containing only equality IDs, new values and the
+//! row's tentative AVL path.
 //!
-//! Later values inspect the latest tentative patch before the published tree.
-//! No row, dictionary representative or tree link changes before final admission.
-//! With a new values and height h, retained patches use O(a h) cells. Their linear
-//! reverse lookup can cost O(a² h²) metadata probes; each probe is charged. This
-//! depends on this tuple's width, never on shifting the historical dictionary.
+//! A new value is staged with its content hash; a later column of the same
+//! tuple that repeats it reuses its tentative ID. No row, dictionary
+//! representative, content chain or tree link changes before final admission.
+//! The staged state depends on this tuple's width, never on the historical
+//! dictionary.
 
 use crate::{
     catalog::{AtomRef, Atoms, storage::TermId},
@@ -12,12 +13,15 @@ use crate::{
 };
 
 use super::super::{
-    Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling, dictionary::Probe,
+    Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling,
+    dictionary::{Content, Probe},
 };
 
 pub(super) struct Added {
     pub cell: Cell,
     pub term: TermId,
+    /// The value's semantic content hash.
+    pub hash: u64,
 }
 
 #[derive(Default)]
@@ -83,9 +87,10 @@ pub(super) fn values(
     work.grow(&mut plan.added, atom.values().len())?;
     for (column, value) in atom.values().iter().enumerate() {
         work.tick(1)?;
+        let bytes = value.canonical_bytes_with(|| work.tick(1))?;
         plan.encoding_bytes = plan
             .encoding_bytes
-            .checked_add(value.canonical_bytes_with(|| work.tick(1))? as u128)
+            .checked_add(bytes as u128)
             .ok_or(Failure::Overflow)?;
         let (term, found) = match index
             .identities
@@ -110,13 +115,16 @@ pub(super) fn values(
                 id as u128 + 1,
                 (work.limits.max_values as u128).min(u128::from(u32::MAX) + 1),
             )?;
-            work.tick(1)?;
+            // A new value is chained under its content hash, which reads
+            // every payload word once.
+            work.tick(1 + Content::hash_work(value.expanded_nodes(), bytes))?;
             plan.added.push(Added {
                 cell: Cell {
                     row: atoms.len(),
                     column,
                 },
                 term,
+                hash: Content::hash(value),
             });
             id
         };
