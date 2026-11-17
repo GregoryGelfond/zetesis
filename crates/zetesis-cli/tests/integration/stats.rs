@@ -75,7 +75,8 @@ fn statistics_report_the_regions_the_search_visited() {
 #[test]
 fn statistics_report_the_parallel_walks_workers_under_its_regions() {
     let mut configured = options(&["--stats", "--oracle", "countermodel"]);
-    configured.workers = std::num::NonZeroUsize::new(2).unwrap();
+    // Three threads: the coordinator and two walkers.
+    configured.workers = std::num::NonZeroUsize::new(3).unwrap();
     let (report, _, text) = solve("a | b.", &configured);
     let regions = report.countermodel_statistics.unwrap().regions.unwrap();
     assert_eq!(
