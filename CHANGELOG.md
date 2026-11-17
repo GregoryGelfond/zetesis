@@ -6,6 +6,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Join ordering defers an independent generator while a remaining connected
+  generator binds one of its variables, instead of first joining it with the
+  whole prefix because it decides a comparison. Arithmetic joins such as
+  `a(C,P) :- edge(C,P), val(C,X), val(P,Y), X > Y + K.` no longer enumerate the
+  product of the two value relations. The set of complete bindings is unchanged.
 - Source preparation can execute eligible join rows in a source-owned CPU pool,
   retaining ordered canonical construction, provenance and complete enumeration.
   The current development configuration requests 14 source workers, separately

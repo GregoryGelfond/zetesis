@@ -8,8 +8,12 @@
 //! 1. an occurrence whose variables are all bound is a test, offering at most
 //!    one row per prefix row and never widening the join, so it precedes
 //!    every generator;
-//! 2. among generators, an empty source first, then an occurrence that decides
-//!    more waiting comparisons, so their result is checked before deeper joins;
+//! 2. among generators, an empty source first; then an independent generator
+//!    (no known whole argument) waits while another remaining connected
+//!    generator binds one of its variables, since that binding turns its
+//!    product with the prefix into a posting probe; then an occurrence that
+//!    decides more waiting comparisons, so their result is checked before
+//!    deeper joins;
 //! 3. among equally decisive generators, an occurrence with a known whole
 //!    argument before an independent domain: its constant or bound flat slot
 //!    can use the ordinary equality posting;
@@ -519,6 +523,61 @@ fn has_bound_argument(
     Ok(false)
 }
 
+/// Whether another remaining nonempty generator already has a known whole
+/// argument and binds a variable of `occurrence`. Tests are excluded: they
+/// bind nothing new. This is a scheduling preference, not a fanout bound.
+fn awaits_connected(
+    occurrence: &PatternOccurrence<'_>,
+    remaining: &[PatternOccurrence<'_>],
+    offered: &[usize],
+    bound: &[bool],
+    budget: &mut Budget,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    for (other, &rows) in remaining.iter().zip(offered) {
+        work(budget, 1, location)?;
+        if other.source == occurrence.source
+            || rows == 0
+            || is_test(other, bound, budget, location)?
+            || !has_bound_argument(other, bound, budget, location)?
+        {
+            continue;
+        }
+        // Charge the complete pairwise slot comparison before the pure scan.
+        work(
+            budget,
+            slot_count(occurrence) as u128 * slot_count(other) as u128,
+            location,
+        )?;
+        let mut shared = false;
+        each_slot(occurrence, budget, location, |slot| {
+            shared |= !is_bound(bound, slot) && has_slot(other, slot);
+        })?;
+        if shared {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The number of slots `each_slot` would visit, read without a charge; the
+/// caller charges the scan it bounds.
+fn slot_count(occurrence: &PatternOccurrence<'_>) -> usize {
+    match occurrence.pattern {
+        PositivePattern::Flat(atom) => atom.terms().variables().count(),
+        PositivePattern::Structural(pattern) => pattern.slots().count(),
+    }
+}
+
+/// Whether `occurrence` binds `variable`, read without a charge; the caller
+/// charges the scan.
+fn has_slot(occurrence: &PatternOccurrence<'_>, variable: usize) -> bool {
+    match occurrence.pattern {
+        PositivePattern::Flat(atom) => atom.terms().variables().any(|slot| slot == variable),
+        PositivePattern::Structural(pattern) => pattern.slots().any(|slot| slot == variable),
+    }
+}
+
 /// What the prefixes of one join order decide: for each literal, the depth
 /// at which its comparison is decided, and whether some check waits for the
 /// complete row.
@@ -721,9 +780,23 @@ fn arrange_with(
             let independent = !test
                 && offered[candidate] != 0
                 && !has_bound_argument(occurrence, bound, budget, location)?;
+            // An independent generator that shares a variable with a remaining
+            // connected generator waits for it: that binding turns its whole
+            // product with the prefix into a posting probe. A comparison it
+            // would decide is decided no later than if it led.
+            let deferred = independent
+                && awaits_connected(
+                    occurrence,
+                    &occurrences[position..],
+                    &offered[position..],
+                    bound,
+                    budget,
+                    location,
+                )?;
             let rank = (
                 !test,
                 offered[candidate] != 0,
+                deferred,
                 Reverse(decides),
                 independent,
                 offered[candidate],
