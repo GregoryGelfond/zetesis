@@ -594,7 +594,8 @@ fn observer_cause(failure: &zetesis_cli::SolveFailure) {
 fn execution_refusal_retains_preparation_timing() {
     use zetesis_cli::SolvePhase;
 
-    let admitted = formula("a | b.");
+    // Not head-cycle-free, so membership stays general reduct checking.
+    let admitted = formula("a | b. a :- b. b :- a.");
     let mut observer = RejectObservation::new(Rejection::Execution);
     let result = Session::new_observed(
         PreparedInput::formula(&admitted),
