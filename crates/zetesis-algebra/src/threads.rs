@@ -135,7 +135,9 @@ impl Deref for Pool {
     type Target = ThreadPool;
 
     fn deref(&self) -> &ThreadPool {
-        self.pool.as_ref().expect("a pool is present until it drops")
+        self.pool
+            .as_ref()
+            .expect("a pool is present until it drops")
     }
 }
 
@@ -162,7 +164,10 @@ mod tests {
 
     #[test]
     fn a_dropped_pool_has_joined_its_counted_threads() {
-        let pool = Pool::new(NonZeroUsize::new(3).unwrap(), |index| format!("test-{index}")).unwrap();
+        let pool = Pool::new(NonZeroUsize::new(3).unwrap(), |index| {
+            format!("test-{index}")
+        })
+        .unwrap();
         pool.broadcast(|_| ());
         assert!(peak() >= 4);
         let threads = Arc::clone(&pool.threads);
