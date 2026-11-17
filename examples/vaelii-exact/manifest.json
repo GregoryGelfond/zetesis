@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "root": "..",
+  "cases": [
+    {
+      "entry": "vaelii-exact/fact.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, a-fact-appears-in-the-answer-set; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/fact.lp",
+          "sha256": "8d181a7c4460b429efe23e49a92a688ba0e2548a64b98f75d15b307987e4edd0",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "vaelii-exact/unsat.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, an-unsatisfiable-program-reports-unsat-rather-than-throwing; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/unsat.lp",
+          "sha256": "58f15ba7b349b61b5b19f5b4037348b4d59601ae151618433911655e5b469cad",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "vaelii-exact/free-choices.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 4,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, agreement-programs: two free choices; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/free-choices.lp",
+          "sha256": "ba9c413a8b1a73739836e8611a26631d54cdff964cbcfcfa47ecd84db14f5368",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "vaelii-exact/integrity.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "optimal",
+        "model_count": 1,
+        "cost": [
+          0
+        ],
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, an-integrity-constraint-forces-the-other-branch; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/integrity.lp",
+          "sha256": "8acf4ad52bad907b39a34800617b91633794ccf4eac05f6a3741679f8dacb59c",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "vaelii-exact/two-level.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "optimal",
+        "model_count": 1,
+        "cost": [
+          0,
+          1
+        ],
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, higher-minimize-priority-dominates; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/two-level.lp",
+          "sha256": "1c3639db112b119dfbb288a36fcafe26ac0a545cf6f5a194ac411ad2b990d6f6",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "vaelii-exact/weight-constraint.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "optimal",
+        "model_count": 1,
+        "cost": [
+          0
+        ],
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, a-weight-constraint-bounds-a-cardinality; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/weight-constraint.lp",
+          "sha256": "b675eaac751844408afd307b78ca49a70c5e683cd921b02099df05a382582c9b",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "vaelii-exact/pigeonhole6.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, (pigeonhole 6) in a-search-past-the-solve-limit-stops-at-the-same-point-on-every-run; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/pigeonhole6.lp",
+          "sha256": "754a2c87a6ec79c4a8a65f53296c83d306fa5e80bab4060beae2f00bee0678dd",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "vaelii-exact/pigeonhole9.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, (pigeonhole 9) in a-search-past-the-solve-limit-stops-at-the-same-point-on-every-run; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/pigeonhole9.lp",
+          "sha256": "3d27bfe4c43db9315ffe69dc8d4ba3eec4d7e9cfe9b06f58ed55cfa0b0ba47f3",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "vaelii-exact/cover60.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "optimal",
+        "model_count": 1,
+        "cost": [
+          149
+        ],
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Exact Vaelii test program from vaelii/vaelii test/vaelii/asp_aspif_test.clj @ 03c728ce8a66, (weighted-cover 60) in the solve-limit and core-guided tests; transcribed from its ASPIF statements by vaelii-exact/gen.py."
+        ]
+      },
+      "files": [
+        {
+          "path": "vaelii-exact/cover60.lp",
+          "sha256": "93fbda1a9a2ffc389d982505a7a13c530e136ac3a405418cf63cff0ef6ef8989",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}
