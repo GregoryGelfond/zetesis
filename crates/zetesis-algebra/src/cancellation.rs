@@ -878,6 +878,10 @@ impl CancellationPoll<'_> {
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
+    #[allow(
+        clippy::inline_always,
+        reason = "measured: the deadline check out of line is cheaper only when every poll inlines"
+    )]
     #[inline(always)]
     pub fn poll(&self) -> Result<(), Stop> {
         if self.cancelled.load(Ordering::Relaxed)
