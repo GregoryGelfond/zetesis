@@ -1932,6 +1932,7 @@ name = "zetesis-algebra"
 version = "0.8.0"
 dependencies = [
  "proptest",
+ "rayon",
 ]
 
 [[package]]
