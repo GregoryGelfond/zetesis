@@ -315,8 +315,9 @@ fn region_statistics_record_the_parallel_walks_engagement() {
     assert!(value["statistics"]["search"]["candidate_regions"]["workers"].is_null());
     // Under the default delay the host's clock decides whether so small a
     // walk engages; each state's keys are null outside it.
+    // Three threads: the coordinator and two walkers.
     let mut parallel = options(&arguments);
-    parallel.workers = std::num::NonZeroUsize::new(2).unwrap();
+    parallel.workers = std::num::NonZeroUsize::new(3).unwrap();
     let (report, value) = solve("{a;b}.", &parallel);
     let measured = report
         .unwrap()
