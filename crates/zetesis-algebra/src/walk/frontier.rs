@@ -594,6 +594,38 @@ impl<E: Payload, R: From<Stop>> Frontier<E, R> {
         reserve: impl FnOnce(&mut VecDeque<E>, usize) -> Result<(), R>,
         children: impl FnOnce(E) -> ([E; N], H),
     ) -> Result<H, (R, E)> {
+        self.publish_split_shedding(index, parent, reserve, children, usize::MAX, |_| {})
+    }
+
+    /// [`Self::publish_split_with`], then, under the same deque lock and
+    /// before any waiter is woken, shed the payload of the entries that the
+    /// publication moved more than `window` entries below the newest.
+    ///
+    /// The owner takes its newest entry first and thieves take the oldest, so
+    /// an entry far below the newest waits longest and is the first a peer
+    /// steals. `shed` replaces such an entry's derived payload by one its later
+    /// visit recomputes; it must not change the entry's region. Each
+    /// publication pushes at most two entries, so shedding the two positions
+    /// that fall out of the window keeps every older entry shed, and the deque
+    /// retains at most `window` unshed payloads. The receipts record the
+    /// exchanged payload bytes; the region count is unchanged. Shedding takes
+    /// no second lock, so a waiter trying the deques sees the publication
+    /// exactly as an unshedding one would.
+    ///
+    /// # Errors
+    /// As [`Self::publish_split_with`]; nothing is shed on refusal.
+    ///
+    /// # Panics
+    /// As [`Self::publish_split_with`].
+    pub fn publish_split_shedding<const N: usize, H>(
+        &self,
+        index: usize,
+        parent: E,
+        reserve: impl FnOnce(&mut VecDeque<E>, usize) -> Result<(), R>,
+        children: impl FnOnce(E) -> ([E; N], H),
+        window: usize,
+        mut shed: impl FnMut(&mut E),
+    ) -> Result<H, (R, E)> {
         const {
             assert!(
                 N > 0 && N <= 2,
@@ -614,42 +646,23 @@ impl<E: Payload, R: From<Stop>> Frontier<E, R> {
             self.inserted(&child);
             queue.push_back(child);
         }
+        if let Some(end) = queue.len().checked_sub(window) {
+            for position in end.saturating_sub(N)..end {
+                let entry = &mut queue[position];
+                if let Some(accounting) = &self.accounting {
+                    accounting.retained_bytes.subtract(payload_bytes(entry));
+                }
+                shed(entry);
+                if let Some(accounting) = &self.accounting {
+                    accounting.retained_bytes.add(payload_bytes(entry));
+                }
+            }
+        }
         // Release the deque before taking the gate: a waiter holds the gate
         // while it tries the deques, and never waits for a queue lock.
         drop(queue);
         self.termination.wake_one();
         Ok(held)
-    }
-
-    /// Shed the payload of the entries that publication has just moved more
-    /// than `window` entries below the newest on worker `index`'s deque.
-    ///
-    /// The owner takes its newest entry first and thieves take the oldest, so
-    /// an entry far below the newest waits longest and is the first a peer
-    /// steals. `shed` replaces such an entry's derived payload by one its later
-    /// visit recomputes; it must not change the entry's region. Each
-    /// publication pushes at most two entries, so shedding the two positions
-    /// that fall out of the window keeps every older entry shed, and the deque
-    /// retains at most `window` unshed payloads. The receipts record the
-    /// exchanged payload bytes; the region count is unchanged.
-    ///
-    /// # Panics
-    /// Panics if `index` is outside the worker deques.
-    pub fn shed_beyond(&self, index: usize, window: usize, mut shed: impl FnMut(&mut E)) {
-        let mut queue = self.queue(index);
-        let Some(end) = queue.len().checked_sub(window) else {
-            return;
-        };
-        for position in end.saturating_sub(2)..end {
-            let entry = &mut queue[position];
-            if let Some(accounting) = &self.accounting {
-                accounting.retained_bytes.subtract(payload_bytes(entry));
-            }
-            shed(entry);
-            if let Some(accounting) = &self.accounting {
-                accounting.retained_bytes.add(payload_bytes(entry));
-            }
-        }
     }
 
     /// Look for a region, waiting while any remains. `None` when the whole

@@ -509,20 +509,18 @@ impl Shared {
         reserve: impl FnOnce(&mut std::collections::VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
         let parent = pending.take().expect("publication has a pending parent");
-        match self
-            .frontier
-            .publish_split_with(index, parent, reserve, |parent| {
+        match self.frontier.publish_split_shedding(
+            index,
+            parent,
+            reserve,
+            |parent| {
                 let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
                 ([cut, held], ())
-            }) {
-            Ok(()) => {
-                self.frontier.shed_beyond(
-                    index,
-                    super::region_frontier::KEPT_KNOWLEDGE,
-                    super::region_frontier::shed,
-                );
-                Ok(())
-            }
+            },
+            super::region_frontier::KEPT_KNOWLEDGE,
+            super::region_frontier::shed,
+        ) {
+            Ok(()) => Ok(()),
             Err((error, parent)) => {
                 *pending = Some(parent);
                 Err(error)

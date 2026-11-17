@@ -232,9 +232,17 @@ fn shedding_keeps_the_newest_payloads_and_records_the_exchanged_bytes() {
     for id in 1..=4 {
         let children = [packet(10 * id), packet(10 * id + 1)];
         frontier
-            .publish_split_with(0, parent, reserve, |_| (children, ()))
+            .publish_split_shedding(
+                0,
+                parent,
+                reserve,
+                |_| (children, ()),
+                3,
+                |entry| {
+                    entry.bytes = Vec::new();
+                },
+            )
             .unwrap();
-        frontier.shed_beyond(0, 3, |entry| entry.bytes = Vec::new());
         parent = frontier.take_local(0).unwrap();
     }
     let queue = frontier.queue(0);

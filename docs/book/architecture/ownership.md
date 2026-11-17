@@ -175,7 +175,7 @@ per worker instead of one per open split, and the deepest entries, which a peer
 steals first, are the ones recomputed. Regions, their order and the visited
 family are unchanged; recomputation is ordinary narrowing work on the lease of
 the worker that visits the region, and the frontier's retained-byte receipts
-record each exchange (`Frontier::shed_beyond`, `Walk::with_recomputation`).
+record each exchange (`Frontier::publish_split_shedding`, `Walk::with_recomputation`). Shedding happens under the publication's own deque lock, before a waiter is woken, because waiters try deques with `try_lock` under the idle gate.
 
 Region queries check retained workspace storage before evaluation and before
 returning a successful verdict. The final check includes scratch grown by the

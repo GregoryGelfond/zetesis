@@ -718,20 +718,18 @@ impl<'filter> SlateFill<'_, 'filter> {
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<Entry, Incomplete> {
         let parent = pending.take().expect("publication has a pending parent");
-        match self
-            .frontier
-            .publish_split_with(self.home(index), parent, reserve, |parent| {
+        match self.frontier.publish_split_shedding(
+            self.home(index),
+            parent,
+            reserve,
+            |parent| {
                 let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
                 ([cut], held)
-            }) {
-            Ok(held) => {
-                self.frontier.shed_beyond(
-                    self.home(index),
-                    super::region_frontier::KEPT_KNOWLEDGE,
-                    super::region_frontier::shed,
-                );
-                Ok(held)
-            }
+            },
+            super::region_frontier::KEPT_KNOWLEDGE,
+            super::region_frontier::shed,
+        ) {
+            Ok(held) => Ok(held),
             Err((error, parent)) => {
                 *pending = Some(parent);
                 Err(error)
