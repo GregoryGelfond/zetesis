@@ -350,3 +350,24 @@ fn empty_batches_create_no_worker_operation() {
     });
     assert!(slots.is_empty());
 }
+
+#[test]
+fn the_pool_with_its_caller_stays_within_the_requested_threads() {
+    // --threads N caps grounding at N threads: N - 1 pool threads plus the
+    // coordinating caller, which runs tasks too (it was a fixed 14 before).
+    assert_eq!(pool_threads(Some(workers(1))), None);
+    for count in [2, 3, 14] {
+        let pool = pool_threads(Some(workers(count))).unwrap();
+        assert_eq!(pool.get(), count - 1);
+        let executor = Executor::new(pool).unwrap();
+        assert_eq!(
+            executor.pool.as_ref().unwrap().current_num_threads(),
+            count - 1
+        );
+    }
+    let available = std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN);
+    assert_eq!(
+        pool_threads(None).map_or(1, |pool| pool.get() + 1),
+        available.get()
+    );
+}

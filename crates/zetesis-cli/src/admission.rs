@@ -379,6 +379,7 @@ pub(crate) fn expansion_limits(options: &Options) -> ExpansionLimits {
 fn grounding_options(options: &Options) -> zetesis_themelios::GroundingOptions {
     zetesis_themelios::GroundingOptions {
         joins: options.formula_joins,
+        workers: Some(options.workers),
     }
 }
 
