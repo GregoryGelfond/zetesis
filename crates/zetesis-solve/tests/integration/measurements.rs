@@ -1,4 +1,5 @@
 //! Shared host scopes preserve attempts independently of application outcomes.
+#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
 
 use crate::support::sessions::config as cpu_config;
 use std::{sync::mpsc, thread, time::Duration};

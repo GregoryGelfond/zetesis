@@ -1,4 +1,5 @@
 //! Independent exhaustive valuation and objective-budget regression checks.
+#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
