@@ -39,6 +39,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- The maintained benchmark corpus adds 14 reconstructed Vaelii-shaped
+  Datalog workloads (`examples/vaelii-reconstructed`), labeled as
+  reconstructions, for 109 cases in all.
 - Direct source evaluation admits stratified recursion: recursive
   Datalog-shaped closures, joins and arithmetic filters, including recursion
   that negates completed lower strata and negation over their completed

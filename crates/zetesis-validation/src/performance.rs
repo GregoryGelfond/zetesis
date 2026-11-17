@@ -17,7 +17,7 @@ mod capture;
 mod config;
 
 /// Finite campaign population, separate from the pinned source catalog size.
-pub(super) const MAX_CASES: usize = 95;
+pub(super) const MAX_CASES: usize = 109;
 pub mod families;
 pub mod matrix;
 pub mod command;
