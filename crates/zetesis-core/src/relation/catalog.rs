@@ -238,9 +238,7 @@ impl Catalog {
         self.rows.path.clear();
         self.rows.root = None;
         self.last_row = None;
-        index.order.nodes.clear();
-        index.order.path.clear();
-        index.order.root = None;
+        index.order.clear();
         index.identities.clear();
         self.layout.dictionary.clear();
         for column in &mut self.layout.columns {
@@ -365,6 +363,7 @@ impl Catalog {
         let mut route = Directions::default();
         work.tick(1)?;
         let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
+        index_values(&mut self.layout, atoms, work)?;
         let value = |column| atom.values().at(column).expect("checked atom arity");
         // A row beyond the last in order is placed without a search.
         let last =
@@ -417,7 +416,68 @@ impl Catalog {
         self.reserve(plan, row_plan, extends, work)?;
         Ok(self.publish(member, row_plan, plan, extends, work))
     }
+}
 
+/// Order the values appended since the last batch, if an ordered lookup
+/// has asked for them: sort the suffix as one batch, then merge equal-level
+/// runs. Each comparison and each written identity is charged; work tracks
+/// the batch (amortized O(log n) merge levels per value), not the catalog.
+fn index_values(layout: &mut Layout, atoms: Atoms<'_>, work: &mut Work) -> Result<(), Failure> {
+    let Layout {
+        dictionary, index, ..
+    } = layout;
+    let DictionaryIndex::Append(index) = index else {
+        return Err(Failure::Dictionary);
+    };
+    let len = dictionary.len();
+    if !*index.order.demanded.get_mut() || index.order.indexed == len {
+        return Ok(());
+    }
+    let dictionary = &*dictionary;
+    let value = |id: u32| {
+        let cell = dictionary[id as usize];
+        atoms
+            .at(cell.row)
+            .and_then(|atom| atom.values().get(cell.column))
+            .ok_or(Failure::Dictionary)
+    };
+    let mut compare = |left: u32, right: u32| {
+        let (left, right) = (value(left)?, value(right)?);
+        work.compare(left, right)
+    };
+    let count = len - index.order.indexed;
+    let mut batch: Vec<u32> = Vec::new();
+    batch
+        .try_reserve_exact(count)
+        .map_err(|_| Failure::Allocation)?;
+    for id in index.order.indexed..len {
+        batch.push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
+    }
+    let mut scratch: Vec<u32> = Vec::new();
+    scratch
+        .try_reserve_exact(count)
+        .map_err(|_| Failure::Allocation)?;
+    super::dictionary::sort_ids(&mut batch, &mut scratch, &mut compare)?;
+    let mut runs = std::mem::take(&mut index.order.levels);
+    runs.push(batch);
+    while runs.len() >= 2 && runs[runs.len() - 2].len() <= 2 * runs[runs.len() - 1].len() {
+        let right = runs.pop().expect("two runs");
+        let left = runs.pop().expect("two runs");
+        let mut merged = Vec::new();
+        merged
+            .try_reserve_exact(left.len() + right.len())
+            .map_err(|_| Failure::Allocation)?;
+        super::dictionary::merge_into(&left, &right, &mut merged, &mut compare)?;
+        runs.push(merged);
+    }
+    work.tick(count as u128)?;
+    index.order.levels = runs;
+    index.order.indexed = len;
+    *index.order.demanded.get_mut() = false;
+    Ok(())
+}
+
+impl Catalog {
     fn reserve(
         &mut self,
         plan: &plan::Plan,
@@ -431,7 +491,6 @@ impl Catalog {
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             return Err(Failure::Dictionary);
         };
-        work.grow(&mut index.order.nodes, plan.added.len())?;
         index.identities.reserve(plan.added.len(), work)?;
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
             column.reserve(id, work)?;
@@ -443,7 +502,6 @@ impl Catalog {
             (self.rows.path.len() - row.changed_from) as u128
                 + plan.ids.len() as u128
                 + plan.added.len() as u128 * 3
-                + plan.patches.len() as u128
                 + 3,
         )?;
         if increasing {
@@ -464,14 +522,6 @@ impl Catalog {
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             unreachable!("catalog owns an append index");
         };
-        index
-            .order
-            .nodes
-            .resize(index.order.nodes.len() + plan.added.len(), Node::default());
-        for patch in &plan.patches {
-            index.order.nodes[patch.id] = patch.node;
-        }
-        index.order.root = plan.root;
         for added in &plan.added {
             let equality =
                 u32::try_from(self.layout.dictionary.len()).expect("admitted equality ID");
@@ -580,9 +630,7 @@ impl Catalog {
             + self.layout.dictionary.capacity() * size_of::<Cell>()
             + match &self.layout.index {
                 DictionaryIndex::Sorted(ids) => ids.capacity() * size_of::<u32>(),
-                DictionaryIndex::Append(index) => {
-                    index_bytes(&index.order) + index.identities.bytes()
-                }
+                DictionaryIndex::Append(index) => index.order.bytes() + index.identities.bytes(),
             }
             + self.layout.columns.capacity() * size_of::<OwnedColumn>()
             + self

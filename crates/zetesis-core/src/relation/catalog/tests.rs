@@ -1412,3 +1412,45 @@ fn a_closed_catalog_refuses_another_writers_rows() {
         Err(Failure::Read(ReadError::ForeignCatalog))
     ));
 }
+
+/// Work charged to insert `count` rows whose first column ascends and whose
+/// second column is a new value in scrambled order.
+fn new_value_work(count: i32) -> u128 {
+    let predicate = Predicate::new("v", 2).unwrap();
+    let limits = Limits {
+        max_rows: 1 << 18,
+        max_columns: 2,
+        max_values: 1 << 19,
+        max_bytes: 1 << 30,
+        max_work: u64::MAX,
+    };
+    let mut fixture = Fixture::new(&predicate, limits).unwrap();
+    let mut work = 0;
+    for index in 0..count {
+        let scrambled = index.wrapping_mul(7919) % count;
+        let row = Atom::new(
+            predicate.clone(),
+            vec![Value::Number(index), Value::Number(count + scrambled)],
+        )
+        .unwrap();
+        work += fixture
+            .insert(&row, limits)
+            .unwrap()
+            .storage
+            .construction_work;
+    }
+    work
+}
+
+#[test]
+fn new_values_take_no_ordered_search() {
+    // The canonical inverse decides a new value; no value-order search or
+    // rebalancing is charged, so the work per row does not grow with the
+    // catalog (it did by ~log2 n with the per-insert value tree).
+    let small = new_value_work(1 << 12);
+    let large = new_value_work(1 << 14);
+    assert!(
+        large * 100 <= small * 4 * 105,
+        "small {small}, large {large}"
+    );
+}

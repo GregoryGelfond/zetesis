@@ -260,17 +260,14 @@ pub(super) fn lookup_with<E: From<Failure>>(
             {
                 return Ok(equality);
             }
-            crate::ordered_index::search(
-                &index.order.nodes,
-                index.order.root,
-                |id| {
+            index
+                .order
+                .search(layout.dictionary.len(), |id| {
                     before()?;
                     value.compare_ref_with(layout.dictionary[id].value(source)?, &mut *before)
-                },
-                |_| {},
-            )?
-            .map(|id| u32::try_from(id).map_err(|_| Failure::Overflow.into()))
-            .transpose()
+                })?
+                .map(|id| u32::try_from(id).map_err(|_| Failure::Overflow.into()))
+                .transpose()
         }
     }
 }
