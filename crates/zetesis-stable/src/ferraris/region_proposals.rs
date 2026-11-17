@@ -100,7 +100,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use rayon::prelude::*;
 use zetesis_algebra::walk::{self, Counting};
 use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
@@ -155,7 +154,12 @@ pub(crate) struct RegionProposals {
     frontier: RegionFrontier,
     /// Whether producers keep their own deques or share deque 0.
     order: FrontierOrder,
-    pool: rayon::ThreadPool,
+    /// Producer threads beside the caller, which produces too: the
+    /// producers together are the requested workers, never one more.
+    /// `None` for one producer: the caller produces alone.
+    pool: Option<zetesis_algebra::threads::Pool>,
+    /// The requested workers: one workspace each, the caller's first.
+    producers: usize,
     statistics: RegionSearchStatistics,
     workers: Workers,
     /// The worklists of the coordinator's own positive checks.
@@ -166,7 +170,7 @@ pub(crate) struct RegionProposals {
 impl std::fmt::Debug for RegionProposals {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RegionProposals")
-            .field("producers", &self.pool.current_num_threads())
+            .field("producers", &self.producers)
             .field("unresolved", &self.frontier.termination.unresolved())
             .finish_non_exhaustive()
     }
@@ -194,10 +198,13 @@ impl RegionProposals {
             root,
         } = opened;
         let root = root.ok_or(Incomplete::InvalidWitness)?;
-        let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(workers.get())
-            .thread_name(|index| format!("zetesis-proposal-{index}"))
-            .build()
+        let pool = NonZeroUsize::new(workers.get() - 1)
+            .map(|helpers| {
+                zetesis_algebra::threads::Pool::new(helpers, |index| {
+                    format!("zetesis-proposal-{index}")
+                })
+            })
+            .transpose()
             .map_err(|_| Incomplete::Allocation)?;
         let frontier = RegionFrontier::measured(
             workers.get(),
@@ -209,6 +216,7 @@ impl RegionProposals {
             frontier,
             order: FrontierOrder::PerProducer,
             pool,
+            producers: workers.get(),
             statistics,
             workers: Workers::new(None, |_| Vec::new()),
             scratch: NarrowingScratch::default(),
@@ -254,12 +262,12 @@ impl RegionProposals {
             parts,
             workers,
             statistics,
-            pool,
+            producers,
             ..
         } = self;
         workers.with_dependent_mut(|_, workspaces| {
             if workspaces.is_empty() {
-                let count = pool.current_num_threads();
+                let count = *producers;
                 workspaces
                     .try_reserve_exact(count)
                     .map_err(|_| Incomplete::Allocation)?;
@@ -408,7 +416,7 @@ impl RegionProposals {
         self.frontier.termination = Termination::resuming(self.frontier.termination.unresolved());
         let joined = self.workers.with_dependent_mut(|filter, workspaces| {
             if workspaces.is_empty() {
-                let count = self.pool.current_num_threads();
+                let count = self.producers;
                 workspaces
                     .try_reserve_exact(count)
                     .map_err(|_| Incomplete::Allocation)?;
@@ -440,20 +448,16 @@ impl RegionProposals {
                 }),
                 order: self.order,
             };
-            self.pool.install(|| {
-                workspaces
-                    .par_iter_mut()
-                    .enumerate()
-                    .for_each(|(index, workspace)| {
-                        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            slate.produce(index, workspace);
-                        }))
-                        .is_err()
-                        {
-                            slate.stop(Incomplete::WorkerPanicked);
-                        }
-                    });
-            });
+            let produce = |index: usize, workspace: &mut _| {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    slate.produce(index, workspace);
+                }))
+                .is_err()
+                {
+                    slate.stop(Incomplete::WorkerPanicked);
+                }
+            };
+            caller_first(self.pool.as_deref(), workspaces, produce);
             let Outcome {
                 candidates,
                 mut stopped,
@@ -1002,4 +1006,31 @@ impl<'filter> SlateFill<'_, 'filter> {
         counts.leaves = 1;
         Ok(Step::Candidate(candidate))
     }
+}
+
+/// Run `produce` once per workspace: the caller takes workspace 0 while the
+/// pool's threads take the rest, so the slate runs on at most the pool's
+/// threads plus the caller. Without a pool the caller runs each in order.
+fn caller_first<W: Send>(
+    pool: Option<&rayon::ThreadPool>,
+    workspaces: &mut [W],
+    produce: impl Fn(usize, &mut W) + Sync,
+) {
+    let Some(pool) = pool else {
+        for (index, workspace) in workspaces.iter_mut().enumerate() {
+            produce(index, workspace);
+        }
+        return;
+    };
+    pool.in_place_scope(|scope| {
+        let produce = &produce;
+        let mut workspaces = workspaces.iter_mut().enumerate();
+        let first = workspaces.next();
+        for (index, workspace) in workspaces {
+            scope.spawn(move |_| produce(index, workspace));
+        }
+        if let Some((index, workspace)) = first {
+            produce(index, workspace);
+        }
+    });
 }
