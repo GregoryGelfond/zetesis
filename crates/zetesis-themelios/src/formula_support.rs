@@ -65,6 +65,11 @@ mod prepared;
 pub(crate) mod component_plan;
 mod probe_selection;
 mod producers;
+mod parallel_executor;
+#[cfg(test)]
+pub(crate) use parallel_executor::with_source_workers;
+pub(crate) use parallel_executor::{Executor, SourceExecution};
+pub(crate) mod row_blocks;
 mod projections;
 pub(crate) use projections::supports_column_totality;
 mod queries;
@@ -610,6 +615,7 @@ fn interrupted(reason: zetesis_algebra::Stop, location: ProgramSite) -> FormulaF
     FormulaFailure::Interrupted { reason, location }
 }
 
+#[cfg(test)]
 pub(crate) fn build(
     catalog: SupportCatalog,
     prepared: &Prepared,
@@ -619,30 +625,67 @@ pub(crate) fn build(
     counters: &mut Counters,
     fallback: ProgramSite,
 ) -> Result<CompletedCatalog, FormulaFailure> {
+    build_with_executor(
+        catalog,
+        prepared,
+        domains,
+        budget,
+        GroundingWork::new(limits, counters, fallback),
+        None,
+    )
+}
+
+pub(crate) fn build_with_executor(
+    catalog: SupportCatalog,
+    prepared: &Prepared,
+    domains: Option<&crate::formula_domains::Domains<'_>>,
+    budget: &mut Budget,
+    work: GroundingWork<'_>,
+    executor: Option<&Executor>,
+) -> Result<CompletedCatalog, FormulaFailure> {
+    let GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
     counters.observe_work(Event::SupportConstructionWork, |counters| {
         let producers =
-            producers::Producers::prepare(prepared, &catalog, limits, counters, fallback)?;
-        complete(
+            producers::Producers::prepare(prepared, &catalog, limits, counters, location)?;
+        complete_with_executor(
             catalog,
             prepared,
             producers,
             domains,
             budget,
-            GroundingWork::new(limits, counters, fallback),
+            GroundingWork::new(limits, counters, location),
+            executor,
         )
     })
+}
+
+#[cfg(test)]
+fn complete(
+    catalog: SupportCatalog,
+    prepared: &Prepared,
+    producers: producers::Producers<'_>,
+    domains: Option<&crate::formula_domains::Domains<'_>>,
+    budget: &mut Budget,
+    work: GroundingWork<'_>,
+) -> Result<CompletedCatalog, FormulaFailure> {
+    complete_with_executor(catalog, prepared, producers, domains, budget, work, None)
 }
 
 /// Every round joins each selected rule under its domain guards, when the
 /// analysis prepared candidates: a row a guard rejects has no complete
 /// continuation the exclusion rule keeps, in this round as in the final one.
-fn complete(
+fn complete_with_executor(
     mut catalog: SupportCatalog,
     prepared: &Prepared,
     mut producers: producers::Producers<'_>,
     domains: Option<&crate::formula_domains::Domains<'_>>,
     budget: &mut Budget,
     work: GroundingWork<'_>,
+    executor: Option<&Executor>,
 ) -> Result<CompletedCatalog, FormulaFailure> {
     let GroundingWork {
         limits,
@@ -729,6 +772,7 @@ fn complete(
                         round,
                         budget,
                         (limits, counters),
+                        executor,
                     )?;
                     if !scheduled {
                         selected = schedule.next(limits, counters, fallback)?;
@@ -802,6 +846,7 @@ fn produce<'source>(
     ),
     budget: &mut Budget,
     (limits, counters): (&FormulaLimits, &mut Counters),
+    executor: Option<&Executor>,
 ) -> Result<(), FormulaFailure> {
     let mut computation = Computation::new(delta, support);
     let candidates = domains
@@ -818,13 +863,14 @@ fn produce<'source>(
         }
         None => None,
     };
-    derive_variants(
+    derive_variants_with_executor(
         (index, rule),
         variants,
         (guards.as_ref(), totality),
         support,
         budget,
         Context::new(&mut computation, limits, counters, rule.location),
+        executor,
     )
 }
 
@@ -892,6 +938,7 @@ pub(crate) struct HeadOutcome {
 
 /// Visit one rule's ordered delta variants under the same admitted guards.
 /// `index` is the rule's position among the producers.
+#[cfg(test)]
 fn derive_variants<'source>(
     (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     variants: &mut delta::Variants<'_, '_>,
@@ -901,7 +948,30 @@ fn derive_variants<'source>(
     ),
     support: &Support<'source>,
     budget: &mut Budget,
-    context: Context<'_, &mut Computation<'_, '_>>,
+    context: Context<'_, &mut Computation<'_, 'source>>,
+) -> Result<(), FormulaFailure> {
+    derive_variants_with_executor(
+        (index, rule),
+        variants,
+        (guards, totality),
+        support,
+        budget,
+        context,
+        None,
+    )
+}
+
+fn derive_variants_with_executor<'source>(
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
+    variants: &mut delta::Variants<'_, '_>,
+    (guards, totality): (
+        Option<&queries::Guards<'_, 'source>>,
+        Option<&crate::formula_domains::numeric_ir::TotalBody<'_>>,
+    ),
+    support: &Support<'source>,
+    budget: &mut Budget,
+    context: Context<'_, &mut Computation<'_, 'source>>,
+    executor: Option<&Executor>,
 ) -> Result<(), FormulaFailure> {
     let Context {
         computation,
@@ -930,14 +1000,13 @@ fn derive_variants<'source>(
             if let Some(totality) = totality {
                 outer.select_static_total_body(rule, totality, limits, counters)?;
             }
-            derive_rule(
+            derive_rule_with_executor(
                 (index, rule),
                 &mut outer,
                 support,
-                computation,
-                limits,
                 budget,
-                counters,
+                Context::new(computation, limits, counters, rule.location),
+                executor,
             )?;
             drop(outer);
             next = variants.next(limits, counters)?;
@@ -955,14 +1024,13 @@ fn derive_variants<'source>(
         if let Some(totality) = totality {
             outer.select_static_total_body(rule, totality, limits, counters)?;
         }
-        derive_rule(
+        derive_rule_with_executor(
             (index, rule),
             &mut outer,
             support,
-            computation,
-            limits,
             budget,
-            counters,
+            Context::new(computation, limits, counters, rule.location),
+            executor,
         )?;
         // Preserve the next-variant lookup before admitting any new owner. A
         // final or only successful cursor has no reuse consumer.
@@ -982,19 +1050,59 @@ fn derive_variants<'source>(
 /// position `index` among the producers. A row under which a decided
 /// default-negated atom fails derives nothing
 /// ([`Derivation::negations_hold`]).
+#[cfg(test)]
 fn derive_rule<'source>(
     (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     outer: &mut Join<'_, 'source>,
     support: &Support<'source>,
-    computation: &mut Computation<'_, '_>,
+    computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<(), FormulaFailure> {
+    derive_rule_with_executor(
+        (index, rule),
+        outer,
+        support,
+        budget,
+        Context::new(computation, limits, counters, rule.location),
+        None,
+    )
+}
+
+fn derive_rule_with_executor<'source>(
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
+    outer: &mut Join<'_, 'source>,
+    support: &Support<'source>,
+    budget: &mut Budget,
+    context: Context<'_, &mut Computation<'_, 'source>>,
+    executor: Option<&Executor>,
+) -> Result<(), FormulaFailure> {
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
     // Every cursor belongs to this immutable round, including each first-new
     // variant. Family-evidence and external-check cursors never enter here.
     outer.select_scalar_body(rule, computation, limits, counters)?;
     outer.select_numeric_probes(rule, limits, counters)?;
+    if let Some(executor) = executor
+        && row_blocks::coordinator::derive(
+            executor,
+            rule,
+            outer,
+            support,
+            budget,
+            Context::new(computation, limits, counters, location),
+        )?
+    {
+        return Ok(());
+    }
     if witnesses::derive(rule, outer, computation, limits, budget, counters)? {
         return Ok(());
     }

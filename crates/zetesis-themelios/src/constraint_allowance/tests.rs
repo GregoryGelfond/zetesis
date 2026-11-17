@@ -4,6 +4,23 @@ use super::{ConstraintAllowance, Pending};
 use crate::{ConstraintCheckLimits, ConstraintCheckStatistics};
 
 #[test]
+fn bulk_substitution_receipts_publish_the_same_prefix_once() {
+    let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
+    let mut pending = Pending::new(allowance.clone());
+    pending.substitutions(17);
+    pending.substitution();
+    pending.substitutions(0);
+    assert_eq!(allowance.statistics().substitutions, 0);
+    pending.settle();
+    pending.settle();
+    assert_eq!(allowance.statistics().substitutions, 18);
+    pending.substitutions(u64::MAX);
+    pending.substitutions(1);
+    drop(pending);
+    assert_eq!(allowance.statistics().substitutions, u64::MAX);
+}
+
+#[test]
 fn in_flight_charges_remain_local() {
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
     let mut pending = Pending::new(allowance.clone());

@@ -585,6 +585,28 @@ impl GroundingWork {
 pub(crate) struct Work(Option<Rc<RefCell<GroundingWork>>>);
 
 impl Work {
+    /// Construct an independent bank on the worker itself. Only its value
+    /// snapshot crosses threads; the coordinator's observer is never shared.
+    pub(crate) fn worker(enabled: bool) -> Self {
+        Self(enabled.then(|| Rc::new(RefCell::new(GroundingWork::default()))))
+    }
+
+    pub(crate) fn snapshot(&self) -> GroundingWork {
+        self.0
+            .as_ref()
+            .map_or_else(GroundingWork::default, |work| *work.borrow())
+    }
+
+    /// Combine operation counts through the same public value reduction. Peak
+    /// fields retain their maximum: they are not a sum of concurrent capacities.
+    /// The coordinator separately accounts the shared output reservation.
+    pub(crate) fn merge(&self, snapshot: &GroundingWork) {
+        if let Some(work) = &self.0 {
+            let mut work = work.borrow_mut();
+            *work = work.checked_sum(*snapshot);
+        }
+    }
+
     pub(crate) fn enabled(&self) -> bool {
         self.0.is_some()
     }
@@ -688,6 +710,50 @@ impl Drop for Exit<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn worker_value_snapshots_merge_without_sharing_observers() {
+        let coordinator = Work::worker(true);
+        coordinator.record(Event::JoinRow);
+        let receipt = std::thread::spawn(|| {
+            let worker = Work::worker(true);
+            worker.record(Event::JoinRow);
+            worker.record(Event::JoinRow);
+            worker.record(Event::NodeInserted);
+            worker.snapshot()
+        })
+        .join()
+        .unwrap();
+        assert_eq!(coordinator.snapshot().join_rows, Some(1));
+        coordinator.merge(&receipt);
+        assert_eq!(coordinator.snapshot().join_rows, Some(3));
+        assert_eq!(coordinator.snapshot().nodes_inserted, Some(1));
+    }
+
+    #[test]
+    fn disabled_worker_observation_allocates_no_bank() {
+        let worker = Work::worker(false);
+        worker.record(Event::JoinRow);
+        assert!(worker.0.is_none());
+        assert_eq!(worker.snapshot().join_rows, Some(0));
+    }
+
+    #[test]
+    fn worker_merge_preserves_unavailability_per_field() {
+        let coordinator = Work::worker(true);
+        coordinator.merge(&GroundingWork {
+            join_rows: None,
+            nodes_inserted: Some(7),
+            ..GroundingWork::default()
+        });
+        coordinator.merge(&GroundingWork {
+            join_rows: Some(3),
+            nodes_inserted: Some(2),
+            ..GroundingWork::default()
+        });
+        assert_eq!(coordinator.snapshot().join_rows, None);
+        assert_eq!(coordinator.snapshot().nodes_inserted, Some(9));
+    }
 
     #[derive(Default)]
     struct Observer(RefCell<Vec<(GroundingOutcome, GroundingWork)>>);

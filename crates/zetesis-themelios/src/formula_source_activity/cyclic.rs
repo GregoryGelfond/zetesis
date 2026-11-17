@@ -13,7 +13,7 @@ use themelios_program::symbol::Signature;
 use super::{Activity, Context, SourceEligibility, authority::Round, signature};
 use crate::FormulaFailure;
 use crate::formula_ir::Prepared;
-use crate::formula_support::Support;
+use crate::formula_support::{Executor, Support};
 
 impl SourceEligibility {
     pub(super) fn cyclic<'source>(
@@ -23,6 +23,7 @@ impl SourceEligibility {
         unresolved: &BTreeSet<Signature>,
         temporary: usize,
         context: &mut Context<'_, '_, 'source>,
+        executor: Option<&Executor>,
     ) -> Result<(), FormulaFailure> {
         for predicate in support.predicates() {
             context.work()?;
@@ -35,10 +36,26 @@ impl SourceEligibility {
                 self.possible(predicate, support, temporary, context)?;
             }
         }
+        let mut completed_rows = None;
+        let mut retained = Some(super::retained::Retention::new(
+            &mut completed_rows,
+            prepared,
+        ));
+        #[cfg(test)]
+        if !super::retained::enabled() {
+            retained = None;
+        }
         loop {
             context.work()?;
             self.round = Some(Round::new(context));
-            let result = self.derive_round(prepared, support, unresolved, temporary, context);
+            let result = self.derive_round(
+                prepared,
+                support,
+                unresolved,
+                temporary,
+                context,
+                (executor, retained.as_mut()),
+            );
             self.round = None;
             if !result? {
                 return Ok(());
@@ -46,18 +63,30 @@ impl SourceEligibility {
         }
     }
 
-    fn derive_round<'source>(
+    fn derive_round<'query, 'source: 'query>(
         &mut self,
         prepared: &'source Prepared,
-        support: &Support<'source>,
+        support: &'query Support<'source>,
         unresolved: &BTreeSet<Signature>,
         temporary: usize,
         context: &mut Context<'_, '_, 'source>,
+        execution: (
+            Option<&Executor>,
+            Option<&mut super::retained::Retention<'_, 'query, 'source>>,
+        ),
     ) -> Result<bool, FormulaFailure> {
+        let (executor, mut retained) = execution;
         let overlap = temporary.saturating_add(self.activity.len());
         for predicate in unresolved {
             context.work()?;
-            self.derive_predicate(prepared, predicate, support, overlap, context)?;
+            self.derive_predicate(
+                prepared,
+                predicate,
+                support,
+                overlap,
+                context,
+                (executor, retained.as_deref_mut()),
+            )?;
         }
         self.refine_round(unresolved, context)
     }

@@ -11,6 +11,43 @@ use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Value;
 
 #[test]
+fn joined_substitutions_keep_their_shared_receipt_at_cancellation() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut accounting = Accounting::with_allowance(allowance.clone());
+    let cancellation = Cancellation::default();
+    let limits = FormulaLimits {
+        max_substitutions: 7,
+        ..FormulaLimits::default()
+    };
+    let result = accounting.with_cancellation(&cancellation, |counters| {
+        counters.substitution(&limits, location())?;
+        cancellation.cancel();
+        counters.absorb_substitutions(6, &limits, location())?;
+        assert!(matches!(
+            counters.absorb_substitutions(1, &limits, location()),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Substitutions,
+                observed: 8,
+                limit: 7,
+                ..
+            })
+        ));
+        counters.poll(location())
+    });
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::Interrupted {
+            reason: Stop::Cancelled,
+            ..
+        })
+    ));
+    assert_eq!(accounting.substitutions, 7);
+    assert_eq!(allowance.statistics().substitutions, 7);
+    accounting.settle();
+    assert_eq!(allowance.statistics().substitutions, 7);
+}
+
+#[test]
 fn refused_checks_retain_their_accepted_prefix() {
     let mut accounting = Accounting::default();
     let limits = FormulaLimits {

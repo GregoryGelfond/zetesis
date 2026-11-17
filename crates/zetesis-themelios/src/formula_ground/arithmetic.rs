@@ -15,8 +15,13 @@
 
 mod certified;
 mod constant_divisors;
+mod scopes;
 
-use crate::formula_support::{Context, GroundingWork};
+pub(super) use scopes::Scopes;
+#[cfg(test)]
+pub(super) use scopes::reference_scopes;
+
+use crate::formula_support::Context;
 
 use crate::ProgramSite;
 
@@ -201,39 +206,6 @@ fn earlier_partial(
     Ok(false)
 }
 
-/// Objective rows use the same independent nested-scope evidence before their
-/// priority, weight and tuple expressions complete the enclosing family.
-pub(super) fn body<'source>(
-    literals: &'source [LiteralIr],
-    binding: &Binding,
-    support: &Support<'source>,
-    budget: &mut Budget,
-    warnings: &mut Warnings,
-    context: Context<'_, &mut Computation<'_, 'source>>,
-) -> Result<(), FormulaFailure> {
-    let Context {
-        computation,
-        work:
-            GroundingWork {
-                limits,
-                counters,
-                location,
-            },
-    } = context;
-    let mut scan = Scan {
-        support,
-        computation,
-        limits,
-        budget,
-        counters,
-        warnings,
-        stack: Vec::new(),
-    };
-    scan.children(literals, binding, location)?;
-    scan.run()?;
-    Ok(())
-}
-
 impl<'a, 'source> Scan<'a, 'source, '_, '_> {
     fn task(&mut self, task: Task<'a, 'source>) -> Result<usize, FormulaFailure> {
         self.counters.work(self.limits, task.location)?;
@@ -369,7 +341,8 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         body: &'source [LiteralIr],
         binding: &Binding,
         location: ProgramSite,
-    ) -> Result<(), FormulaFailure> {
+    ) -> Result<bool, FormulaFailure> {
+        let mut nested = false;
         for literals in body.chunk_by(|left, right| {
             matches!(
                 (left, right),
@@ -380,6 +353,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
             self.counters.work(self.limits, location)?;
             match &literals[0] {
                 LiteralIr::Aggregate(aggregate) => {
+                    nested = true;
                     for elements in aggregate
                         .elements
                         .chunk_by(|left, right| left.family == right.family)
@@ -398,6 +372,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
                     }
                 }
                 LiteralIr::Conditional(_) => {
+                    nested = true;
                     let group = self.group(location)?;
                     for literal in literals {
                         let LiteralIr::Conditional(conditional) = literal else {
@@ -414,12 +389,20 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
                     }
                 }
                 LiteralIr::ProjectedAtom(_, projection) => {
-                    self.projection(projection, binding, location)?;
+                    nested |= self.projection(projection, binding, location)?;
                 }
-                _ => {}
+                LiteralIr::Atom(..)
+                | LiteralIr::PatternAtom(_)
+                | LiteralIr::Compare(_)
+                | LiteralIr::ArgumentCheck(_)
+                | LiteralIr::TupleCompare(..)
+                | LiteralIr::Guard(_)
+                | LiteralIr::HeadGuard(_)
+                | LiteralIr::Bind { .. }
+                | LiteralIr::Range { .. } => {}
             }
         }
-        Ok(())
+        Ok(nested)
     }
 
     fn projection(
@@ -427,23 +410,25 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         projection: &'source Projection,
         binding: &Binding,
         location: ProgramSite,
-    ) -> Result<(), FormulaFailure> {
-        if let Projection::Witnesses {
-            bindings,
-            variables,
-            inputs,
-            ..
-        } = projection
-        {
-            self.local(
+    ) -> Result<bool, FormulaFailure> {
+        match projection {
+            Projection::Arguments { .. } => Ok(false),
+            Projection::Witnesses {
                 bindings,
-                &binding.prefix(*inputs),
-                *variables,
-                Continue::None,
-                location,
-            )?;
+                variables,
+                inputs,
+                ..
+            } => {
+                self.local(
+                    bindings,
+                    &binding.prefix(*inputs),
+                    *variables,
+                    Continue::None,
+                    location,
+                )?;
+                Ok(true)
+            }
         }
-        Ok(())
     }
 
     fn continue_with(
@@ -455,7 +440,9 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
     ) -> Result<(), FormulaFailure> {
         match continuation {
             Continue::None | Continue::Consequent(Consequent::Guard(_)) => {}
-            Continue::Projection(projection) => self.projection(projection, binding, location)?,
+            Continue::Projection(projection) => {
+                self.projection(projection, binding, location)?;
+            }
             Continue::Head(head) => self.head(head, binding, location)?,
             Continue::Consequent(Consequent::Atoms(_, alternatives)) => {
                 for alternative in alternatives {

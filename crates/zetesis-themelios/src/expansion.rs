@@ -419,6 +419,17 @@ impl Budget {
         location: ProgramSite,
     ) -> Result<(), ExpansionFailure> {
         self.poll(location)?;
+        self.record_charge(resource, amount, location)
+    }
+
+    /// Record admitted work without a new interruption boundary. Ordinary
+    /// admission polls first; joined workers have already performed this work.
+    fn record_charge(
+        &mut self,
+        resource: ExpansionResource,
+        amount: u128,
+        location: ProgramSite,
+    ) -> Result<(), ExpansionFailure> {
         let (used, ceiling) = match resource {
             ExpansionResource::TermWork => (&mut self.work, self.limits.max_term_work),
             ExpansionResource::Templates => (&mut self.templates, self.limits.max_templates),
@@ -465,6 +476,52 @@ impl Budget {
         }
         *used = observed;
         Ok(())
+    }
+
+    /// Divide only the unspent cumulative allowances between ordered tasks.
+    /// Input and per-family ceilings still describe each original source object;
+    /// they are not a shared consumable balance. No worker receives past usage.
+    pub(crate) fn worker_limits(&self, tasks: usize, index: usize) -> ExpansionLimits {
+        assert!(tasks != 0 && index < tasks);
+        let share = |ceiling: usize, used: u128| {
+            let remaining = usize::try_from((ceiling as u128).saturating_sub(used))
+                .expect("remaining source allowance fits its ceiling");
+            remaining / tasks + usize::from(index < remaining % tasks)
+        };
+        ExpansionLimits {
+            max_term_work: share(self.limits.max_term_work, self.work),
+            max_templates: share(self.limits.max_templates, self.templates),
+            max_values: share(self.limits.max_values, self.values),
+            max_scalar_bytes: share(self.limits.max_scalar_bytes, self.scalar_bytes),
+            max_origin_locations: share(self.limits.max_origin_locations, self.origins),
+            ..self.limits
+        }
+    }
+
+    /// Settle a joined task whose grant came from `worker_limits`. Retain every
+    /// performed dimension before observing cancellation, including the scalar
+    /// receipt's shared owner. The sum of these grants fits the parent ceiling.
+    pub(crate) fn absorb(
+        &mut self,
+        usage: ExpansionUsage,
+        location: ProgramSite,
+    ) -> Result<(), ExpansionFailure> {
+        let mut first = None;
+        for (resource, amount) in [
+            (ExpansionResource::TermWork, usage.term_work),
+            (ExpansionResource::Templates, usage.templates),
+            (ExpansionResource::Values, usage.values),
+            (ExpansionResource::ScalarBytes, usage.scalar_bytes),
+            (ExpansionResource::Origins, usage.origin_locations),
+        ] {
+            if let Err(error) = self.record_charge(resource, amount as u128, location)
+                && first.is_none()
+            {
+                first = Some(error);
+            }
+        }
+        self.poll(location)?;
+        first.map_or(Ok(()), Err)
     }
 
     /// Output headroom for an optional rewrite before it commits a family.

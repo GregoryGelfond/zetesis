@@ -1,7 +1,7 @@
 //! A normal-rule traversal borrows one checked source template across its bindings.
 
 mod rows;
-pub(crate) use rows::RowHead;
+pub(crate) use rows::{RowHead, project as row_column};
 
 use zetesis_core::PatternRef;
 use zetesis_core::atom_interner::PreparedPattern;

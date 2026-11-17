@@ -1,5 +1,7 @@
 # Source preparation and grounding modules
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 `zetesis-themelios` has two materialization boundaries. Relational admission
 returns templates for lazy or eager normal-rule execution. Formula preparation
 returns scoped instructions; grounding consumes them to construct a finite
@@ -77,10 +79,200 @@ The workspace charges cumulative preparation/query work and simultaneous named
 snapshot, index, scratch and mask capacities to the existing source limits.
 Refused capacity, allocation and work retain logical scope and any real source
 coordinates; a failed table operation is not an indexed fallback or an empty program. These
-objects are not a process-memory ceiling. The source builder remains sequential:
-an immutable index can serve independent callers, but selecting this strategy
-launches neither Rayon grounding nor a GPU kernel. See the
-[table API and its preservation boundary](../rust/finite-tables.md).
+objects are not a process-memory ceiling. Selecting the table strategy itself
+launches neither Rayon grounding nor a GPU kernel. Canonical construction and
+publication remain coordinator-owned; separately enabled row execution follows
+the [ordered execution boundary](#ordered-row-execution-and-current-activity-reuse)
+below. See the [table API and its preservation boundary](../rust/finite-tables.md).
+
+## Ordered row execution and current-activity reuse
+
+The experimental source executor belongs to one initial preparation, spanning
+possible-support completion, formula emission and objective activation. Its
+physical worker selection is separate from the solver's search-worker count;
+the current private configuration is not a public grounding default. Retained
+per-answer callbacks do not acquire this pool. The executor neither selects a
+new source semantics nor changes reduct membership.
+
+Eligible operations borrow the existing Join plan and immutable relation epoch.
+They partition an admitted probe into contiguous blocks, use the original
+matcher and scalar filters, and return ordered source witnesses. A fully bound
+prefix may precede that probe only when its ordinary matcher proves a zero-or-one
+row prefix without binding new variables. Workers still execute those prefix
+reads. An expanding-generator check prevents creating staging work for a join
+with no useful varying suffix; it does not establish profitability.
+
+The coordinator consumes successful blocks in source order and retains canonical
+term and atom construction, provenance, formula emission and objective-family
+publication. Support execution preserves the first-new delta pivot and serial
+publication barriers. An immutable published snapshot does not imply that the
+pending-head prefix is constant: earlier committed rows can suppress later
+support witnesses. Therefore fixed-stream list equality alone does not prove
+that staging visits the same internal witness count as per-row serial emission.
+The public requirement is preserved complete source meaning and output; the
+actual performed work remains accounted.
+
+Each consumer authenticates its own shape and current cursor state. The
+source-activity producer consumer admits normal positive flat patterns with
+comparison operands that are single constants or variables. It does not admit
+general arithmetic by borrowing this rule. Completed table-query consumers,
+retained selections, generated values, rich scopes or other unsupported states
+keep their existing traversal when the descriptor cannot establish eligibility.
+A syntactically eligible objective may select a different dependency-analysis
+path; actual dispatch must be established at the final consumer.
+
+One source-owned pool serves bounded tasks without nested pools. Each task has
+its own budget and counters; all performed receipts, including those of failed
+tasks, settle before outcome arbitration and ordered publication. Storage
+reservations remain live while the coordinator consumes results. This can cause
+earlier refusal under a partitioned allowance. A descriptor or pool that declines
+before claiming the cursor can select the ordinary path; an admitted stopped
+attempt cannot retry with a fresh allowance. Actual cancellation and typed
+resource failures retain their existing owners. Reservations describe admitted
+logical storage, not a measured process-memory peak. The authored source-buffer
+byte ledger excludes Rayon's pool/registry allocations, OS thread stacks and
+per-spawn heap jobs. These infrastructure costs belong in process-time and
+memory observations; the ledger does not claim their exact allocation size or
+recovery from an allocator abort. Whole-child RSS does not isolate those costs.
+
+Source activity can avoid a comparison only for a binding whose actual Join or
+authenticated replay already established that same ordinary comparison. Atom
+activity and guards still read the current table. Generic model-query and
+objective activity have no such permission merely because their fields exist.
+Removing the redundant arithmetic also removes its work, intermediate-value
+admissions and polling points; exact resource boundaries can consequently move.
+
+During cyclic activity refinement, a producer may retain one completed immutable
+row family over the same completed support. Its first pass records a row and
+immediately runs the original consumer. Only complete exhaustion and successful
+consumers seal the family; failure cannot publish a reusable partial stream.
+Replay authenticates the source producer, relation epoch and canonical values,
+keeps occurrence order and duplicates, and recomputes current Activity, bodies
+and heads. It never caches a previous round's truth. An empty completed family
+is valid. Retention storage starts lazily at the first eligible capture and stays
+charged while live. The combined route tries sealed replay, then eligible cold
+capture, then row workers, then the ordinary traversal; these savings overlap.
+
+Objective scope validation also retains a smaller fact: only a successful full
+scan proving no nested aggregate, conditional or projected-witness obligation
+allows that immutable fragment's later bindings to skip another empty scan.
+Rich scopes remain pending even if one binding has no descendants. Enclosing
+row validation and independent scalar fields remain required. General objectives
+have one such owner per scan; parallel numeric blocks each have their own.
+
+The [ordered execution correspondence](../lean/correspondence.md#ordered-parallel-grounding-and-witness-replay)
+and [comparison/row-reuse correspondence](../lean/correspondence.md#selected-comparisons-and-retained-producer-rows)
+state the separate Lean premises and Rust obligations. These laws do not prove
+thread safety, pool liveness, source matching, resource accounting or complete
+frontend route selection. This implementation provides CPU row execution, not
+device grounding or a general parallel component-wave scheduler.
+
+### Measuring the development worker configuration
+
+The current development build attempts a source-owned pool with 14 physical
+workers and a logical task ceiling of 14. This setting is separate from the
+solver's search-worker count: `--threads` does not select source workers. A
+smaller admitted row interval can create fewer blocks. Pool initialization may
+select the ordinary path, and the clean ordinary output does not report source
+task counts or physical occupancy. A configured worker count therefore does not
+establish observed concurrency.
+
+Worker eligibility does not establish profitability. Much of a program may
+remain outside the row certificate, and admitted workers do not take ownership
+of canonical formula construction, current Activity or semantic round
+publication. For example, a headless negative transitivity constraint and
+arithmetic choice constraints remain outside the normal positive-flat emission
+worker. A cyclic objective with double-negated conditions requires the general
+objective path, rather than the lifted numeric scan. A dependent reachability
+chain can repeatedly offer a narrow stream while later rounds still wait for
+publication. These are distinct limits; more threads do not remove them.
+
+A targeted source family exercises the lifted numeric class directly:
+
+```asp
+d(1..512).
+e(1..512).
+#minimize { 1@0,X,Y : d(X), e(Y) }.
+```
+
+Replacing both endpoints by `N` gives `N*N` distinct objective contributions,
+with one complete answer and optimum `N*N`. The formula's fact domains grow
+linearly, while complete objective evaluation grows with their product. The
+positive-flat condition, constant priority/weight and independent variables
+meet the numeric-row certificate without a source-eligibility query or cyclic
+retention.
+
+On 2026-11-16, a development screen on an Apple M4 Pro compared separately
+frozen CPU-only builds with configured source workers 1, 4 and 14. Rust 1.97.1
+built the release profile with fat LTO and one codegen unit; search was fixed at
+14 workers, clingo 5.8.2 used one worker, and the native allowance was 24 GiB.
+The maintained benchmark engine ran one warmup, three timed repetitions and
+one separate whole-child memory reading per point, with a 120-second child
+limit. Complete optimal families and costs were checked. Initial-grounding
+medians, in milliseconds, were:
+
+| N | Configured source 1 | Configured source 4 | Configured source 14 |
+|---:|---:|---:|---:|
+| 512 | 38.419 | 16.590 | 38.151 |
+| 1,024 | 149.735 | 74.623 | 150.226 |
+| 2,048 | 601.167 | 283.204 | 582.218 |
+
+Four workers reduced this phase by about 2–2.3 times; fourteen did not retain
+that benefit. At `N=2048`, total process medians were 3.406, 3.166 and 3.480
+seconds: the best observed total reduction was about 7%, because later objective
+scoring/retention still took roughly 2.8 seconds. Whole-child native peak RSS
+was about 341, 346 and 343 MiB, respectively. Those peaks do not isolate pool,
+retention or grounding allocations. All named grounding work/outcome records
+and published Formula counts agreed across these settings; the observed gain
+was in elapsed execution, not fewer counted bindings or arithmetic operations.
+
+This is a narrow, ordered three-sample screen, not a general worker default.
+The broader size controls exposed substantial serial-facing work, and the
+reachability-chain control became slower with more configured source workers.
+The cause of the numeric 4-versus-14 behavior remains unmeasured: actual source
+occupancy, scheduling and contention were not recorded. Exact source admission
+and resource failures remain results rather than reasons to increase limits.
+
+Use the [maintained benchmark protocol](../reference/benchmarking.md) for
+reproduction. Source-worker comparisons currently require separately built
+copies differing only in the private `PHYSICAL_WORKERS` constant in
+`crates/zetesis-themelios/src/formula_support/parallel_executor.rs`; keep the
+logical task ceiling fixed at 14. From each source copy, build the CPU executable
+with the same toolchain and profile, using a distinct target directory outside
+any synchronized source tree:
+
+```sh
+cargo +1.97.1 build --release -p zetesis-cli --bin zetesis \
+  --no-default-features --locked --offline
+```
+
+Prepare the three input files shown above, using endpoints 512, 1024 and 2048.
+Declare each as an authored case in a version-2 `--workloads` manifest named
+`numeric-objective.json`, with its actual byte hash, an optimal-family contract
+of one model, and the corresponding costs 262144, 1048576 and 4194304. Keep the
+manifest and source bytes identical across worker configurations. For each
+frozen executable, substitute its path and a fresh report name in the same
+canonical command; the following names are placeholders, not installed tools:
+
+```sh
+zetesis-bench run examples/correctness \
+  --workloads numeric-objective.json --zetesis ./zetesis-source-1 \
+  --clingo clingo --native-interface solve --backend cpu \
+  --grounder auto --oracle auto --threads 14 --clingo-threads 1 \
+  --warmups 1 --repetitions 3 --memory-runs 1 \
+  --timeout-seconds 120 --campaign-seconds 7200 --memory 25769803776 \
+  --sample-bytes 134217728 --answer-bytes 134217728 \
+  --native-report-bytes 134217728 --native-atoms 4194304 \
+  --native-value-nodes 8388608 --capture-bytes 2147483648 \
+  --report-bytes 4294967296 --report source-1.json --json --color never
+```
+
+Preserve full family/cost qualification, timed ranges, actual grounding mode
+and fresh reference measurements. Report initial grounding and later
+objective/validation work separately: overlapping phase clocks are not an
+additive wall-time decomposition. These dated measurements belong to their
+frozen CPU builds, not later source revisions or a GPU configuration. They do
+not replace full-corpus comparisons or choose a CPU/GPU production policy.
 
 ## Locate the operation
 
@@ -121,6 +313,9 @@ those instructions rather than interpreting the plan as new program semantics.
 | Projection declarations | `formula_project_ir`, `formula_ground::projection`, `metadata::projection` | Fixed complete projection domain; no change to original theory or displayed atoms |
 | Observation and metadata | `metadata`, `observation` | Source directives and views of a supplied full model |
 | Objective bounds | `objective_bound` | Optional score bounds with their own admission and work limits |
+| Ordered row execution | `formula_support::parallel_executor`, `formula_support::row_blocks` | One initial preparation owner, authenticated ordered witness staging and settled task receipts; consumer-specific admission |
+| Source-activity reuse | `formula_source_activity::parallel`, `formula_source_activity::retained` | Selected bindings and sealed immutable row families; current Activity and canonical consumers remain coordinator-owned |
+| Objective scope absence | `formula_ground::arithmetic::Scopes` | Successful complete syntax absence, not a cached result for one binding |
 | Measurement | `grounding_observer` | Injected phase/work observations, separate from semantic completion |
 | Public composition | `lib`, `formula`, `formula_owner`, `program_site` | Source/logical admission, retained original program and explicit statement identity |
 

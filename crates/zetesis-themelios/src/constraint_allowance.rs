@@ -134,7 +134,12 @@ impl Pending {
 
     #[inline]
     pub(crate) fn substitution(&mut self) {
-        self.charges.substitutions = self.charges.substitutions.saturating_add(1);
+        self.substitutions(1);
+    }
+
+    #[inline]
+    pub(crate) fn substitutions(&mut self, amount: u64) {
+        self.charges.substitutions = self.charges.substitutions.saturating_add(amount);
     }
 
     pub(crate) fn scalar(&mut self, amount: u128) {

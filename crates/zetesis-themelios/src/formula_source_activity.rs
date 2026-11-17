@@ -20,12 +20,16 @@ use crate::formula_support::components::Pattern as AtomPattern;
 use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::{Name, Signature};
 use zetesis_core::catalog::PredicateRef;
-pub(crate) mod model_query;
+mod acyclic;
+mod authority;
 mod cyclic;
+pub(crate) mod model_query;
+mod parallel;
+mod retained;
+#[cfg(test)]
+mod tests;
 mod possible;
 mod roots;
-mod authority;
-mod acyclic;
 pub(crate) use acyclic::{Exact, evaluate_acyclic};
 
 use crate::expansion::Budget;
@@ -34,7 +38,7 @@ use crate::formula_binding::Binding;
 use crate::formula_facts::{FactBlock, Item};
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{
-    self, CompletedQueries, Computation, Counters, Ir, Join, SourceAtom, SourceSelection,
+    self, CompletedQueries, Computation, Counters, Executor, Ir, Join, SourceAtom, SourceSelection,
     StorageLease, Support,
 };
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
@@ -316,6 +320,26 @@ impl SourceEligibility {
         conditions: impl IntoIterator<Item = &'a [LiteralIr]>,
         context: &mut Context<'_, '_, 'source>,
     ) -> Result<Self, FormulaFailure> {
+        Self::build_from_conditions_with_executor(
+            prepared,
+            completed_support,
+            retained,
+            conditions,
+            context,
+            None,
+        )
+    }
+
+    /// The observing objective may lend its already-owned source executor.
+    /// Dependency readiness and each complete Activity publication remain serial.
+    pub(crate) fn build_from_conditions_with_executor<'a, 'source>(
+        prepared: &'source Prepared,
+        completed_support: &CompletedQueries<'source>,
+        retained: usize,
+        conditions: impl IntoIterator<Item = &'a [LiteralIr]>,
+        context: &mut Context<'_, '_, 'source>,
+        executor: Option<&Executor>,
+    ) -> Result<Self, FormulaFailure> {
         let support = completed_support.support();
         let graph = prepared.analysis.dependencies();
         let relevant = context.closure(graph, retained, conditions)?;
@@ -341,10 +365,10 @@ impl SourceEligibility {
                 }
             }
             let Some(predicate) = ready else {
-                result.cyclic(prepared, support, &remaining, temporary, context)?;
+                result.cyclic(prepared, support, &remaining, temporary, context, executor)?;
                 break;
             };
-            result.predicate(prepared, &predicate, support, temporary, context)?;
+            result.predicate(prepared, &predicate, support, temporary, context, executor)?;
             remaining.remove(&predicate);
             completed.insert(predicate);
         }
@@ -358,6 +382,7 @@ impl SourceEligibility {
         support: &Support<'source>,
         temporary: usize,
         context: &mut Context<'_, '_, 'source>,
+        executor: Option<&Executor>,
     ) -> Result<(), FormulaFailure> {
         self.round = Some(authority::Round::new(context));
         let result = self
@@ -367,20 +392,26 @@ impl SourceEligibility {
                 support,
                 temporary.saturating_add(self.activity.len()),
                 context,
+                (executor, None),
             )
             .and_then(|()| self.publish_predicate(context));
         self.round = None;
         result
     }
 
-    fn derive_predicate<'source>(
+    fn derive_predicate<'query, 'source: 'query>(
         &mut self,
         prepared: &'source Prepared,
         predicate: &Signature,
-        support: &Support<'source>,
+        support: &'query Support<'source>,
         temporary: usize,
         context: &mut Context<'_, '_, 'source>,
+        execution: (
+            Option<&Executor>,
+            Option<&mut retained::Retention<'_, 'query, 'source>>,
+        ),
     ) -> Result<(), FormulaFailure> {
+        let (executor, mut retained) = execution;
         // A fact block is a precise producer: a normal head over an empty body.
         let mut precise = true;
         for rule in prepared.rules_without_facts() {
@@ -405,7 +436,14 @@ impl SourceEligibility {
                         if !context.produces(rule, predicate)? {
                             continue;
                         }
-                        self.rule((index, rule), predicate, support, temporary, context)?;
+                        self.rule(
+                            (index, rule),
+                            predicate,
+                            support,
+                            temporary,
+                            context,
+                            (executor, retained.as_deref_mut()),
+                        )?;
                     }
                     Item::Facts(block) => {
                         context.location = block.location();
@@ -435,23 +473,20 @@ impl SourceEligibility {
     /// row under which a decided default-negated atom fails has an absent
     /// body: support completion derived no head from it
     /// (`formula_support::decided_negations_hold`), so none is staged here.
-    fn rule<'source>(
+    fn rule<'query, 'source: 'query>(
         &mut self,
         (index, rule): (usize, &'source RuleIr),
         predicate: &Signature,
-        support: &Support<'source>,
+        support: &'query Support<'source>,
         temporary: usize,
         context: &mut Context<'_, '_, 'source>,
+        execution: (
+            Option<&Executor>,
+            Option<&mut retained::Retention<'_, 'query, 'source>>,
+        ),
     ) -> Result<(), FormulaFailure> {
+        let (executor, mut retained) = execution;
         context.location = rule.location;
-        let mut outer = Join::rule(
-            Ir::Source(rule),
-            support,
-            context.computation,
-            context.limits,
-            context.budget,
-            context.counters,
-        )?;
         // Retain immutable scoped families for this producer over completed
         // support. Staged activity also reuses completed readings until this
         // producer returns; direct exact publication requires fresh readings.
@@ -465,6 +500,50 @@ impl SourceEligibility {
             },
             support,
         );
+        let producer = parallel::Producer {
+            position: (index, rule),
+            predicate,
+            temporary,
+        };
+        if let Some(rows) = retained.as_deref_mut()
+            && rows.replay(self, producer, support, &mut bodies)?
+        {
+            return Ok(());
+        }
+        let mut outer = {
+            let context = bodies.context(rule.location);
+            Join::rule(
+                Ir::Source(rule),
+                support,
+                context.computation,
+                context.limits,
+                context.budget,
+                context.counters,
+            )?
+        };
+        if let Some(rows) = retained {
+            let recording = {
+                let context = bodies.context(rule.location);
+                crate::formula_support::row_blocks::witness_rows::retained::Recording::new(
+                    rule,
+                    &outer,
+                    crate::formula_support::Context::new(
+                        &*context.computation,
+                        context.limits,
+                        context.counters,
+                        rule.location,
+                    ),
+                )?
+            };
+            if let Some(recording) = recording {
+                return rows.capture(self, producer, outer, recording, &mut bodies);
+            }
+        }
+        if let Some(executor) = executor
+            && parallel::try_rule(self, producer, &mut outer, &mut bodies, executor)?
+        {
+            return Ok(());
+        }
         while let Some(binding) = {
             let context = bodies.context(rule.location);
             outer.next(
@@ -475,68 +554,83 @@ impl SourceEligibility {
                 rule.location,
             )?
         } {
-            // Support completion derived no head from a row under which a
-            // decided negation is false. The row is passed over here as it
-            // was there, before its body is read or its head is named: the
-            // head lies outside the completed support.
-            if let Some(certainty) = support.certainty() {
-                let context = bodies.context(rule.location);
-                if !formula_support::decided_negations_hold(
-                    rule,
-                    certainty.decided(index),
-                    &binding,
-                    context.computation,
-                    context.limits,
-                    context.counters,
-                )? {
-                    continue;
-                }
+            self.rule_binding(producer, &binding, &mut bodies)?;
+        }
+        Ok(())
+    }
+
+    /// One coordinator consumer retains the serial source and mutation order.
+    fn rule_binding<'source>(
+        &mut self,
+        producer: parallel::Producer<'source, '_>,
+        binding: &Binding<'_>,
+        bodies: &mut crate::formula_ground::SourceBodies<'_, '_, 'source, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let (index, rule) = producer.position;
+        let predicate = producer.predicate;
+        let temporary = producer.temporary;
+        let support = bodies.support();
+        // Support completion derived no head from a row under which a
+        // decided negation is false. The row is passed over here as it
+        // was there, before its body is read or its head is named: the
+        // head lies outside the completed support.
+        if let Some(certainty) = support.certainty() {
+            let context = bodies.context(rule.location);
+            if !formula_support::decided_negations_hold(
+                rule,
+                certainty.decided(index),
+                binding,
+                context.computation,
+                context.limits,
+                context.counters,
+            )? {
+                return Ok(());
             }
-            let body = self.producer_activity(
-                &rule.body,
-                &rule.body_binding(&binding),
-                &mut bodies,
-                rule.location,
-            )?;
-            match &rule.head {
-                HeadIr::Normal(Some(head)) => {
-                    self.retain(
-                        *head,
-                        &binding,
-                        body,
-                        temporary,
-                        &mut bodies.context(rule.location),
-                    )?;
-                }
-                HeadIr::Disjunction(heads) => {
-                    if heads.iter().any(|head| head.positive_atom().is_none()) {
-                        return Err(refusal(rule.location));
-                    }
-                    for head in heads.iter().filter_map(|head| head.positive_atom()) {
-                        if bodies
-                            .context(rule.location)
-                            .pattern_matches(*head, predicate)?
-                        {
-                            self.retain(
-                                *head,
-                                &binding,
-                                body.min(Activity::Optional),
-                                temporary,
-                                &mut bodies.context(rule.location),
-                            )?;
-                        }
-                    }
-                }
-                HeadIr::ConditionalDisjunction { .. } => {
-                    // Rich local eligibility uses completed support above;
-                    // model truth remains with the exact original query.
+        }
+        let body = self.selected_producer_activity(
+            &rule.body,
+            &rule.body_binding(binding),
+            bodies,
+            rule.location,
+        )?;
+        match &rule.head {
+            HeadIr::Normal(Some(head)) => {
+                self.retain(
+                    *head,
+                    binding,
+                    body,
+                    temporary,
+                    &mut bodies.context(rule.location),
+                )?;
+            }
+            HeadIr::Disjunction(heads) => {
+                if heads.iter().any(|head| head.positive_atom().is_none()) {
                     return Err(refusal(rule.location));
                 }
-                HeadIr::Choice(_) => {
-                    self.choice(rule, predicate, &binding, body, temporary, &mut bodies)?;
+                for head in heads.iter().filter_map(|head| head.positive_atom()) {
+                    if bodies
+                        .context(rule.location)
+                        .pattern_matches(*head, predicate)?
+                    {
+                        self.retain(
+                            *head,
+                            binding,
+                            body.min(Activity::Optional),
+                            temporary,
+                            &mut bodies.context(rule.location),
+                        )?;
+                    }
                 }
-                HeadIr::Normal(None) => unreachable!("only producer heads selected"),
             }
+            HeadIr::ConditionalDisjunction { .. } => {
+                // Rich local eligibility uses completed support above;
+                // model truth remains with the exact original query.
+                return Err(refusal(rule.location));
+            }
+            HeadIr::Choice(_) => {
+                self.choice(rule, predicate, binding, body, temporary, bodies)?;
+            }
+            HeadIr::Normal(None) => unreachable!("only producer heads selected"),
         }
         Ok(())
     }
@@ -590,7 +684,7 @@ impl SourceEligibility {
                     rule.location,
                 )?
             } {
-                let eligible = self.producer_activity(
+                let eligible = self.selected_producer_activity(
                     &element.condition,
                     &element.body_binding(&row),
                     bodies,
@@ -649,7 +743,12 @@ impl SourceEligibility {
         self.stage(&atom, activity, temporary, context)
     }
 
-    fn producer_activity(
+    /// Read activity for a producer-selected body frame, either directly from
+    /// the original Join or through its authenticated immutable witness replay.
+    /// Every ordinary comparison has selected that unchanged source binding.
+    /// Atom activity and original guards still read the current snapshot;
+    /// unselected objective/model-query bindings do not enter this operation.
+    fn selected_producer_activity(
         &self,
         literals: &[LiteralIr],
         binding: &Binding,
@@ -657,7 +756,7 @@ impl SourceEligibility {
         location: ProgramSite,
     ) -> Result<Activity, FormulaFailure> {
         if ordinary(literals) {
-            self.activity(literals, binding, &mut bodies.context(location))
+            self.fold_activity(literals, binding, true, &mut bodies.context(location))
         } else {
             bodies.activity(literals, binding, self, !self.exact, location)
         }

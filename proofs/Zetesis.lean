@@ -113,6 +113,8 @@ import Zetesis.ObjectiveConditions
 import Zetesis.ObjectiveProjection
 import Zetesis.ObjectiveConditionTable
 import Zetesis.ObjectiveEligibility
+import Zetesis.SelectedProducerComparisons
+import Zetesis.CyclicRows
 import Zetesis.BooleanHeads
 import Zetesis.BooleanHeadElements
 import Zetesis.SignedHeadElements
@@ -161,6 +163,9 @@ import Zetesis.GatePositions
 import Zetesis.SourceContributions
 import Zetesis.FiniteTables
 import Zetesis.TableBindings
+import Zetesis.ParallelGrounding
+import Zetesis.WitnessReplay
+import Zetesis.SingletonPrefix
 import Zetesis.DomainBindings
 import Zetesis.DomainProducers
 import Zetesis.FormulaRegions

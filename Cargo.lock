@@ -2157,6 +2157,7 @@ version = "0.8.0"
 dependencies = [
  "hashbrown 0.17.1",
  "proptest",
+ "rayon",
  "serde_json",
  "tempfile",
  "themelios-analysis",

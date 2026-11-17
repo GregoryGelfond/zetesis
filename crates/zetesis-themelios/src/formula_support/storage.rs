@@ -217,6 +217,22 @@ impl StorageLease {
         bytes: usize,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
+        self.replace(bytes, location)
+    }
+
+    /// Retain an already-admitted conservative capacity reservation. This is
+    /// charged ownership for admission, not an allocator observation. Callers
+    /// must not report it as an actual peak; concurrent source preparation marks
+    /// that observation unavailable before attaching its worker reservation.
+    pub(crate) fn reserve(
+        &mut self,
+        bytes: usize,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        self.replace(bytes, location)
+    }
+
+    fn replace(&mut self, bytes: usize, location: ProgramSite) -> Result<(), FormulaFailure> {
         if bytes == self.bytes {
             return Ok(());
         }

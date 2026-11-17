@@ -268,4 +268,28 @@ theorem negated_false_link_holds (links : List Link) (failed : some false ∈ li
     negated links = some true := by
   simp [negated, false_link_decides links failed]
 
+/-- The source classifier records every construct which can create independent
+nested-scope tasks. A false classification is uniform in the outer binding;
+an empty result for one binding alone is not this premise. -/
+theorem absent_nested_outcomes {Literal Binding : Type}
+    (nested : Literal → Bool) (expand : Literal → Binding → List Outcome)
+    (sound : ∀ literal, nested literal = false → ∀ binding, expand literal binding = [])
+    (body : List Literal) (absent : body.any nested = false) (binding : Binding) :
+    body.flatMap (fun literal => expand literal binding) = [] := by
+  induction body with
+  | nil => rfl
+  | cons head tail ih =>
+    have parts : nested head = false ∧ tail.any nested = false := by
+      simpa using absent
+    simp [sound head parts.1 binding, ih parts.2]
+
+/-- Omitting a uniformly empty nested-outcome family changes neither admission
+nor zero-divisor warnings. The caller still validates the enclosing row and
+its independent scalar fields. No resource or polling equivalence is claimed. -/
+theorem absent_nested_preserves_family (family nested : List Outcome)
+    (absent : nested = []) :
+    (Admissible (family ++ nested) ↔ Admissible family) ∧
+      (Warned (family ++ nested) ↔ Warned family) := by
+  simp [absent]
+
 end Zetesis.ArithmeticFamilies

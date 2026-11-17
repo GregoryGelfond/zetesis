@@ -287,29 +287,29 @@ fn instantiate(
         location,
         options,
     } = preparation;
-    let limits = &limits;
-    let budget = &mut expansion_budget;
-    let cancellation = budget.cancellation().cloned();
+    let execution = formula_support::SourceExecution::new();
+    let cancellation = expansion_budget.cancellation().cloned();
     let published = accounting.controlled::<_, FormulaFailure>(
         cancellation.as_ref(),
         profile.work(),
         location,
         |counters| {
-            let (mut catalog, domains) = complete_support(
+            let (mut catalog, domains) = complete_support_with_executor(
                 &prepared,
                 source_catalog,
                 options.domains,
-                budget,
+                &mut expansion_budget,
                 profile,
-                GroundingWork::new(limits, counters, location),
+                GroundingWork::new(&limits, counters, location),
+                execution.executor(),
             )?;
             let pending = {
                 let (completed, mut append) =
                     profile.phase(GroundingPhase::SupportCompletion, None, || {
-                        catalog.split(limits, counters, location)
+                        catalog.split(&limits, counters, location)
                     })?;
                 let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
-                    completed.queries(options.joins, limits, counters, location)
+                    completed.queries(options.joins, &limits, counters, location)
                 })?;
                 let mut computation = Computation::new(&mut append, queries.support());
                 emit(
@@ -317,13 +317,13 @@ fn instantiate(
                     &queries,
                     domains.as_ref(),
                     profile,
-                    schedule,
-                    budget,
-                    Context::new(&mut computation, limits, counters, location),
+                    EmissionRun::new(schedule, &execution),
+                    &mut expansion_budget,
+                    Context::new(&mut computation, &limits, counters, location),
                 )?
             };
             drop(domains);
-            let publication_work = GroundingWork::new(limits, counters, location);
+            let publication_work = GroundingWork::new(&limits, counters, location);
             pending.publish(catalog, &mut prepared, schedule, publication_work)
         },
     )?;
@@ -338,7 +338,7 @@ fn instantiate(
         streamed,
         catalog: open,
     } = published;
-    let expansion = budget.usage();
+    let expansion = expansion_budget.usage();
     let (constraints, retained) = if let Some(output_storage) = retained_storage {
         (
             None,
@@ -357,7 +357,7 @@ fn instantiate(
                     prepared.take_rules_without_facts(),
                     support,
                     streamed_instances,
-                    limits,
+                    &limits,
                     location,
                 )
             }),
@@ -382,13 +382,32 @@ fn instantiate(
 
 /// Prepare optional domains and complete support under the same cumulative
 /// account. The domain certificate remains tied to the prepared program.
+#[cfg(test)]
 pub(crate) fn complete_support<'source>(
+    prepared: &'source crate::formula_ir::Prepared,
+    catalog: formula_support::SupportCatalog,
+    options: Option<crate::DomainLimits>,
+    budget: &mut Budget,
+    profile: &Profile<'_>,
+    work: GroundingWork<'_>,
+) -> Result<
+    (
+        formula_support::CompletedCatalog,
+        Option<crate::formula_domains::Domains<'source>>,
+    ),
+    FormulaFailure,
+> {
+    complete_support_with_executor(prepared, catalog, options, budget, profile, work, None)
+}
+
+pub(crate) fn complete_support_with_executor<'source>(
     prepared: &'source crate::formula_ir::Prepared,
     mut catalog: formula_support::SupportCatalog,
     options: Option<crate::DomainLimits>,
     budget: &mut Budget,
     profile: &Profile<'_>,
     work: GroundingWork<'_>,
+    executor: Option<&formula_support::Executor>,
 ) -> Result<
     (
         formula_support::CompletedCatalog,
@@ -418,14 +437,13 @@ pub(crate) fn complete_support<'source>(
         None
     };
     let catalog = profile.phase(crate::GroundingPhase::SupportCompletion, None, || {
-        formula_support::build(
+        formula_support::build_with_executor(
             catalog,
             prepared,
             domains.as_ref(),
-            limits,
             budget,
-            counters,
-            location,
+            GroundingWork::new(limits, counters, location),
+            executor,
         )
     })?;
     Ok((catalog, domains))
@@ -507,15 +525,38 @@ impl InstanceBound {
     }
 }
 
+/// One already-selected initial preparation; this borrows its source executor.
+#[derive(Clone, Copy)]
+struct EmissionRun<'run, 'schedule> {
+    schedule: Schedule<'schedule>,
+    execution: &'run formula_support::SourceExecution,
+}
+
+impl<'run, 'schedule> EmissionRun<'run, 'schedule> {
+    fn new(
+        schedule: Schedule<'schedule>,
+        execution: &'run formula_support::SourceExecution,
+    ) -> Self {
+        Self {
+            schedule,
+            execution,
+        }
+    }
+}
+
 fn emit<'source>(
     prepared: &'source crate::formula_ir::Prepared,
     queries: &formula_support::CompletedQueries<'source>,
     domains: Option<&crate::formula_domains::Domains<'_>>,
     profile: &Profile<'_>,
-    schedule: Schedule<'_>,
+    run: EmissionRun<'_, '_>,
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, 'source>>,
 ) -> Result<PendingEmission, FormulaFailure> {
+    let EmissionRun {
+        schedule,
+        execution,
+    } = run;
     let Context {
         computation,
         work:
@@ -530,12 +571,13 @@ fn emit<'source>(
         arithmetic::prepare(prepared, support, computation, limits, budget, counters)
     })?;
     let objectives = profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-        objectives::prepare(
+        objectives::prepare_with_executor(
             prepared,
             queries,
             budget,
             &mut warnings,
             Context::new(&mut *computation, limits, counters, location),
+            execution.executor(),
         )
     })?;
     let projection = projection::prepare(
@@ -578,6 +620,7 @@ fn emit<'source>(
         builder.families.enable(queries, location)?;
         builder.collect_fixed_facts(prepared.items())?;
         builder.certainty = support.certainty();
+        builder.executor = execution.executor();
         Ok::<_, FormulaFailure>(builder)
     })?;
     let mut streaming =
@@ -749,6 +792,7 @@ struct Emission<A = AtomCatalog> {
 
 pub(super) struct Builder<'a, 'terms, 'source> {
     pub(super) computation: &'a mut Computation<'terms, 'source>,
+    executor: Option<&'a formula_support::Executor>,
     purpose: Purpose,
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
@@ -1290,6 +1334,7 @@ impl<'source> Builder<'_, '_, 'source> {
             formula_support::SourceSelection::new(computation, limits, counters, location)?;
         Ok(Builder {
             computation,
+            executor: None,
             limits,
             budget,
             catalog,

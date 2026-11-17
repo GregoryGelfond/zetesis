@@ -311,6 +311,30 @@ impl Counters {
         Ok(())
     }
 
+    /// Retain completed substitutions without replaying their individual events.
+    /// The worker grants jointly fit this cumulative ceiling; no new work or
+    /// interruption observation is introduced by settling their count.
+    pub(super) fn absorb_substitutions(
+        &mut self,
+        amount: u64,
+        limits: &crate::FormulaLimits,
+        location: crate::ProgramSite,
+    ) -> Result<(), crate::FormulaFailure> {
+        let total = u128::from(self.accounting.substitutions) + u128::from(amount);
+        crate::formula::ceiling(
+            crate::FormulaResource::Substitutions,
+            total,
+            u128::from(limits.max_substitutions),
+            location,
+        )?;
+        if let Some(allowance) = &mut self.accounting.allowance {
+            allowance.substitutions(amount);
+        }
+        self.accounting.substitutions =
+            u64::try_from(total).expect("settled substitutions fit their u64 ceiling");
+        Ok(())
+    }
+
     #[cfg(test)]
     pub(crate) fn attach_test_control(&mut self, cancellation: &Cancellation) {
         let mut control = AccountControl::new(Some(cancellation));

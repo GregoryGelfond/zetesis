@@ -121,6 +121,9 @@ use std::cell::{Cell, RefCell};
 use std::mem::size_of;
 use std::ops::Range;
 
+#[cfg(test)]
+mod waves;
+
 use zetesis_core::TemplateComponentsRef;
 use zetesis_core::catalog::PredicateRef;
 

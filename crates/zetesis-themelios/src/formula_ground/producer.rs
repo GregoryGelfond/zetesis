@@ -22,11 +22,13 @@ pub(crate) mod testing;
 #[cfg(test)]
 mod tests;
 
+mod parallel;
+
 use std::ops::Range;
 use zetesis_ferraris::NodeView;
 
 use super::cache::CoordinateMap;
-use super::{Builder, MatchedNodes};
+use super::{AtomPattern, Builder, MatchedNodes};
 use crate::FormulaFailure;
 use crate::formula_ir::RuleIr;
 use crate::formula_support::{Buffer, Context, Join, RowHead, witnesses};
@@ -329,10 +331,10 @@ fn branch(
 }
 
 /// Decline without advancing the supplied join when this class does not apply.
-pub(super) fn rule(
-    builder: &mut Builder<'_, '_, '_>,
-    rule: &RuleIr,
-    outer: &mut Join<'_, '_>,
+pub(super) fn rule<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
+    rule: &'source RuleIr,
+    outer: &mut Join<'_, 'source>,
 ) -> Result<bool, FormulaFailure> {
     #[cfg(test)]
     if !testing::enabled() {
@@ -344,6 +346,11 @@ pub(super) fn rule(
     debug_assert_eq!(rule.body_variables, rule.variables);
     #[cfg(test)]
     testing::record(testing::Point::Run);
+    if let Some(executor) = builder.executor
+        && parallel::rule(builder, rule, outer, pattern, executor)?
+    {
+        return Ok(true);
+    }
     outer.retain_witnesses(Context::new(
         builder.computation,
         builder.limits,
@@ -361,35 +368,49 @@ pub(super) fn rule(
             rule.location,
         ),
     )? {
-        debug_assert_eq!(row.rows.len(), rule.body.len());
-        #[cfg(test)]
-        testing::record(testing::Point::Witness);
-        if prepared.is_none() {
-            let head = RowHead::new(
-                pattern,
-                &row,
-                builder.computation,
-                builder.limits,
-                builder.counters,
-                rule.location,
-            )?;
-            prepared = Some((head, Body::new(row.rows.len(), builder, rule)?));
-        }
-        let (head, body) = prepared.as_mut().expect("selected producer preparation");
-        let body = body.emit(&row, builder, rule)?;
-        let atom = head.atom(
-            &row,
+        emit_row(&mut prepared, pattern, &row, builder, rule)?;
+    }
+    Ok(true)
+}
+
+/// The one coordinator-side consumer of a complete producer witness. Both a
+/// direct cursor and an authenticated replay must call this exact operation,
+/// retaining its lazy first-row allocation and source publication order.
+fn emit_row<'source>(
+    prepared: &mut Option<(RowHead<'source>, Body)>,
+    pattern: AtomPattern,
+    row: &witnesses::WitnessRow<'_, 'source>,
+    builder: &mut Builder<'_, '_, '_>,
+    rule: &RuleIr,
+) -> Result<(), FormulaFailure> {
+    debug_assert_eq!(row.rows.len(), rule.body.len());
+    #[cfg(test)]
+    testing::record(testing::Point::Witness);
+    if prepared.is_none() {
+        let head = RowHead::new(
+            pattern,
+            row,
             builder.computation,
             builder.limits,
             builder.counters,
             rule.location,
         )?;
-        let head = builder.atom_identity(&atom, rule.location)?;
-        let formula = builder.node(NodeView::Implies(body, head), rule.location)?;
-        builder.root(formula, rule)?;
-        builder.ordinary_producer(head, body, rule)?;
-        #[cfg(test)]
-        testing::record(testing::Point::Publish);
+        *prepared = Some((head, Body::new(row.rows.len(), builder, rule)?));
     }
-    Ok(true)
+    let (head, body) = prepared.as_mut().expect("selected producer preparation");
+    let body = body.emit(row, builder, rule)?;
+    let atom = head.atom(
+        row,
+        builder.computation,
+        builder.limits,
+        builder.counters,
+        rule.location,
+    )?;
+    let head = builder.atom_identity(&atom, rule.location)?;
+    let formula = builder.node(NodeView::Implies(body, head), rule.location)?;
+    builder.root(formula, rule)?;
+    builder.ordinary_producer(head, body, rule)?;
+    #[cfg(test)]
+    testing::record(testing::Point::Publish);
+    Ok(())
 }

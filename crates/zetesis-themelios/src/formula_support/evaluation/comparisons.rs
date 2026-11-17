@@ -107,20 +107,33 @@ impl Evaluation {
 }
 
 fn leaves(expressions: [&Expression; 2]) -> Option<[&Operation; 2]> {
-    let [left] = expressions[0].nodes.as_slice() else {
-        return None;
-    };
-    let [right] = expressions[1].nodes.as_slice() else {
-        return None;
-    };
-    if [left, right]
-        .iter()
-        .all(|node| matches!(node, Operation::Constant(_) | Operation::Variable(_)))
-    {
-        Some([left, right])
-    } else {
-        None
+    match leaves_with(expressions, || Ok::<(), std::convert::Infallible>(())) {
+        Ok(result) => result,
+        Err(never) => match never {},
     }
+}
+
+/// The evaluator and private producer admission share one leaf grammar. The
+/// caller owns accounting; reads happen in the original left/right order.
+pub(in crate::formula_support) fn leaves_with<E>(
+    expressions: [&Expression; 2],
+    mut read: impl FnMut() -> Result<(), E>,
+) -> Result<Option<[&Operation; 2]>, E> {
+    read()?;
+    let [left] = expressions[0].nodes.as_slice() else {
+        return Ok(None);
+    };
+    read()?;
+    let [right] = expressions[1].nodes.as_slice() else {
+        return Ok(None);
+    };
+    for node in [left, right] {
+        read()?;
+        if !matches!(node, Operation::Constant(_) | Operation::Variable(_)) {
+            return Ok(None);
+        }
+    }
+    Ok(Some([left, right]))
 }
 
 #[cfg(test)]

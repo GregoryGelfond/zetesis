@@ -17,6 +17,7 @@ use crate::grounding_observer::Event;
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
 
 mod comparisons;
+pub(super) use comparisons::leaves_with as comparison_leaves_with;
 mod scratch;
 use scratch::{Frame, Scratch};
 

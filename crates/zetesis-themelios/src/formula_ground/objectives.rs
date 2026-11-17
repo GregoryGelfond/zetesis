@@ -6,6 +6,7 @@
 //! resolved priorities retain at most one bounded template per eligible row.
 
 mod components;
+mod numeric_rows;
 mod rows;
 use crate::formula_support::{Context, GroundingWork};
 
@@ -31,12 +32,13 @@ use crate::formula_support::{
 };
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
-pub(super) fn prepare<'source>(
+pub(super) fn prepare_with_executor<'source>(
     prepared: &'source Prepared,
     completed: &CompletedQueries<'source>,
     budget: &mut Budget,
     warnings: &mut Warnings,
     context: Context<'_, &mut Computation<'_, 'source>>,
+    executor: Option<&crate::formula_support::Executor>,
 ) -> Result<PendingProgram, FormulaFailure> {
     let Context {
         computation,
@@ -61,7 +63,7 @@ pub(super) fn prepare<'source>(
         .iter()
         .any(|objective| objective.needs_eligibility_query)
     {
-        Some(SourceEligibility::build_from_conditions(
+        Some(SourceEligibility::build_from_conditions_with_executor(
             prepared,
             completed,
             presence.retained_entries(),
@@ -77,6 +79,7 @@ pub(super) fn prepare<'source>(
                 counters,
                 location,
             },
+            executor,
         )?)
     } else {
         None
@@ -93,6 +96,7 @@ pub(super) fn prepare<'source>(
         eligibility: eligibility.as_ref(),
         warnings,
         evaluation: Evaluation::default(),
+        executor,
     };
     // The source compiler emits each original element's alternatives together.
     // A constant-size accumulator preserves that family without merging other
@@ -192,6 +196,7 @@ struct Preparation<'a, 'terms, 'source> {
     eligibility: Option<&'a SourceEligibility>,
     warnings: &'a mut Warnings,
     evaluation: Evaluation,
+    executor: Option<&'a crate::formula_support::Executor>,
 }
 
 /// The complete scalar fields of one defined, numeric objective instance.
@@ -240,6 +245,7 @@ impl<'source> Preparation<'_, '_, 'source> {
         )?;
         bindings.evidence();
         let mut family = Evidence::default();
+        let mut scopes = super::arithmetic::Scopes::new(objective.condition.literals());
         while let Some(row) = bindings.next_row(
             self.computation,
             self.limits,
@@ -249,7 +255,7 @@ impl<'source> Preparation<'_, '_, 'source> {
         )? {
             let binding = row.values;
             if row.passes {
-                self.validate_scopes(objective, &binding, support)?;
+                self.validate_scopes(objective, &mut scopes, &binding, support)?;
             }
             if !presence.eligible(
                 objective,
@@ -395,45 +401,45 @@ impl<'source> Preparation<'_, '_, 'source> {
             self.counters,
         )?;
         bindings.evidence();
-        let mut numeric = false;
-        while let Some(row) = bindings.next_row(
-            self.computation,
-            self.limits,
-            self.budget,
-            self.counters,
-            objective.location,
-        )? {
-            if row.passes {
-                self.validate_scopes(objective, &row.values, support)?;
-            }
-            let value = self.field(&objective.weight, &row.values, objective.location)?;
-            if let ValueNodeRef::Number(weight) =
-                self.value(&value, objective.location)?.descriptor()
-            {
-                if objective.polarity.normalize(weight).is_none() {
-                    if !row.passes {
-                        continue;
-                    }
-                    return Err(crate::diagnostic::unsupported(
-                        crate::ProfileFeature::NumericOverflow,
-                        objective.location,
-                    )
-                    .into());
-                }
-                numeric |= row.passes;
-            }
+        if let Some(executor) = self.executor
+            && let Some(result) = numeric_rows::try_parallel(
+                executor,
+                objective,
+                &mut bindings,
+                self.budget,
+                Context::new(
+                    &mut *self.computation,
+                    self.limits,
+                    self.counters,
+                    objective.location,
+                ),
+            )?
+        {
+            return Ok(result);
         }
-        Ok((numeric, bindings.take_family()))
+        numeric_rows::scan(
+            objective,
+            &mut bindings,
+            support,
+            self.budget,
+            self.warnings,
+            Context::new(
+                &mut *self.computation,
+                self.limits,
+                self.counters,
+                objective.location,
+            ),
+        )
     }
 
     fn validate_scopes(
         &mut self,
         objective: &'source ObjectiveIr,
+        scopes: &mut super::arithmetic::Scopes<'source>,
         binding: &Binding,
         support: &Support<'source>,
     ) -> Result<(), FormulaFailure> {
-        super::arithmetic::body(
-            objective.condition.literals(),
+        scopes.validate(
             binding,
             support,
             self.budget,
@@ -657,47 +663,20 @@ impl<'source> Preparation<'_, '_, 'source> {
         })
     }
 
-    fn field(
-        &mut self,
-        field: &ObjectiveField,
-        binding: &Binding,
-        location: ProgramSite,
-    ) -> Result<TermKey, FormulaFailure> {
-        self.counters.work(self.limits, location)?;
-        match field {
-            ObjectiveField::Term(term) => self.term(term, binding, location),
-            ObjectiveField::Expression(expression) => formula_support::expression(
-                expression,
-                binding,
-                self.computation,
-                self.limits,
-                self.counters,
-                location,
-            ),
-        }
-    }
     fn term(
         &mut self,
         term: &crate::formula_support::components::Term,
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
-        match term {
-            crate::formula_support::components::Term::Variable(slot) => {
-                binding.key(*slot, location)
-            }
-            crate::formula_support::components::Term::Constant(value) => self
-                .computation
-                .static_key(*value, self.limits, self.counters, location),
-        }
+        numeric_rows::term(
+            term,
+            binding,
+            Context::new(&*self.computation, self.limits, self.counters, location),
+        )
     }
     fn value(&self, key: &TermKey, location: ProgramSite) -> Result<TermRef<'_>, FormulaFailure> {
-        self.computation.read().term(key).map_err(|error| {
-            crate::formula_binding::assignment(
-                zetesis_core::catalog::AssignmentError::Read(error),
-                location,
-            )
-        })
+        numeric_rows::value_ref(self.computation, key, location)
     }
     fn number(&self, key: &TermKey, location: ProgramSite) -> Result<Option<i32>, FormulaFailure> {
         Ok(match self.value(key, location)?.descriptor() {

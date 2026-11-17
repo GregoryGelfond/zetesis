@@ -1,9 +1,145 @@
 //! Scalar receipt publication is independent of budget enforcement history.
 
-use super::{Budget, ExpansionFailure, ExpansionLimits, ExpansionResource};
+use super::{Budget, ExpansionFailure, ExpansionLimits, ExpansionResource, ExpansionUsage};
 use crate::test_support::location;
 use crate::{ConstraintAllowance, ConstraintCheckLimits};
 use zetesis_algebra::{Cancellation, Stop};
+
+#[test]
+fn worker_grants_partition_every_unspent_cumulative_dimension() {
+    let limits = ExpansionLimits {
+        max_term_work: 17,
+        max_templates: 19,
+        max_values: 23,
+        max_scalar_bytes: 29,
+        max_origin_locations: 31,
+        ..ExpansionLimits::default()
+    };
+    let mut budget = Budget::new(limits, usize::MAX);
+    let prefix = ExpansionUsage {
+        term_work: 2,
+        templates: 3,
+        values: 5,
+        scalar_bytes: 7,
+        origin_locations: 11,
+    };
+    budget.absorb(prefix, location()).unwrap();
+    for tasks in [1, 4, 14, 32] {
+        let grants: Vec<_> = (0..tasks)
+            .map(|index| budget.worker_limits(tasks, index))
+            .collect();
+        assert_eq!(
+            grants
+                .iter()
+                .map(|grant| grant.max_term_work)
+                .sum::<usize>(),
+            15
+        );
+        assert_eq!(
+            grants
+                .iter()
+                .map(|grant| grant.max_templates)
+                .sum::<usize>(),
+            16
+        );
+        assert_eq!(
+            grants.iter().map(|grant| grant.max_values).sum::<usize>(),
+            18
+        );
+        assert_eq!(
+            grants
+                .iter()
+                .map(|grant| grant.max_scalar_bytes)
+                .sum::<usize>(),
+            22
+        );
+        assert_eq!(
+            grants
+                .iter()
+                .map(|grant| grant.max_origin_locations)
+                .sum::<usize>(),
+            20
+        );
+        assert!(
+            grants
+                .windows(2)
+                .all(|pair| pair[0].max_term_work >= pair[1].max_term_work)
+        );
+        assert!(
+            grants
+                .iter()
+                .all(|grant| grant.max_family_bytes == limits.max_family_bytes)
+        );
+    }
+    assert_eq!(budget.usage(), prefix);
+}
+
+#[test]
+fn joined_worker_receipts_survive_cancellation_in_every_dimension() {
+    let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
+    let cancellation = Cancellation::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX)
+        .with_allowance(allowance.clone())
+        .with_cancellation(Some(cancellation.clone()));
+    let receipt = ExpansionUsage {
+        term_work: 2,
+        templates: 3,
+        values: 5,
+        scalar_bytes: 7,
+        origin_locations: 11,
+    };
+    cancellation.cancel();
+    for multiplier in [1, 2] {
+        let result = budget.with_settled_receipt(|budget| budget.absorb(receipt, location()));
+        assert!(matches!(
+            result,
+            Err(ExpansionFailure::Interrupted {
+                reason: Stop::Cancelled,
+                ..
+            })
+        ));
+        assert_eq!(
+            budget.usage(),
+            ExpansionUsage {
+                term_work: 2 * multiplier,
+                templates: 3 * multiplier,
+                values: 5 * multiplier,
+                scalar_bytes: 7 * multiplier,
+                origin_locations: 11 * multiplier,
+            }
+        );
+        assert_eq!(allowance.statistics().scalar_bytes, 7 * multiplier);
+    }
+}
+
+#[test]
+fn zero_worker_grants_do_not_increase_parent_allowances() {
+    let mut budget = Budget::new(
+        ExpansionLimits {
+            max_term_work: 0,
+            max_templates: 0,
+            max_values: 0,
+            max_scalar_bytes: 0,
+            max_origin_locations: 0,
+            ..ExpansionLimits::default()
+        },
+        usize::MAX,
+    );
+    for index in 0..14 {
+        let grant = budget.worker_limits(14, index);
+        let mut worker = Budget::new(grant, usize::MAX);
+        assert!(matches!(
+            worker.charge(ExpansionResource::TermWork, 1, location()),
+            Err(ExpansionFailure::Limit {
+                observed: 1,
+                limit: 0,
+                ..
+            })
+        ));
+        budget.absorb(worker.usage(), location()).unwrap();
+    }
+    assert_eq!(budget.usage(), ExpansionUsage::default());
+}
 
 fn budget(allowance: &ConstraintAllowance) -> Budget {
     Budget::new(

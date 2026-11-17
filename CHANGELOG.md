@@ -4,6 +4,30 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Changed
+
+- Source preparation can execute eligible join rows in a source-owned CPU pool,
+  retaining ordered canonical construction, provenance and complete enumeration.
+  The current development configuration requests 14 source workers, separately
+  from the solver's search-worker setting. Task allowances and retained result
+  storage are accounted before publication; partitioned limits can refuse earlier.
+- Reuse source comparisons already established by selected rows, complete
+  immutable producer rows during cyclic activity refinement, and successful
+  absence checks for objective scopes. Replayed rows still read current activity;
+  no prior truth or reduct-membership result is cached. Removing duplicate work
+  also changes its associated resource and cancellation boundaries. See the
+  [source execution contract](docs/book/architecture/source-pipeline.md#ordered-row-execution-and-current-activity-reuse).
+
+### Added
+
+- `GpuFormulaOracle::from_source_with_kernel` accepts explicit kernel options
+  while preserving the supplied device source and context. Existing default
+  primitive constructors retain Dense propagation. The current development solve
+  experiment requests ChangedDependencies when no formula profile is supplied;
+  supplied profiles remain exact. Ordinary statistics remain available, while
+  private device-mode diagnostics are omitted. This is an explicit experimental
+  policy, not a release-default selection or a general GPU performance claim.
+
 ## 0.8.0 — 2026-11-15
 
 Zetesis 0.8.0 reduces repeated grounding, support and candidate-checking work,

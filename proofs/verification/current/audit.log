@@ -249,6 +249,8 @@
 'Zetesis.ArithmeticFamilies.chain_holds_iff' depends on axioms: [propext]
 'Zetesis.ArithmeticFamilies.chain_by_links' depends on axioms: [propext]
 'Zetesis.ArithmeticFamilies.negated_false_link_holds' depends on axioms: [propext]
+'Zetesis.ArithmeticFamilies.absent_nested_outcomes' depends on axioms: [propext, Quot.sound]
+'Zetesis.ArithmeticFamilies.absent_nested_preserves_family' depends on axioms: [propext]
 'Zetesis.AssociativeWitnesses.disjunction_truth' depends on axioms: [propext, Quot.sound]
 'Zetesis.AssociativeWitnesses.conjunction_truth' depends on axioms: [propext, Quot.sound]
 'Zetesis.AssociativeWitnesses.disjunction_unit' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -699,6 +701,11 @@
 'Zetesis.LearnedRegions.falsum_free_countermodel_does_not_refute_superset' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.SourceActivity.CyclicRows.selected_occurrences_exact' depends on axioms: [Quot.sound]
+'Zetesis.SourceActivity.CyclicRows.replay_current_consumer_exact' does not depend on any axioms
+'Zetesis.SourceActivity.CyclicRows.whole_pass_exact' depends on axioms: [Quot.sound]
+'Zetesis.SourceActivity.CyclicRows.refinement_trace_exact' depends on axioms: [Quot.sound]
+'Zetesis.SourceActivity.CyclicRows.rows_do_not_determine_activity' does not depend on any axioms
 'Zetesis.DagSharing.getD_append_left' depends on axioms: [propext]
 'Zetesis.DagSharing.getD_snoc_end' depends on axioms: [propext, Quot.sound]
 'Zetesis.DagSharing.fold_length' depends on axioms: [propext, Quot.sound]
@@ -1580,6 +1587,17 @@
 'Zetesis.PairwiseExclusions.constraints_frozen_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PairwiseExclusions.frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PairwiseExclusions.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ParallelGrounding.row_tasks_reconstruct' depends on axioms: [propext]
+'Zetesis.ParallelGrounding.ordered_task_outputs_exact' depends on axioms: [propext]
+'Zetesis.ParallelGrounding.completed_task_results_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.ParallelGrounding.task_count_includes_empty' depends on axioms: [propext]
+'Zetesis.ParallelGrounding.empty_output_partition_fixture' does not depend on any axioms
+'Zetesis.ParallelGrounding.completion_order_is_not_source_order' does not depend on any axioms
+'Zetesis.ParallelGrounding.delta_stable_under_disjoint_publication' does not depend on any axioms
+'Zetesis.ParallelGrounding.independent_deltas_merge' depends on axioms: [propext, Quot.sound]
+'Zetesis.ParallelGrounding.covered_delta_merge_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ParallelGrounding.unfinished_dependency_blocks' does not depend on any axioms
+'Zetesis.ParallelGrounding.starting_cannot_create_readiness' depends on axioms: [propext]
 'Zetesis.ParametricReduct.satisfies_original' does not depend on any axioms
 'Zetesis.ParametricReduct.satisfies_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ParametricReduct.countermodel_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1848,6 +1866,7 @@
 'Zetesis.rejected_sample_does_not_refute_region' does not depend on any axioms
 'Zetesis.accepted_sample_does_not_exhaust_region' does not depend on any axioms
 'Zetesis.SeedSelections.materialization_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.SelectedProducerComparisons.selected_fold_exact' depends on axioms: [propext]
 'Zetesis.Semantics.body_mono' does not depend on any axioms
 'Zetesis.Semantics.consequence_mono' does not depend on any axioms
 'Zetesis.Semantics.constraints_down' does not depend on any axioms
@@ -1931,6 +1950,9 @@
 'Zetesis.SingletonHeads.double_negative_singleton_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SingletonHeads.negative_singleton_has_no_producer' depends on axioms: [propext, Quot.sound]
 'Zetesis.SingletonHeads.double_negative_singleton_has_no_producer' depends on axioms: [propext, Quot.sound]
+'Zetesis.ParallelGrounding.SingletonPrefix.singleton_prefix_outputs' depends on axioms: [propext, Quot.sound]
+'Zetesis.ParallelGrounding.SingletonPrefix.rejected_prefix_outputs' depends on axioms: [propext, Quot.sound]
+'Zetesis.ParallelGrounding.SingletonPrefix.multiple_prefixes_do_not_commute_with_blocks' does not depend on any axioms
 'Zetesis.SourceActivityReuse.activity_masks_compatible' depends on axioms: [propext]
 'Zetesis.SourceActivityReuse.threshold_covers' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceActivityReuse.bounds_equal_of_occurrence_agreement' depends on axioms: [propext]
@@ -2401,6 +2423,11 @@
 'Zetesis.WeightedHeadActivity.same_rows_preserve_measure' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.WeightedHeadActivity.bound_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.WeightedHeadActivity.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ParallelGrounding.WitnessReplay.unchanged_prefix_reconstructs' does not depend on any axioms
+'Zetesis.ParallelGrounding.WitnessReplay.unchanged_projection_exact' does not depend on any axioms
+'Zetesis.ParallelGrounding.WitnessReplay.task_boundary_reset' depends on axioms: [propext]
+'Zetesis.ParallelGrounding.WitnessReplay.unchanged_completion_retained' depends on axioms: [propext]
+'Zetesis.ParallelGrounding.WitnessReplay.unchecked_prefix_is_unsound' does not depend on any axioms
 'Zetesis.WorkCharge.repeated_eq_charge' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorkCharge.exhausted_records_limit' depends on axioms: [propext]
 'Zetesis.WorkCharge.accepted_within_limit' depends on axioms: [propext, Quot.sound]

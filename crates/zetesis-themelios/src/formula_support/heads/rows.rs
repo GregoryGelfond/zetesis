@@ -118,7 +118,7 @@ impl<'source> RowHead<'source> {
     }
 }
 
-fn project(
+pub(crate) fn project(
     variable: usize,
     row: &WitnessRow<'_, '_>,
     limits: &FormulaLimits,

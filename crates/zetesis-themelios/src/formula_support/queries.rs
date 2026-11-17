@@ -88,6 +88,20 @@ impl<'source> Deref for Support<'source> {
 }
 
 impl<'source> Support<'source> {
+    /// Retain the immutable epoch's stored lifetime without retaining this query's scratch.
+    pub(super) fn relations(&self) -> &'source Relations<'source> {
+        self.relations
+    }
+
+    /// Preserve the original query strategy when constructing isolated task scratch.
+    pub(super) fn strategy(&self) -> JoinStrategy {
+        if self.table_strategy {
+            JoinStrategy::Table
+        } else {
+            JoinStrategy::Indexed
+        }
+    }
+
     pub(super) fn workspace(&self) -> &super::storage::Workspace {
         &self.workspace
     }

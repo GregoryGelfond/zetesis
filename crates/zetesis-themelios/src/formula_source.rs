@@ -234,6 +234,7 @@ pub(crate) fn evaluate(
         location,
     } = preparation;
     let profile = Profile::new(observer);
+    let execution = crate::formula_support::SourceExecution::new();
     let cancellation = budget.cancellation().cloned();
     accounting.controlled::<_, FormulaFailure>(
         cancellation.as_ref(),
@@ -247,13 +248,14 @@ pub(crate) fn evaluate(
                     location,
                 });
             }
-            let (mut catalog, domains) = crate::formula_ground::complete_support(
+            let (mut catalog, domains) = crate::formula_ground::complete_support_with_executor(
                 &program,
                 catalog,
                 options.domains,
                 &mut budget,
                 &profile,
                 GroundingWork::new(&limits, counters, location),
+                execution.executor(),
             )?;
             // Complete-domain analysis may assist support; exact activity always reads
             // the complete original rows and does not depend on an optional guard.

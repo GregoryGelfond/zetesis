@@ -5283,6 +5283,108 @@ clause. `replacement_exact` equates a covering generic scan with one availabilit
 test at that position. Its Rust correspondent, the clause search's watch
 replacement, was removed with that search; the law remains as a statement.
 
+## Ordered parallel grounding and witness replay
+
+[`ParallelGrounding`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ParallelGrounding.lean)
+proves exact concatenation of contiguous row blocks and their ordered complete
+outputs. `completed_task_results_exact` assumes that each successful task
+computes its complete mathematical emitter. It does not derive that premise
+from Rust task submission or an output count. Empty results still require
+completion; completion-order publication can change the original occurrence
+sequence. The independent-producer equations in this module require complete
+extensional read/write footprints and published delta histories. They preserve
+sets under those premises, not provenance lists, and do not qualify the current
+ready queue as an antichain or implement a component-wave scheduler.
+
+The experimental Rust boundary borrows the already-prepared Join plan and its
+immutable relation epoch through `row_blocks::CursorRows`; workers use the
+existing join/matcher and stage source occurrences. The coordinator consumes
+results in task order. Relating its selected first-probe postings, delta pivot,
+backtracking and any later split depth to a complete ordered partition remains
+a Rust obligation. The fixed-stream equation does not assert that pending-head
+visibility and serial per-row publication visit identical internal witnesses.
+Support-head coalescing, rule origins and objective-family consumers require
+their own concrete correspondence and complete-answer checks.
+
+[`WitnessReplay`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/WitnessReplay.lean)
+requires an authentic unchanged prefix. Its reconstruction and projection laws
+justify the value presented to the existing projection, not a new matcher or
+an effectful canonical writer. Rust `WitnessPlan`, `Batch` and `Replay`
+retain exact source/rule/plan/relation owners and coordinates; the first witness
+of each task must reset its prefix, and unchanged duplicate completions must
+survive. `RowHead` and `RowBinding` still establish the concrete atom/binding
+projection. The coordinator owns interning and consumer publication. Bounds on
+integer coordinates alone do not authenticate a different source owner.
+
+[`SingletonPrefix`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SingletonPrefix.lean)
+allows a fully bound, matcher-confirmed zero-or-one prefix around the blocks.
+The concrete descriptor must reject an unbound generator and distinguish a
+singleton offered row from a successful match. Every worker still executes the
+ordinary prefix operations. The multiple-prefix counterexample rules out
+commuting an arbitrary prefix-binding loop with block order.
+
+The initial source preparation owns one reusable executor; retained per-answer
+callbacks do not acquire that pool. A worker-local controlled accounting owner
+is separate from immutable shared source data. All completed work, substitution
+and expansion receipts must settle before ordered publication, including
+receipts from failed tasks. Result storage stays covered while publication is
+live. Conservative reservation bounds are not observed physical peaks. The
+existing typed cancellation/refusal, error arbitration, panic cleanup and
+pre-claim serial fallback are implementation contracts, not consequences of
+these list equations. Failed admitted work is not retried with a fresh allowance.
+
+The compiled physical worker count and logical task geometry are private
+experimental choices, distinct from the solver's search-worker setting. These
+modules select no production default, GPU grounding route or resource policy.
+Tests must establish actual dispatch and the full frontend-selected consumer;
+a syntactically eligible objective may later require a different dependency
+path. Complete families, optimal ties, source diagnostics and unchanged reduct
+membership remain required. The named law premises, source-owner tests, refusal
+and cancellation tests, maintained gates and canonical measurements are separate
+evidence. See the [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parallel-grounding.md).
+
+## Selected comparisons and retained producer rows
+
+[`SelectedProducerComparisons`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SelectedProducerComparisons.lean)
+proves one conditional activity-fold equality. The ordinary producer's selected
+binding must already satisfy every reused ordinary comparison. Other body
+occurrences still read their current Activity. The Rust selected-producer reader
+must establish that the exact original join selected the same source expressions
+and binding, and that ordinary comparisons are the only reused occurrences.
+Generic objective/model-query activity and unselected bindings do not satisfy
+that premise merely because their scalar fields exist. The law does not establish
+equal interner histories, eliminated work, or typed failure order.
+
+[`CyclicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CyclicRows.lean)
+proves exact ordered selection, replay into the same current state, complete
+producer-pass equality and fixed finite trace equality under explicit row and
+pass agreement. It also proves that identical rows do not justify cached
+Activity. Concrete retained rows therefore require immutable completed support,
+identical source producer and relation owners, stable scalar decisions and
+canonical value identities, duplicate-preserving order, and successful exhaustion
+before sealing. Cold capture must retain the original row/consumer interleaving;
+a failed attempt must never publish a reusable partial family. Warm replay must
+recompute Activity, source bodies, heads and their consumer effects against the
+current round, preserving producer order. Lazy optional retention, actual storage,
+substitution/work charges, refusal and cancellation remain Rust obligations.
+These conditional equations do not establish convergence or exact Rust cache
+construction, and do not change reduct membership or enumeration requirements.
+
+The related `ArithmeticFamilies.absent_nested_outcomes` and
+`absent_nested_preserves_family` laws concern only uniformly empty nested outcome
+families. The Rust `Scopes` classifier must cover aggregates, conditionals and
+projected witness scopes, retain source ownership and reuse absence only after a
+successful complete classification. General objectives and each numeric-row
+worker must still validate enclosing rows and independent scalar fields. A
+nonempty or declined classification continues ordinary validation; one empty
+binding does not establish uniform absence. The laws do not equate work charges
+or cancellation checkpoints.
+
+The [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-row-reuse.md)
+explains the mathematical premises. Kernel checks, concrete Rust tests, resource
+qualification and measurements are distinct evidence.
+
+
 ## Read hypotheses as caller obligations
 
 The CPU and device tight checkers pack producer support into 32-bit words.

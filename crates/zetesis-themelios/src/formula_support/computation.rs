@@ -5,6 +5,8 @@ mod atoms;
 mod static_components;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod borrowed_tests;
 
 use crate::ProgramSite;
 use zetesis_core::ValueNodeRef;
@@ -33,6 +35,7 @@ pub(crate) struct Computation<'a, 'source> {
 enum Terms<'a, 'source> {
     Append(&'a mut SupportAppend<'source>),
     Frozen(TermLookup<'source>),
+    Borrowed(&'a SupportAppend<'source>),
 }
 
 impl<'a, 'source> Computation<'a, 'source> {
@@ -53,6 +56,38 @@ impl<'a, 'source> Computation<'a, 'source> {
         }
     }
 
+    /// Private worker read capability. The live split authenticates the
+    /// immutable relation epoch before pending support becomes visible.
+    pub(super) fn borrowed(
+        append: &'a SupportAppend<'source>,
+        support: &'a Support<'source>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        counters.work(limits, location)?;
+        if !append.belongs_to(support) {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location,
+            });
+        }
+        Ok(Self {
+            terms: Terms::Borrowed(append),
+            support,
+        })
+    }
+
+    /// Lend pending membership only while this computation cannot publish.
+    /// The caller must release every returned read before using its writer.
+    pub(super) fn pending_reader(&self) -> Option<&SupportAppend<'source>> {
+        match &self.terms {
+            Terms::Append(append) => Some(append),
+            Terms::Frozen(_) => None,
+            Terms::Borrowed(append) => Some(append),
+        }
+    }
+
     /// The live query already borrowed by this computation. Shared final-family
     /// owners retain this borrow; they never authenticate a recycled address.
     pub(crate) fn query_support(&self) -> &'a Support<'source> {
@@ -63,6 +98,7 @@ impl<'a, 'source> Computation<'a, 'source> {
         match &self.terms {
             Terms::Append(append) => append.read(),
             Terms::Frozen(lookup) => lookup.read(),
+            Terms::Borrowed(append) => append.read(),
         }
     }
 
@@ -223,24 +259,13 @@ impl<'a, 'source> Computation<'a, 'source> {
             ),
             Terms::Frozen(lookup) => {
                 let outer = self.support.live_bytes() as u128 - lookup.storage_bytes();
-                let checked = super::relations::owner_limits(limits, outer, location)?;
-                lookup.restart_storage_peak();
-                let result = lookup.find_term_with(
-                    value,
-                    zetesis_core::catalog::Limits {
-                        max_nodes: usize::MAX,
-                        max_depth: usize::MAX,
-                        max_bytes: usize::MAX,
-                    },
-                    checked,
-                    || counters.work(limits, location),
-                );
-                counters.record(Event::SupportPeakBytes(outer + lookup.storage_peak()));
-                result
-                    .map_err(|error| {
-                        super::relations::atom_failure(error, limits, outer, location)
-                    })?
-                    .ok_or(FormulaFailure::UnadmittedTerm { location })
+                import_lookup(lookup, outer, value, limits, counters, location)
+            }
+            Terms::Borrowed(append) => {
+                let mut lookup = append.term_lookup();
+                let outer = self.support.live_bytes() as u128 - lookup.storage_bytes()
+                    + size_of::<TermLookup<'_>>() as u128;
+                import_lookup(&mut lookup, outer, value, limits, counters, location)
             }
         }
     }
@@ -269,27 +294,27 @@ impl<'a, 'source> Computation<'a, 'source> {
             ),
             Terms::Frozen(lookup) => {
                 let outer = self.support.live_bytes() as u128 - lookup.storage_bytes();
-                let checked = super::relations::owner_limits(limits, outer, location)?;
-                lookup.restart_storage_peak();
-                let result = lookup.find_constructed_with(
-                    descriptor,
-                    values,
-                    children,
+                constructed_lookup(
+                    lookup,
+                    outer,
+                    (descriptor, values, children),
                     term_limits,
-                    checked,
-                    || counters.work(limits, location),
-                );
-                counters.record(Event::SupportPeakBytes(outer + lookup.storage_peak()));
-                result
-                    .map_err(|error| match error {
-                        AssignedFailure::Assignment(error) => {
-                            crate::formula_binding::assignment(error, location)
-                        }
-                        AssignedFailure::Interner(error) => {
-                            super::relations::atom_failure(error, limits, outer, location)
-                        }
-                    })?
-                    .ok_or(FormulaFailure::UnadmittedTerm { location })
+                    GroundingWork::new(limits, counters, location),
+                )?
+                .ok_or(FormulaFailure::UnadmittedTerm { location })
+            }
+            Terms::Borrowed(append) => {
+                let mut lookup = append.term_lookup();
+                let outer = self.support.live_bytes() as u128 - lookup.storage_bytes()
+                    + size_of::<TermLookup<'_>>() as u128;
+                constructed_lookup(
+                    &mut lookup,
+                    outer,
+                    (descriptor, values, children),
+                    term_limits,
+                    GroundingWork::new(limits, counters, location),
+                )?
+                .ok_or(FormulaFailure::UnadmittedTerm { location })
             }
         }
     }
@@ -314,6 +339,11 @@ impl<'a, 'source> Computation<'a, 'source> {
             Terms::Frozen(lookup) => {
                 let outer = live - lookup.storage_bytes();
                 find_constructed(lookup, outer, descriptor, values, children, work)
+            }
+            Terms::Borrowed(append) => {
+                let mut lookup = append.term_lookup();
+                let outer = live - lookup.storage_bytes() + size_of::<TermLookup<'_>>() as u128;
+                find_constructed(&mut lookup, outer, descriptor, values, children, work)
             }
         }
     }
@@ -345,17 +375,32 @@ fn find_constructed(
     children: &[usize],
     work: GroundingWork<'_>,
 ) -> Result<Option<TermKey>, FormulaFailure> {
-    let GroundingWork {
-        limits,
-        counters,
-        location,
-    } = work;
+    constructed_lookup(
+        lookup,
+        outer,
+        (descriptor, values, children),
+        zetesis_core::catalog::Limits {
+            max_nodes: usize::MAX,
+            max_depth: usize::MAX,
+            max_bytes: usize::MAX,
+        },
+        work,
+    )
+}
+
+/// Existing immutable import accounting, shared with the private borrowed lane.
+fn import_lookup(
+    lookup: &mut TermLookup<'_>,
+    outer: u128,
+    value: TermRef<'_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<TermKey, FormulaFailure> {
     let checked = super::relations::owner_limits(limits, outer, location)?;
     lookup.restart_storage_peak();
-    let result = lookup.find_constructed_with(
-        descriptor,
-        values,
-        children,
+    let result = lookup.find_term_with(
+        value,
         zetesis_core::catalog::Limits {
             max_nodes: usize::MAX,
             max_depth: usize::MAX,
@@ -364,6 +409,31 @@ fn find_constructed(
         checked,
         || counters.work(limits, location),
     );
+    counters.record(Event::SupportPeakBytes(outer + lookup.storage_peak()));
+    result
+        .map_err(|error| super::relations::atom_failure(error, limits, outer, location))?
+        .ok_or(FormulaFailure::UnadmittedTerm { location })
+}
+
+/// Caller-supplied term limits stay distinct from permissive identity lookup.
+fn constructed_lookup(
+    lookup: &mut TermLookup<'_>,
+    outer: u128,
+    (descriptor, values, children): (ValueNodeRef<'_>, AssignmentSlice<'_>, &[usize]),
+    term_limits: zetesis_core::catalog::Limits,
+    work: GroundingWork<'_>,
+) -> Result<Option<TermKey>, FormulaFailure> {
+    let GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
+    let checked = super::relations::owner_limits(limits, outer, location)?;
+    lookup.restart_storage_peak();
+    let result =
+        lookup.find_constructed_with(descriptor, values, children, term_limits, checked, || {
+            counters.work(limits, location)
+        });
     counters.record(Event::SupportPeakBytes(outer + lookup.storage_peak()));
     result.map_err(|error| match error {
         AssignedFailure::Assignment(error) => crate::formula_binding::assignment(error, location),

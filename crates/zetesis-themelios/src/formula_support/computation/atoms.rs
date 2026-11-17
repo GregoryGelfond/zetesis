@@ -28,7 +28,7 @@ impl Computation<'_, '_> {
                 counters,
                 location,
             ),
-            Terms::Frozen(_) => Err(owner_failure(location)),
+            Terms::Frozen(_) | Terms::Borrowed(_) => Err(owner_failure(location)),
         }
     }
 
@@ -49,7 +49,7 @@ impl Computation<'_, '_> {
                 counters,
                 location,
             ),
-            Terms::Frozen(_) => Err(owner_failure(location)),
+            Terms::Frozen(_) | Terms::Borrowed(_) => Err(owner_failure(location)),
         }
     }
 
@@ -166,7 +166,7 @@ impl Computation<'_, '_> {
                 counters,
                 location,
             ),
-            Terms::Frozen(_) => Err(owner_failure(location)),
+            Terms::Frozen(_) | Terms::Borrowed(_) => Err(owner_failure(location)),
         }
     }
 
@@ -181,6 +181,12 @@ impl Computation<'_, '_> {
     ) -> Result<bool, FormulaFailure> {
         match &self.terms {
             Terms::Append(append) => append.contains_pattern(
+                pattern,
+                binding.slots(),
+                self.support.workspace_bytes(),
+                GroundingWork::new(limits, counters, location),
+            ),
+            Terms::Borrowed(append) => append.contains_pattern(
                 pattern,
                 binding.slots(),
                 self.support.workspace_bytes(),
@@ -217,7 +223,7 @@ impl Computation<'_, '_> {
                 self.support.workspace_bytes(),
                 GroundingWork::new(limits, counters, location),
             ),
-            Terms::Frozen(_) => Err(owner_failure(location)),
+            Terms::Frozen(_) | Terms::Borrowed(_) => Err(owner_failure(location)),
         }
     }
 
@@ -227,7 +233,7 @@ impl Computation<'_, '_> {
     ) -> Result<SourceScope, FormulaFailure> {
         match &self.terms {
             Terms::Append(append) => Ok(append.source_scope()),
-            Terms::Frozen(_) => Err(owner_failure(location)),
+            Terms::Frozen(_) | Terms::Borrowed(_) => Err(owner_failure(location)),
         }
     }
 
@@ -251,7 +257,7 @@ impl Computation<'_, '_> {
     ) -> Result<AtomRef<'_>, FormulaFailure> {
         match &self.terms {
             Terms::Append(append) => append.source_at(scope, position, limits, counters, location),
-            Terms::Frozen(_) => Err(owner_failure(location)),
+            Terms::Frozen(_) | Terms::Borrowed(_) => Err(owner_failure(location)),
         }
     }
 }

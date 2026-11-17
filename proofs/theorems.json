@@ -1255,6 +1255,16 @@
     "line": 267
   },
   {
+    "name": "Zetesis.ArithmeticFamilies.absent_nested_outcomes",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 274
+  },
+  {
+    "name": "Zetesis.ArithmeticFamilies.absent_nested_preserves_family",
+    "file": "Zetesis/ArithmeticFamilies.lean",
+    "line": 289
+  },
+  {
     "name": "Zetesis.AssociativeWitnesses.disjunction_truth",
     "file": "Zetesis/AssociativeWitnesses.lean",
     "line": 29
@@ -3413,6 +3423,31 @@
     "name": "Zetesis.LearnedRegions.falsum_free_countermodel_does_not_refute_superset",
     "file": "Zetesis/CountermodelReuse.lean",
     "line": 107
+  },
+  {
+    "name": "Zetesis.SourceActivity.CyclicRows.selected_occurrences_exact",
+    "file": "Zetesis/CyclicRows.lean",
+    "line": 33
+  },
+  {
+    "name": "Zetesis.SourceActivity.CyclicRows.replay_current_consumer_exact",
+    "file": "Zetesis/CyclicRows.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.SourceActivity.CyclicRows.whole_pass_exact",
+    "file": "Zetesis/CyclicRows.lean",
+    "line": 55
+  },
+  {
+    "name": "Zetesis.SourceActivity.CyclicRows.refinement_trace_exact",
+    "file": "Zetesis/CyclicRows.lean",
+    "line": 68
+  },
+  {
+    "name": "Zetesis.SourceActivity.CyclicRows.rows_do_not_determine_activity",
+    "file": "Zetesis/CyclicRows.lean",
+    "line": 77
   },
   {
     "name": "Zetesis.DagSharing.getD_append_left",
@@ -7630,6 +7665,61 @@
     "line": 167
   },
   {
+    "name": "Zetesis.ParallelGrounding.row_tasks_reconstruct",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 42
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.ordered_task_outputs_exact",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 58
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.completed_task_results_exact",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.task_count_includes_empty",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 88
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.empty_output_partition_fixture",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 95
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.completion_order_is_not_source_order",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 102
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.delta_stable_under_disjoint_publication",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 117
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.independent_deltas_merge",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 135
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.covered_delta_merge_exact",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 167
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.unfinished_dependency_blocks",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 220
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.starting_cannot_create_readiness",
+    "file": "Zetesis/ParallelGrounding.lean",
+    "line": 230
+  },
+  {
     "name": "Zetesis.ParametricReduct.satisfies_original",
     "file": "Zetesis/ParametricReduct.lean",
     "line": 41
@@ -8885,6 +8975,11 @@
     "line": 35
   },
   {
+    "name": "Zetesis.SelectedProducerComparisons.selected_fold_exact",
+    "file": "Zetesis/SelectedProducerComparisons.lean",
+    "line": 42
+  },
+  {
     "name": "Zetesis.Semantics.body_mono",
     "file": "Zetesis/Semantics.lean",
     "line": 56
@@ -9248,6 +9343,21 @@
     "name": "Zetesis.SingletonHeads.double_negative_singleton_has_no_producer",
     "file": "Zetesis/SingletonHeads.lean",
     "line": 78
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.SingletonPrefix.singleton_prefix_outputs",
+    "file": "Zetesis/SingletonPrefix.lean",
+    "line": 25
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.SingletonPrefix.rejected_prefix_outputs",
+    "file": "Zetesis/SingletonPrefix.lean",
+    "line": 35
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.SingletonPrefix.multiple_prefixes_do_not_commute_with_blocks",
+    "file": "Zetesis/SingletonPrefix.lean",
+    "line": 44
   },
   {
     "name": "Zetesis.SourceActivityReuse.activity_masks_compatible",
@@ -11458,6 +11568,31 @@
     "name": "Zetesis.WeightedHeadActivity.stable_in_context",
     "file": "Zetesis/WeightedHeadActivity.lean",
     "line": 102
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.WitnessReplay.unchanged_prefix_reconstructs",
+    "file": "Zetesis/WitnessReplay.lean",
+    "line": 26
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.WitnessReplay.unchanged_projection_exact",
+    "file": "Zetesis/WitnessReplay.lean",
+    "line": 35
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.WitnessReplay.task_boundary_reset",
+    "file": "Zetesis/WitnessReplay.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.WitnessReplay.unchanged_completion_retained",
+    "file": "Zetesis/WitnessReplay.lean",
+    "line": 49
+  },
+  {
+    "name": "Zetesis.ParallelGrounding.WitnessReplay.unchecked_prefix_is_unsound",
+    "file": "Zetesis/WitnessReplay.lean",
+    "line": 55
   },
   {
     "name": "Zetesis.WorkCharge.repeated_eq_charge",

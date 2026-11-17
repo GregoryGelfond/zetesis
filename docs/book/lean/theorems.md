@@ -164,6 +164,37 @@ unknown-count bound when a round resolves at least one optional entry. These
 activity laws serve objective and projection preparation; they do not establish
 that every possible atom occurs in an answer set or prove Rust producer coverage.
 
+
+`ParallelGrounding.row_tasks_reconstruct` and `ordered_task_outputs_exact`
+preserve complete ordered row occurrences and their emitted outputs across a
+contiguous partition. `completed_task_results_exact` exposes the required
+agreement of each successful task with that emitter. The separate producer-delta
+laws require complete read/write footprints; queued work does not establish
+completed publication or component readiness.
+`ParallelGrounding.WitnessReplay.unchanged_prefix_reconstructs` and
+`unchanged_projection_exact` require the actual shared-prefix premise and retain
+task-boundary reset. `ParallelGrounding.SingletonPrefix.singleton_prefix_outputs`
+composes the ordered partition with one fixed binding; its counterexample rules
+out commuting multiple prefix bindings with block order. The
+[parallel-grounding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parallel-grounding.md)
+separates these conditional equations from source ownership, Rust execution,
+resource settlement and unselected experiment policies.
+
+`SelectedProducerComparisons.selected_fold_exact` preserves the complete activity
+conjunction when each reused comparison is already required at the selected
+binding. `SourceActivity.CyclicRows.selected_occurrences_exact` preserves the
+ordered selected stream, including duplicates, from equal source occurrences and
+scalar decisions. Its replay, whole-pass and finite-trace laws keep the same
+current-state consumer; `rows_do_not_determine_activity` rules out caching truth
+merely because rows are equal. The [producer-row reuse guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-row-reuse.md)
+separates these premises from concrete Rust ownership, coverage and resource
+obligations.
+
+`ArithmeticFamilies.absent_nested_outcomes` requires uniform absence under a
+sound nested-scope classifier; `absent_nested_preserves_family` preserves
+admission and warnings when that empty family is omitted. Neither permits
+skipping independent enclosing-row or scalar-field validation.
+
 `WeightedHeadActivity.formula_original` extends that independent tuple activity
 to signed sums over a complete, duplicate-free key carrier.
 `WeightedHeadActivity.bound_frozen` shows why the activated bound constrains

@@ -31,6 +31,15 @@ pub(crate) struct SupportAppend<'a> {
 }
 
 impl<'a> SupportAppend<'a> {
+    /// Only live split views carry this exact growth owner. Safe exclusive
+    /// catalog borrowing prevents a second epoch while either view survives.
+    /// A pointer match alone would not certify an arbitrary stored snapshot.
+    pub(in crate::formula_support) fn belongs_to(&self, relations: &super::Relations<'_>) -> bool {
+        relations
+            .growth
+            .is_some_and(|growth| std::ptr::eq(growth, self.growth))
+    }
+
     pub(in crate::formula_support) fn read(&self) -> CatalogRead<'_> {
         self.owner.read()
     }
