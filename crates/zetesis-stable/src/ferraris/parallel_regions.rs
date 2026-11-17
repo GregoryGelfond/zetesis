@@ -1335,11 +1335,9 @@ impl ParallelRegions {
     ) -> Result<(), Incomplete> {
         self.engage_with(budget, |shared, slot, sender| {
             let original = Arc::clone(index);
-            std::thread::Builder::new()
-                .name("zetesis-region".into())
-                .spawn(move || {
-                    contain_worker(&shared, || worker(&shared, &original, slot, &sender))
-                })
+            zetesis_algebra::threads::spawn("zetesis-region", move || {
+                contain_worker(&shared, || worker(&shared, &original, slot, &sender))
+            })
         })
     }
 

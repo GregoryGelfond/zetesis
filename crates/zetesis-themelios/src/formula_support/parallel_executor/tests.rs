@@ -1,4 +1,6 @@
+#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
 use super::*;
+use rayon::ThreadPoolBuilder;
 use crate::formula_support::Accounting;
 use crate::grounding_observer::Work;
 use crate::test_support::location;
