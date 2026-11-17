@@ -6,6 +6,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Objective scoring tries the newest contribution key before searching the
+  sorted keys and reads the control flags through a retained poll view.
+  Scoring 4,194,304 bindings of `#minimize{1@0,X,Y:d(X),e(Y)}` falls from
+  about 2.9 s to about 0.6 s; cancellation is still observed at every tick.
 - Candidate search keeps the knowledge of only the newest 64 pending regions
   per worker; older pending regions recompute it when visited. Peak memory
   no longer grows with search depth times workers: on a 1,000-node coloring

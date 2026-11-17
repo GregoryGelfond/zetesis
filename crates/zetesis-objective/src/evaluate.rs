@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use zetesis_algebra::{Cancellation, Meter};
+use zetesis_algebra::{Cancellation, CancellationPoll, Meter};
 use zetesis_core::catalog::{AtomRef, TermRef};
 use zetesis_core::{AtomRows, Model, PatternRef, TemplateTerm, ValueNodeRef};
 
@@ -11,7 +11,8 @@ use crate::{
 
 pub(super) struct Work<'a> {
     limits: Limits,
-    cancellation: &'a Cancellation,
+    /// The control flags, read at every tick without traversing the token.
+    control: CancellationPoll<'a>,
     meter: Meter<'static>,
     bindings: u64,
     active_bindings: u64,
@@ -24,7 +25,7 @@ impl<'control> Work<'control> {
     pub(super) fn new(limits: Limits, cancellation: &'control Cancellation) -> Self {
         Self {
             limits,
-            cancellation,
+            control: cancellation.polling(),
             meter: Meter::local(limits.max_work),
             bindings: 0,
             active_bindings: 0,
@@ -57,7 +58,7 @@ impl<'control> Work<'control> {
         self.error(ErrorKind::Stopped(reason))
     }
     pub(super) fn poll(&self) -> Result<(), Error> {
-        self.cancellation.poll().map_err(|reason| {
+        self.control.poll().map_err(|reason| {
             self.stop(match reason {
                 zetesis_algebra::Stop::Cancelled => Stop::Cancelled,
                 zetesis_algebra::Stop::Deadline => Stop::Deadline,
@@ -389,6 +390,18 @@ impl<'input> Evaluator<'input, '_> {
     ) -> Result<(), Error> {
         let mut low = 0;
         let mut high = self.keys.len();
+        // Bindings usually arrive in key order, so the newest key is tried
+        // first: a greater tuple appends after one comparison.
+        if let Some(last) = high.checked_sub(1) {
+            match self.compare_key(last, priority, weight, &tuple)? {
+                Ordering::Greater => high = last,
+                Ordering::Equal => {
+                    self.work.duplicates = self.work.increment(self.work.duplicates)?;
+                    return Ok(());
+                }
+                Ordering::Less => low = high,
+            }
+        }
         while low < high {
             let middle = low + (high - low) / 2;
             match self.compare_key(middle, priority, weight, &tuple)? {
