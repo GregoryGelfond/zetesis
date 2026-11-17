@@ -23,8 +23,8 @@ already prepared representation and does not retry admission itself.
 
 `prepare_formula_execution` and `prepare_bundle_execution` apply the same
 execution policy as the CLI and native API. Under automatic CPU execution, a
-complete stratified normal source (acyclic, or recursive only through
-definite-closed components) can be evaluated during preparation, without
+complete stratified normal source (recursive only through certain
+components, never through negation or aggregates) can be evaluated during preparation, without
 constructing formulas. The returned `PreparedExecution` owns either that
 `AcyclicSource` or the selected `GroundedFormula`; `input()` borrows it for a
 session. Explicit grounding and oracle requests retain their ordinary paths.
