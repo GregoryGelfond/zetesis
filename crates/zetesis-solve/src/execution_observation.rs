@@ -79,7 +79,8 @@ pub enum ExecutionObservation<'a> {
     /// has run, in wall time since it began, for longer than starting them
     /// costs; a walk that ends sooner starts none.
     ParallelRegions {
-        /// Requested worker population.
+        /// Walker threads the walk may start: the requested threads less
+        /// the coordinating thread, which runs the walk itself.
         workers: NonZeroUsize,
     },
     /// Bounded workers propose formula leaves, then join before an independent
