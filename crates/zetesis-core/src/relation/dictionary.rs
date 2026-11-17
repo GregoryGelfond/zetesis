@@ -3,9 +3,11 @@
 //! Published entries are exactly the append dictionary's representatives. The
 //! bound source supplies their vocabulary; no map entry retains a scope or
 //! payload. Hash operations admit one fixed-key container operation, not each
-//! opaque internal probe. Semantic ordering remains the foreign-input fallback.
+//! opaque internal probe. A value the read cannot name is found by its
+//! semantic content hash; no value order is kept.
 
 use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher};
 
 use crate::catalog::{CatalogRead, ReadError, TermRef, storage::TermId};
 
@@ -13,123 +15,130 @@ use super::{Failure, Resource, Work, ceiling};
 
 #[derive(Default)]
 pub(super) struct Append {
-    pub order: Runs,
     pub identities: Inverse,
+    pub content: Content,
 }
 
-/// The catalog's value order, built in bulk only on demand.
+/// Content identity for values this owner's read cannot name.
 ///
-/// Insertion never orders a value: the canonical inverse (`Inverse`) already
-/// decides equality for every value this owner can name. Ordered lookup is
-/// needed only for a value the read cannot name. Such a lookup searches the
-/// sorted runs and scans the unindexed suffix `indexed..dictionary.len()`,
-/// charging each comparison, and marks the order as demanded. The next
-/// insertion then sorts that suffix as one batch and merges it into the runs
-/// (binary-counter levels). The batch sort and each merge use fixed block
-/// boundaries, so their comparisons — and their charged work — are identical
-/// whether the blocks run on one worker or many.
+/// Every dictionary value is chained under the semantic hash of its term
+/// (`Hash for TermRef`, consistent with term equality). A lookup of an
+/// uninterned or foreign value hashes it once and compares only the values in
+/// its chain, so no value order is kept: insertion records a value in
+/// constant work beyond its hash, and a lookup's comparisons do not grow with
+/// the dictionary. Hashing reads every payload word once and is charged per
+/// expanded node and per eight canonical bytes. Retained bytes are the head
+/// table plus one `u32` link per value.
 #[derive(Default)]
-pub(super) struct Runs {
-    pub levels: Vec<Vec<u32>>,
-    pub indexed: usize,
-    pub demanded: std::sync::atomic::AtomicBool,
+pub(super) struct Content {
+    heads: HashMap<u64, u32, BuildHasherDefault<Prehashed>>,
+    next: Vec<u32>,
 }
 
-impl Runs {
-    pub(super) fn clear(&mut self) {
-        self.levels.clear();
-        self.indexed = 0;
-        *self.demanded.get_mut() = false;
+/// The chain end.
+const NO_LINK: u32 = u32::MAX;
+
+/// Head keys are already semantic hashes; the table uses them as they are.
+#[derive(Default)]
+pub(super) struct Prehashed(u64);
+
+impl Hasher for Prehashed {
+    fn finish(&self) -> u64 {
+        self.0
     }
 
-    /// Retained capacity of the run headers and their identities.
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = self.0.rotate_left(8) ^ u64::from(byte);
+        }
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = value;
+    }
+}
+
+impl Content {
+    /// The semantic hash of a value: fixed keys, so the same in every run.
+    pub(super) fn hash(value: TermRef<'_>) -> u64 {
+        let mut state = DefaultHasher::new();
+        value.hash(&mut state);
+        state.finish()
+    }
+
+    /// Charged work of hashing a value of `nodes` expanded nodes and
+    /// `bytes` canonical bytes: one unit per node and per payload word.
+    pub(super) fn hash_work(nodes: usize, bytes: usize) -> u128 {
+        nodes as u128 + bytes.div_ceil(8) as u128
+    }
+
+    /// Addressable key/value capacity and links, not opaque control bytes.
     pub(super) fn bytes(&self) -> usize {
-        self.levels.capacity() * size_of::<Vec<u32>>()
-            + self
-                .levels
-                .iter()
-                .map(|run| run.capacity() * size_of::<u32>())
-                .sum::<usize>()
+        self.heads.capacity() * size_of::<(u64, u32)>() + self.next.capacity() * size_of::<u32>()
     }
 
-    /// `compare(id)` orders the query against value `id`. Runs are searched
-    /// by bisection, then the unindexed suffix up to `len` linearly.
-    pub(super) fn search<E>(
+    /// Reset visits retained hash storage even when its logical extent is small.
+    pub(super) fn clear_work(&self) -> u128 {
+        self.heads.capacity() as u128
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.heads.clear();
+        self.next.clear();
+    }
+
+    pub(super) fn reserve(&mut self, additional: usize, work: &mut Work) -> Result<(), Failure> {
+        let needed = self
+            .next
+            .len()
+            .checked_add(additional)
+            .ok_or(Failure::Overflow)?;
+        if needed <= self.next.capacity() && needed <= self.heads.capacity() {
+            return Ok(());
+        }
+        let previous = self.bytes();
+        let proposed = needed.max(self.next.capacity().saturating_mul(2));
+        ceiling(
+            Resource::Bytes,
+            work.live as u128
+                + proposed as u128 * (size_of::<(u64, u32)>() + size_of::<u32>()) as u128,
+            work.limits.max_bytes as u128,
+        )?;
+        // Relocation and the container reservation precede any publication.
+        work.tick(self.next.len() as u128 + 1)?;
+        self.heads
+            .try_reserve(proposed.saturating_sub(self.heads.len()))
+            .map_err(|_| Failure::Allocation)?;
+        self.next
+            .try_reserve(proposed.saturating_sub(self.next.len()))
+            .map_err(|_| Failure::Allocation)?;
+        work.replacement(previous, self.bytes())
+    }
+
+    /// Chain value `equality`, the next identity, under `hash`. Reserved by
+    /// the surrounding transaction.
+    pub(super) fn publish(&mut self, hash: u64, equality: u32) {
+        debug_assert_eq!(self.next.len(), equality as usize);
+        let link = self.heads.insert(hash, equality).unwrap_or(NO_LINK);
+        self.next.push(link);
+    }
+
+    /// The value equal to the query among those chained under `hash`;
+    /// `equal(id)` decides each candidate, newest first.
+    pub(super) fn find<E>(
         &self,
-        len: usize,
-        mut compare: impl FnMut(usize) -> Result<std::cmp::Ordering, E>,
-    ) -> Result<Option<usize>, E> {
-        for run in &self.levels {
-            let (mut start, mut end) = (0, run.len());
-            while start < end {
-                let middle = start + (end - start) / 2;
-                let id = run[middle] as usize;
-                match compare(id)? {
-                    std::cmp::Ordering::Less => end = middle,
-                    std::cmp::Ordering::Equal => return Ok(Some(id)),
-                    std::cmp::Ordering::Greater => start = middle + 1,
-                }
+        hash: u64,
+        mut equal: impl FnMut(u32) -> Result<bool, E>,
+    ) -> Result<Option<u32>, E> {
+        let mut link = self.heads.get(&hash).copied().unwrap_or(NO_LINK);
+        while link != NO_LINK {
+            if equal(link)? {
+                return Ok(Some(link));
             }
-        }
-        if self.indexed < len {
-            self.demanded
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        for id in self.indexed..len {
-            if compare(id)?.is_eq() {
-                return Ok(Some(id));
-            }
+            link = self.next[link as usize];
         }
         Ok(None)
     }
-}
-
-/// Stable bottom-up merge sort of `ids` by a fallible order, with fixed
-/// block boundaries (width 1, 2, 4, ...): the comparisons performed depend
-/// only on the input, so independent blocks of one width may run on separate
-/// workers with the same charged work.
-pub(super) fn sort_ids<E>(
-    ids: &mut Vec<u32>,
-    scratch: &mut Vec<u32>,
-    compare: &mut impl FnMut(u32, u32) -> Result<std::cmp::Ordering, E>,
-) -> Result<(), E> {
-    let len = ids.len();
-    let mut width = 1;
-    while width < len {
-        scratch.clear();
-        let mut start = 0;
-        while start < len {
-            let middle = (start + width).min(len);
-            let end = (start + 2 * width).min(len);
-            merge_into(&ids[start..middle], &ids[middle..end], scratch, compare)?;
-            start = end;
-        }
-        std::mem::swap(ids, scratch);
-        width *= 2;
-    }
-    Ok(())
-}
-
-/// Append the stable merge of two sorted runs to `out`.
-pub(super) fn merge_into<E>(
-    left: &[u32],
-    right: &[u32],
-    out: &mut Vec<u32>,
-    compare: &mut impl FnMut(u32, u32) -> Result<std::cmp::Ordering, E>,
-) -> Result<(), E> {
-    let (mut i, mut j) = (0, 0);
-    while i < left.len() && j < right.len() {
-        if compare(right[j], left[i])?.is_lt() {
-            out.push(right[j]);
-            j += 1;
-        } else {
-            out.push(left[i]);
-            i += 1;
-        }
-    }
-    out.extend_from_slice(&left[i..]);
-    out.extend_from_slice(&right[j..]);
-    Ok(())
 }
 
 #[derive(Default)]
@@ -216,66 +225,39 @@ impl Inverse {
 }
 
 #[cfg(test)]
-mod runs_tests {
-    use super::{Runs, merge_into, sort_ids};
-    use std::sync::atomic::Ordering::Relaxed;
-
-    fn sorted(values: &[i32]) -> (Vec<u32>, usize) {
-        let mut ids: Vec<u32> = (0..u32::try_from(values.len()).unwrap()).collect();
-        let mut scratch = Vec::new();
-        let mut comparisons = 0;
-        sort_ids(&mut ids, &mut scratch, &mut |l: u32, r: u32| {
-            comparisons += 1;
-            Ok::<_, ()>(values[l as usize].cmp(&values[r as usize]))
-        })
-        .unwrap();
-        (ids, comparisons)
-    }
+mod content_tests {
+    use super::Content;
 
     #[test]
-    fn batch_sort_is_stable_and_bounded() {
-        let values: Vec<i32> = (0..1000).map(|i| (i * 7919) % 257).collect();
-        let (ids, comparisons) = sorted(&values);
-        let mut expected: Vec<u32> = (0..1000).collect();
-        expected.sort_by_key(|&id| (values[id as usize], id));
-        assert_eq!(ids, expected);
-        // At most n * ceil(log2 n) comparisons, independent of worker count.
-        assert!(comparisons <= 1000 * 10, "{comparisons}");
-    }
-
-    #[test]
-    fn merge_is_stable() {
-        let values = [1, 3, 3, 5, 2, 3, 6];
-        let mut out = Vec::new();
-        merge_into(
-            &[0, 1, 2, 3],
-            &[4, 5, 6],
-            &mut out,
-            &mut |l: u32, r: u32| Ok::<_, ()>(values[l as usize].cmp(&values[r as usize])),
-        )
-        .unwrap();
-        assert_eq!(out, [0, 4, 1, 2, 5, 3, 6]);
-    }
-
-    #[test]
-    fn search_reads_runs_then_the_unindexed_suffix_and_demands_order() {
-        let values = [10, 20, 30, 40, 5];
-        let runs = Runs {
-            levels: vec![vec![0, 1, 2]],
-            indexed: 3,
-            demanded: std::sync::atomic::AtomicBool::default(),
+    fn a_shared_hash_chains_its_values_and_finds_each() {
+        let mut content = Content::default();
+        for (equality, hash) in [(0, 7), (1, 9), (2, 7), (3, 7)] {
+            content.next.reserve(1);
+            content.publish(hash, equality);
+        }
+        let values = [10, 20, 30, 40];
+        let find = |hash: u64, query: i32| {
+            let mut compared = 0;
+            let found = content
+                .find(hash, |id| {
+                    compared += 1;
+                    Ok::<_, ()>(values[id as usize] == query)
+                })
+                .unwrap();
+            (found, compared)
         };
-        let find = |query: i32| {
-            runs.search(values.len(), |id| Ok::<_, ()>(query.cmp(&values[id])))
-                .unwrap()
-        };
-        assert_eq!(find(20), Some(1));
-        assert!(
-            !runs.demanded.load(Relaxed),
-            "an indexed hit demands nothing"
-        );
-        assert_eq!(find(5), Some(4));
-        assert!(runs.demanded.load(Relaxed));
-        assert_eq!(find(7), None);
+        assert_eq!(find(7, 10), (Some(0), 3));
+        assert_eq!(find(7, 40), (Some(3), 1));
+        assert_eq!(find(9, 20), (Some(1), 1));
+        // A miss compares only its own chain, never the whole dictionary.
+        assert_eq!(find(7, 99), (None, 3));
+        assert_eq!(find(5, 10), (None, 0));
+    }
+
+    #[test]
+    fn hash_work_counts_nodes_and_payload_words() {
+        assert_eq!(Content::hash_work(1, 0), 1);
+        assert_eq!(Content::hash_work(1, 8), 2);
+        assert_eq!(Content::hash_work(3, 17), 6);
     }
 }
