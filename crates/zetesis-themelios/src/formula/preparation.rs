@@ -192,8 +192,8 @@ impl PreparedFormula {
     }
 
     /// Admit and evaluate a complete signed stratified normal source once,
-    /// before formula construction: acyclic, or recursive only through
-    /// definite-closed components. Complete support and original arithmetic
+    /// before formula construction: recursive only through certain
+    /// components, never through negation. Complete support and original arithmetic
     /// admission still run. Inapplicable sources retain the ordinary
     /// ground/query door and all accepted classification charges. Objectives,
     /// projections, recursion through default negation or aggregates and

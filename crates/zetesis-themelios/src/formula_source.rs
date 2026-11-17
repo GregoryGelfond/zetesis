@@ -1,5 +1,5 @@
 //! Exact finite source evaluation for a complete signed stratified normal
-//! program: acyclic, or recursive only through definite-closed components.
+//! program: recursive only through certain components, never through negation.
 //!
 //! The result is a source subject, not a replacement formula theory. Complete
 //! support and original-family arithmetic admission precede the one dependency
@@ -45,7 +45,7 @@ struct Admitted {
 
 /// Immutable exact interpretation of one admitted source program. The type
 /// keeps its established name; its class also admits recursion through
-/// definite-closed components.
+/// certain components.
 /// Clones share its original identity and canonical typed atom payload. No
 /// Boolean theory is synthesized and no formula-query contract is changed.
 #[derive(Clone)]
