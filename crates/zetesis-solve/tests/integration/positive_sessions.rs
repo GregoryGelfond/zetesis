@@ -392,6 +392,27 @@ fn tight_disjunctive_source_takes_shifted_tight_support() {
 }
 
 #[test]
+fn unconditional_conditional_head_takes_shifted_tight_support() {
+    // `q(X,Y) : Y=1..2 :- X=1.` is the disjunction q(1,1) | q(1,2): its
+    // condition holds unconditionally, so its disjuncts are atoms and the
+    // tight head-cycle-free program is shifted like the written disjunction.
+    let written = formula("q(1,1) | q(1,2).");
+    let (expected, _) = collect(&written, config(1, Oracle::Countermodel));
+    let expected = family(&expected);
+    assert_eq!(expected.len(), 2);
+    for source in ["q(X,Y) : Y=1..2 :- X=1.", "q(1,1) | q(1,2)."] {
+        let owner = formula(source);
+        for workers in [1, 4] {
+            let (actual, observations) = collect(&owner, config(workers, Oracle::Auto));
+            assert_eq!(observations.membership, [Membership::Tight], "{source}");
+            let (reference, _) = collect(&owner, config(workers, Oracle::Countermodel));
+            assert_eq!(family(&actual), expected, "{source}");
+            assert_eq!(family(&reference), expected, "{source}");
+        }
+    }
+}
+
+#[test]
 fn cancellation_after_positive_preparation_is_incomplete() {
     let owner = formula("a. b:-a. a:-b.");
     let cancellation = Cancellation::default();
