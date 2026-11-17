@@ -81,25 +81,31 @@ pub(crate) fn evaluate_acyclic(
             let (_, batch) = closed.take().expect("checked pending rank");
             result.publish_required(batch, context)?;
         }
-        match source.items().get(position) {
+        let item = source.items().get(position);
+        context.location = match item {
+            Item::Rule(_, rule) => rule.location,
+            Item::Facts(block) => block.location(),
+        };
+        // A saturated rank's heads, fact rows included, are published
+        // together when the rank ends, exactly as its fact rules' heads were.
+        let batch = if plan.closed(rank) {
+            if closed.is_none() {
+                closed = Some((
+                    rank,
+                    SourceSelection::batch(
+                        context.computation,
+                        context.limits,
+                        context.counters,
+                        context.location,
+                    )?,
+                ));
+            }
+            closed.as_mut().map(|(_, batch)| batch)
+        } else {
+            None
+        };
+        match item {
             Item::Rule(index, rule) => {
-                context.location = rule.location;
-                let batch = if plan.closed(rank) {
-                    if closed.is_none() {
-                        closed = Some((
-                            rank,
-                            SourceSelection::batch(
-                                context.computation,
-                                context.limits,
-                                context.counters,
-                                context.location,
-                            )?,
-                        ));
-                    }
-                    closed.as_mut().map(|(_, batch)| batch)
-                } else {
-                    None
-                };
                 consistent &= profile.phase(
                     GroundingPhase::RuleInstantiation,
                     Some(rule.location),
@@ -107,11 +113,10 @@ pub(crate) fn evaluate_acyclic(
                 )?;
             }
             Item::Facts(block) => {
-                context.location = block.location();
                 profile.phase(
                     GroundingPhase::RuleInstantiation,
                     Some(block.location()),
-                    || result.facts_exact(block, context),
+                    || result.facts_exact(block, batch, context),
                 )?;
             }
         }
@@ -179,10 +184,15 @@ impl SourceEligibility {
     }
 
     /// Stage each fact row `Required`: a body-free rule's one passing binding
-    /// has that activity, since the fold over no literal starts from it.
+    /// has that activity, since the fold over no literal starts from it. In a
+    /// saturated rank (`closed` holds its pending heads), each row joins the
+    /// rank's batch instead, as a fact rule's head does, and is published
+    /// `Required` with the rank: one sorted merge rather than one ordered
+    /// insertion per row.
     fn facts_exact(
         &mut self,
         block: FactBlock<'_>,
+        mut closed: Option<&mut SourceBatch>,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
         let mut head = crate::formula_support::facts::FactHead::new(
@@ -195,7 +205,16 @@ impl SourceEligibility {
         for row in block.rows() {
             context.location = row.location();
             let atom = head.atom(row, context.computation, context.limits, context.counters)?;
-            self.stage_exact(&atom, Activity::Required, context)?;
+            match closed.as_deref_mut() {
+                Some(batch) => batch.push(
+                    &atom,
+                    context.computation,
+                    context.limits,
+                    context.counters,
+                    context.location,
+                )?,
+                None => self.stage_exact(&atom, Activity::Required, context)?,
+            }
         }
         Ok(())
     }
