@@ -4,7 +4,7 @@ mod receipt;
 mod reservation;
 
 use super::*;
-use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
 #[test]
@@ -39,13 +39,11 @@ fn boundary_decisions_do_not_overflow_at_the_counter_limit() {
 
 fn wait_for_expiry(cancellation: &Cancellation) {
     let deadline = &cancellation.deadline.as_ref().unwrap().deadline;
-    let timeout = Instant::now() + Duration::from_secs(5);
-    // Observe the flag directly: a boundary poll must not cause the expiry.
-    // The bound detects a stalled timer, not a promised scheduling latency.
-    while !deadline.expired.load(Ordering::Relaxed) {
-        assert!(Instant::now() < timeout, "deadline timer did not expire");
+    while Instant::now() < deadline.at {
         thread::sleep(Duration::from_millis(1));
     }
+    // Nothing observes the clock until a poll: the flag is still clear.
+    assert!(!deadline.expired.load(Ordering::Relaxed));
 }
 
 /// Charge once through a meter that has admitted `charged` operations under
@@ -259,26 +257,14 @@ fn clones_share_the_deadline() {
 }
 
 #[test]
-fn dropping_the_last_clone_retires_the_timer() {
-    // A second waiter on the same deadline stands in for the timer thread,
-    // whose handle is not retained: retirement wakes every waiter.
-    let owner = DeadlineOwner::arm(Instant::now() + Duration::from_hours(1)).unwrap();
-    let deadline = Arc::clone(&owner.deadline);
-    let (retired, observer) = mpsc::channel();
-    thread::spawn(move || {
-        deadline.wait();
-        retired.send(()).unwrap();
-    });
-    assert!(observer.recv_timeout(Duration::from_millis(100)).is_err());
-    drop(owner);
-    assert!(observer.recv_timeout(Duration::from_secs(5)).is_ok());
-}
-
-#[test]
-fn retirement_does_not_expire_the_deadline() {
-    let owner = DeadlineOwner::arm(Instant::now() + Duration::from_hours(1)).unwrap();
-    let deadline = Arc::clone(&owner.deadline);
-    drop(owner);
-    deadline.wait();
+fn a_deadline_starts_no_thread_and_latches_at_the_first_late_poll() {
+    // The deadline is observed by polling, so --threads bounds every thread.
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_hours(1)).unwrap();
+    assert_eq!(cancellation.poll(), Ok(()));
+    let deadline = &cancellation.deadline.as_ref().unwrap().deadline;
     assert!(!deadline.expired.load(Ordering::Relaxed));
+    let past = Cancellation::with_deadline(Instant::now()).unwrap();
+    assert!(past.deadline.as_ref().unwrap().deadline.expired.load(Ordering::Relaxed));
+    assert_eq!(past.poll(), Err(Stop::Deadline));
 }

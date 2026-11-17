@@ -3,8 +3,7 @@
 use std::fmt;
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
-use std::thread;
+use std::sync::Arc;
 use std::time::Instant;
 
 mod bytes;
@@ -779,10 +778,10 @@ pub struct Metered<T, E> {
 }
 
 /// Shared cancellation and an optional immutable deadline. Clones observe the
-/// same flags. A deadline is observed the way cancellation is: a timer thread
-/// sets an expiry flag when the deadline passes, and a poll reads flags only,
-/// never the clock. The timer retires at the deadline or when the last clone
-/// drops, whichever comes first.
+/// same flags. A deadline is observed at the same boundaries as cancellation:
+/// a poll of a handle with a deadline reads the monotonic clock once and
+/// latches a shared expiry flag when the deadline has passed. No thread is
+/// started, so `--threads` bounds every thread the solver runs.
 #[derive(Clone, Debug, Default)]
 pub struct Cancellation {
     cancelled: Arc<AtomicBool>,
@@ -791,11 +790,11 @@ pub struct Cancellation {
 }
 
 impl Cancellation {
-    /// A fresh cancellation handle with the specified absolute deadline. A deadline that
-    /// has already passed is expired at once and starts no thread.
+    /// A fresh cancellation handle with the specified absolute deadline. A
+    /// deadline that has already passed is expired at once. No thread starts.
     ///
     /// # Errors
-    /// Returns the operating system's refusal to start the timer thread.
+    /// Never fails; the `io::Result` is kept for source compatibility.
     pub fn with_deadline(deadline: Instant) -> io::Result<Self> {
         Ok(Self {
             deadline: Some(Arc::new(DeadlineOwner::arm(deadline)?)),
@@ -810,8 +809,9 @@ impl Cancellation {
 
     /// Observe cancellation and the deadline at a bounded work boundary.
     /// Ordinary handles read at most two relaxed flags; a handle from a
-    /// [`CancellationSlot`] additionally reads its run's membership. No clock
-    /// is read. A retired or superseded run reports cancellation.
+    /// [`CancellationSlot`] additionally reads its run's membership. A handle
+    /// with an unexpired deadline also reads the monotonic clock once. A
+    /// retired or superseded run reports cancellation.
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
@@ -867,17 +867,18 @@ impl Cancellation {
 #[derive(Clone, Copy, Debug)]
 pub struct CancellationPoll<'a> {
     cancelled: &'a AtomicBool,
-    expired: Option<&'a AtomicBool>,
+    expired: Option<&'a Deadline>,
     membership: Option<slot::MembershipPoll<'a>>,
 }
 
 impl CancellationPoll<'_> {
     /// Observe exactly the same flags, in the same order, as the owning token.
-    /// Reads only relaxed atomics; no clock, allocation or lock is involved.
+    /// Reads relaxed atomics and, before a deadline has expired, the monotonic
+    /// clock; no allocation, lock or thread is involved.
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
-    #[inline]
+    #[inline(always)]
     pub fn poll(&self) -> Result<(), Stop> {
         if self.cancelled.load(Ordering::Relaxed)
             || slot::MembershipPoll::is_cancelled(self.membership)
@@ -885,7 +886,7 @@ impl CancellationPoll<'_> {
             Err(Stop::Cancelled)
         } else if self
             .expired
-            .is_some_and(|expired| expired.load(Ordering::Relaxed))
+            .is_some_and(|deadline| deadline.expired.load(Ordering::Relaxed) || deadline.observe())
         {
             Err(Stop::Deadline)
         } else {
@@ -894,81 +895,68 @@ impl CancellationPoll<'_> {
     }
 }
 
-/// The flags a timer sets and the wake-up it waits on.
+/// Polls on one thread between two clock reads. A clock read per poll
+/// dominated the shortest charged units, so a thread reads the clock at its
+/// first poll and then once per this many; an expired deadline is observed
+/// at most `CLOCK_STRIDE - 1` polls late on each thread.
+const CLOCK_STRIDE: u32 = 64;
+
+thread_local! {
+    /// This thread's polls left before its next clock read.
+    static UNTIL_CLOCK: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// An absolute deadline and the flag that latches its expiry for every clone.
 #[derive(Debug)]
 struct Deadline {
     at: Instant,
     expired: AtomicBool,
-    /// True once every cancellation handle has dropped; the timer then exits early.
-    retired: Mutex<bool>,
-    wake: Condvar,
 }
 
-/// Held by the cancellation handles, not by the timer, so that dropping the last
-/// clone is observable as the owner's drop.
+impl Deadline {
+    /// Whether an unlatched deadline has passed: at every [`CLOCK_STRIDE`]th
+    /// poll on this thread, one clock read that latches it. Kept out of line
+    /// so a poll stays a few flag loads where it is inlined.
+    #[cold]
+    #[inline(never)]
+    fn observe(&self) -> bool {
+        let due = UNTIL_CLOCK.with(|until| {
+            let left = until.get();
+            until.set(left.checked_sub(1).unwrap_or(CLOCK_STRIDE - 1));
+            left == 0
+        });
+        if !due {
+            return false;
+        }
+        let expired = Instant::now() >= self.at;
+        if expired {
+            self.expired.store(true, Ordering::Relaxed);
+        }
+        expired
+    }
+}
+
+/// Held by the cancellation handles; clones share one deadline.
 #[derive(Debug)]
 struct DeadlineOwner {
     deadline: Arc<Deadline>,
 }
 
 impl DeadlineOwner {
-    /// Borrow an optional timer flag without observing its current value.
+    /// Borrow an optional deadline without observing it.
     #[inline]
-    fn expiry(deadline: Option<&Arc<Self>>) -> Option<&AtomicBool> {
-        let owner = deadline?;
-        Some(&owner.deadline.expired)
+    fn expiry(deadline: Option<&Arc<Self>>) -> Option<&Deadline> {
+        Some(&deadline?.deadline)
     }
 
+    #[allow(clippy::unnecessary_wraps)] // `with_deadline` keeps its io::Result.
     fn arm(at: Instant) -> io::Result<Self> {
-        let deadline = Arc::new(Deadline {
-            at,
-            expired: AtomicBool::new(false),
-            retired: Mutex::new(false),
-            wake: Condvar::new(),
-        });
-        if Instant::now() >= at {
-            deadline.expired.store(true, Ordering::Relaxed);
-        } else {
-            let timer = Arc::clone(&deadline);
-            thread::Builder::new()
-                .name("zetesis-deadline".into())
-                .spawn(move || timer.wait())?;
-        }
-        Ok(Self { deadline })
-    }
-}
-
-impl Drop for DeadlineOwner {
-    fn drop(&mut self) {
-        *self.deadline.lock() = true;
-        self.deadline.wake.notify_all();
-    }
-}
-
-impl Deadline {
-    fn lock(&self) -> std::sync::MutexGuard<'_, bool> {
-        self.retired.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Sleep until the deadline or retirement. Timed waits bound the sleep to
-    /// the remaining time, so a spurious wake-up costs one clock read.
-    fn wait(&self) {
-        let mut retired = self.lock();
-        loop {
-            if *retired {
-                return;
-            }
-            let now = Instant::now();
-            if now >= self.at {
-                self.expired.store(true, Ordering::Relaxed);
-                return;
-            }
-            retired = self
-                .wake
-                .wait_timeout(retired, self.at - now)
-                .unwrap_or_else(PoisonError::into_inner)
-                .0;
-        }
+        Ok(Self {
+            deadline: Arc::new(Deadline {
+                at,
+                expired: AtomicBool::new(Instant::now() >= at),
+            }),
+        })
     }
 }
 
