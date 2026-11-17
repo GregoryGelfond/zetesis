@@ -249,8 +249,9 @@ timing and memory rounds.
 Each benchmark profile admits at most 256 threads. On a host reporting more,
 choose an explicit count within that bound.
 
-The thread count applies to eager support grounding as well as search: the
-grounding pool has exactly `--threads` workers. Before this was fixed, eager
+The thread count applies to eager support grounding as well as search:
+grounding runs on at most `--threads` threads, the coordinating thread plus a
+pool of one fewer. Before this was fixed, eager
 grounding always used a private pool of fourteen workers whatever the setting,
 so earlier one-thread grounding times were measured with fourteen grounding
 workers. Reproduce the published fourteen-worker comparisons with an explicit
