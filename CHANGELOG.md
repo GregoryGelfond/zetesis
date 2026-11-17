@@ -6,6 +6,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- The parallel numeric-objective scan reads each weight in place instead of
+  through an owned term key, so its workers no longer contend on one shared
+  reference count. Grounding `#minimize{1@0,X,Y:d(X),e(Y)}` over 2,048 × 2,048
+  bindings falls from about 0.58 s to about 0.12 s with fourteen workers. A
+  grounding batch's first task runs on the coordinator, and a one-task batch
+  never enters the worker pool.
 - Objective scoring tries the newest contribution key before searching the
   sorted keys and reads the control flags through a retained poll view.
   Scoring 4,194,304 bindings of `#minimize{1@0,X,Y:d(X),e(Y)}` falls from
