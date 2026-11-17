@@ -438,6 +438,9 @@ fn an_unnamed_lookup_does_not_grow_with_the_dictionary() {
         let (large_found, large) = unnamed_lookup_work(4096, query);
         assert_eq!(small_found.is_some(), query >= 0);
         assert_eq!(large_found.is_some(), query >= 0);
-        assert!(large <= small + 4, "query {query}: small {small}, large {large}");
+        assert!(
+            large <= small + 4,
+            "query {query}: small {small}, large {large}"
+        );
     }
 }

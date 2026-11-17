@@ -1,7 +1,10 @@
 //! A registration classifies each producer once, reads every frame a rich
 //! producer's traversal reads, and skips only traversals that would derive
 //! nothing new.
-#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests start their own threads and pools"
+)]
 
 use std::cell::Cell;
 use std::fmt::Write as _;

@@ -1,5 +1,8 @@
 //! The coordinator phase, engagement and the walk's record.
-#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests start their own threads and pools"
+)]
 
 use std::cell::Cell;
 use std::collections::BTreeSet;

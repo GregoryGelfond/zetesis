@@ -44,10 +44,7 @@ fn peak(program: &str, threads: usize, extra: &[&str]) -> (usize, Option<usize>)
         .output()
         .unwrap();
     let diagnostics = String::from_utf8(result.stderr).unwrap();
-    assert!(
-        matches!(result.status.code(), Some(0 | 3)),
-        "{diagnostics}"
-    );
+    assert!(matches!(result.status.code(), Some(0 | 3)), "{diagnostics}");
     let audit = diagnostics
         .lines()
         .find_map(|line| line.strip_prefix("zetesis-thread-audit: "))
@@ -74,9 +71,15 @@ fn no_more_threads_run_than_requested() {
     for threads in [1, 2, 3] {
         for (name, program, extra) in cases {
             let (peak, os_live) = peak(program, threads, extra);
-            assert!(peak <= threads, "{name} at --threads {threads}: peak {peak}");
+            assert!(
+                peak <= threads,
+                "{name} at --threads {threads}: peak {peak}"
+            );
             if let Some(os_live) = os_live {
-                assert!(os_live <= threads, "{name} at --threads {threads}: {os_live} at exit");
+                assert!(
+                    os_live <= threads,
+                    "{name} at --threads {threads}: {os_live} at exit"
+                );
             }
         }
     }

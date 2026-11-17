@@ -265,6 +265,13 @@ fn a_deadline_starts_no_thread_and_latches_at_the_first_late_poll() {
     let deadline = &cancellation.deadline.as_ref().unwrap().deadline;
     assert!(!deadline.expired.load(Ordering::Relaxed));
     let past = Cancellation::with_deadline(Instant::now()).unwrap();
-    assert!(past.deadline.as_ref().unwrap().deadline.expired.load(Ordering::Relaxed));
+    assert!(
+        past.deadline
+            .as_ref()
+            .unwrap()
+            .deadline
+            .expired
+            .load(Ordering::Relaxed)
+    );
     assert_eq!(past.poll(), Err(Stop::Deadline));
 }
