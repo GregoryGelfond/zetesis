@@ -3,3 +3,24 @@
 # the pedantic lint still guards against accidental large copies, which a
 # deliberate policy value is not.
 pass-by-value-size-limit = 320
+
+# `--threads N` bounds every solver thread (docs: benchmarking.md). Threads
+# start through `zetesis_algebra::threads`, which counts them and joins its
+# pools; nothing may use Rayon's global pool, which would add host-sized
+# threads beyond the cap.
+disallowed-methods = [
+    { path = "std::thread::spawn", reason = "start solver threads with zetesis_algebra::threads::spawn so --threads counts them" },
+    { path = "std::thread::Builder::spawn", reason = "start solver threads with zetesis_algebra::threads::spawn so --threads counts them" },
+    { path = "rayon::ThreadPoolBuilder::build", reason = "build pools with zetesis_algebra::threads::Pool so --threads counts and joins them" },
+    { path = "rayon::ThreadPoolBuilder::build_global", reason = "Rayon's global pool would exceed --threads" },
+    { path = "rayon::join", reason = "runs on Rayon's global pool outside an owned pool; use a threads::Pool" },
+    { path = "rayon::scope", reason = "runs on Rayon's global pool outside an owned pool; use a threads::Pool" },
+    { path = "rayon::scope_fifo", reason = "runs on Rayon's global pool outside an owned pool; use a threads::Pool" },
+    { path = "rayon::in_place_scope", reason = "spawns onto Rayon's global pool; use a threads::Pool" },
+    { path = "rayon::in_place_scope_fifo", reason = "spawns onto Rayon's global pool; use a threads::Pool" },
+    { path = "rayon::spawn", reason = "spawns onto Rayon's global pool; use a threads::Pool" },
+    { path = "rayon::spawn_fifo", reason = "spawns onto Rayon's global pool; use a threads::Pool" },
+    { path = "rayon::broadcast", reason = "runs on Rayon's global pool; use a threads::Pool" },
+    { path = "rayon::spawn_broadcast", reason = "runs on Rayon's global pool; use a threads::Pool" },
+    { path = "rayon::current_num_threads", reason = "initialises Rayon's global pool" },
+]
