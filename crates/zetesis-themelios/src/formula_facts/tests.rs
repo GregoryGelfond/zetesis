@@ -654,3 +654,49 @@ fn reconstruction_refusals_agree_against_the_formula_ceiling() {
         format!("refused formula work limit {rule_admission} exceeded")
     );
 }
+
+/// Fact rows of a saturated rank join the rank's publication batch, as fact
+/// rules' heads do. Staging them one ordered insertion at a time after a large
+/// recursive component charged work proportional to that component per row.
+#[test]
+fn recursive_source_evaluation_charges_no_more_work_than_fact_rules() {
+    let work = |path: &Path| -> u64 {
+        let prepared = crate::prepare_bundle_formula(
+            bundle(path),
+            BundleAdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                max_work: 10_000_000_000,
+                ..FormulaLimits::default()
+            },
+        )
+        .unwrap();
+        match prepared.try_source() {
+            Ok(SourceAdmission::Admitted(source)) => source.statistics().work,
+            Ok(SourceAdmission::NotApplicable(_)) => panic!("{} not applicable", path.display()),
+            Err(failure) => panic!("{}", failure.error()),
+        }
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let n = 100;
+    let mut text = lines(n, |text, i| writeln!(text, "node(n{i})."));
+    for i in 1..n {
+        writeln!(text, "edge(n{i},n{}).", (i * 7) % i).unwrap();
+        writeln!(text, "edge(n{i},n{}).", i - 1).unwrap();
+    }
+    for (name, tail) in [
+        (
+            "closure",
+            "anc(X,Y) :- edge(X,Y).\nanc(X,Z) :- edge(X,Y), anc(Y,Z).\n",
+        ),
+        (
+            "reverse",
+            "anc(X,Y) :- edge(X,Y).\nanc(X,Z) :- anc(X,Y), edge(Y,Z).\n",
+        ),
+    ] {
+        let path = written(directory.path(), name, &(text.clone() + tail));
+        let rules = with_facts_as_rules(|| work(&path));
+        let arena = work(&path);
+        assert!(arena <= rules, "{name}: {arena} > {rules}");
+    }
+}
