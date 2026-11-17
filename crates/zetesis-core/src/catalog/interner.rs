@@ -27,6 +27,7 @@ use super::{
     storage::{self, AtomId, Snapshot, Store},
 };
 use crate::{AtomKey, ordered_index as index};
+use discovery::Discovery;
 use index::{Directions, Index, Link, Node, Planned, Step, position};
 use query::{Identity, Query};
 use spine::Spines;
@@ -69,7 +70,7 @@ impl Limits {
     /// Combine an explicit canonical-storage allowance with discovery metadata.
     ///
     /// Uses the actual ID, AVL-node and path-step layouts: three n-cell discovery
-    /// buffers, four n-cell node buffers, two n-cell predicate-subtree buffers,
+    /// buffers, a discovery table across one growth, two n-cell node buffers, two n-cell predicate-subtree buffers,
     /// four bounded AVL paths, one n-cell order and n-bit selection mask with
     /// their headers, plus the owner, largest projected-input and prepared-result headers.
     /// This conservatively includes geometric old/new-buffer overlap; it is not
@@ -87,9 +88,10 @@ impl Limits {
                 + PREPARED_BYTES
                 + query::Projected::MAX_BYTES
                 + 3 * cells::<AtomId>(max_atoms)
-                + 4 * cells::<Node>(max_atoms)
+                + discovery::bound(max_atoms)
+                + 2 * cells::<Node>(max_atoms)
                 + 2 * cells::<Subtree>(max_atoms)
-                + 4 * cells::<Step>(path_bound(max_atoms))
+                + 2 * cells::<Step>(path_bound(max_atoms))
                 + cells::<usize>(max_atoms)
                 + size_of::<Vec<usize>>() as u128
                 + cells::<u64>(max_atoms.div_ceil(64))
@@ -185,9 +187,8 @@ pub struct AtomInterner {
     /// The shared node index. Its own root goes unused here: each relation
     /// keeps the root of its subtree, and the index publishes nodes alone.
     index: Index,
-    /// Sparse inverse: node positions are discovery positions; their keys come
-    /// from committed/pending IDs. `AtomId` ordering is local indexing only.
-    discovery: Index,
+    /// Discovery positions by canonical identity: a hash view, no order.
+    discovery: Discovery,
     spines: Spines,
     subtrees: Vec<Subtree>,
 }
@@ -244,7 +245,7 @@ impl AtomInterner {
             committed: Vec::new(),
             pending: Vec::new(),
             index: Index::default(),
-            discovery: Index::default(),
+            discovery: Discovery::default(),
             spines: Spines::default(),
             subtrees: Vec::new(),
         }
@@ -423,8 +424,7 @@ impl AtomInterner {
                 self.index.nodes.capacity(),
                 self.index.path.capacity(),
                 self.subtrees.capacity(),
-                self.discovery.nodes.capacity(),
-                self.discovery.path.capacity(),
+                self.discovery.bytes(),
             )
     }
 
@@ -777,7 +777,7 @@ struct Lookup<'a> {
     committed: &'a [AtomId],
     pending: &'a [AtomId],
     nodes: &'a [Node],
-    discovery: &'a Index,
+    discovery: &'a Discovery,
     subtrees: &'a [Subtree],
     bytes: u128,
 }
@@ -806,14 +806,10 @@ impl Lookup<'_> {
     ) -> Result<Option<usize>, Failure<E>> {
         if let Identity::Local(atom) = query.identity_with(self.store, &mut before)? {
             return match atom.present() {
-                Some(atom) => discovery::find(
-                    self.discovery,
-                    self.committed,
-                    self.pending,
-                    atom,
-                    &mut before,
-                )
-                .map_err(Failure::Stopped),
+                Some(atom) => self
+                    .discovery
+                    .find(self.committed, self.pending, atom, &mut before)
+                    .map_err(Failure::Stopped),
                 None => Ok(None),
             };
         }
@@ -847,7 +843,7 @@ pub struct AtomAppender<'a> {
     committed_capacity: usize,
     pending: &'a mut Vec<AtomId>,
     index: &'a mut Index,
-    discovery: &'a mut Index,
+    discovery: &'a mut Discovery,
     spines: &'a mut Spines,
     subtrees: &'a mut Vec<Subtree>,
 }
@@ -1024,8 +1020,7 @@ impl AtomAppender<'_> {
                 self.index.nodes.capacity(),
                 self.index.path.capacity(),
                 self.subtrees.capacity(),
-                self.discovery.nodes.capacity(),
-                self.discovery.path.capacity(),
+                self.discovery.bytes(),
             )
     }
     /// Peak named canonical and discovery capacity, including retained payload.
@@ -1122,14 +1117,10 @@ impl<'a> AtomAppender<'a> {
     ) -> Result<AtomEntry<'a, 'key>, Failure<E>> {
         let extra = query.extra_bytes() + PREPARED_BYTES;
         if let Some(atom) = prepared.as_ref().and_then(storage::PreparedAtom::present)
-            && let Some(position) = discovery::find(
-                self.discovery,
-                self.committed,
-                self.pending,
-                atom,
-                &mut before,
-            )
-            .map_err(Failure::Stopped)?
+            && let Some(position) = self
+                .discovery
+                .find(self.committed, self.pending, atom, &mut before)
+                .map_err(Failure::Stopped)?
         {
             return Ok(AtomEntry {
                 appender: self,
@@ -1241,8 +1232,7 @@ impl<'a> AtomAppender<'a> {
                 self.index.nodes.capacity(),
                 0,
                 self.subtrees.capacity(),
-                self.discovery.nodes.capacity(),
-                self.discovery.path.capacity(),
+                self.discovery.bytes(),
             );
         let Index {
             nodes, path, peak, ..
@@ -1485,10 +1475,9 @@ impl<'owner> AtomEntry<'owner, '_> {
         }
         let atom = self.intern(limits, &mut before)?;
         let extra = self.extra_bytes();
-        let discovery = self
-            .appender
-            .prepare_discovery(atom, extra, limits, &mut before)?;
-        self.publish(atom, id, (relation, beyond), plan, &discovery, &mut before)?;
+        self.appender
+            .reserve_discovery(extra, limits, &mut before)?;
+        self.publish(atom, id, (relation, beyond), plan, &mut before)?;
         Ok(id)
     }
 
@@ -1500,7 +1489,6 @@ impl<'owner> AtomEntry<'owner, '_> {
         id: usize,
         (relation, beyond): (Result<usize, usize>, bool),
         plan: Planned,
-        discovery: &discovery::Plan,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<(), Failure<E>> {
         let mut checked = || before().map_err(Failure::Stopped);
@@ -1514,26 +1502,14 @@ impl<'owner> AtomEntry<'owner, '_> {
             }
         }
         checked()?; // Root publication.
-        checked()?; // New inverse node.
-        for step in &self.appender.discovery.path
-            [discovery.nodes.changed_from..self.appender.discovery.path.len() - 1]
-        {
-            if step.changed {
-                checked()?;
-            }
-        }
-        checked()?; // Inverse root publication.
+        checked()?; // Discovery position publication.
         if increasing {
             spine::admit(self.appender.index, plan, &mut checked)?;
-        }
-        if discovery.increasing {
-            spine::admit(self.appender.discovery, discovery.nodes, &mut checked)?;
         }
         self.appender.index.publish_nodes_from(plan.changed_from);
         self.appender
             .discovery
-            .publish_nodes_from(discovery.nodes.changed_from);
-        self.appender.discovery.root = discovery.nodes.root;
+            .insert(self.appender.committed, self.appender.pending, atom, id);
         match relation {
             Ok(relation) => {
                 let subtree = &mut self.appender.subtrees[relation];
@@ -1554,10 +1530,6 @@ impl<'owner> AtomEntry<'owner, '_> {
         self.appender.pending.push(atom);
         if increasing {
             self.appender.spines.semantic = Some(spine::retain(self.appender.index, plan, id));
-        }
-        if discovery.increasing {
-            self.appender.spines.discovery =
-                Some(spine::retain(self.appender.discovery, discovery.nodes, id));
         }
         Ok(())
     }
@@ -1593,8 +1565,7 @@ fn storage(
     nodes: usize,
     path: usize,
     subtrees: usize,
-    discovery_nodes: usize,
-    discovery_path: usize,
+    discovery: u128,
 ) -> u128 {
     (size_of::<AtomInterner>() - size_of::<Store>()) as u128
         + cells::<AtomId>(committed)
@@ -1602,8 +1573,7 @@ fn storage(
         + cells::<Node>(nodes)
         + cells::<Step>(path)
         + cells::<Subtree>(subtrees)
-        + cells::<Node>(discovery_nodes)
-        + cells::<Step>(discovery_path)
+        + discovery
 }
 fn cells<T>(count: usize) -> u128 {
     count as u128 * size_of::<T>() as u128

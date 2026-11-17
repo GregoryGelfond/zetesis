@@ -30,18 +30,6 @@ fn assert_spines(owner: &AtomInterner) {
             .expect("semantic certificate belongs to one current subtree");
         assert_path(&owner.index, relation.root);
     }
-    if let Some(spine) = owner.spines.discovery {
-        assert!(spine.matches(&owner.discovery, owner.discovery.root, spine.last()));
-        assert_path(&owner.discovery, owner.discovery.root);
-        let last = discovery::identity(&owner.committed, &owner.pending, spine.last()).unwrap();
-        assert!(
-            owner
-                .committed
-                .iter()
-                .chain(&owner.pending)
-                .all(|id| *id <= last)
-        );
-    }
 }
 
 fn counted(owner: &mut AtomInterner, input: &Atom) -> usize {
@@ -105,15 +93,10 @@ fn monotone_publication_reduces_work_without_a_second_path() {
         cold_work += counted(&mut cold, &atom(value));
         assert_spines(&warm);
         assert!(warm.spines.semantic.is_some());
-        assert!(warm.spines.discovery.is_some());
         validate(&warm);
     }
     assert!(warm_work < cold_work, "{warm_work} versus {cold_work}");
     assert_eq!(warm.index.path.capacity(), cold.index.path.capacity());
-    assert_eq!(
-        warm.discovery.path.capacity(),
-        cold.discovery.path.capacity()
-    );
     assert_eq!(warm.storage_bytes(), cold.storage_bytes());
 }
 
@@ -138,10 +121,10 @@ fn nonmonotone_and_predicate_switches_preserve_both_indexes() {
                 assert_eq!(insert(&mut warm, &input), insert(&mut cold, &input));
                 assert_spines(&warm);
                 // Occupied entries must not disturb either retained path.
-                let retained = (warm.index.path.len(), warm.discovery.path.len());
+                let retained = warm.index.path.len();
                 insert(&mut warm, &input);
                 assert_spines(&warm);
-                assert_eq!(retained, (warm.index.path.len(), warm.discovery.path.len()));
+                assert_eq!(retained, warm.index.path.len());
             }
             if offset % 11 == 0 {
                 warm.commit_with(limits(), PERMIT).unwrap();
@@ -170,23 +153,17 @@ fn sparse_closed_ids_do_not_imply_increasing_discovery_keys() {
     let mut warm = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
     let mut cold = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
     let canonical = warm.store.snapshot(0).unwrap().atom_count();
-    let mut saw_nonincreasing = false;
     for value in [10, 20, 30, 40, 50, 60, 70] {
         let input = atom(value);
         cold.spines = Spines::default();
         assert_eq!(insert(&mut warm, &input), insert(&mut cold, &input));
         assert!(warm.spines.semantic.is_some());
-        saw_nonincreasing |= warm.spines.discovery.is_none();
         assert_spines(&warm);
         validate(&warm);
         assert_eq!(warm.store.snapshot(0).unwrap().atom_count(), canonical);
     }
-    assert!(
-        saw_nonincreasing,
-        "semantic order differs from the sparse ID order"
-    );
     assert_eq!(warm.len(), 7);
-    assert_eq!(warm.discovery.nodes.len(), 7);
+    assert_eq!(warm.discovery.len(), 7);
 }
 
 fn prefix() -> AtomInterner {

@@ -62,6 +62,11 @@ impl PredicateId {
     }
 }
 identifier!(AtomId);
+impl AtomId {
+    pub(crate) fn word(self) -> u32 {
+        self.0
+    }
+}
 
 /// A typed refusal; previously published snapshots remain valid.
 #[derive(Clone, Debug, PartialEq, Eq)]

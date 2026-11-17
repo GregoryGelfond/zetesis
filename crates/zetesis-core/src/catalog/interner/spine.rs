@@ -8,5 +8,4 @@ pub(super) use crate::ordered_index::spine::{RightSpine, admit, retain};
 #[derive(Default)]
 pub(super) struct Spines {
     pub semantic: Option<RightSpine>,
-    pub discovery: Option<RightSpine>,
 }

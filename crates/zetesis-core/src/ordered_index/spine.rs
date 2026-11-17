@@ -22,10 +22,6 @@ impl RightSpine {
             && self.length == index.path.len()
             && index.path.last().is_some_and(|step| step.id == last)
     }
-
-    pub(crate) fn last(self) -> usize {
-        self.last
-    }
 }
 
 /// All-right insertion permits only a single left rotation. Its old root leaves

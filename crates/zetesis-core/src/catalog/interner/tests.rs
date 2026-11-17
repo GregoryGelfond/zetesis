@@ -103,7 +103,7 @@ fn validate(owner: &AtomInterner) {
         actual.extend(atoms);
     }
     assert_eq!(seen, (0..owner.len()).collect());
-    assert_eq!(owner.discovery.nodes.len(), owner.len());
+    assert_eq!(owner.discovery.len(), owner.len());
     for id in 0..owner.len() {
         assert_eq!(
             owner
@@ -591,7 +591,7 @@ fn refused_discovery_retries_one_existing_identity() {
     assert_eq!(admitted, operations - 1);
     assert!(owner.is_empty());
     assert!(owner.index.nodes.is_empty());
-    assert!(owner.discovery.nodes.is_empty());
+    assert_eq!(owner.discovery.len(), 0);
     assert!(owner.get(0).is_none());
     assert_eq!(
         owner

@@ -361,7 +361,7 @@ fn every_row_publication_stop_preserves_publication_coherence() {
             assert_eq!(work, cutoff);
             assert_eq!(append.len(), initial);
             assert_eq!(append.index.nodes.len(), initial);
-            assert_eq!(append.discovery.nodes.len(), initial);
+            assert_eq!(append.discovery.len(), initial);
             let binding = frame(append, source.row(0).unwrap());
             let projected = Projected {
                 predicate: prepared.pattern.pattern.predicate,
@@ -622,7 +622,6 @@ fn projected_rows_reuse_published_paths_without_repeating_preparation() {
                 assert_eq!(id, values.len() + index);
                 assert_eq!(append.get(id).unwrap(), expected(values[index].clone()));
                 assert!(append.spines.semantic.is_some());
-                assert!(append.spines.discovery.is_some());
             }
             assert_eq!(append.len(), 128);
             work
