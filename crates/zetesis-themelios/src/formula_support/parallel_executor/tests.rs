@@ -157,13 +157,23 @@ fn one_pool_is_reused_across_independent_batches() {
         ThreadPoolBuilder::new().num_threads(count.get()).build()
     })
     .unwrap();
-    let mut first = [None];
-    let mut second = [None];
-    executor.run(&[()], &mut first, |()| std::thread::current().id());
-    executor.run(&[()], &mut second, |()| std::thread::current().id());
+    let mut first = [None, None];
+    let mut second = [None, None];
+    executor.run(&[(), ()], &mut first, |()| std::thread::current().id());
+    executor.run(&[(), ()], &mut second, |()| std::thread::current().id());
     assert_eq!(factories.get(), 1);
     assert_eq!(first, second);
-    assert_ne!(first[0].unwrap(), std::thread::current().id());
+    // The coordinator runs the first task; the pool's one worker the other.
+    assert_eq!(first[0].unwrap(), std::thread::current().id());
+    assert_ne!(first[1].unwrap(), std::thread::current().id());
+}
+
+#[test]
+fn a_single_task_runs_on_the_coordinator() {
+    let executor = Executor::new(workers(4)).unwrap();
+    let mut slot = [None];
+    executor.run(&[()], &mut slot, |()| std::thread::current().id());
+    assert_eq!(slot[0], Some(std::thread::current().id()));
 }
 
 #[test]
