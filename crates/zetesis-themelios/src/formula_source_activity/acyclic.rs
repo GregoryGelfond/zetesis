@@ -227,28 +227,7 @@ impl SourceEligibility {
     ) -> Result<bool, FormulaFailure> {
         let mut consistent = true;
         if closed.is_some() {
-            let negated = rule
-                .body
-                .iter()
-                .filter(|literal| {
-                    matches!(literal, LiteralIr::Atom(negation, _) if *negation != DefaultNegation::None)
-                })
-                .count();
-            context.counters.charge_work(
-                rule.body.len() as u128 + 1,
-                context.limits,
-                rule.location,
-            )?;
-            if negated != 0
-                && support
-                    .certainty()
-                    .is_none_or(|certainty| certainty.decided(index).count() != negated)
-            {
-                return Err(FormulaFailure::SupportRelation {
-                    error: zetesis_core::relation::Failure::Owner,
-                    location: rule.location,
-                });
-            }
+            saturation_agrees(index, rule, support, context)?;
         }
         let mut join = Join::rule(
             rule,
@@ -384,6 +363,49 @@ impl SourceEligibility {
             selected,
             consistent,
             lease,
+        })
+    }
+}
+
+/// Refuse a saturated rule whose default negations support completion did not
+/// all decide, or whose assignment elements it did not all require: the plan
+/// and the support would then disagree about the rule's certainty.
+fn saturation_agrees(
+    index: usize,
+    rule: &crate::formula_ir::RuleIr,
+    support: &crate::formula_support::Support<'_>,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<(), FormulaFailure> {
+    let mut negated = 0_usize;
+    let mut required = true;
+    for literal in &rule.body {
+        match literal {
+            LiteralIr::Atom(negation, _) if *negation != DefaultNegation::None => negated += 1,
+            LiteralIr::Aggregate(aggregate) => {
+                for (position, element) in aggregate.elements.iter().enumerate() {
+                    context.work()?;
+                    required &= crate::formula_support::certain::Certainty::requires(
+                        support.certainty(),
+                        aggregate.id,
+                        position,
+                        element,
+                    );
+                }
+            }
+            _ => {}
+        }
+        context.work()?;
+    }
+    let decided = negated == 0
+        || support
+            .certainty()
+            .is_some_and(|certainty| certainty.decided(index).count() == negated);
+    if decided && required {
+        Ok(())
+    } else {
+        Err(FormulaFailure::SupportRelation {
+            error: zetesis_core::relation::Failure::Owner,
+            location: rule.location,
         })
     }
 }

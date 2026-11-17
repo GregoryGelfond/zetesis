@@ -136,6 +136,22 @@ fn stratified_recursion_matches_original_ferraris_membership() {
 }
 
 #[test]
+fn certain_assignments_match_original_ferraris_membership() {
+    // Assignments whose elements read completed lower certain relations.
+    for source in [
+        "e(1,2). e(1,3). n(1). n(2). c(X,N) :- n(X), N = #count{ Y : e(X,Y) }.",
+        "e(1,2). e(2,3). r(X,Y) :- e(X,Y). r(X,Z) :- r(X,Y), e(Y,Z). \
+         c(N) :- N = #count{ X,Y : r(X,Y) }.",
+        "w(1,4). w(2,5). s(N) :- N = #sum{ V,K : w(K,V) }. m(N) :- N = #max{ V : w(_,V) }.",
+        "e(1,2). e(1,3). n(1). n(2). c(X,N) :- n(X), N = #count{ Y : e(X,Y) }. :- c(1,2).",
+    ] {
+        let owner = admitted(source);
+        let actual: BTreeSet<_> = interpretation(&owner).into_iter().collect();
+        assert_eq!(actual, independent(source), "{source}");
+    }
+}
+
+#[test]
 fn recursion_through_negation_declines_the_class() {
     for source in ["p :- not q. q :- not p.", "p :- q. q :- p, not p."] {
         let SourceAdmission::NotApplicable(preparation) = prepared(source).try_source().unwrap()

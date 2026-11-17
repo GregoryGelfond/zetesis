@@ -51,6 +51,17 @@ the local selection when the rank ends, by one sorted linear merge rather than
 one shifting insertion per atom. A negative or aggregate cycle declines the
 class, retaining the ordinary grounding door and every accepted charge.
 
+A rule may also hold an assignment aggregate, such as
+`c(X,N) :- n(X), N = #count{ Y : e(X,Y) }.`, whose elements read only positive
+atoms of strictly lower certain components and comparisons. Every tuple such
+an element yields over completed support is required, so the assignment's
+carrier is the single exact value that support completion proposes, and the
+head predicate stays certain. Its rank is saturated: the rows support offers
+are published without a fold, which has no aggregate reading. Evaluation
+again first checks that support completion listed every element as required.
+Any other aggregate, or an element with negation or a nested literal, keeps
+the ordinary door.
+
 The resulting rank structure is a stratification in the sense of
 [`StratifiedEvaluation`](../lean/theorems.md): positive dependencies stay
 within a rank and frozen gates read lower ranks. Strict ranks use the one-pass

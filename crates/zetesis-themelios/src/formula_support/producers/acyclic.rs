@@ -21,7 +21,7 @@
 
 use super::{Memory, Node, find, graph_nodes, invalid};
 use crate::formula_facts::Item;
-use crate::formula_ir::{HeadIr, LiteralIr, Prepared};
+use crate::formula_ir::{AggregateIr, HeadIr, LiteralIr, Prepared};
 use crate::formula_support::components::Pattern;
 use crate::formula_support::{Counters, SourceScope, StorageLease, SupportCatalog};
 use crate::{AnalysisBasis, FormulaFailure, FormulaLimits, ProgramSite};
@@ -101,6 +101,12 @@ impl AcyclicPlan {
             };
             for literal in &rule.body {
                 counters.work(limits, rule.location)?;
+                // An assignment is evaluated from completed support only.
+                if matches!(literal, LiteralIr::Aggregate(_))
+                    && let Some(flag) = recursive.get_mut(rank)
+                {
+                    *flag = true;
+                }
                 let LiteralIr::Atom(negation, atom) = literal else {
                     continue;
                 };
@@ -253,18 +259,60 @@ fn close(
         }
         for literal in &rule.body {
             counters.work(limits, rule.location)?;
-            let LiteralIr::Atom(negation, atom) = literal else {
-                continue;
+            let certain = match literal {
+                LiteralIr::Atom(negation, atom) => {
+                    let dependency = ranks.atom(*atom, limits, counters, rule.location)?;
+                    let lower = dependency < rank && closed[dependency] != Closure::Open;
+                    (*negation == DefaultNegation::None && dependency == rank) || lower
+                }
+                LiteralIr::Aggregate(aggregate) => elements_certain(
+                    aggregate,
+                    rank,
+                    closed,
+                    ranks,
+                    limits,
+                    counters,
+                    rule.location,
+                )?,
+                _ => true,
             };
-            let dependency = ranks.atom(*atom, limits, counters, rule.location)?;
-            let lower = dependency < rank && closed[dependency] != Closure::Open;
-            if (*negation != DefaultNegation::None || dependency < rank) && !lower {
+            if !certain {
                 closed[rank] = Closure::Open;
                 break;
             }
         }
     }
     Ok(())
+}
+
+/// Whether every element of an assignment reads only positive atoms of
+/// strictly lower certain components and literals its local join decides,
+/// so that each of its tuples is required over completed support.
+fn elements_certain(
+    aggregate: &AggregateIr,
+    rank: usize,
+    closed: &[Closure],
+    ranks: &Ranks<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    for element in &aggregate.elements {
+        for literal in &element.condition {
+            counters.work(limits, location)?;
+            match literal {
+                LiteralIr::Atom(DefaultNegation::None, atom) => {
+                    let dependency = ranks.atom(*atom, limits, counters, location)?;
+                    if dependency >= rank || closed[dependency] == Closure::Open {
+                        return Ok(false);
+                    }
+                }
+                LiteralIr::Compare(..) => {}
+                _ => return Ok(false),
+            }
+        }
+    }
+    Ok(true)
 }
 
 fn eligible(
@@ -293,19 +341,28 @@ fn eligible(
     // A fact block is a normal producer with an empty body: always in class.
     for rule in source.rules_without_facts() {
         counters.work(limits, rule.location)?;
+        // An assignment aggregate binds its target outside the body's own
+        // variables; any other binding plan keeps the ordinary door.
+        let assigns = rule.body.iter().any(|literal| {
+            matches!(literal, LiteralIr::Aggregate(aggregate)
+                if aggregate.binding.is_some() && aggregate.negation == DefaultNegation::None)
+        });
         if !matches!(rule.head, HeadIr::Normal(_))
-            || rule.bindings.is_some()
-            || rule.body_variables != rule.variables
+            || (!assigns && (rule.bindings.is_some() || rule.body_variables != rule.variables))
         {
             return Ok(false);
         }
         for literal in &rule.body {
             counters.work(limits, rule.location)?;
-            if !matches!(
-                literal,
+            let admitted = match literal {
                 LiteralIr::Atom(DefaultNegation::None | DefaultNegation::Not, _)
-                    | LiteralIr::Compare(..)
-            ) {
+                | LiteralIr::Compare(..) => true,
+                LiteralIr::Aggregate(aggregate) => {
+                    aggregate.binding.is_some() && aggregate.negation == DefaultNegation::None
+                }
+                _ => false,
+            };
+            if !admitted {
                 return Ok(false);
             }
         }

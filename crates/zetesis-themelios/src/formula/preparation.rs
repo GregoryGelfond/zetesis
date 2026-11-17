@@ -196,8 +196,9 @@ impl PreparedFormula {
     /// components, never through negation. Complete support and original arithmetic
     /// admission still run. Inapplicable sources retain the ordinary
     /// ground/query door and all accepted classification charges. Objectives,
-    /// projections, recursion through default negation or aggregates and
-    /// non-flat source bodies use that ordinary door.
+    /// projections, recursion through default negation or aggregates,
+    /// aggregates other than certain assignments and non-flat source bodies
+    /// use that ordinary door.
     ///
     /// # Errors
     /// Returns the original typed admission, arithmetic, control or resource
