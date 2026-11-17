@@ -9085,6 +9085,26 @@
     "line": 80
   },
   {
+    "name": "Zetesis.ShiftedSupport.sole_head_forced",
+    "file": "Zetesis/ShiftedSupport.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.ShiftedSupport.producer_forces_head",
+    "file": "Zetesis/ShiftedSupport.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.ShiftedSupport.ranked_support_contained",
+    "file": "Zetesis/ShiftedSupport.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.ShiftedSupport.ranked_support_stable",
+    "file": "Zetesis/ShiftedSupport.lean",
+    "line": 115
+  },
+  {
     "name": "Zetesis.SignedHeadElements.operand_original",
     "file": "Zetesis/SignedHeadElements.lean",
     "line": 62

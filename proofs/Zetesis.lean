@@ -140,6 +140,7 @@ import Zetesis.Observations
 import Zetesis.SourceSupport
 import Zetesis.BindingScopes
 import Zetesis.DisjunctiveSupport
+import Zetesis.ShiftedSupport
 import Zetesis.ExternalSupport
 import Zetesis.CertainAtoms
 import Zetesis.DecidedNegation

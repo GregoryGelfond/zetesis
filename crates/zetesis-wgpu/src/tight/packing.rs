@@ -158,6 +158,13 @@ impl Graph {
         max_staging_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Self, GpuError> {
+        // The device kernel sets a head's support bit from its producer's body
+        // alone; a shifted head disjunction also needs its other heads absent.
+        if certificate.shifts_disjunctions() {
+            return Err(capacity(
+                "device tight support does not read shifted head disjunctions",
+            ));
+        }
         let theory = certificate.theory();
         let atoms = address(theory.atom_count())?;
         let graph = crate::formula_graph::Shape::with_control(

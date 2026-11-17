@@ -905,6 +905,26 @@ reduct checking available. A completed check under a complete tight certificate
 can refute an unsupported candidate by the support theorem. These are different procedures
 for the same reduct-based membership contract.
 
+The tight certificate also admits a head disjunction of 2 to 16 distinct atoms,
+nested disjunctions flattened. It reads such a root through its shift: each head
+atom gets a producer that supports it only while the body is true and no other
+atom of that head is present (`TightProducerKind::Shifted`). Ranks are derived
+over the same positive body-to-head edges, so an admitted program is tight and
+therefore head-cycle-free. For a head-cycle-free program the shift has the same
+answer sets (Ben-Eliyahu and Dechter), and for the tight shift those are exactly
+its supported models that satisfy the original roots (Fages), so complete
+enumeration, optimum ties and reduct membership are unchanged. The original
+theory is not rewritten; only the support condition reads the other heads. A
+plan with a shifted producer keeps complete evaluation (no readers index) and
+keeps the general device route, since the device support kernel reads producer
+bodies only. A repeated head atom, a non-atom head leaf, a wider head or a
+positive cycle still falls back to general reduct checking. Lean states the
+sufficiency in `ShiftedSupport.ranked_support_stable` (original satisfaction
+plus ranked shifted support gives stability) and the necessity in
+`DisjunctiveSupport.answer_set_supported_with_choices`; that the Rust
+flattening, rank derivation and optimized check refine these definitions
+remains a Rust obligation (see the [Lean theorem guide](../lean/theorems.md)).
+
 The device [ranked-support checker](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/tight/check.wgsl)
 stores support as one bit per semantic atom in each candidate's row. By default it clears
 the row, then each enabled original producer atomically sets its head bit.
