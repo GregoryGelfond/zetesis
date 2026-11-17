@@ -237,7 +237,7 @@ pub(crate) fn evaluate(
         location,
     } = preparation;
     let profile = Profile::new(observer);
-    let execution = crate::formula_support::SourceExecution::new();
+    let execution = crate::formula_support::SourceExecution::with_workers(options.workers);
     let cancellation = budget.cancellation().cloned();
     accounting.controlled::<_, FormulaFailure>(
         cancellation.as_ref(),

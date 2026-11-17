@@ -600,7 +600,7 @@ These are the same typed, cumulative source limits; refusal does not silently
 disable family retention or publish an incomplete stage.
 
 Choose positive joins separately through the preparation's
-`with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` method.
+`with_grounding_options(GroundingOptions { joins: JoinStrategy::Table, ..Default::default() })` method.
 The default `Indexed` strategy probes existing value postings. After a flat
 constraint establishes finite arithmetic totality, a computed equality may
 supply a necessary input domain to the shared table selector under either
