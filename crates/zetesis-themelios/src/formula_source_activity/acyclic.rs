@@ -1,11 +1,14 @@
-//! Exact consequence scan under a complete signed acyclic source certificate.
+//! Exact consequence scan under a complete signed stratified source
+//! certificate: acyclic, or recursive only through definite-closed components.
 //! The activity cells and canonical source identities are the same ones used
 //! by source eligibility; only this stronger certificate permits exact output.
 
 use super::{Activity, Context, SourceEligibility};
 use crate::formula_facts::{FactBlock, Item};
 use crate::formula_ir::HeadIr;
-use crate::formula_support::{AcyclicPlan, Join, SourceAtom, SourceSelection, StorageLease};
+use crate::formula_support::{
+    AcyclicPlan, Join, SourceAtom, SourceBatch, SourceSelection, StorageLease,
+};
 use crate::grounding_observer::Profile;
 use crate::{FormulaFailure, FormulaResource, GroundingPhase};
 
@@ -66,14 +69,40 @@ pub(crate) fn evaluate_acyclic(
     let mut result = SourceEligibility::new(context)?;
     result.exact = true;
     let mut consistent = true;
-    for &(_, position) in plan.items() {
+    // Heads of the current definite-closed rank, published together when the
+    // rank ends: no rule of a closed rank reads activity, and every later
+    // rank starts after the publication.
+    let mut closed: Option<(usize, SourceBatch)> = None;
+    for &(rank, position) in plan.items() {
+        if let Some((pending, _)) = &closed
+            && *pending != rank
+        {
+            let (_, batch) = closed.take().expect("checked pending rank");
+            result.publish_required(batch, context)?;
+        }
         match source.items().get(position) {
             Item::Rule(index, rule) => {
                 context.location = rule.location;
+                let batch = if plan.closed(rank) {
+                    if closed.is_none() {
+                        closed = Some((
+                            rank,
+                            SourceSelection::batch(
+                                context.computation,
+                                context.limits,
+                                context.counters,
+                                context.location,
+                            )?,
+                        ));
+                    }
+                    closed.as_mut().map(|(_, batch)| batch)
+                } else {
+                    None
+                };
                 consistent &= profile.phase(
                     GroundingPhase::RuleInstantiation,
                     Some(rule.location),
-                    || result.rule_exact((index, rule), support, context),
+                    || result.rule_exact((index, rule), batch, support, context),
                 )?;
             }
             Item::Facts(block) => {
@@ -86,11 +115,68 @@ pub(crate) fn evaluate_acyclic(
             }
         }
     }
+    if let Some((_, batch)) = closed {
+        result.publish_required(batch, context)?;
+    }
     consistent &= profile.phase(GroundingPhase::Coherence, None, || result.coherent(context))?;
     result.into_exact(consistent, context)
 }
 
 impl SourceEligibility {
+    /// Publish the heads of one completed definite-closed rank `Required`.
+    /// Already selected atoms are raised in place; new atoms take the next
+    /// local coordinates, so the activity table grows by exactly that range.
+    /// A refusal aborts the whole exact evaluation.
+    fn publish_required(
+        &mut self,
+        batch: SourceBatch,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let Self {
+            atoms,
+            activity,
+            lease,
+            ..
+        } = self;
+        debug_assert_eq!(activity.len(), atoms.len());
+        let before = activity.len();
+        batch.merge_into(
+            atoms,
+            (FormulaResource::Atoms, context.limits.theory.max_atoms),
+            crate::formula_support::Context::new(
+                &*context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            ),
+            |local, counters| {
+                counters.work(context.limits, context.location)?;
+                if let Some(cell) = activity.get_mut(local) {
+                    *cell = Activity::Required;
+                }
+                Ok(())
+            },
+        )?;
+        let additional = atoms.len() - before;
+        crate::formula_support::reserve(
+            activity,
+            additional,
+            lease,
+            Self::header_bytes(),
+            crate::formula_support::Context::new(
+                &*context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            ),
+        )?;
+        context
+            .counters
+            .charge_work(additional as u128 + 1, context.limits, context.location)?;
+        activity.resize(atoms.len(), Activity::Required);
+        Ok(())
+    }
+
     /// Stage each fact row `Required`: a body-free rule's one passing binding
     /// has that activity, since the fold over no literal starts from it.
     fn facts_exact(
@@ -121,9 +207,17 @@ impl SourceEligibility {
     /// its head, which no other row derives, lies outside the completed
     /// support and is not named here. The join has read the row's head
     /// arguments by then, so a fatal failure among them still refuses.
+    ///
+    /// In a definite-closed component (`closed` holds its pending heads),
+    /// every passing row's body is `Required` without a fold: the join offers
+    /// only completed-support rows, and completed support restricted to
+    /// definite-closed predicates is their least model. This is what lets such
+    /// a component be recursive: a fold would read same-component atoms before
+    /// their producers are staged. Its heads are published with the rank.
     fn rule_exact(
         &mut self,
         (index, rule): (usize, &crate::formula_ir::RuleIr),
+        mut closed: Option<&mut SourceBatch>,
         support: &crate::formula_support::Support<'_>,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<bool, FormulaFailure> {
@@ -168,6 +262,20 @@ impl SourceEligibility {
                     context.counters,
                 )?
             {
+                continue;
+            }
+            if let Some(batch) = closed.as_deref_mut() {
+                let HeadIr::Normal(Some(head)) = &rule.head else {
+                    unreachable!("a closed component has a head")
+                };
+                let atom = context.atom(*head, &row.values)?;
+                batch.push(
+                    &atom,
+                    context.computation,
+                    context.limits,
+                    context.counters,
+                    context.location,
+                )?;
                 continue;
             }
             let body = self.fold_activity(&rule.body, &row.values, true, context)?;

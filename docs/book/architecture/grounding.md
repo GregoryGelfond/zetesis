@@ -183,7 +183,7 @@ relation of a certain predicate a supported atom holds in every answer set and
 an unsupported one in none, so `not a` is false for a supported `a` and true
 otherwise, and `not not a` the reverse. A row of the rule under which such a
 literal is false derives no head, and a rule whose other literals are definite
-keeps its head predicate certain. The direct evaluation of a complete acyclic
+keeps its head predicate certain. The direct evaluation of a complete stratified
 normal source passes over the same rows, so the atoms it publishes are those
 of the completed support. In
 `c(1..3). e(1). d(X) :- c(X), not e(X). {p}. q :- d(2), p.` the support of `d`

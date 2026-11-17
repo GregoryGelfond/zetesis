@@ -25,6 +25,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- Direct source evaluation admits recursion through definite-closed components:
+  recursive Datalog-shaped closures, joins and arithmetic filters, including
+  negation over their completed relations from later strata, are evaluated
+  from completed support without formula construction. Recursion through
+  default negation or aggregates keeps the ordinary grounding door. See
+  [direct evaluation of definite recursion](docs/book/architecture/source-pipeline.md#direct-evaluation-of-definite-recursion).
 - `GpuFormulaOracle::from_source_with_kernel` accepts explicit kernel options
   while preserving the supplied device source and context. Existing default
   primitive constructors retain Dense propagation. The current development solve
