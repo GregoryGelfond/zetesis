@@ -84,7 +84,7 @@ occurring values cannot create a new tuple.
 ## Positive joins in eager formula grounding
 
 On a `PreparedFormula` or `PreparedFormulaBundle`,
-`with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` selects
+`with_grounding_options(GroundingOptions { joins: JoinStrategy::Table, ..Default::default() })` selects
 the table strategy. `JoinStrategy::Indexed` is the default for ordinary probes.
 A separately certified computed equality can supply finite domains to the same
 selector under either strategy, as described below. These execution choices

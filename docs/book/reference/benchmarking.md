@@ -253,6 +253,14 @@ timing and memory rounds.
 Each benchmark profile admits at most 256 threads. On a host reporting more,
 choose an explicit count within that bound.
 
+The thread count applies to eager support grounding as well as search: the
+grounding pool has exactly `--threads` workers. Before this was fixed, eager
+grounding always used a private pool of fourteen workers whatever the setting,
+so earlier one-thread grounding times were measured with fourteen grounding
+workers. Reproduce the published fourteen-worker comparisons with an explicit
+`--threads 14` rather than `auto`, which follows the host. Grounding work
+receipts do not depend on the thread count; only wall time does.
+
 The advanced controls, listed by `zetesis-bench run --help` and omitted from
 `-h`, apply to every profile:
 

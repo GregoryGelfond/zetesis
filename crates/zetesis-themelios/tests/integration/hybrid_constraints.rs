@@ -342,6 +342,7 @@ fn table_policy_is_not_silently_replaced() {
     let result = prepared("{p}. :-p.")
         .with_grounding_options(GroundingOptions {
             joins: JoinStrategy::Table,
+            ..GroundingOptions::default()
         })
         .ground_hybrid();
     assert!(matches!(

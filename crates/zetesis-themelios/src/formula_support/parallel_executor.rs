@@ -17,7 +17,9 @@ use rayon::{Scope, ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 pub(super) const TASKS: usize = 14;
 
 pub(crate) struct Executor {
-    pool: ThreadPool,
+    /// `None`: one requested thread; the caller runs every task in slot
+    /// order with the same task geometry and receipts, spawning no thread.
+    pool: Option<ThreadPool>,
     #[cfg(test)]
     submissions: AtomicUsize,
     #[cfg(test)]
@@ -26,10 +28,17 @@ pub(crate) struct Executor {
     peak: AtomicUsize,
 }
 
-/// Private comparison configuration, fixed in each frozen executable. This is
-/// not the solver's search-worker setting or a proposed portable default.
-#[cfg(not(test))]
-const PHYSICAL_WORKERS: usize = 14;
+/// Pool threads for a requested host-thread count (`--threads`, or the
+/// available parallelism when none is given, as `auto`). The coordinating
+/// caller thread runs tasks too, so the pool has one thread fewer than the
+/// request and grounding never runs more than the requested threads; one
+/// thread selects the ordinary serial path and spawns none. The logical task
+/// geometry (`TASKS`) and every charged receipt are independent of this count.
+pub(crate) fn pool_threads(requested: Option<NonZeroUsize>) -> Option<NonZeroUsize> {
+    let threads = requested
+        .unwrap_or_else(|| std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN));
+    NonZeroUsize::new(threads.get() - 1)
+}
 
 /// The owner spans one entire preparation, including support and emission.
 /// It never enters retained per-answer checks. Initialization failure retains
@@ -39,14 +48,29 @@ pub(crate) struct SourceExecution {
 }
 
 impl SourceExecution {
-    pub(crate) fn new() -> Self {
+    /// Honors the caller's host-thread request (`--threads`). Unit-test
+    /// fixtures instead use the count chosen by `with_source_workers`
+    /// (serial when none is chosen), as before.
+    pub(crate) fn with_workers(requested: Option<NonZeroUsize>) -> Self {
         #[cfg(not(test))]
-        let workers = NonZeroUsize::new(PHYSICAL_WORKERS);
+        let workers = Some(pool_threads(requested));
         #[cfg(test)]
-        let workers = TEST_WORKERS.with(|count| NonZeroUsize::new(count.get()));
+        let workers = {
+            let _ = requested;
+            TEST_WORKERS.with(|count| NonZeroUsize::new(count.get()))
+        };
         Self {
+            #[cfg(not(test))]
+            executor: workers
+                .map(|pool| pool.map_or_else(|| Ok(Executor::inline()), Executor::new)),
+            #[cfg(test)]
             executor: workers.map(Executor::new),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new() -> Self {
+        Self::with_workers(None)
     }
 
     pub(crate) fn executor(&self) -> Option<&Executor> {
@@ -117,7 +141,7 @@ impl Executor {
         build: impl FnOnce(NonZeroUsize) -> Result<ThreadPool, ThreadPoolBuildError>,
     ) -> Result<Self, ThreadPoolBuildError> {
         build(workers).map(|pool| Self {
-            pool,
+            pool: Some(pool),
             #[cfg(test)]
             submissions: AtomicUsize::new(0),
             #[cfg(test)]
@@ -127,13 +151,30 @@ impl Executor {
         })
     }
 
+    /// The caller alone, for a one-thread request: no pool thread exists.
+    #[cfg_attr(test, allow(dead_code))]
+    fn inline() -> Self {
+        Self {
+            pool: None,
+            #[cfg(test)]
+            submissions: AtomicUsize::new(0),
+            #[cfg(test)]
+            active: AtomicUsize::new(0),
+            #[cfg(test)]
+            peak: AtomicUsize::new(0),
+        }
+    }
+
     /// This closure is not `Send`: `Rc`-bearing canonical owners stay on the caller.
     /// Only explicitly spawned worker closures must satisfy Rayon's `Send` bound.
     fn in_place<'scope, F, R>(&self, action: F) -> R
     where
         F: FnOnce(&Scope<'scope>) -> R,
     {
-        self.pool.in_place_scope(action)
+        self.pool
+            .as_ref()
+            .expect("inline execution never enters a scope")
+            .in_place_scope(action)
     }
 
     /// All inputs and output slots are admitted before submission. Logical order
@@ -158,6 +199,13 @@ impl Executor {
         // so a one-task batch never enters the pool.
         if tasks.is_empty() {
             *first_slot = Some(Self::tracked(self, || run(first)));
+            return;
+        }
+        if self.pool.is_none() {
+            *first_slot = Some(Self::tracked(self, || run(first)));
+            for (task, slot) in tasks.iter().zip(slots.iter_mut()) {
+                *slot = Some(Self::tracked(self, || run(task)));
+            }
             return;
         }
         self.in_place(|scope| {

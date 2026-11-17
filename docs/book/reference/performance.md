@@ -183,7 +183,9 @@ It refuses to overwrite an existing report. Without clingo, it times zetesis
 alone and checks its answers against the ones each workload records.
 
 Omit `--suite baseline` to run the full corpus. Select CPU threads or a backend
-explicitly when comparing configurations:
+explicitly when comparing configurations. `--threads` sizes both the search
+workers and the eager grounding pool; use `--threads 14` to reproduce the
+fourteen-worker tables:
 
 ```sh
 zetesis-bench run --threads 2 --report two-threads.json

@@ -287,7 +287,7 @@ fn instantiate(
         location,
         options,
     } = preparation;
-    let execution = formula_support::SourceExecution::new();
+    let execution = formula_support::SourceExecution::with_workers(options.workers);
     let cancellation = expansion_budget.cancellation().cloned();
     let published = accounting.controlled::<_, FormulaFailure>(
         cancellation.as_ref(),
