@@ -1,5 +1,8 @@
 //! Reference, owner/input identity, nested fill and admission checks.
-#![allow(clippy::disallowed_methods, reason = "tests start their own threads and pools")]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests start their own threads and pools"
+)]
 
 mod relevant;
 use super::*;
