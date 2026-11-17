@@ -441,39 +441,48 @@ fn index_values(layout: &mut Layout, atoms: Atoms<'_>, work: &mut Work) -> Resul
             .and_then(|atom| atom.values().get(cell.column))
             .ok_or(Failure::Dictionary)
     };
-    let mut compare = |left: u32, right: u32| {
+    let compare = |work: &mut Work, left: u32, right: u32| {
         let (left, right) = (value(left)?, value(right)?);
         work.compare(left, right)
     };
+    // The batch, its sort scratch and each merge output are admitted against
+    // the byte limit before allocation; scratch and merged-away runs are
+    // released, so the retained runs remain counted as catalog bytes.
     let count = len - index.order.indexed;
-    let mut batch: Vec<u32> = Vec::new();
-    batch
-        .try_reserve_exact(count)
-        .map_err(|_| Failure::Allocation)?;
+    let mut batch: Vec<u32> = work.reserve(count)?;
     for id in index.order.indexed..len {
         batch.push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
     }
-    let mut scratch: Vec<u32> = Vec::new();
-    scratch
-        .try_reserve_exact(count)
-        .map_err(|_| Failure::Allocation)?;
-    super::dictionary::sort_ids(&mut batch, &mut scratch, &mut compare)?;
-    let mut runs = std::mem::take(&mut index.order.levels);
-    runs.push(batch);
-    while runs.len() >= 2 && runs[runs.len() - 2].len() <= 2 * runs[runs.len() - 1].len() {
-        let right = runs.pop().expect("two runs");
-        let left = runs.pop().expect("two runs");
-        let mut merged = Vec::new();
-        merged
-            .try_reserve_exact(left.len() + right.len())
-            .map_err(|_| Failure::Allocation)?;
-        super::dictionary::merge_into(&left, &right, &mut merged, &mut compare)?;
-        runs.push(merged);
-    }
-    work.tick(count as u128)?;
-    index.order.levels = runs;
+    let mut scratch: Vec<u32> = work.reserve(count)?;
+    super::dictionary::sort_ids(&mut batch, &mut scratch, &mut |left, right| {
+        compare(work, left, right)
+    })?;
+    work.release(scratch);
+    // The sorted batch is published as a run before any merge, so a refused
+    // merge leaves every value reachable through some run.
+    work.grow(&mut index.order.levels, 1)?;
+    index.order.levels.push(batch);
     index.order.indexed = len;
     *index.order.demanded.get_mut() = false;
+    work.tick(count as u128)?;
+    let levels = &mut index.order.levels;
+    while levels.len() >= 2 && levels[levels.len() - 2].len() <= 2 * levels[levels.len() - 1].len()
+    {
+        let (left, right) = (&levels[levels.len() - 2], &levels[levels.len() - 1]);
+        let mut merged: Vec<u32> = work.reserve(left.len() + right.len())?;
+        let result = super::dictionary::merge_into(left, right, &mut merged, &mut |l, r| {
+            compare(work, l, r)
+        });
+        if let Err(error) = result {
+            work.release(merged);
+            return Err(error);
+        }
+        let right = levels.pop().expect("two runs");
+        let left = levels.pop().expect("two runs");
+        work.release(left);
+        work.release(right);
+        levels.push(merged);
+    }
     Ok(())
 }
 
