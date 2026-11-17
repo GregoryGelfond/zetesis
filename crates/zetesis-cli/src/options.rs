@@ -110,8 +110,9 @@ pub struct Options {
     /// Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.
     ///
     /// Zero requests an immediate stop. No deadline is imposed when omitted.
-    /// A timer thread marks the deadline and checked work boundaries observe
-    /// the mark as they observe cancellation, without reading the clock. Blocking source I/O,
+    /// Checked work boundaries observe the deadline as they observe
+    /// cancellation, reading the clock once every 64 polls on each thread; no
+    /// thread is started for it. Blocking source I/O,
     /// frontend operations and a running GPU kernel cannot be preempted.
     /// Library callers supply their own Cancellation instead of this process option.
     #[arg(long, value_name = "DURATION", value_parser = values::seconds)]
@@ -133,6 +134,10 @@ pub struct Options {
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.models, display_order = 0)]
     pub models: usize,
     /// Host threads; auto uses available parallelism, falling back to one.
+    ///
+    /// A hard cap: at most this many solver threads run at once, the main
+    /// thread included, across grounding, search and completion. A GPU
+    /// backend may add its device-discovery thread and the driver's threads.
     ///
     /// The shared policy assigns worker and scratch capacity within the memory
     /// allowance. Parallel answer order can vary; the answer-set family does not.
