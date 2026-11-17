@@ -192,10 +192,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     limits,
                     cancellation.clone(),
                 )
-            } else if config.workers.get() > 1 {
+            } else if let Some(producers) = config.region_producers() {
                 StableModels::prepare_with_region_producers(
                     self.input.theory,
-                    config.workers,
+                    producers,
                     limits,
                     cancellation.clone(),
                 )
@@ -274,7 +274,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             }
             self.learned = Some(store);
         }
-        if config.region_workers().is_none() && config.workers.get() > 1 {
+        if config.region_producers().is_some() {
             observations.record(Event::ParallelProposals {
                 workers: config.workers,
             })?;

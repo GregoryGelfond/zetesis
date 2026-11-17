@@ -85,7 +85,9 @@ pub struct SolveConfig {
     /// commit. CPU execution retains `batch_size` independently of this GPU
     /// formula policy.
     pub gpu_batching: GpuBatching,
-    /// Worker count: the walkers of the region tree, one being the scalar walk.
+    /// Thread count: every thread the solve runs at once, the calling thread
+    /// included. On a CPU backend the caller coordinates and `workers - 1`
+    /// threads walk the region tree; below three that is the scalar walk.
     /// The library default is four; the command uses the host's available
     /// parallelism, or one when availability is unknown.
     pub workers: NonZeroUsize,
@@ -155,14 +157,24 @@ impl SolveConfig {
 }
 
 impl SolveConfig {
-    /// The workers that walk the region tree together and decide its
-    /// leaves themselves: several, on a CPU backend. A device backend uses
-    /// separate bounded candidate producers; those workers do not decide
-    /// membership. One worker uses the scalar proposer, so both
-    /// alternatives return `None`.
+    /// The threads that walk the region tree together and decide its
+    /// leaves themselves, beside the coordinating caller: `workers - 1` on a
+    /// CPU backend, when that is at least two. Fewer use the scalar walk on
+    /// the caller, so the walk never runs more than `workers` threads.
     #[must_use]
     pub fn region_workers(&self) -> Option<NonZeroUsize> {
-        (self.workers.get() > 1 && self.backend == Backend::Cpu).then_some(self.workers)
+        if self.backend != Backend::Cpu {
+            return None;
+        }
+        NonZeroUsize::new(self.workers.get() - 1).filter(|walkers| walkers.get() > 1)
+    }
+
+    /// The bounded candidate producers of a device backend, the caller
+    /// among them: `workers`, when several. Producers do not decide
+    /// membership. A CPU backend and one worker return `None`.
+    #[must_use]
+    pub fn region_producers(&self) -> Option<NonZeroUsize> {
+        (self.workers.get() > 1 && self.backend != Backend::Cpu).then_some(self.workers)
     }
 }
 
