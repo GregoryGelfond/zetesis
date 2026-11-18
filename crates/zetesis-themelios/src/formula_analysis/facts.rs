@@ -7,7 +7,7 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::ops::Range;
 
 use themelios_program::program::{
@@ -335,11 +335,14 @@ impl Families {
         // first-occurrence order, so both buffers are reserved exactly.
         let mut pending = Vec::new();
         let mut count = 0_usize;
-        let mut distinct = BTreeMap::<&Symbol, usize>::new();
+        // Distinct values are found by hash: one probe per leaf, with no
+        // ordered comparisons. Positions are first-occurrence order, as before.
+        let mut distinct = HashMap::<&Symbol, usize>::new();
         for atom in &atoms {
             each_leaf(atom, &mut pending, allocation, |symbol, allocation| {
                 count += 1;
-                if !distinct.contains_key(symbol) {
+                let next = distinct.len();
+                if let std::collections::hash_map::Entry::Vacant(entry) = distinct.entry(symbol) {
                     // The distinct value's copy and its transient index entry.
                     allocation.budget.charge(
                         ExpansionResource::ScalarBytes,
@@ -347,8 +350,7 @@ impl Families {
                             + size_of::<(&Symbol, usize)>() as u128,
                         allocation.site,
                     )?;
-                    let index = distinct.len();
-                    distinct.insert(symbol, index);
+                    entry.insert(next);
                 }
                 Ok(())
             })?;
@@ -357,7 +359,7 @@ impl Families {
         crate::formula_pattern::reserve(&mut leaves.order, count, budget, site)?;
         crate::formula_pattern::reserve(&mut leaves.symbols, distinct.len(), budget, site)?;
         crate::formula_pattern::reserve(&mut leaves.families, atoms.len(), budget, site)?;
-        let mut names = BTreeMap::<(Sign, &Name), usize>::new();
+        let mut names = HashMap::<(Sign, &Name), usize>::new();
         for atom in &atoms {
             let name = if let Some(&name) = names.get(&(atom.sign, &atom.name)) {
                 name
