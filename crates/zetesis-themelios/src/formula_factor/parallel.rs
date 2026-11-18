@@ -52,9 +52,7 @@ pub(super) fn rule<'source>(
         |builder| {
             component_rows::stage(
                 executor,
-                rule,
-                head,
-                &scopes,
+                (rule, head, &scopes),
                 support,
                 builder.computation,
                 builder.budget,

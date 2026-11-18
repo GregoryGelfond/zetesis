@@ -60,12 +60,9 @@ pub(crate) fn head_rows(support: &Support<'_>, head: PatternRef<'_>) -> usize {
 /// Stage every head row's instance in parallel blocks of the fixed task
 /// geometry. `None` when a worker met a row this route does not stage; the
 /// caller then emits the rule on its ordinary path.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn stage<'source>(
     executor: &Executor,
-    rule: &RuleIr,
-    head: PatternRef<'_>,
-    components: &[ComponentScope<'_>],
+    (rule, head, components): (&RuleIr, PatternRef<'_>, &[ComponentScope<'_>]),
     support: &Support<'source>,
     computation: &Computation<'_, 'source>,
     budget: &mut Budget,
