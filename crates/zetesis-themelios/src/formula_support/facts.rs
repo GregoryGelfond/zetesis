@@ -153,7 +153,8 @@ fn intern<'source>(
         counters.work(limits, location)?;
         counters.observe_work(Event::SupportHeadWork, |counters| {
             let atom = head.atom(row, &mut computation, limits, counters)?;
-            computation.support(&atom, limits, counters, location)
+            computation.support(&atom, limits, counters, location)?;
+            computation.record_fact(&atom, limits, counters, location)
         })?;
     }
     Ok(())

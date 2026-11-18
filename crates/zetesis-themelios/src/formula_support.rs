@@ -675,9 +675,49 @@ fn complete(
     complete_with_executor(catalog, prepared, producers, domains, budget, work, None)
 }
 
-/// Every round joins each selected rule under its domain guards, when the
-/// analysis prepared candidates: a row a guard rejects has no complete
-/// continuation the exclusion rule keeps, in this round as in the final one.
+/// Install certainty and posting demand, publish the catalog, and let the
+/// first round record each fact row's atom for grounding to read back.
+fn prepare_rounds(
+    catalog: &mut SupportCatalog,
+    prepared: &Prepared,
+    producers: &mut producers::Producers<'_>,
+    (limits, counters): (&FormulaLimits, &mut Counters),
+    fallback: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    catalog.prepared_bytes(producers.bytes());
+    // Certain predicates are read by assignment proposals from the first
+    // round on, so they are installed before the first snapshot.
+    if certain::every_predicate_assumed() {
+        catalog.install_certainty(certain::Certainty::all(), limits, counters, fallback)?;
+    } else if !certain::left_out()
+        && let Some(certainty) =
+            producers.certainty(prepared, catalog, limits, counters, fallback)?
+    {
+        catalog.install_certainty(certainty, limits, counters, fallback)?;
+    }
+    // Postings are kept only for columns a join can bind, decided before the
+    // first relation is created, since a column cannot gain postings later.
+    if let Some(view) = catalog.component_view(limits, counters, fallback)? {
+        let demand = demand::Demand::of(prepared, view, limits, counters, fallback)?;
+        catalog.install_demand(demand);
+    }
+    catalog.publish(limits, counters, fallback)?;
+    let mut rows = 0_usize;
+    for block in prepared.items().blocks() {
+        counters.work(limits, block.location())?;
+        rows = rows
+            .checked_add(block.len())
+            .ok_or(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Overflow,
+                location: fallback,
+            })?;
+    }
+    if rows > 0 {
+        catalog.open_fact_rows(rows, limits, counters, fallback)?;
+    }
+    Ok(())
+}
+
 fn complete_with_executor(
     mut catalog: SupportCatalog,
     prepared: &Prepared,
@@ -692,24 +732,13 @@ fn complete_with_executor(
         counters,
         location: fallback,
     } = work;
-    catalog.prepared_bytes(producers.bytes());
-    // Certain predicates are read by assignment proposals from the first
-    // round on, so they are installed before the first snapshot.
-    if certain::every_predicate_assumed() {
-        catalog.install_certainty(certain::Certainty::all(), limits, counters, fallback)?;
-    } else if !certain::left_out()
-        && let Some(certainty) =
-            producers.certainty(prepared, &catalog, limits, counters, fallback)?
-    {
-        catalog.install_certainty(certainty, limits, counters, fallback)?;
-    }
-    // Postings are kept only for columns a join can bind, decided before the
-    // first relation is created, since a column cannot gain postings later.
-    if let Some(view) = catalog.component_view(limits, counters, fallback)? {
-        let demand = demand::Demand::of(prepared, view, limits, counters, fallback)?;
-        catalog.install_demand(demand);
-    }
-    catalog.publish(limits, counters, fallback)?;
+    prepare_rounds(
+        &mut catalog,
+        prepared,
+        &mut producers,
+        (limits, counters),
+        fallback,
+    )?;
     #[cfg(test)]
     postings::begin_support();
     let mut rounds = 0_u64;
@@ -789,6 +818,7 @@ fn complete_with_executor(
                 GroundingWork::new(limits, counters, fallback),
             )?
         };
+        catalog.close_fact_rows();
         if !changed {
             // An unchanged round decides every component no waiting producer
             // still feeds, so the earliest waiting producer was traversed. A

@@ -54,7 +54,7 @@
 use super::metadata::Fixing;
 use super::{Builder, Node, VERUM};
 use crate::formula_binding::Binding;
-use crate::formula_facts::{Item, Items};
+use crate::formula_facts::{FactBlock, Item, Items};
 use crate::formula_ir::HeadIr;
 use crate::formula_support::{
     FactAtoms, SourceAtom, SourceBatch, SourceSelection, facts::FactHead,
@@ -72,6 +72,21 @@ impl Builder<'_, '_, '_> {
         }
         let mut facts = None;
         let mut fact_location = None;
+        // Support's first round recorded every fact row's atom: copy it.
+        let location = items.blocks().next().map(FactBlock::location);
+        let recorded = match location {
+            Some(location) => {
+                self.fact_atoms = FactAtoms::recorded(
+                    items.blocks(),
+                    self.computation,
+                    self.limits,
+                    self.counters,
+                    location,
+                )?;
+                self.fact_atoms.is_some()
+            }
+            None => false,
+        };
         for item in items.iter() {
             let location = match item {
                 Item::Rule(_, rule) => rule.location,
@@ -80,41 +95,7 @@ impl Builder<'_, '_, '_> {
             self.work(location)?;
             match item {
                 Item::Facts(block) => {
-                    let mut head = FactHead::new(
-                        block,
-                        self.computation,
-                        self.limits,
-                        self.counters,
-                        location,
-                    )?;
-                    if self.fact_atoms.is_none() {
-                        self.fact_atoms = Some(FactAtoms::new(
-                            self.computation,
-                            self.limits,
-                            self.counters,
-                            location,
-                        )?);
-                    }
-                    self.fact_atoms.as_mut().expect("fact record").begin(
-                        block,
-                        self.computation,
-                        self.limits,
-                        self.counters,
-                        location,
-                    )?;
-                    for row in block.rows() {
-                        let location = row.location();
-                        self.work(location)?;
-                        let atom = head.atom(row, self.computation, self.limits, self.counters)?;
-                        self.fact_atoms.as_mut().expect("opened fact record").push(
-                            &atom,
-                            self.limits,
-                            self.counters,
-                            location,
-                        )?;
-                        self.remember_fact(&mut facts, &atom, location)?;
-                        fact_location.get_or_insert(location);
-                    }
+                    self.fixed_block(block, recorded, (&mut facts, &mut fact_location))?;
                 }
                 Item::Rule(_, rule)
                     if rule.body.is_empty() && rule.variables == 0 && rule.bindings.is_none() =>
@@ -144,6 +125,9 @@ impl Builder<'_, '_, '_> {
                 Item::Rule(..) => {}
             }
         }
+        if let Some(record) = &mut self.fact_atoms {
+            record.rewind();
+        }
         let bound = self.atom_bound();
         self.fixed_facts = facts
             .map(|facts| {
@@ -157,6 +141,94 @@ impl Builder<'_, '_, '_> {
             })
             .transpose()?;
         Ok(())
+    }
+
+    /// Remember `block`'s rows as fixed facts: read back from support's
+    /// record when it holds the block, otherwise interned and recorded for
+    /// emission.
+    fn fixed_block(
+        &mut self,
+        block: FactBlock<'_>,
+        recorded: bool,
+        (facts, fact_location): (&mut Option<SourceBatch>, &mut Option<ProgramSite>),
+    ) -> Result<(), FormulaFailure> {
+        let location = block.location();
+        if recorded {
+            let mut record = self.fact_atoms.take().expect("recorded fact atoms");
+            let read = self.recorded_block(block, &mut record, (facts, fact_location));
+            self.fact_atoms = Some(record);
+            if read? {
+                return Ok(());
+            }
+        }
+        let mut head = FactHead::new(
+            block,
+            self.computation,
+            self.limits,
+            self.counters,
+            location,
+        )?;
+        if !recorded {
+            if self.fact_atoms.is_none() {
+                self.fact_atoms = Some(FactAtoms::new(
+                    self.computation,
+                    self.limits,
+                    self.counters,
+                    location,
+                )?);
+            }
+            self.fact_atoms.as_mut().expect("fact record").begin(
+                block,
+                self.computation,
+                self.limits,
+                self.counters,
+                location,
+            )?;
+        }
+        for row in block.rows() {
+            let location = row.location();
+            self.work(location)?;
+            let atom = head.atom(row, self.computation, self.limits, self.counters)?;
+            if !recorded {
+                self.fact_atoms.as_mut().expect("opened fact record").push(
+                    &atom,
+                    self.limits,
+                    self.counters,
+                    location,
+                )?;
+            }
+            self.remember_fact(facts, &atom, location)?;
+            fact_location.get_or_insert(location);
+        }
+        Ok(())
+    }
+
+    /// Remember `block`'s rows from `record`; false when it does not hold
+    /// the block next.
+    fn recorded_block(
+        &mut self,
+        block: FactBlock<'_>,
+        record: &mut FactAtoms,
+        (facts, fact_location): (&mut Option<SourceBatch>, &mut Option<ProgramSite>),
+    ) -> Result<bool, FormulaFailure> {
+        let Some(mut atoms) = record.take(
+            block,
+            self.computation,
+            self.limits,
+            self.counters,
+            block.location(),
+        )?
+        else {
+            return Ok(false);
+        };
+        for row in block.rows() {
+            let location = row.location();
+            self.work(location)?;
+            let atom = atoms.next(self.limits, self.counters, location)?;
+            self.remember_fact(facts, &atom, location)?;
+            fact_location.get_or_insert(location);
+        }
+        Ok(true)
     }
 
     fn remember_fact(

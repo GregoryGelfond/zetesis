@@ -149,6 +149,32 @@ impl Computation<'_, '_> {
         )
     }
 
+    /// Record a fact row's atom for later phases (support's first round).
+    pub(crate) fn record_fact(
+        &mut self,
+        atom: &SourceAtom,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.record_fact(atom, limits, counters, location)
+    }
+
+    /// The fact rows support completion recorded, in item order, when this
+    /// computation appends to the very catalog its support was read from;
+    /// otherwise none.
+    pub(crate) fn recorded_fact_rows(&self) -> &[usize] {
+        match &self.terms {
+            Terms::Append(append) if append.belongs_to(self.support.relations()) => {
+                self.support.fact_rows()
+            }
+            _ => &[],
+        }
+    }
+
     /// Producer heads explicitly select discovered identities into support.
     /// Final formula emission and objective/output selection do not call this.
     pub(crate) fn support(

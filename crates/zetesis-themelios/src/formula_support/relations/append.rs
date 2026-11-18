@@ -24,6 +24,8 @@ pub(super) struct Base {
 pub(crate) struct SupportAppend<'a> {
     owner: AtomAppender<'a>,
     pending: &'a mut Vec<usize>,
+    /// Open only in support's first round, with a reserved cell per fact row.
+    fact_rows: Option<&'a mut Vec<usize>>,
     supported: &'a mut Words<u64>,
     scope: &'a SourceScope,
     growth: &'a AtomicUsize,
@@ -117,7 +119,7 @@ impl<'a> SupportAppend<'a> {
     }
     pub(super) fn new(
         owner: AtomAppender<'a>,
-        pending: &'a mut Vec<usize>,
+        (pending, fact_rows): (&'a mut Vec<usize>, Option<&'a mut Vec<usize>>),
         supported: &'a mut Words<u64>,
         scope: &'a SourceScope,
         growth: &'a AtomicUsize,
@@ -126,6 +128,7 @@ impl<'a> SupportAppend<'a> {
         Self {
             owner,
             pending,
+            fact_rows,
             supported,
             scope,
             growth,
@@ -173,6 +176,25 @@ impl<'a> SupportAppend<'a> {
             limits.max_support_bytes as u128,
             location,
         )
+    }
+
+    /// Record a fact row's atom in the cell reserved for it. One unit.
+    pub(in crate::formula_support) fn record_fact(
+        &mut self,
+        atom: &SourceAtom,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        counters.work(limits, location)?;
+        let Some(rows) = self.fact_rows.as_deref_mut() else {
+            return Err(failure(Failure::Owner, location));
+        };
+        if !self.scope.same(&atom.scope) || rows.len() == rows.capacity() {
+            return Err(failure(Failure::Owner, location));
+        }
+        rows.push(atom.position);
+        Ok(())
     }
 
     pub(in crate::formula_support) fn is_empty(&self) -> bool {

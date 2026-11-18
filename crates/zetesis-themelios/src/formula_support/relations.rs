@@ -107,6 +107,10 @@ pub(crate) struct SupportCatalog {
     /// The certain predicates; absent until support completion installs them,
     /// and when it finds none.
     certainty: Option<super::certain::Certainty>,
+    /// Each fact row's atom position, in item order, as support's first
+    /// round interned it; reserved before that round, which alone appends.
+    fact_rows: Vec<usize>,
+    fact_rows_open: bool,
     entries: usize,
     index_bytes: usize,
     prepared_bytes: usize,
@@ -124,6 +128,8 @@ impl Default for SupportCatalog {
             growth: AtomicUsize::new(0),
             demand: None,
             certainty: None,
+            fact_rows: Vec::new(),
+            fact_rows_open: false,
             entries: 0,
             index_bytes: size_of::<Self>() - size_of::<AtomInterner>()
                 + SourceScope::shared_bytes(),
@@ -181,6 +187,40 @@ impl SupportCatalog {
         .add(0)
     }
 
+    /// Reserve one cell per fact row for the first round to record its atom
+    /// in, admitted with the catalog's bytes before allocation. One unit.
+    pub(super) fn open_fact_rows(
+        &mut self,
+        rows: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        counters.work(limits, location)?;
+        let bytes = rows
+            .checked_mul(size_of::<usize>())
+            .and_then(|added| added.checked_add(self.bytes(location).ok()?))
+            .ok_or_else(|| failure(Failure::Overflow, location))?;
+        Memory::new(
+            bytes,
+            counters.accounting.workspace.bytes() as u128,
+            limits,
+            counters,
+            location,
+        )
+        .add(0)?;
+        self.fact_rows
+            .try_reserve_exact(rows)
+            .map_err(|_| failure(Failure::Allocation, location))?;
+        self.fact_rows_open = true;
+        Ok(())
+    }
+
+    /// The first round has recorded every fact row: later snapshots read them.
+    pub(super) fn close_fact_rows(&mut self) {
+        self.fact_rows_open = false;
+    }
+
     pub(in crate::formula_support) fn bytes(
         &self,
         location: ProgramSite,
@@ -188,6 +228,7 @@ impl SupportCatalog {
         usize::try_from(self.owner.storage_bytes())
             .ok()
             .and_then(|owner| owner.checked_add(self.index_bytes))
+            .and_then(|bytes| bytes.checked_add(self.fact_rows.capacity() * size_of::<usize>()))
             .and_then(|bytes| bytes.checked_add(self.prepared_bytes))
             .and_then(|bytes| bytes.checked_add(self.component_bytes().ok()?))
             .and_then(|bytes| bytes.checked_add(self.pending.capacity() * size_of::<usize>()))
@@ -236,10 +277,17 @@ impl SupportCatalog {
         let supported_bytes = self.supported.capacity() * size_of::<u64>();
         let (committed, appender) = self.owner.split();
         let growth = &self.growth;
+        // The open first round records fact rows; every later snapshot reads them.
+        let (fact_rows, record): (&[usize], _) = if self.fact_rows_open {
+            (&[], Some(&mut self.fact_rows))
+        } else {
+            (&self.fact_rows, None)
+        };
         let relations = SnapshotSource {
             sources: &self.rows,
             components: self.components.as_ref(),
             certainty: self.certainty.as_ref(),
+            fact_rows,
             read: committed.read(),
             entries: self.entries,
             bytes,
@@ -248,7 +296,7 @@ impl SupportCatalog {
         .build(limits, counters, location)?;
         let append = SupportAppend::new(
             appender,
-            &mut self.pending,
+            (&mut self.pending, record),
             &mut self.supported,
             &self.scope,
             growth,
@@ -352,6 +400,7 @@ impl SupportCatalog {
             sources: &self.rows,
             components: self.components.as_ref(),
             certainty: self.certainty.as_ref(),
+            fact_rows: &self.fact_rows,
             read: self.owner.read(),
             entries: self.entries,
             bytes: self.bytes(location)?,
@@ -379,6 +428,7 @@ struct SnapshotSource<'a> {
     sources: &'a [CatalogRows],
     components: Option<&'a TemplateComponents>,
     certainty: Option<&'a super::certain::Certainty>,
+    fact_rows: &'a [usize],
     read: CatalogRead<'a>,
     entries: usize,
     bytes: usize,
@@ -429,6 +479,7 @@ impl<'a> SnapshotSource<'a> {
             rows,
             components,
             certainty: self.certainty,
+            fact_rows: self.fact_rows,
             read: Some(self.read),
             entries: self.entries,
             bytes: memory.bytes,
@@ -757,6 +808,9 @@ pub(crate) struct Relations<'source> {
     components: Option<TemplateComponentsRef<'source>>,
     /// The certain predicates of the source this support completes.
     certainty: Option<&'source super::certain::Certainty>,
+    /// Each fact row's atom position, in item order; empty when support
+    /// completion recorded none.
+    fact_rows: &'source [usize],
     read: Option<CatalogRead<'source>>,
     growth: Option<&'source AtomicUsize>,
     pub(super) entries: usize,
@@ -804,6 +858,10 @@ impl<'source> Relations<'source> {
     /// found any ([`super::certain`]).
     pub(crate) fn certainty(&self) -> Option<&'source super::certain::Certainty> {
         self.certainty
+    }
+
+    pub(super) fn fact_rows(&self) -> &'source [usize] {
+        self.fact_rows
     }
 
     pub(super) fn components(&self) -> Option<TemplateComponentsRef<'source>> {

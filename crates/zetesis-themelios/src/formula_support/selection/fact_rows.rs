@@ -5,7 +5,9 @@
 //! row's source position here, block by block, in item order. The second pass
 //! visits the same blocks in the same order and reads each row's atom back by
 //! its position instead of interning the row again. A block that is not the
-//! next recorded one is interned again by its reader.
+//! next recorded one is interned again by its reader. When support completion
+//! recorded the rows in its first round, the first pass copies that record
+//! instead of interning at all.
 //!
 //! R rows in B blocks retain R + 2B cells under the selection's lease and
 //! cost one charged unit per row to record and one to read back.
@@ -41,6 +43,45 @@ impl FactAtoms {
             blocks: Vec::new(),
             next: 0,
         })
+    }
+
+    /// The atoms support completion recorded for `blocks`, the program's
+    /// fact blocks in item order, when `computation` appends to that support's
+    /// catalog and the record holds exactly their rows; otherwise none. One
+    /// unit per row copied.
+    pub(crate) fn recorded<'b>(
+        blocks: impl Iterator<Item = FactBlock<'b>>,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<Self>, FormulaFailure> {
+        counters.work(limits, location)?;
+        let rows = computation.recorded_fact_rows();
+        if rows.is_empty() {
+            return Ok(None);
+        }
+        let mut atoms = Self::new(computation, limits, counters, location)?;
+        for block in blocks {
+            atoms.begin(block, computation, limits, counters, location)?;
+            let start = atoms.rows.positions.len();
+            let Some(cells) = start
+                .checked_add(block.len())
+                .and_then(|end| rows.get(start..end))
+            else {
+                return Ok(None);
+            };
+            for &position in cells {
+                counters.work(limits, location)?;
+                atoms.rows.positions.push(position);
+            }
+        }
+        Ok((atoms.rows.positions.len() == rows.len()).then_some(atoms))
+    }
+
+    /// Read the record again from its first block.
+    pub(crate) fn rewind(&mut self) {
+        self.next = 0;
     }
 
     fn other_bytes(&self) -> usize {
