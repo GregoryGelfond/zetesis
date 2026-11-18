@@ -301,7 +301,6 @@ fn emit<'plan, 'source>(
             prepared.as_mut().map_or(Plans::Owned, Plans::Lazy),
             fixed,
             &mut Vec::new(),
-            first,
         );
     }
     body(
@@ -312,14 +311,12 @@ fn emit<'plan, 'source>(
         shared(),
         fixed,
         &mut held,
-        first,
     )
 }
 
 /// Emit the rule instance: each component's alternatives, in order, then the
 /// implication. `witnesses[i]` is component `first + i`'s witness cursor, holding
 /// its first passing completion; an absent one is built here.
-#[allow(clippy::too_many_arguments)]
 fn body<'cursor, 'plan: 'cursor, 'source>(
     builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
@@ -328,8 +325,8 @@ fn body<'cursor, 'plan: 'cursor, 'source>(
     mut plans: Plans<'cursor, 'plan, 'source>,
     fixed: &Binding,
     witnesses: &mut Vec<Join<'cursor, 'source>>,
-    first: usize,
 ) -> Result<(), FormulaFailure> {
+    let first = usize::from(!matches!(rule.head, HeadIr::Normal(None)));
     let mut witnesses = witnesses.drain(..);
     let mut body = VERUM;
     for (index, component) in components.components.iter().enumerate() {
