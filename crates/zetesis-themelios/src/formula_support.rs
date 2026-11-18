@@ -1592,6 +1592,9 @@ pub(crate) struct Join<'a, 'source> {
     /// Immutable necessary rows, borrowed only by post-capture prepared joins.
     pattern_rows: Option<&'a prepared::PatternRows<'a>>,
     witnesses: Option<witnesses::Witnesses<'source>>,
+    /// A passing completion found by an existence check and not yet lent:
+    /// the next matched-row request lends it before the join advances.
+    held: Option<rows::Frame>,
     depth: usize,
     traversal: Traversal,
 }
@@ -2608,7 +2611,6 @@ impl<'a, 'source> Join<'a, 'source> {
                 },
         } = context;
         let count = plan.patterns.len();
-        let delta = plan.pivot;
         let mut lease = computation.lease();
         let plan_bytes = match &plan {
             JoinPlan::Owned(plan) => plan.retained_bytes(),
@@ -2655,6 +2657,7 @@ impl<'a, 'source> Join<'a, 'source> {
             family: family::Evidence::default(),
             head_bounds: &[],
             checked_guard: None,
+            delta: plan.pivot,
             plan,
             verdicts: Vec::new(),
             failure: None,
@@ -2663,7 +2666,6 @@ impl<'a, 'source> Join<'a, 'source> {
                 total,
                 &Context::new(computation, limits, counters, location),
             )?,
-            delta,
             domains: None,
             row_filter: None,
             anchor: None,
@@ -2683,6 +2685,7 @@ impl<'a, 'source> Join<'a, 'source> {
             structural_query: None,
             pattern_rows: None,
             witnesses: None,
+            held: None,
             depth: 0,
             traversal: Traversal::Searching,
         };

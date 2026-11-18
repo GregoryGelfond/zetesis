@@ -130,16 +130,66 @@ impl<'source> Join<'_, 'source> {
         Ok(())
     }
 
+    /// Traverse to the first passing completion and hold it, unlent and
+    /// unadvanced, for the next [`Self::next_matched_row`]. Rejected
+    /// completions before it are skipped exactly as that consumer skips them.
+    /// Returns whether a passing completion exists.
+    pub(crate) fn hold_passing_row(
+        &mut self,
+        budget: &mut Budget,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        debug_assert!(self.held.is_none());
+        let Context {
+            computation,
+            work:
+                super::GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        while let Some(row) = self.next_staged(
+            Ownership::Lend,
+            None,
+            Advance::Base,
+            budget,
+            Context::new(computation, limits, counters, location),
+        )? {
+            if row.passes {
+                self.held = Some(row.frame);
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// Lend the record only at a passing completion, retaining the ordinary
     /// rejected-row validation path and the owned completion's immediate undo.
+    /// A held completion is lent first, for one unit, without traversal.
     pub(crate) fn next_matched_row(
         &mut self,
         budget: &mut Budget,
         context: Context<'_, &mut Computation<'_, '_>>,
     ) -> Result<Option<MatchedBinding<'_, 'source>>, FormulaFailure> {
-        let Some(row) = self.next_staged(Ownership::Lend, None, Advance::Base, budget, context)?
-        else {
-            return Ok(None);
+        let row = if let Some(frame) = self.held.take() {
+            let super::GroundingWork {
+                limits,
+                counters,
+                location,
+            } = context.work;
+            counters.work(limits, location)?;
+            super::rows::Staged {
+                frame,
+                passes: true,
+            }
+        } else {
+            let Some(row) =
+                self.next_staged(Ownership::Lend, None, Advance::Base, budget, context)?
+            else {
+                return Ok(None);
+            };
+            row
         };
         let witnesses = if row.passes {
             self.witnesses.as_mut().map(|witnesses| {
