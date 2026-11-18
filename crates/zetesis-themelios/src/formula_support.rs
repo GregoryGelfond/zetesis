@@ -14,7 +14,7 @@ pub(crate) mod sort;
 mod storage;
 pub(crate) use computation::Computation;
 pub(crate) use publication::Publication;
-pub(crate) use selection::{SourceBatch, SourceSelection};
+pub(crate) use selection::{FactAtoms, SourceBatch, SourceSelection};
 pub(crate) use storage::{
     StorageLease, growth_capacity, growth_target, reserve, reserve_exact, reserve_exact_scoped,
 };

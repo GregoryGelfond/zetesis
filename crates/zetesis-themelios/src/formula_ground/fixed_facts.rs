@@ -56,7 +56,9 @@ use super::{Builder, Node, VERUM};
 use crate::formula_binding::Binding;
 use crate::formula_facts::{Item, Items};
 use crate::formula_ir::HeadIr;
-use crate::formula_support::{SourceAtom, SourceBatch, SourceSelection, facts::FactHead};
+use crate::formula_support::{
+    FactAtoms, SourceAtom, SourceBatch, SourceSelection, facts::FactHead,
+};
 use crate::{FormulaFailure, ProgramSite};
 
 #[cfg(test)]
@@ -85,10 +87,31 @@ impl Builder<'_, '_, '_> {
                         self.counters,
                         location,
                     )?;
+                    if self.fact_atoms.is_none() {
+                        self.fact_atoms = Some(FactAtoms::new(
+                            self.computation,
+                            self.limits,
+                            self.counters,
+                            location,
+                        )?);
+                    }
+                    self.fact_atoms.as_mut().expect("fact record").begin(
+                        block,
+                        self.computation,
+                        self.limits,
+                        self.counters,
+                        location,
+                    )?;
                     for row in block.rows() {
                         let location = row.location();
                         self.work(location)?;
                         let atom = head.atom(row, self.computation, self.limits, self.counters)?;
+                        self.fact_atoms.as_mut().expect("opened fact record").push(
+                            &atom,
+                            self.limits,
+                            self.counters,
+                            location,
+                        )?;
                         self.remember_fact(&mut facts, &atom, location)?;
                         fact_location.get_or_insert(location);
                     }

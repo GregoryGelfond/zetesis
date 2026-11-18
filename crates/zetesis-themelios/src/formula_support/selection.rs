@@ -1,7 +1,9 @@
 //! Local atom coordinates select one source authority without copying payload.
 
 mod batch;
+mod fact_rows;
 pub(crate) use batch::SourceBatch;
+pub(crate) use fact_rows::FactAtoms;
 
 use crate::ProgramSite;
 use crate::formula_support::Context;

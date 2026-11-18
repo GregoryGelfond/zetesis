@@ -955,6 +955,12 @@ impl<'a> FactBlock<'a> {
         self.block().arity
     }
 
+    /// The block's index in its arena: the same in every pass over one
+    /// item sequence.
+    pub(crate) fn id(self) -> usize {
+        self.block
+    }
+
     /// The number of rows, at least one.
     pub(crate) fn len(self) -> usize {
         self.block().rows
