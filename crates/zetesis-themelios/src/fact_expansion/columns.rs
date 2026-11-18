@@ -70,15 +70,13 @@ impl Column {
             offset: 0,
         };
         let mut payload = 0_u128;
-        let mut pending = Vec::new();
-        reserve(&mut pending, 1, budget, location)?;
-        pending.push(term);
+        let mut pending = Pending::new(term);
         while let Some(term) = pending.pop() {
             budget.poll(location)?;
             let segment = match term {
                 SourceTerm::Pool(items) => {
-                    reserve(&mut pending, items.len(), budget, location)?;
-                    pending.extend(items.iter().rev());
+                    reserve(&mut pending.rest, items.len(), budget, location)?;
+                    pending.rest.extend(items.iter().rev());
                     continue;
                 }
                 SourceTerm::Interval { lower, upper } => {
@@ -141,19 +139,17 @@ pub(super) fn size(
     budget: &Budget,
     location: ProgramSite,
 ) -> Result<(u128, u128), ExpansionFailure> {
-    let mut pending = Vec::new();
-    reserve(&mut pending, 1, budget, location)?;
-    pending.push(term);
+    let mut pending = Pending::new(term);
     let mut size = 0_u128;
     let mut bytes = 0_u128;
     while let Some(term) = pending.pop() {
         budget.poll(location)?;
         match term {
             SourceTerm::Pool(items) => {
-                reserve(&mut pending, items.len(), budget, location)?;
+                reserve(&mut pending.rest, items.len(), budget, location)?;
                 // Validation historically visits pool leaves in reverse order;
                 // emission has its own forward order in Column::prepare.
-                pending.extend(items);
+                pending.rest.extend(items);
             }
             SourceTerm::Interval { lower, upper } => {
                 let range = interval(lower, upper, location)?;
@@ -177,6 +173,27 @@ pub(super) fn size(
         }
     }
     Ok((size, bytes))
+}
+
+/// A column's traversal stack. The root term is held apart, so a plain scalar
+/// argument, the common case, is visited without allocating a stack; only a
+/// pool's items are pushed.
+struct Pending<'a> {
+    root: Option<&'a SourceTerm>,
+    rest: Vec<&'a SourceTerm>,
+}
+
+impl<'a> Pending<'a> {
+    fn new(root: &'a SourceTerm) -> Self {
+        Self {
+            root: Some(root),
+            rest: Vec::new(),
+        }
+    }
+
+    fn pop(&mut self) -> Option<&'a SourceTerm> {
+        self.root.take().or_else(|| self.rest.pop())
+    }
 }
 
 fn interval(
