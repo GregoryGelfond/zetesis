@@ -1070,6 +1070,30 @@ fn derive_variants_with_executor<'source>(
                 location: _,
             },
     } = context;
+    // A body-less normal rule without variables has exactly one binding, the
+    // empty one, under every variant: no join, selection or witness cursor
+    // has anything to visit. Its head is derived from that binding as the
+    // join's one row would derive it.
+    if rule.body.is_empty()
+        && rule.variables == 0
+        && let HeadIr::Normal(Some(head)) = &rule.head
+    {
+        let mut next = variants.next(limits, counters)?;
+        while next.is_some() {
+            let binding = Binding::new(computation, limits, counters, rule.location)?;
+            let mut derivation = Derivation {
+                normal_head: None,
+                computation: &mut *computation,
+                limits,
+                budget: &mut *budget,
+                counters: &mut *counters,
+            };
+            derivation.normal_head(*head, &binding, rule.location)?;
+            drop(derivation);
+            next = variants.next(limits, counters)?;
+        }
+        return Ok(());
+    }
     // A successful map belongs to this exact rule and immutable round. The
     // first cursor retains its ordinary mutable preparation; later variants
     // borrow it only after that cursor has finished and released its state.
