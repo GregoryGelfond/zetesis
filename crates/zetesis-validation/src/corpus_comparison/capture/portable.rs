@@ -226,10 +226,6 @@ fn drain(
     exceeded: Arc<AtomicBool>,
     sender: mpsc::Sender<std::io::Result<()>>,
 ) {
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "a capture harness's pipe drain, outside the solver's --threads"
-    )]
     thread::spawn(move || {
         let result = (|| {
             let mut buffer = [0u8; 8192];

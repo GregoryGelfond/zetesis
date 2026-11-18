@@ -1,9 +1,4 @@
 //! Structural delta coverage uses the existing matcher and fixed-point builder.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests start their own threads and pools"
-)]
-
 use super::*;
 use crate::formula::Compiled;
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode};

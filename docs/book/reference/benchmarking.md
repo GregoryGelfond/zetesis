@@ -267,8 +267,10 @@ run at once, the main thread included. Search runs N-1 region walkers beside
 the coordinating main thread (the scalar walk below three threads), so a
 fourteen-thread run now walks with thirteen; earlier fourteen-worker search
 runs used fourteen walkers plus the main thread. The deadline starts no
-thread, and nothing uses Rayon's global pool. With `ZETESIS_THREAD_AUDIT=1`
-the command reports the peak on standard error. A GPU backend may add its
+thread, and nothing uses Rayon's global pool: a zetesis-maintenance test
+audits the library source for threads started outside
+`zetesis_algebra::threads`. With `ZETESIS_THREAD_AUDIT=1` the command reports
+the peak on standard error. A GPU backend may add its
 device-discovery thread and the driver's threads.
 
 The advanced controls, listed by `zetesis-bench run --help` and omitted from

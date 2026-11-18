@@ -17,3 +17,4 @@ mod process_capture;
 mod proof_capture;
 mod proof_records;
 mod source_inventory;
+mod thread_boundary;

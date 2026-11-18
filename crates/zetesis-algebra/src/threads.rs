@@ -59,7 +59,6 @@ pub fn spawn<T: Send + 'static>(
     name: impl Into<String>,
     body: impl FnOnce() -> T + Send + 'static,
 ) -> io::Result<JoinHandle<T>> {
-    #[allow(clippy::disallowed_methods, reason = "the one counted spawn")]
     Builder::new().name(name.into()).spawn(move || {
         let _counted = Counted::enter();
         body()
@@ -86,7 +85,6 @@ impl Pool {
     ) -> Result<Self, ThreadPoolBuildError> {
         let handles = Arc::new(Mutex::new(Vec::with_capacity(threads.get())));
         let started = Arc::clone(&handles);
-        #[allow(clippy::disallowed_methods, reason = "the counted, joined pool")]
         let pool = ThreadPoolBuilder::new()
             .num_threads(threads.get())
             .thread_name(name)
@@ -98,7 +96,6 @@ impl Pool {
                 if let Some(size) = thread.stack_size() {
                     builder = builder.stack_size(size);
                 }
-                #[allow(clippy::disallowed_methods, reason = "the counted pool's own spawn")]
                 let handle = builder.spawn(move || {
                     let _counted = Counted::enter();
                     thread.run();
