@@ -803,6 +803,9 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     /// Each fact row's atom, in item order, as fixed-fact collection named
     /// it; emission reads a block's atoms back instead of interning again.
     fact_atoms: Option<formula_support::FactAtoms>,
+    /// The fact rule being instantiated: its head pattern and the atom
+    /// support completion recorded for it, read instead of interning again.
+    fact_head: Option<(AtomPattern, formula_support::SourceAtom)>,
     /// The certain predicates of the completed support, whose supported atoms
     /// are fixed as the explicit facts are. Only the theory's builder reads it.
     certainty: Option<&'source Certainty>,
@@ -893,7 +896,11 @@ impl<'source> Builder<'_, '_, 'source> {
                                 }
                             }
                         } else {
-                            self.instantiate_rule(rule, index, domains, support, schedule)
+                            self.fact_head = self.recorded_head(index, rule)?;
+                            let result =
+                                self.instantiate_rule(rule, index, domains, support, schedule);
+                            self.fact_head = None;
+                            result
                         }
                     },
                 )?,
@@ -906,6 +913,24 @@ impl<'source> Builder<'_, '_, 'source> {
             }
         }
         Ok(streaming)
+    }
+
+    /// The head atom support completion recorded for the fact rule `index`.
+    fn recorded_head(
+        &mut self,
+        index: usize,
+        rule: &RuleIr,
+    ) -> Result<Option<(AtomPattern, formula_support::SourceAtom)>, FormulaFailure> {
+        let HeadIr::Normal(Some(head)) = rule.head else {
+            return Ok(None);
+        };
+        if !rule.body.is_empty() || rule.variables != 0 {
+            return Ok(None);
+        }
+        let atom =
+            self.computation
+                .recorded_head(index, self.limits, self.counters, rule.location)?;
+        Ok(atom.map(|atom| (head, atom)))
     }
 
     /// Emit each fact row as `Builder::normal` emits a fact rule's one passing
@@ -1377,6 +1402,7 @@ impl<'source> Builder<'_, '_, 'source> {
             aggregate_atoms,
             fixed_facts: None,
             fact_atoms: None,
+            fact_head: None,
             certainty: None,
             metadata: metadata::Metadata::default(),
             nodes: FormulaNodes::default(),
@@ -1683,6 +1709,14 @@ impl<'source> Builder<'_, '_, 'source> {
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
+        if let Some((head, atom)) = self.fact_head.take() {
+            // A ground pattern names one atom whatever the assignment.
+            let read = (head == pattern).then(|| self.atom_identity(&atom, location));
+            self.fact_head = Some((head, atom));
+            if let Some(read) = read {
+                return read;
+            }
+        }
         let pattern =
             self.computation
                 .static_pattern(pattern, self.limits, self.counters, location)?;

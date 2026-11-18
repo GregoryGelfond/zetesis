@@ -97,12 +97,15 @@ impl Builder<'_, '_, '_> {
                 Item::Facts(block) => {
                     self.fixed_block(block, recorded, (&mut facts, &mut fact_location))?;
                 }
-                Item::Rule(_, rule)
+                Item::Rule(index, rule)
                     if rule.body.is_empty() && rule.variables == 0 && rule.bindings.is_none() =>
                 {
                     // The ordinary representation of the same ground fact;
                     // disjunctions and choices never establish a fact.
-                    if let HeadIr::Normal(Some(head)) = &rule.head {
+                    if let Some((_, atom)) = self.recorded_head(index, rule)? {
+                        self.remember_fact(&mut facts, &atom, location)?;
+                        fact_location.get_or_insert(location);
+                    } else if let HeadIr::Normal(Some(head)) = &rule.head {
                         let binding =
                             Binding::new(self.computation, self.limits, self.counters, location)?;
                         let head = self.computation.static_pattern(

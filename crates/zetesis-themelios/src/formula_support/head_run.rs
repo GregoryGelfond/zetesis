@@ -18,7 +18,7 @@ pub(super) struct HeadRun {
 }
 
 /// A ground, body-less rule's single head.
-fn fact_head(rule: &RuleIr) -> Option<Pattern> {
+pub(super) fn fact_head(rule: &RuleIr) -> Option<Pattern> {
     match rule.head {
         HeadIr::Normal(Some(head)) if rule.body.is_empty() && rule.variables == 0 => Some(head),
         _ => None,
@@ -40,6 +40,7 @@ impl HeadRun {
         if let Some((last, end)) = self.open {
             if index == last + 1 && index < end {
                 self.open = Some((index, end));
+                delta.expect_head(index);
                 return Ok(());
             }
             self.close(delta, support, limits, counters, rules[index].location)?;
@@ -70,6 +71,7 @@ impl HeadRun {
             crate::formula_support::GroundingWork::new(limits, counters, rule.location),
         )?;
         self.open = Some((index, end));
+        delta.expect_head(index);
         Ok(())
     }
 

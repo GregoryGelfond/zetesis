@@ -21,6 +21,9 @@ pub(super) struct Base {
     pub(super) supported: usize,
 }
 
+/// Each recorded fact rule's index and its head's atom position.
+pub(in crate::formula_support) type HeadRows = Vec<(usize, usize)>;
+
 pub(crate) struct SupportAppend<'a> {
     owner: AtomAppender<'a>,
     pending: &'a mut Vec<usize>,
@@ -28,6 +31,11 @@ pub(crate) struct SupportAppend<'a> {
     fact_rows: Option<&'a mut Vec<usize>>,
     /// A run of fact rules' heads prepared at the owner as one fact block.
     head_block: Option<assigned::FactRows>,
+    /// Open only in support's first round without fact blocks: each recorded
+    /// fact rule's index and head atom position.
+    head_rows: Option<&'a mut HeadRows>,
+    /// The fact rule whose head the open head block admits next.
+    head_rule: Option<usize>,
     supported: &'a mut Words<u64>,
     scope: &'a SourceScope,
     growth: &'a AtomicUsize,
@@ -121,7 +129,11 @@ impl<'a> SupportAppend<'a> {
     }
     pub(super) fn new(
         owner: AtomAppender<'a>,
-        (pending, fact_rows): (&'a mut Vec<usize>, Option<&'a mut Vec<usize>>),
+        (pending, fact_rows, head_rows): (
+            &'a mut Vec<usize>,
+            Option<&'a mut Vec<usize>>,
+            Option<&'a mut HeadRows>,
+        ),
         supported: &'a mut Words<u64>,
         scope: &'a SourceScope,
         growth: &'a AtomicUsize,
@@ -132,6 +144,8 @@ impl<'a> SupportAppend<'a> {
             pending,
             fact_rows,
             head_block: None,
+            head_rows,
+            head_rule: None,
             supported,
             scope,
             growth,

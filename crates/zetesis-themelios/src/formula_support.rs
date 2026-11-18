@@ -715,6 +715,16 @@ fn prepare_rounds(
     }
     if rows > 0 {
         catalog.open_fact_rows(rows, limits, counters, fallback)?;
+    } else {
+        // Without fact blocks, a cell per fact rule for its head's atom.
+        let mut facts = 0_usize;
+        for rule in prepared.rules_without_facts() {
+            counters.work(limits, rule.location)?;
+            facts += usize::from(head_run::fact_head(rule).is_some());
+        }
+        if facts > 1 {
+            catalog.open_head_rows(facts, limits, counters, fallback)?;
+        }
     }
     Ok(())
 }

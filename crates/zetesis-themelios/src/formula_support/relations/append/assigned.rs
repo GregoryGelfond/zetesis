@@ -356,10 +356,17 @@ impl SupportAppend<'_> {
         workspace: usize,
         work: GroundingWork<'_>,
     ) -> Result<(), FormulaFailure> {
+        self.head_rule = None;
         match self.head_block.take() {
             Some(rows) => self.finish_facts(rows, workspace, work),
             None => Ok(()),
         }
+    }
+
+    /// The fact rule `index` comes next in the open head block: its head's
+    /// atom is recorded, when a cell for it was reserved.
+    pub(in crate::formula_support) fn expect_head(&mut self, index: usize) {
+        self.head_rule = self.head_block.as_ref().map(|_| index);
     }
 
     /// Whether a head of `pattern`'s predicate enters the open head block.
@@ -384,6 +391,15 @@ impl SupportAppend<'_> {
             .ok_or_else(|| failure(Failure::Owner, location))?;
         let result = self.fact_assigned(&rows, pattern, values, workspace, work);
         self.head_block = Some(rows);
+        if let (Ok(atom), Some(rule), Some(heads)) = (
+            &result,
+            self.head_rule.take(),
+            self.head_rows.as_deref_mut(),
+        ) && heads.len() < heads.capacity()
+            && heads.last().is_none_or(|&(last, _)| last < rule)
+        {
+            heads.push((rule, atom.position));
+        }
         result
     }
 

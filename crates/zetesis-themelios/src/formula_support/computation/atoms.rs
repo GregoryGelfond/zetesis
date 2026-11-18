@@ -263,6 +263,33 @@ impl Computation<'_, '_> {
         }
     }
 
+    /// The head atom support completion recorded for the fact rule `index`,
+    /// when this computation appends to the very catalog its support was read
+    /// from and the rule's head was admitted in a head block. One unit.
+    pub(crate) fn recorded_head(
+        &self,
+        index: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<SourceAtom>, FormulaFailure> {
+        let Terms::Append(append) = &self.terms else {
+            return Ok(None);
+        };
+        let rows = self.support.head_rows();
+        if rows.is_empty() || !append.belongs_to(self.support.relations()) {
+            return Ok(None);
+        }
+        counters.work(limits, location)?;
+        Ok(rows
+            .binary_search_by_key(&index, |&(rule, _)| rule)
+            .ok()
+            .map(|found| SourceAtom {
+                scope: append.source_scope(),
+                position: rows[found].1,
+            }))
+    }
+
     /// Producer heads explicitly select discovered identities into support.
     /// Final formula emission and objective/output selection do not call this.
     pub(crate) fn support(

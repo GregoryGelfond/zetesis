@@ -111,6 +111,10 @@ pub(crate) struct SupportCatalog {
     /// round interned it; reserved before that round, which alone appends.
     fact_rows: Vec<usize>,
     fact_rows_open: bool,
+    /// Without fact blocks: each fact rule's index and its head's atom
+    /// position, in rule order, for the rules support's first round admitted
+    /// in a head block; reserved before that round, which alone appends.
+    head_rows: Vec<(usize, usize)>,
     entries: usize,
     index_bytes: usize,
     prepared_bytes: usize,
@@ -130,6 +134,7 @@ impl Default for SupportCatalog {
             certainty: None,
             fact_rows: Vec::new(),
             fact_rows_open: false,
+            head_rows: Vec::new(),
             entries: 0,
             index_bytes: size_of::<Self>() - size_of::<AtomInterner>()
                 + SourceScope::shared_bytes(),
@@ -216,6 +221,35 @@ impl SupportCatalog {
         Ok(())
     }
 
+    /// Reserve a cell per fact rule for the first round to record its head
+    /// atom in, as [`Self::open_fact_rows`] does for fact rows. One unit.
+    pub(super) fn open_head_rows(
+        &mut self,
+        rules: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        counters.work(limits, location)?;
+        let bytes = rules
+            .checked_mul(size_of::<(usize, usize)>())
+            .and_then(|added| added.checked_add(self.bytes(location).ok()?))
+            .ok_or_else(|| failure(Failure::Overflow, location))?;
+        Memory::new(
+            bytes,
+            counters.accounting.workspace.bytes() as u128,
+            limits,
+            counters,
+            location,
+        )
+        .add(0)?;
+        self.head_rows
+            .try_reserve_exact(rules)
+            .map_err(|_| failure(Failure::Allocation, location))?;
+        self.fact_rows_open = true;
+        Ok(())
+    }
+
     /// The first round has recorded every fact row: later snapshots read them.
     pub(super) fn close_fact_rows(&mut self) {
         self.fact_rows_open = false;
@@ -229,6 +263,9 @@ impl SupportCatalog {
             .ok()
             .and_then(|owner| owner.checked_add(self.index_bytes))
             .and_then(|bytes| bytes.checked_add(self.fact_rows.capacity() * size_of::<usize>()))
+            .and_then(|bytes| {
+                bytes.checked_add(self.head_rows.capacity() * size_of::<(usize, usize)>())
+            })
             .and_then(|bytes| bytes.checked_add(self.prepared_bytes))
             .and_then(|bytes| bytes.checked_add(self.component_bytes().ok()?))
             .and_then(|bytes| bytes.checked_add(self.pending.capacity() * size_of::<usize>()))
@@ -283,11 +320,17 @@ impl SupportCatalog {
         } else {
             (&self.fact_rows, None)
         };
+        let (head_rows, heads): (&[(usize, usize)], _) = if self.fact_rows_open {
+            (&[], Some(&mut self.head_rows))
+        } else {
+            (&self.head_rows, None)
+        };
         let relations = SnapshotSource {
             sources: &self.rows,
             components: self.components.as_ref(),
             certainty: self.certainty.as_ref(),
             fact_rows,
+            head_rows,
             read: committed.read(),
             entries: self.entries,
             bytes,
@@ -296,7 +339,7 @@ impl SupportCatalog {
         .build(limits, counters, location)?;
         let append = SupportAppend::new(
             appender,
-            (&mut self.pending, record),
+            (&mut self.pending, record, heads),
             &mut self.supported,
             &self.scope,
             growth,
@@ -401,6 +444,7 @@ impl SupportCatalog {
             components: self.components.as_ref(),
             certainty: self.certainty.as_ref(),
             fact_rows: &self.fact_rows,
+            head_rows: &self.head_rows,
             read: self.owner.read(),
             entries: self.entries,
             bytes: self.bytes(location)?,
@@ -429,6 +473,7 @@ struct SnapshotSource<'a> {
     components: Option<&'a TemplateComponents>,
     certainty: Option<&'a super::certain::Certainty>,
     fact_rows: &'a [usize],
+    head_rows: &'a [(usize, usize)],
     read: CatalogRead<'a>,
     entries: usize,
     bytes: usize,
@@ -480,6 +525,7 @@ impl<'a> SnapshotSource<'a> {
             components,
             certainty: self.certainty,
             fact_rows: self.fact_rows,
+            head_rows: self.head_rows,
             read: Some(self.read),
             entries: self.entries,
             bytes: memory.bytes,
@@ -811,6 +857,9 @@ pub(crate) struct Relations<'source> {
     /// Each fact row's atom position, in item order; empty when support
     /// completion recorded none.
     fact_rows: &'source [usize],
+    /// Each fact rule's index and head atom position, in rule order, for the
+    /// rules support completion recorded; empty when it recorded none.
+    head_rows: &'source [(usize, usize)],
     read: Option<CatalogRead<'source>>,
     growth: Option<&'source AtomicUsize>,
     pub(super) entries: usize,
@@ -862,6 +911,10 @@ impl<'source> Relations<'source> {
 
     pub(super) fn fact_rows(&self) -> &'source [usize] {
         self.fact_rows
+    }
+
+    pub(super) fn head_rows(&self) -> &'source [(usize, usize)] {
+        self.head_rows
     }
 
     pub(super) fn components(&self) -> Option<TemplateComponentsRef<'source>> {
