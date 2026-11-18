@@ -325,6 +325,68 @@ impl SupportAppend<'_> {
         })
     }
 
+    /// Prepare `rows` heads of `predicate` as one fact block, for a run of
+    /// fact rules that follow one another. Any open block is ended first.
+    pub(in crate::formula_support) fn open_head_block(
+        &mut self,
+        predicate: PredicateRef<'_>,
+        rows: usize,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<(), FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        self.close_head_block(workspace, GroundingWork::new(limits, counters, location))?;
+        let rows = self.prepare_facts(
+            predicate,
+            rows,
+            workspace,
+            GroundingWork::new(limits, counters, location),
+        )?;
+        self.head_block = Some(rows);
+        Ok(())
+    }
+
+    /// End the open head block, giving back the room its unpublished rows left.
+    pub(in crate::formula_support) fn close_head_block(
+        &mut self,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<(), FormulaFailure> {
+        match self.head_block.take() {
+            Some(rows) => self.finish_facts(rows, workspace, work),
+            None => Ok(()),
+        }
+    }
+
+    /// Whether a head of `pattern`'s predicate enters the open head block.
+    pub(in crate::formula_support) fn in_head_block(&self, pattern: PatternRef<'_>) -> bool {
+        self.head_block
+            .as_ref()
+            .is_some_and(|rows| self.owner.prepared_for(&rows.facts, pattern.predicate()))
+    }
+
+    /// [`Self::assigned`] for one head of the open head block.
+    pub(in crate::formula_support) fn head_block_assigned(
+        &mut self,
+        pattern: PatternRef<'_>,
+        values: AssignmentSlice<'_>,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let location = work.location;
+        let rows = self
+            .head_block
+            .take()
+            .ok_or_else(|| failure(Failure::Owner, location))?;
+        let result = self.fact_assigned(&rows, pattern, values, workspace, work);
+        self.head_block = Some(rows);
+        result
+    }
+
     /// Source templates and their constants already passed source admission.
     /// Preparation retains only the caller-accounted borrowed header.
     pub(in crate::formula_support) fn prepare_pattern<'pattern>(

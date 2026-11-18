@@ -21,6 +21,7 @@ pub(crate) use storage::{
 mod accounting;
 mod expression_keys;
 mod generated;
+mod head_run;
 mod heads;
 mod integer_comparisons;
 pub(crate) use heads::RowHead;
@@ -754,11 +755,8 @@ fn complete_with_executor(
         rounds += 1;
         counters.record(Event::SupportRound);
         let changed = {
-            // Rules alone are scheduled: a fact block has no producer slot,
-            // and enters support in the first round at its item position.
             let mut schedule = producers.schedule();
-            let mut facts = (rounds == 1 && prepared.items().blocks().next().is_some())
-                .then(|| facts::FirstRound::new(prepared.items()));
+            let (mut facts, mut heads) = first_round(rounds, prepared);
             let mut selected = schedule.next(limits, counters, fallback)?;
             if selected.is_none() && producers.is_planned() && facts.is_none() {
                 // Every zero-input producer ran at bootstrap. Every subsequent
@@ -778,13 +776,19 @@ fn complete_with_executor(
             counters.observe_work(Event::SupportProductionWork, |counters| {
                 while let Some((index, scheduled)) = next_producer(
                     selected,
-                    &mut facts,
+                    (&mut facts, &mut heads),
                     (&producers, &mut delta, &support),
                     (limits, counters, fallback),
                 )? {
-                    if let Some(facts) = &mut facts {
-                        facts.before_rule(index, &mut delta, &support, limits, counters)?;
-                    }
+                    let rules = prepared.rules_without_facts();
+                    let first = (&mut facts, &mut heads);
+                    enter_rule(
+                        index,
+                        first,
+                        rules,
+                        (&mut delta, &support),
+                        (limits, counters),
+                    )?;
                     let rule = &prepared.rules_without_facts()[index];
                     counters.work(limits, rule.location)?;
                     counters.record(Event::SupportProducerVisit);
@@ -837,13 +841,51 @@ fn complete_with_executor(
     }
 }
 
+/// What the first round admits beside its producers. Rules alone are
+/// scheduled: a fact block has no producer slot, and enters support in the
+/// first round at its item position. Without fact blocks, the first round
+/// admits runs of fact rules of one predicate as head blocks instead.
+fn first_round(
+    rounds: u64,
+    prepared: &Prepared,
+) -> (Option<facts::FirstRound<'_>>, Option<head_run::HeadRun>) {
+    let facts = (rounds == 1 && prepared.items().blocks().next().is_some())
+        .then(|| facts::FirstRound::new(prepared.items()));
+    let heads = (rounds == 1 && facts.is_none()).then(head_run::HeadRun::default);
+    (facts, heads)
+}
+
+/// Admit what the first round holds before the rule `index`: the fact blocks
+/// that precede it, or the run of fact rules it opens or continues.
+fn enter_rule<'source>(
+    index: usize,
+    (facts, heads): (
+        &mut Option<facts::FirstRound<'_>>,
+        &mut Option<head_run::HeadRun>,
+    ),
+    rules: &'source [crate::formula_ir::RuleIr],
+    (delta, support): (&mut SupportAppend<'source>, &Support<'source>),
+    (limits, counters): (&FormulaLimits, &mut Counters),
+) -> Result<(), FormulaFailure> {
+    if let Some(facts) = facts {
+        facts.before_rule(index, delta, support, limits, counters)?;
+    }
+    if let Some(heads) = heads {
+        heads.before_rule(index, rules, delta, support, limits, counters)?;
+    }
+    Ok(())
+}
+
 /// The round's next producer: the schedule's, then, once it is exhausted and
 /// the facts are in, each producer the component schedule holds whose waited
 /// components reached their fixed point, flagged so its caller traverses it
 /// in full.
 fn next_producer<'source>(
     selected: Option<usize>,
-    facts: &mut Option<facts::FirstRound<'_>>,
+    (facts, heads): (
+        &mut Option<facts::FirstRound<'_>>,
+        &mut Option<head_run::HeadRun>,
+    ),
     (producers, delta, support): (
         &producers::Producers<'_>,
         &mut SupportAppend<'source>,
@@ -856,6 +898,10 @@ fn next_producer<'source>(
     }
     if let Some(facts) = facts.take() {
         facts.finish(delta, support, limits, counters)?;
+    }
+    // A producer the component schedule releases starts no head run.
+    if let Some(mut heads) = heads.take() {
+        heads.close(delta, support, limits, counters, location)?;
     }
     let ready = match producers.take_ready() {
         Some(index) => Some(index),

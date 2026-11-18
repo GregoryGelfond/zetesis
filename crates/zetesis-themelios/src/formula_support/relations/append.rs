@@ -26,6 +26,8 @@ pub(crate) struct SupportAppend<'a> {
     pending: &'a mut Vec<usize>,
     /// Open only in support's first round, with a reserved cell per fact row.
     fact_rows: Option<&'a mut Vec<usize>>,
+    /// A run of fact rules' heads prepared at the owner as one fact block.
+    head_block: Option<assigned::FactRows>,
     supported: &'a mut Words<u64>,
     scope: &'a SourceScope,
     growth: &'a AtomicUsize,
@@ -129,6 +131,7 @@ impl<'a> SupportAppend<'a> {
             owner,
             pending,
             fact_rows,
+            head_block: None,
             supported,
             scope,
             growth,

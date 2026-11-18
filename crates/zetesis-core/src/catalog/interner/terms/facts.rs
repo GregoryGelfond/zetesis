@@ -97,6 +97,17 @@ impl AtomAppender<'_> {
         })
     }
 
+    /// Whether `predicate` is the one `facts` was prepared for in this writer:
+    /// one identity comparison, reading no names.
+    #[must_use]
+    pub fn prepared_for(&self, facts: &PreparedFacts, predicate: PredicateRef<'_>) -> bool {
+        let read = storage::Read::from(&*self.store);
+        read.accepts_atom_scope(&facts.owner)
+            && predicate
+                .canonical()
+                .is_some_and(|(source, id)| id == facts.predicate && read.same_vocabulary(source))
+    }
+
     /// End a prepared block: give back the room its found rows did not use,
     /// so the capacities are those publishing its new rows one at a time
     /// would have left. Shrinking moves each live cell once.

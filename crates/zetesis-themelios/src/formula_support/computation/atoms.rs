@@ -75,6 +75,34 @@ impl Computation<'_, '_> {
         )
     }
 
+    /// Whether `pattern`'s heads enter the open head block of fact rules.
+    pub(crate) fn in_head_block(&self, pattern: PatternRef<'_>) -> bool {
+        match &self.terms {
+            Terms::Append(append) => append.in_head_block(pattern),
+            Terms::Frozen(_) | Terms::Borrowed(_) => false,
+        }
+    }
+
+    /// [`Self::atom`] for a head of the open head block.
+    pub(crate) fn head_block_atom(
+        &mut self,
+        pattern: PatternRef<'_>,
+        binding: &Binding<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.head_block_assigned(
+            pattern,
+            binding.slots(),
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
     /// Authenticate a fact block's predicate and reserve its rows.
     pub(crate) fn prepare_facts(
         &mut self,
