@@ -174,9 +174,9 @@ fn support_comparison_stream(theory: &Theory, decline_arithmetic: bool) -> Stabl
     stream
 }
 
-#[test]
-fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_and_refusals() {
-    let cases = [
+/// The certificate cases: eligible ones, and refusals at positions 3 and 6.
+fn certificate_cases() -> [Theory; 7] {
+    [
         three_choices(),
         // Unsupported carrier atoms are cut by the walk's founded narrowing:
         // every present atom lacks a producer, so only the empty interpretation
@@ -187,8 +187,9 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
             vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
             vec![0, 2],
         ),
-        // Positive cycle and general disjunction are certificate refusals.
+        // A positive cycle is a certificate refusal.
         theory(1, vec![Node::atom(0), Node::implies(0, 0)], vec![1]),
+        // A tight disjunction is head-cycle-free: shifted support checks it.
         theory(
             2,
             vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
@@ -205,7 +206,25 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
             ],
             vec![3],
         ),
-    ];
+        // A disjunction whose atoms support each other is not head-cycle-free
+        // and stays a certificate refusal: a | b. a :- b. b :- a.
+        theory(
+            2,
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::or_pair([0, 1]),
+                Node::implies(1, 0),
+                Node::implies(0, 1),
+            ],
+            vec![2, 3, 4],
+        ),
+    ]
+}
+
+#[test]
+fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_and_refusals() {
+    let cases = certificate_cases();
     for (index, theory) in cases.iter().enumerate() {
         let wanted = expected(theory);
         // Only the unsupported-atom constraint needs arithmetic declined to
@@ -214,7 +233,7 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
         let eligible = scalar
             .enable_certified_checking(TightPlanLimits::default())
             .unwrap();
-        assert_eq!(eligible, ![3, 4].contains(&index));
+        assert_eq!(eligible, ![3, 6].contains(&index), "case {index}");
         assert_eq!(masks(scalar.by_ref()), wanted);
         assert!(scalar.exhausted());
         let stats = scalar.statistics();

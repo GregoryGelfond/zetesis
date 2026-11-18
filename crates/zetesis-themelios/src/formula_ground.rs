@@ -2259,6 +2259,12 @@ impl<'source> Builder<'_, '_, 'source> {
                 self.head_origins(atom, rule)?;
             }
         }
+        // An unconditional disjunct is its literal: (true -> l) and not not
+        // true is strongly equivalent to l, so the disjunction keeps atom
+        // leaves for the shifted (head-cycle-free) support route.
+        if condition == VERUM {
+            return Ok(literal);
+        }
         let implication = self.node(Node::Implies(condition, literal), rule.location)?;
         let absent = self.neg(condition, rule.location)?;
         let eligible = self.neg(absent, rule.location)?;

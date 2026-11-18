@@ -11,7 +11,7 @@ pub use evaluate::TightWorkspace;
 
 use std::fmt;
 
-use crate::Theory;
+use crate::{NodeView, Theory};
 use zetesis_algebra::{Cancellation, ChargeError, Meter, MeterBytes, Refusal, Stop};
 
 /// Admission bounds for the optional class certificate. Logical bytes cover the
@@ -168,6 +168,65 @@ pub enum TightProducerKind {
     Normal,
     /// Atomic choice head; no rewriting of the original theory is performed.
     Choice,
+    /// One atom of a head-cycle-free head disjunction, read as its shift
+    /// `h ← body ∧ ¬(other heads)`: the producer supports `h` only while no
+    /// other atom of the disjunction node `heads` is present. No rewriting of
+    /// the original theory is performed.
+    Shifted {
+        /// The original head disjunction node of the producer's root.
+        heads: usize,
+    },
+}
+
+/// The most atoms a shifted head disjunction may hold; a wider head falls
+/// back, so a support check reads a bounded head per producer.
+pub(super) const MAX_SHIFTED_HEADS: usize = 16;
+
+/// The `(atom node, atom)` leaves of a head disjunction, nested disjunctions
+/// flattened, in left-to-right order, with their count; `None` unless `head`
+/// is a disjunction whose every leaf is an atom and which has at most
+/// [`MAX_SHIFTED_HEADS`] leaves. Reads at most `2 * MAX_SHIFTED_HEADS` nodes.
+pub(super) fn head_disjunction(
+    theory: &Theory,
+    head: usize,
+) -> Option<([(usize, usize); MAX_SHIFTED_HEADS], usize)> {
+    if !matches!(theory.view().node(head).ok()?, NodeView::Or(_)) {
+        return None;
+    }
+    let mut leaves = [(0, 0); MAX_SHIFTED_HEADS];
+    let mut count = 0;
+    let mut pending = [0usize; 2 * MAX_SHIFTED_HEADS];
+    pending[0] = head;
+    let mut depth = 1;
+    let mut reads = 0;
+    while depth > 0 {
+        depth -= 1;
+        let node = pending[depth];
+        reads += 1;
+        if reads > 2 * MAX_SHIFTED_HEADS {
+            return None;
+        }
+        match theory.view().node(node).ok()? {
+            NodeView::Atom(atom) => {
+                if count == MAX_SHIFTED_HEADS {
+                    return None;
+                }
+                leaves[count] = (node, atom);
+                count += 1;
+            }
+            NodeView::Or(operands) => {
+                if depth + operands.len() > pending.len() {
+                    return None;
+                }
+                for &operand in operands.iter().rev() {
+                    pending[depth] = operand;
+                    depth += 1;
+                }
+            }
+            _ => return None,
+        }
+    }
+    Some((leaves, count))
 }
 
 /// An immutable producer extracted from one exact original root.
@@ -235,6 +294,9 @@ pub struct TightPlan {
     /// Who reads each node's truth, present once [`Self::prepare_updates`]
     /// built it; a reused workspace then updates its retained evaluation.
     readers: Option<readers::Readers>,
+    /// Head atoms a complete check reads for shifted head disjunctions: each
+    /// shifted producer reads every atom of its head.
+    shifted_reads: u128,
     statistics: TightPlanStatistics,
 }
 impl TightPlan {
@@ -252,6 +314,14 @@ impl TightPlan {
     #[must_use]
     pub fn ranks(&self) -> &[usize] {
         &self.ranks
+    }
+    /// Whether any producer is a shifted head disjunction, whose support also
+    /// reads the other heads of its root.
+    #[must_use]
+    pub fn shifts_disjunctions(&self) -> bool {
+        self.producers
+            .iter()
+            .any(|producer| matches!(producer.kind, TightProducerKind::Shifted { .. }))
     }
     /// Certificate construction and retained payload accounting.
     #[must_use]
@@ -292,15 +362,21 @@ impl TightPlan {
                 work: 0,
             };
         }
-        if !readers::Reader::rows_fit(
-            self.theory.parts().rows().len(),
-            self.theory.parts().conditions().len(),
-        ) || !Self::index_admitted(
-            self.producers.len(),
-            self.index_work_bound(),
-            self.index_byte_bound(),
-            limits,
-        ) {
+        // An update re-reads a producer only when its body changes; a shifted
+        // producer's support also reads its other heads, so a plan with one
+        // keeps complete evaluation.
+        if self.shifts_disjunctions()
+            || !readers::Reader::rows_fit(
+                self.theory.parts().rows().len(),
+                self.theory.parts().conditions().len(),
+            )
+            || !Self::index_admitted(
+                self.producers.len(),
+                self.index_work_bound(),
+                self.index_byte_bound(),
+                limits,
+            )
+        {
             return TightAttempt {
                 result: Ok(false),
                 work: 0,
@@ -397,6 +473,7 @@ impl TightPlan {
         let theory = &self.theory;
         let complete = crate::EvaluationWorkspace::work_bound(theory)
             + self.producers.len() as u128
+            + self.shifted_reads
             + theory.atom_count().div_ceil(32) as u128;
         if self.readers.is_none() {
             return complete;

@@ -464,7 +464,9 @@ impl Execution {
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         let source = resources.device_source(options).map_err(SolveError::Gpu)?;
-        if let Some(plan) = tight_plan {
+        // The device support kernel reads producer bodies only; a plan that
+        // shifts head disjunctions keeps the general device route.
+        if let Some(plan) = tight_plan.filter(|plan| !plan.shifts_disjunctions()) {
             return Self::tight(options, source, plan, control, observations);
         }
         // A supplied profile is used exactly, with its shader and pipelines.
