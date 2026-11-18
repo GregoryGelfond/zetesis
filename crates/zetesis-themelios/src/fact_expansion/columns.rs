@@ -11,7 +11,11 @@ use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
 use crate::{ExpansionFailure, ExpansionResource, ProfileFeature, ProgramSite, compile};
 
-#[derive(Debug)]
+/// The segments a recycled column keeps room for: a plain argument's one and
+/// a short pool's few. A larger column releases its storage with its values.
+const RETAINED_SEGMENTS: usize = 8;
+
+#[derive(Debug, Default)]
 pub(super) struct Column {
     segments: Vec<Segment>,
     segment: usize,
@@ -59,16 +63,18 @@ impl Column {
                 .sum::<usize>()
     }
 
+    /// Check one argument into this column, replacing what it held and
+    /// keeping its storage; returns the argument's scalar payload bytes.
     pub(super) fn prepare(
+        &mut self,
         term: &SourceTerm,
         budget: &mut Budget,
         location: ProgramSite,
-    ) -> Result<(Self, u128), ExpansionFailure> {
-        let mut column = Self {
-            segments: Vec::new(),
-            segment: 0,
-            offset: 0,
-        };
+    ) -> Result<u128, ExpansionFailure> {
+        let column = self;
+        column.segments.clear();
+        column.segment = 0;
+        column.offset = 0;
         let mut payload = 0_u128;
         let mut pending = Pending::new(term);
         while let Some(term) = pending.pop() {
@@ -100,7 +106,15 @@ impl Column {
             reserve(&mut column.segments, 1, budget, location)?;
             column.segments.push(segment);
         }
-        Ok((column, payload))
+        Ok(payload)
+    }
+
+    /// Drop the column's values, keeping a small column's storage for reuse.
+    pub(super) fn recycle(&mut self) {
+        self.segments.clear();
+        self.segments.shrink_to(RETAINED_SEGMENTS);
+        self.segment = 0;
+        self.offset = 0;
     }
 
     /// The segments in emission order, independent of the copy-preflight position.
