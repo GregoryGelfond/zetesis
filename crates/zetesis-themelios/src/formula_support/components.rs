@@ -90,6 +90,9 @@ pub(crate) enum Term {
 pub(crate) struct Admission<'a> {
     catalog: &'a mut SupportCatalog,
     workspace: Workspace,
+    /// The predicate admitted last. Consecutive patterns of one predicate,
+    /// such as a block of fact rules, share its declaration and component.
+    last_predicate: Option<Predicate>,
     _header: StorageLease,
 }
 
@@ -123,6 +126,7 @@ impl SupportCatalog {
         let admission = Admission {
             catalog: self,
             workspace,
+            last_predicate: None,
             _header: header,
         };
         admission.check(limits, counters, location)?;
