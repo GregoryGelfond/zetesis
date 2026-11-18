@@ -10,6 +10,7 @@ use zetesis_algebra::words::Words;
 use zetesis_core::catalog::PredicateRef;
 
 mod assigned;
+mod ranks;
 pub(crate) use assigned::{FactRows, SourceAtom, SourceScope};
 
 #[cfg(test)]
@@ -283,16 +284,18 @@ impl<'a> SupportAppend<'a> {
                     position,
                     predicate,
                     start,
+                    arity,
+                    rank: 0,
                 });
             }
             let terms = &terms;
-            crate::formula_support::sort::merge_by(
+            sort_keys(
                 &mut keys,
-                &mut scratch,
-                &mut runs,
+                terms,
+                (&mut scratch, &mut runs),
+                &mut memory,
                 executor.and_then(crate::formula_support::Executor::pool),
-                GroundingWork::new(limits, counters, location),
-                |left, right, charged| left.compare(right, terms, charged),
+                (limits, counters, location),
             )?;
             // One permit per position written back in typed order.
             counters.charge_work(keys.len() as u128, limits, location)?;
@@ -309,6 +312,90 @@ impl<'a> SupportAppend<'a> {
     }
 }
 
+/// Sort a round's keys into typed atom order, by ranks when that pays.
+fn sort_keys<'a>(
+    keys: &mut Vec<Key<'a>>,
+    terms: &[TermRef<'a>],
+    (scratch, runs): (&mut Vec<Key<'a>>, &mut Vec<usize>),
+    memory: &mut Memory<'_>,
+    pool: Option<&rayon::ThreadPool>,
+    (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+) -> Result<(), FormulaFailure> {
+    // Rank distinct terms and predicates once, so the sort compares integers,
+    // when the round is large and its arrival order is not already nearly
+    // typed (then the natural merge sort only confirms runs). Values outside
+    // one canonical vocabulary keep the typed comparison.
+    let ranked = if disordered(keys, terms, (limits, counters, location))? {
+        let mut predicates = Vec::new();
+        memory.reserve(&mut predicates, keys.len())?;
+        predicates.extend(keys.iter().map(|key| key.predicate));
+        ranks::ranks(
+            terms,
+            &predicates,
+            memory,
+            pool,
+            (limits, counters, location),
+        )?
+    } else {
+        None
+    };
+    let work = GroundingWork::new(limits, counters, location);
+    if let Some((columns, heads)) = ranked {
+        for (key, rank) in keys.iter_mut().zip(&heads) {
+            key.rank = *rank;
+        }
+        let columns = &columns;
+        crate::formula_support::sort::merge_by(
+            keys,
+            scratch,
+            runs,
+            pool,
+            work,
+            |left, right, charged| left.compare_ranked(right, columns, charged),
+        )
+    } else {
+        crate::formula_support::sort::merge_by(
+            keys,
+            scratch,
+            runs,
+            pool,
+            work,
+            |left, right, charged| left.compare(right, terms, charged),
+        )
+    }
+}
+
+/// Rounds smaller than this keep the typed comparison.
+const RANKED_MIN: usize = 1 << 12;
+/// Adjacent pairs sampled, at an even stride, to judge arrival order.
+const SAMPLED_PAIRS: usize = 1 << 10;
+
+/// Whether a large round's arrival order is far from typed: at least one in
+/// sixteen evenly spaced adjacent pairs descends. Depends only on the keys.
+fn disordered(
+    keys: &[Key<'_>],
+    terms: &[TermRef<'_>],
+    (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+) -> Result<bool, FormulaFailure> {
+    if keys.len() < RANKED_MIN {
+        return Ok(false);
+    }
+    let stride = keys.len() / SAMPLED_PAIRS;
+    let (mut sampled, mut descents, mut charged) = (0_usize, 0_usize, 0_u64);
+    for index in (1..keys.len()).step_by(stride.max(1)) {
+        sampled += 1;
+        charged += 1;
+        if keys[index]
+            .compare(&keys[index - 1], terms, &mut charged)
+            .is_lt()
+        {
+            descents += 1;
+        }
+    }
+    counters.charge_work(u128::from(charged), limits, location)?;
+    Ok(descents * 16 >= sampled)
+}
+
 /// A pending atom's position with its predicate and the start of its
 /// columns in the sort's term buffer, read once before sorting.
 #[derive(Clone, Copy)]
@@ -316,9 +403,26 @@ struct Key<'a> {
     position: usize,
     predicate: PredicateRef<'a>,
     start: usize,
+    arity: usize,
+    /// The predicate's rank among the round's predicates, once ranked.
+    rank: u32,
 }
 
 impl Key<'_> {
+    /// The typed atom order read from ranks: one permit per comparison.
+    fn compare_ranked(
+        &self,
+        other: &Self,
+        columns: &[u32],
+        charged: &mut u64,
+    ) -> std::cmp::Ordering {
+        *charged += 1;
+        self.rank.cmp(&other.rank).then_with(|| {
+            columns[self.start..self.start + self.arity]
+                .cmp(&columns[other.start..other.start + other.arity])
+        })
+    }
+
     /// The typed atom order: predicates, then columns left to right, each
     /// compared as a typed atom comparison compares them. Distinct positions
     /// are distinct atoms, so no identity check precedes the fields.
