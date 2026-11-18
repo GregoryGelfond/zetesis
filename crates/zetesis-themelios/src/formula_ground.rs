@@ -1266,6 +1266,17 @@ impl<'source> Builder<'_, '_, 'source> {
         if crate::formula_factor::rule(self, rule, support)? {
             return Ok(());
         }
+        // A body-less normal rule without variables has one passing row, the
+        // empty binding, and no witness, selection or exclusion to consult:
+        // it is emitted from that binding as the join's one row would be.
+        if rule.body.is_empty()
+            && rule.variables == 0
+            && matches!(rule.head, HeadIr::Normal(Some(_)))
+        {
+            let binding =
+                Binding::new(self.computation, self.limits, self.counters, rule.location)?;
+            return self.rule(rule, &binding, support, None, None);
+        }
         let candidates = domains
             .map(|domains| domains.for_rule(index, rule))
             .transpose()?
