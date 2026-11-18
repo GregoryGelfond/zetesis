@@ -172,9 +172,9 @@ impl<'a> Prepared<'a> {
             location,
         } = work;
         let empty = Binding::new(computation, limits, counters, location)?;
-        let mut plan = order::Plan::new(
+        let mut plan = order::Plan::with_fixed(
             scope.literals,
-            &empty,
+            (&empty, bound),
             bound.len(),
             order::SourceRows {
                 relations: support,
@@ -186,8 +186,8 @@ impl<'a> Prepared<'a> {
                 computation.preparation_capacity(capacity, limits, counters, location)
             }),
         )?;
-        // Keep today's empty-prefix order. Fixed head slots only change the
-        // comparison schedule, just as the ordinary component's decide does.
+        // Fixed head slots are bound before the first row is read, so they
+        // order the component as well as its comparison schedule.
         let mut lease = computation.lease();
         let bytes = usize::try_from(plan.retained_bytes()).map_err(|_| overflow(location))?;
         lease.observe(bytes, location)?;

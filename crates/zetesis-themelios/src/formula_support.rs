@@ -2206,8 +2206,39 @@ impl<'a, 'source> Join<'a, 'source> {
             None,
             Context::new(computation, limits, counters, location),
         )?;
+        join.arrange_fixed(computation, limits, budget, counters, location)?;
         join.decide(computation, limits, budget, counters, location)?;
         Ok(join)
+    }
+
+    /// Reorder a fresh component cursor once its fixed slots are installed,
+    /// as a prepared component plan is ordered: a fixed slot is bound.
+    fn arrange_fixed(
+        &mut self,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let fixed = self.bound_slots(computation, limits, counters, location)?;
+        let empty = Binding::new(computation, limits, counters, location)?;
+        let mut admit =
+            |capacity| computation.preparation_capacity(capacity, limits, counters, location);
+        let plan = order::Plan::with_fixed(
+            self.literals.get(),
+            (&empty, fixed.slice()),
+            fixed.len(),
+            order::SourceRows {
+                relations: self.support,
+                pivot: None,
+            },
+            budget,
+            location,
+            Some(&mut admit),
+        )?;
+        *self.owned_plan() = plan;
+        Ok(())
     }
 
     fn fix_component(
