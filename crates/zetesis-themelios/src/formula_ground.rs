@@ -1337,9 +1337,7 @@ impl<'source> Builder<'_, '_, 'source> {
             rule.location,
         )?;
         outer.select_total_body(rule, self.computation, self.limits, self.counters)?;
-        if matches!(schedule, Schedule::Eager(_)) {
-            outer.select_numeric_probes(rule, self.limits, self.counters)?;
-        }
+        outer.select_numeric_probes(rule, self.limits, self.counters)?;
         if crate::formula_factor::continuations(self, rule, &mut outer, support)? {
             return Ok(());
         }

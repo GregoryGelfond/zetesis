@@ -1540,7 +1540,7 @@ pub(crate) struct Join<'a, 'source> {
     source_evidence: bool,
     /// All flat constraint expressions succeeded over completed source domains.
     certified_total: bool,
-    /// Explicit eager-emission permission for checked expression-key probes.
+    /// Explicit rule-instantiation permission for checked expression-key probes.
     expression_keys: Option<expression_keys::Eligible>,
     multiples: Option<multiples::Prepared<'a>>,
     range_selection: Option<RangeSelection<'a>>,
