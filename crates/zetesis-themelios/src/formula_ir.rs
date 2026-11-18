@@ -1821,24 +1821,48 @@ impl Compiler<'_> {
         &mut self,
         value: &Value,
     ) -> Result<components::Scalar, FormulaFailure> {
-        let key = self.value(value)?;
-        self.source
-            .scalar_key(&key, self.limits, self.counters, self.location)
+        let (key, slot) = self.value_slot(value)?;
+        if let Some(slot) = slot
+            && let Some(scalar) =
+                self.imported
+                    .scalar(slot, self.limits, self.counters, self.location)?
+        {
+            return Ok(scalar);
+        }
+        let scalar = self
+            .source
+            .scalar_key(&key, self.limits, self.counters, self.location)?;
+        if let Some(slot) = slot {
+            self.imported.remember_scalar(
+                slot,
+                scalar,
+                &self.source,
+                self.limits,
+                self.counters,
+                self.location,
+            )?;
+        }
+        Ok(scalar)
     }
 
     /// Admit one explicit source root. Interned descendants do not enlarge this
     /// scope's domain; objective and projection scopes own separate selections.
     pub(super) fn value(&mut self, value: &Value) -> Result<TermKey, FormulaFailure> {
+        self.value_slot(value).map(|(key, _)| key)
+    }
+
+    /// [`Self::value`] with the memo slot remembering it, if any.
+    fn value_slot(&mut self, value: &Value) -> Result<(TermKey, Option<usize>), FormulaFailure> {
         let found = self
             .imported
             .find(value, self.limits, self.counters, self.location)?;
-        let key = if let Some(key) = found {
-            key
+        let (key, slot) = if let Some((key, slot)) = found {
+            (key, Some(slot))
         } else {
             let key =
                 self.source
                     .import(value.into(), self.limits, self.counters, self.location)?;
-            self.imported.remember(
+            let slot = self.imported.remember(
                 value,
                 &key,
                 &self.source,
@@ -1846,7 +1870,7 @@ impl Compiler<'_> {
                 self.counters,
                 self.location,
             )?;
-            key
+            (key, slot)
         };
         if self.domain.insert(
             &key,
@@ -1864,7 +1888,7 @@ impl Compiler<'_> {
                 self.location,
             )?;
         }
-        Ok(key)
+        Ok((key, slot))
     }
 
     pub(super) fn empty_domain(&self) -> Result<domain::Domain, FormulaFailure> {

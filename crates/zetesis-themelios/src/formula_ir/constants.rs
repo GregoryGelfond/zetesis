@@ -5,8 +5,8 @@
 //! vocabulary once; a later occurrence is found here by hashing and comparing
 //! its source value (one unit per node and payload word each), instead of
 //! hashing and probing its text and node in the vocabulary again. Every
-//! occurrence still receives its own scalar component, so component layout is
-//! unchanged.
+//! occurrence of a root constant names the scalar component its first
+//! occurrence admitted, so a repeated constant appends no component.
 //!
 //! The memo is optional storage under the support workspace. It grows only
 //! when its whole replacement fits the remaining allowance; otherwise later
@@ -20,7 +20,10 @@ use zetesis_core::Value;
 use zetesis_core::catalog::{TermAssignment, TermKey};
 
 use crate::ProgramSite;
-use crate::formula_support::{Counters, StorageLease, components::Admission};
+use crate::formula_support::{
+    Counters, StorageLease,
+    components::{Admission, Scalar},
+};
 use crate::{FormulaFailure, FormulaLimits};
 
 pub(crate) struct Constants {
@@ -30,6 +33,8 @@ pub(crate) struct Constants {
     payload: usize,
     /// Remembered terms under the vocabulary's one witness.
     terms: TermAssignment,
+    /// The root scalar component admitted for each remembered slot, if any.
+    scalars: Vec<Option<Scalar>>,
     lease: StorageLease,
 }
 
@@ -47,6 +52,7 @@ impl Constants {
             slots: HashMap::default(),
             payload: 0,
             terms: source.read().assignment(),
+            scalars: Vec::new(),
             lease,
         })
     }
@@ -76,7 +82,7 @@ impl Constants {
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
-    ) -> Result<Option<TermKey>, FormulaFailure> {
+    ) -> Result<Option<(TermKey, usize)>, FormulaFailure> {
         Self::read_value(value, limits, counters, location)?;
         counters.work(limits, location)?;
         let Some(&slot) = self.slots.get(value) else {
@@ -84,7 +90,58 @@ impl Constants {
         };
         // The equal entry the probe found was compared in full.
         Self::read_value(value, limits, counters, location)?;
-        Ok(self.terms.key(slot).ok().flatten())
+        Ok(self.terms.key(slot).ok().flatten().map(|key| (key, slot)))
+    }
+
+    /// The root scalar component remembered for `slot`, one unit to read.
+    pub(super) fn scalar(
+        &self,
+        slot: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<Scalar>, FormulaFailure> {
+        counters.work(limits, location)?;
+        Ok(self.scalars.get(slot).copied().flatten())
+    }
+
+    /// Remember `slot`'s root scalar component when the growth fits the
+    /// allowance; otherwise leave it unremembered. Growth moves every cell
+    /// once and the write is one unit.
+    pub(super) fn remember_scalar(
+        &mut self,
+        slot: usize,
+        scalar: Scalar,
+        source: &Admission<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let previous = self.lease.bytes();
+        if slot >= self.scalars.len() {
+            let needed = slot + 1;
+            if needed > self.scalars.capacity() {
+                let allowance = source.allowance(&self.lease, limits, location)?;
+                let target = needed.max(self.scalars.capacity() * 2);
+                // Old and new buffers coexist while the cells move.
+                let replacement = target * size_of::<Option<Scalar>>();
+                if previous.saturating_add(replacement) > allowance
+                    || self
+                        .scalars
+                        .try_reserve_exact(target - self.scalars.len())
+                        .is_err()
+                {
+                    return Ok(());
+                }
+                for _ in 0..self.scalars.len() {
+                    counters.work(limits, location)?;
+                }
+            }
+            self.scalars.resize(needed, None);
+        }
+        counters.work(limits, location)?;
+        self.scalars[slot] = Some(scalar);
+        self.observe(previous, source, limits, counters, location)
     }
 
     /// Remember an imported constant when the memo's growth fits the
@@ -97,7 +154,7 @@ impl Constants {
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
-    ) -> Result<(), FormulaFailure> {
+    ) -> Result<Option<usize>, FormulaFailure> {
         let slot = self.terms.len();
         let allowance = source.allowance(&self.lease, limits, location)?;
         let previous = self.lease.bytes();
@@ -118,14 +175,18 @@ impl Constants {
                 })
                 .is_err()
         {
-            return self.observe(previous, source, limits, counters, location);
+            return self
+                .observe(previous, source, limits, counters, location)
+                .map(|()| None);
         }
         if index > self.slots.capacity() {
             if self.slots.try_reserve(index - self.slots.len()).is_err() {
                 self.terms
                     .truncate_with(slot, || counters.work(limits, location))
                     .map_err(|error| crate::formula_binding::failure(error, location))?;
-                return self.observe(previous, source, limits, counters, location);
+                return self
+                    .observe(previous, source, limits, counters, location)
+                    .map(|()| None);
             }
             // Rehashing moves every remembered entry once.
             for _ in 0..self.slots.len() {
@@ -140,6 +201,7 @@ impl Constants {
         self.slots.insert(value.clone(), slot);
         self.payload += payload;
         self.observe(previous, source, limits, counters, location)
+            .map(|()| Some(slot))
     }
 
     fn observe(
@@ -153,6 +215,7 @@ impl Constants {
         let bytes = size_of::<Self>() - size_of::<TermAssignment>()
             + self.slots.capacity() * size_of::<(Value, usize)>()
             + self.payload
+            + self.scalars.capacity() * size_of::<Option<Scalar>>()
             + self.terms.retained_bytes();
         self.lease.observe(bytes, location)?;
         source.storage_observed(
@@ -249,7 +312,7 @@ mod tests {
                 )
                 .unwrap()
                 .unwrap();
-            assert_ne!(read.term(&symbol).unwrap(), read.term(&string).unwrap());
+            assert_ne!(read.term(&symbol.0).unwrap(), read.term(&string.0).unwrap());
         });
     }
 }
