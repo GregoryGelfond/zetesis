@@ -754,3 +754,57 @@ fn an_out_of_order_pool_of_fact_rows_still_corresponds() {
     };
     assert_eq!(definitions.deferred.occurrences(), 5);
 }
+
+/// The partition of `text`, decided from its compact summary or, with
+/// `materialized`, only after the full program was prepared first.
+fn decided(text: &str, materialized: bool) -> (Option<usize>, bool) {
+    let mut prepared = prepare(text);
+    if materialized {
+        let location = prepared.location;
+        prepared
+            .program
+            .analyzed
+            .materialize(&mut prepared.budget, location)
+            .unwrap();
+        assert!(prepared.program.analyzed.compact_program().is_none());
+    }
+    let Partition { base, terminal } = partition(prepared).unwrap();
+    let compact = base.program.analyzed.compact_program().is_some();
+    let deferred = terminal.map(|Definitions { deferred, .. }| deferred.len());
+    (deferred, compact)
+}
+
+#[test]
+fn ground_only_terminal_signatures_decline_on_the_compact_summary() {
+    // Every fact signature is terminal, but none has a producer that
+    // enumerates bindings, so the policy would keep all of them in the base.
+    for text in [
+        "e(1,2). e(2,3). n(1). n(2).",
+        "e(1,2). e(2,3). r(X):-e(X,Y), not n(Y). n(3).",
+        "e(1,2). r(Y):-r(X), e(X,Y). r(1).",
+        "p(1). a:-p(1). b(1):-p(1).",
+    ] {
+        assert_eq!(decided(text, false), (None, true), "{text}");
+        assert_eq!(decided(text, true).0, None, "{text}");
+    }
+}
+
+#[test]
+fn the_compact_decision_agrees_with_the_full_program() {
+    for text in [
+        "p(1). q(2). d(X):-p(X). d(X):-q(X).",
+        "p(1). q(2). d(3;1;2). d(X):-p(X). d(X):-q(X).",
+        "p(1). d(X):-p(X). e(X):-d(X).",
+        "p(1). d(X):-p(X). -d(1).",
+        "p(1). d(X):-p(X). :- d(2).",
+        "p(1). d(X):-p(X). {c(X)}:-p(X).",
+        "p(1). d(X):-p(X), not q(X). q(2).",
+        "p(1). p(f(2)). d(X):-p(X).",
+        "e(1,2). e(2,3). n(1).",
+        "e(1,2). r(Y):-r(X), e(X,Y). r(1). t(X):-r(X).",
+    ] {
+        let (compact, _) = decided(text, false);
+        let (full, _) = decided(text, true);
+        assert_eq!(compact, full, "{text}");
+    }
+}
