@@ -7,9 +7,9 @@ use crate::ProgramSite;
 
 use super::GroundingObserver;
 
-/// One operator of a support-completion round, in round order. Index snapshot,
-/// join, dedup, wake and publication alternate per round; rule
-/// instantiation's emission is its own phase.
+/// One operator of a support-completion round, in round order, or of rule
+/// instantiation's parallel emission. Index snapshot, join, dedup, wake and
+/// publication alternate per round; emission stages, then replays.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GroundingOperator {
@@ -23,16 +23,22 @@ pub enum GroundingOperator {
     SupportWake,
     /// Publish the round's atoms into the support relations.
     SupportPublish,
+    /// Stage a factored rule's passing component rows in head-row blocks.
+    EmitStage,
+    /// Replay staged rule instances, in head order, into formula nodes.
+    EmitReplay,
 }
 
 impl GroundingOperator {
     /// Every operator, in round order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 7] = [
         Self::SupportIndex,
         Self::SupportJoin,
         Self::SupportDedup,
         Self::SupportWake,
         Self::SupportPublish,
+        Self::EmitStage,
+        Self::EmitReplay,
     ];
 
     /// Stable machine-readable identifier; no allocation or clock access.
@@ -44,6 +50,8 @@ impl GroundingOperator {
             Self::SupportDedup => "support_dedup",
             Self::SupportWake => "support_wake",
             Self::SupportPublish => "support_publish",
+            Self::EmitStage => "emit_stage",
+            Self::EmitReplay => "emit_replay",
         }
     }
 }

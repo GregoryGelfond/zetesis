@@ -12,6 +12,14 @@ impl Counters {
         crate::grounding_observer::operator(self.observed.operators(), operator, self, action)
     }
 
+    /// The operator observer, for operators bracketed outside support
+    /// completion; `None` when no timing observer is attached.
+    pub(crate) fn operators(
+        &self,
+    ) -> Option<std::rc::Rc<dyn crate::grounding_observer::OperatorObserver>> {
+        self.observed.operators()
+    }
+
     pub(super) fn observe_work<T>(
         &mut self,
         event: fn(u64) -> Event,

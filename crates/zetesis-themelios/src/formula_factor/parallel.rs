@@ -11,9 +11,11 @@ use zetesis_ferraris::NodeView as Node;
 
 use super::{Component, head_binding, plan};
 use crate::FormulaFailure;
+use crate::GroundingOperator;
 use crate::formula_ground::{Builder, FALSUM, VERUM};
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::row_blocks::component_rows;
+use crate::formula_support::row_blocks::coordinator::Completed;
 use crate::formula_support::{ComponentScope, Context, Support};
 
 /// Head rows below which a rule stays on the serial route. It depends only on
@@ -42,17 +44,25 @@ pub(super) fn rule<'source>(
         return Ok(false);
     }
     let location = rule.location;
-    let Some(mut completed) = component_rows::stage(
-        executor,
-        rule,
-        head,
-        &scopes,
-        support,
-        builder.computation,
-        builder.budget,
-        (builder.limits, builder.counters),
-    )?
-    else {
+    let operators = builder.counters.operators();
+    let staged = crate::grounding_observer::operator(
+        operators.clone(),
+        GroundingOperator::EmitStage,
+        &mut *builder,
+        |builder| {
+            component_rows::stage(
+                executor,
+                rule,
+                head,
+                &scopes,
+                support,
+                builder.computation,
+                builder.budget,
+                (builder.limits, builder.counters),
+            )
+        },
+    )?;
+    let Some(mut completed) = staged else {
         return Ok(false);
     };
     completed.attach_reservation(Context::new(
@@ -61,6 +71,34 @@ pub(super) fn rule<'source>(
         builder.counters,
         location,
     ))?;
+    crate::grounding_observer::operator(
+        operators,
+        GroundingOperator::EmitReplay,
+        &mut *builder,
+        |builder| {
+            replay(
+                builder,
+                rule,
+                (head, pattern),
+                components,
+                support,
+                &completed,
+            )
+        },
+    )?;
+    Ok(true)
+}
+
+/// Replay every staged instance in head order with the serial route's calls.
+fn replay<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
+    rule: &RuleIr,
+    (head, pattern): (PatternRef<'_>, crate::formula_support::components::Pattern),
+    components: &plan::Plan,
+    support: &Support<'source>,
+    completed: &Completed<component_rows::Staged<'source>>,
+) -> Result<(), FormulaFailure> {
+    let location = rule.location;
     let mut heads = support.rows(head.predicate()).enumerate();
     for staged in completed.results() {
         let shape = staged.shape.slice();
@@ -122,7 +160,7 @@ pub(super) fn rule<'source>(
             return Err(owner(location));
         }
     }
-    Ok(true)
+    Ok(())
 }
 
 fn owner(location: crate::ProgramSite) -> FormulaFailure {
