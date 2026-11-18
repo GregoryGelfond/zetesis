@@ -294,6 +294,8 @@ mod campaigns {
     fn compact_conformance_retains_memory_refusal_diagnostics() {
         use std::os::unix::fs::PermissionsExt;
 
+        const MEMORY: u64 = 320 * 1024;
+
         let fixture = Fixture::new();
         // This controlled reference is a protocol fixture, not an answer oracle.
         // Its UNSAT families intentionally mismatch queens; the native memory
@@ -309,10 +311,11 @@ mod campaigns {
         let mut options = test(&fixture.options(&destination));
         options.zetesis = Some(PathBuf::from(env!("CARGO_BIN_EXE_zetesis")));
         options.threads = vec![std::num::NonZeroUsize::MIN];
-        // 384 KiB admits this refusal record (12 KiB) while the wide
-        // eager producer family cannot fit its named source/support capacities.
+        // 320 KiB admits this refusal record (12 KiB) while the wide
+        // eager producer family cannot fit its named source/support capacities;
+        // support storage binds well before the formula's node share does.
         // Zero memory would also refuse the diagnostic's own output buffer.
-        options.memory = Some(384 * 1024);
+        options.memory = Some(MEMORY);
         options.view.json = true;
         let mut output = Vec::new();
         assert_eq!(
@@ -359,7 +362,7 @@ mod campaigns {
         }
         assert_eq!(
             evidence["report"]["plan"]["profiles"][0]["memory_bytes"],
-            384 * 1024
+            MEMORY
         );
         // The authored scalability Mastermind case here is colors=8. Other cases
         // may complete within this allowance; their controlled reference is not an
@@ -376,16 +379,14 @@ mod campaigns {
             "{}; retained stderr: {}",
             wide.1, evidence["report"]["samples"][wide.0]["capture"]["stderr"]["data"]
         );
-        // Either memory share may bind first: support storage, or the formula
-        // node share once support needs less memory per atom.
-        let limits =
-            zetesis_solve::Resources::new(384 * 1024, std::num::NonZeroUsize::MIN).formula_limits();
-        let detail = wide.1["detail"].as_str().unwrap();
+        let support_bytes = zetesis_solve::Resources::new(MEMORY, std::num::NonZeroUsize::MIN)
+            .formula_limits()
+            .max_support_bytes;
         assert!(
-            detail.contains(&format!(
-                "SupportBytes limit {} exceeded",
-                limits.max_support_bytes
-            )) || detail.contains(&format!("Nodes limit {} exceeded", limits.theory.max_nodes)),
+            wide.1["detail"]
+                .as_str()
+                .unwrap()
+                .contains(&format!("SupportBytes limit {support_bytes} exceeded")),
             "{}",
             wide.1
         );
