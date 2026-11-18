@@ -1593,13 +1593,12 @@ fn prepare_bundle(
         metadata::check_count(source.parsed(), expansion, &mut metadata_count)?;
         formula_ir::check_objectives(source.parsed(), limits, &mut objective_count)?;
         budget.poll(site)?;
-        let raised = crate::formula_raise::raise(source.parsed(), &mut metadata)?;
+        let raised = crate::formula_raise::raise_statements(source.parsed(), &mut metadata)?;
         budget.poll(site)?;
         statements.extend(
             raised
-                .statements()
-                .filter(|carrier| !matches!(carrier.get(), Statement::Include(_)))
-                .cloned(),
+                .into_iter()
+                .filter(|carrier| !matches!(carrier.get(), Statement::Include(_))),
         );
     }
     let entry = bundle
