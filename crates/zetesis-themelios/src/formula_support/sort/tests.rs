@@ -227,3 +227,56 @@ fn ordered_heapsort_input_costs_one_comparison_per_value() {
         );
     }
 }
+
+#[test]
+fn galloping_merges_disjoint_runs_in_logarithmic_comparisons() {
+    // Two long runs that do not interleave, in either order, and runs that
+    // interleave in blocks of every length.
+    let mut cases: Vec<Vec<i32>> = vec![
+        (500..1000).chain(0..500).collect(),
+        (0..500).chain(250..750).collect(),
+    ];
+    for block in 1..20 {
+        let mut values: Vec<i32> = (0..400).filter(|v| (v / block) % 2 == 0).collect();
+        values.extend((0..400).filter(|v| (v / block) % 2 == 1));
+        cases.push(values);
+    }
+    for original in cases {
+        let mut expected = original.clone();
+        expected.sort_unstable();
+        let (result, actual, _) = merged(&original, &FormulaLimits::default());
+        result.unwrap();
+        assert_eq!(actual, expected);
+    }
+    let original: Vec<i32> = (500..1000).chain(0..500).collect();
+    let (_, _, work) = merged(&original, &FormulaLimits::default());
+    // 999 run-finding comparisons, then about 2 log2 500 merge probes.
+    assert!(work < 2 * 999 + 80, "{work}");
+}
+
+#[test]
+fn galloping_merges_ties_left_first() {
+    // Equal keys from the left run precede those from the right run.
+    let original: Vec<(i32, i32)> = (0..20)
+        .map(|v| (v, 0))
+        .chain((0..20).map(|v| (v, 1)))
+        .collect();
+    let mut values = original.clone();
+    let mut scratch = Vec::with_capacity(values.len());
+    let mut runs = Vec::with_capacity(values.len() + 1);
+    let mut counters = Counters::default();
+    merge_by(
+        &mut values,
+        &mut scratch,
+        &mut runs,
+        GroundingWork::new(&FormulaLimits::default(), &mut counters, location()),
+        |left: &(i32, i32), right: &(i32, i32), work| {
+            work.counters.work(work.limits, work.location)?;
+            Ok(left.0.cmp(&right.0))
+        },
+    )
+    .unwrap();
+    let mut expected = original;
+    expected.sort_by_key(|value| value.0);
+    assert_eq!(values, expected);
+}
