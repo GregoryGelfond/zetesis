@@ -1,7 +1,7 @@
 //! Typed order and membership are exact whichever way an atom arrives:
 //! ordered requests at any point return the reference typed order of the
-//! committed atoms, any form of an atom finds its one position, and an atom
-//! arriving above every atom of its predicate is placed without a typed search.
+//! committed atoms, any form of an atom finds its one position, and insertion
+//! work does not depend on the order in which atoms arrive.
 
 use super::*;
 
@@ -44,15 +44,14 @@ fn charged(values: impl Iterator<Item = i32>) -> u64 {
 }
 
 #[test]
-fn ascending_arrivals_skip_the_typed_search() {
+fn insertion_work_does_not_depend_on_arrival_order() {
     const COUNT: i32 = 1 << 12;
-    // The same atoms; a scrambled order needs the typed search for each.
     let ascending = charged(0..COUNT);
     let scrambled = charged((0..COUNT).map(|index| index.wrapping_mul(7919) % COUNT));
-    // Interning, discovery and replay remain for every arrival; the typed
-    // search does not.
+    // Identity is a hash probe and discovery an append: no typed search, so
+    // only hash-chain collisions can differ between the two orders.
     assert!(
-        ascending * 10 <= scrambled * 6,
+        ascending.abs_diff(scrambled) * 1000 <= ascending,
         "ascending {ascending}, scrambled {scrambled}"
     );
 }

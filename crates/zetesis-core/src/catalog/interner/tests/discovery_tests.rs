@@ -34,8 +34,8 @@ fn atom_lookup_work(width: usize) -> usize {
 
 #[test]
 fn canonical_atom_lookup_does_not_compare_text() {
-    // The queried first discovery is not the semantic AVL root. An ordered
-    // content search would inspect unequal strings with their common prefix.
+    // An ordered content search would inspect unequal strings with their
+    // common prefix; the exact identity path compares no text.
     assert_eq!(atom_lookup_work(1), atom_lookup_work(4096));
 }
 
@@ -64,10 +64,9 @@ fn canonical_key_lookup_does_not_compare_text() {
 }
 
 #[test]
-fn canonical_occupied_entries_need_no_path_storage() {
+fn canonical_occupied_entries_need_no_scratch_storage() {
     let mut owner = owner(&[2, 1, 3]);
     owner.commit_with(limits(), PERMIT).unwrap();
-    owner.index.path = Vec::new();
     owner.restart_storage_peak();
     let bytes = owner.storage_bytes();
     let exact = Limits {
@@ -95,7 +94,6 @@ fn canonical_occupied_entries_need_no_path_storage() {
             Some(1)
         );
     }
-    assert_eq!(owner.index.path.capacity(), 0);
     assert_eq!(owner.storage_bytes(), bytes);
     assert_eq!(owner.storage_peak_bytes(), bytes + PREPARED_BYTES);
 }
@@ -267,7 +265,6 @@ fn derived_allowance_covers_distinct_signed_predicates() {
             owner.commit_with(limits, PERMIT).unwrap();
         }
     }
-    assert_eq!(owner.subtrees.len(), ATOMS);
     assert!(
         owner.store.current_bytes() + owner.snapshot.metadata_bytes() <= CANONICAL_BYTES as u128
     );

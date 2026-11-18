@@ -106,7 +106,7 @@ impl AtomAppender<'_> {
         let grown = (2 * table.allocation_size()).max(64) as u128;
         let live = self.storage_bytes() + extra + grown;
         admit(live, limits)?;
-        self.index.peak = self.index.peak.max(live);
+        *self.peak = (*self.peak).max(live);
         for _ in 0..table.len() {
             before().map_err(Failure::Stopped)?; // Each moved position.
         }
@@ -115,7 +115,7 @@ impl AtomAppender<'_> {
             .table
             .try_reserve(1, rehash(committed, pending))
             .map_err(|_| Failure::Catalog(crate::catalog::Error::Allocation))?;
-        self.index.peak = self.index.peak.max(self.storage_bytes() + extra);
+        *self.peak = (*self.peak).max(self.storage_bytes() + extra);
         Ok(())
     }
 }

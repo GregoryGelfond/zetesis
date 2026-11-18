@@ -11,12 +11,10 @@ mod closed;
 mod discovery;
 mod ordering;
 mod query;
-mod spine;
 mod terms;
 pub use closed::{CloseFailure, ClosedCatalog};
 pub use terms::{AssignedFailure, PreparedPattern, PreparedRows, RowColumn, TermLookup};
 
-use std::cmp::Ordering;
 use std::{collections::TryReserveError, fmt};
 
 use zetesis_algebra::{Meter, MeterBytes};
@@ -26,30 +24,19 @@ use super::{
     Limits as TermLimits, PredicateRef,
     storage::{self, AtomId, Snapshot, Store},
 };
-use crate::{AtomKey, ordered_index as index};
+use crate::AtomKey;
 use discovery::Discovery;
-use index::{Directions, Index, Link, Node, Planned, Step, position};
 use query::{Identity, Query};
-use spine::Spines;
-
-/// A vacant route either records a search or follows the proved right spine.
-/// Both are consumed under the same exclusive entry that established absence.
-#[derive(Clone, Copy)]
-enum InsertionPath<'a> {
-    Recorded(&'a Directions),
-    BeyondLast(usize),
-}
 
 /// Owned prepared-result slot retained throughout an exclusive entry.
 const PREPARED_BYTES: u128 = size_of::<Option<storage::PreparedAtom>>() as u128;
 
-/// Immutable candidate positions, never tuple identity or absence. A prepared
+/// An immutable candidate position, never tuple identity or absence. A prepared
 /// pattern authenticates the writer; each consumer checks the current signed
 /// predicate at its position before using the ordinary authoritative owner.
 #[derive(Clone, Copy, Debug)]
 struct PredicateLocations {
     column: usize,
-    subtree: usize,
 }
 
 /// Bounds on this interner's population and named storage, independent of truth.
@@ -58,27 +45,26 @@ pub struct Limits {
     /// Maximum discovered atoms, including the uncommitted discovery tail.
     /// Undiscovered canonical rows in a shared closed base count only as storage.
     pub max_atoms: usize,
-    /// Canonical store, discovery maps, current snapshot directory, both AVL indexes
-    /// and path/order/selection scratch, projected-input and prepared-result
-    /// headers, including admitted growth overlap. Named canonical text and term
-    /// storage is included. Allocator bookkeeping, Arc counters,
-    /// caller frames and externally retained snapshots remain separate.
+    /// Canonical store, discovery maps, current snapshot directory, order
+    /// scratch, projected-input and prepared-result headers, including
+    /// admitted growth overlap. Named canonical text and term storage is
+    /// included. Allocator bookkeeping, Arc counters, caller frames and
+    /// externally retained snapshots remain separate.
     pub max_bytes: u128,
 }
 
 impl Limits {
     /// Combine an explicit canonical-storage allowance with discovery metadata.
     ///
-    /// Uses the actual ID, AVL-node and path-step layouts: three n-cell discovery
-    /// buffers, a discovery table across one growth, two n-cell node buffers, two n-cell predicate-subtree buffers,
-    /// four bounded AVL paths, one n-cell order and n-bit selection mask with
-    /// their headers, plus the owner, largest projected-input and prepared-result headers.
-    /// This conservatively includes geometric old/new-buffer overlap; it is not
-    /// a requirement to allocate all
-    /// those buffers. The AVL path bound is twice the population bit width plus
-    /// one, including the planned leaf. `canonical_bytes` is a caller-selected
-    /// allowance for the store and snapshot directories; atom count alone cannot
-    /// bound arbitrary text and terms. Actual allocation capacity is rechecked.
+    /// Uses the actual ID layouts: three n-cell discovery buffers, a discovery
+    /// table across one growth, one n-cell order with two n-cell merge buffers,
+    /// an (n+1)-cell run-start buffer and an n-bit selection mask with their
+    /// headers, plus the owner, largest
+    /// projected-input and prepared-result headers. This conservatively includes
+    /// geometric old/new-buffer overlap; it is not a requirement to allocate all
+    /// those buffers. `canonical_bytes` is a caller-selected allowance for the
+    /// store and snapshot directories; atom count alone cannot bound arbitrary
+    /// text and terms. Actual allocation capacity is rechecked.
     #[must_use]
     pub fn for_atoms(max_atoms: usize, canonical_bytes: usize) -> Self {
         Self {
@@ -89,11 +75,9 @@ impl Limits {
                 + query::Projected::MAX_BYTES
                 + 3 * cells::<AtomId>(max_atoms)
                 + discovery::bound(max_atoms)
-                + 2 * cells::<Node>(max_atoms)
-                + 2 * cells::<Subtree>(max_atoms)
-                + 2 * cells::<Step>(path_bound(max_atoms))
-                + cells::<usize>(max_atoms)
-                + size_of::<Vec<usize>>() as u128
+                + 4 * cells::<usize>(max_atoms)
+                + cells::<usize>(1)
+                + 4 * size_of::<Vec<usize>>() as u128
                 + cells::<u64>(max_atoms.div_ceil(64))
                 + size_of::<Vec<u64>>() as u128,
         }
@@ -156,27 +140,19 @@ impl<E: std::error::Error + 'static> std::error::Error for Failure<E> {
     }
 }
 
-/// Authoritative unique atoms in first-insertion order, with derived indexes
-/// for exact local identity and typed order.
+/// Authoritative unique atoms in first-insertion order, with one derived hash
+/// view for exact local identity. Typed order is sorted on demand.
 ///
 /// Authenticated canonical queries use Store's exact row index and an ID-only
-/// inverse to discovery positions. The semantic AVL supplies typed enumeration,
-/// insertion placement and foreign/ingress lookup. That lookup compares the predicate once, finding its relation among the few
-/// the program names by a checked binary search, and then compares arguments
-/// only along that relation's tree. Searches use O(log n) node probes and
-/// checked typed comparisons without allocating or changing retained scratch. Entry records the initial search's
-/// directions in fixed local stack state. Only a vacant entry replays child
-/// links to prepare its mutation path, without repeating typed comparisons.
-/// An entry beyond the authoritative last atom instead prepares the right spine
-/// directly, visiting its links once without a separate direction-recording pass.
-/// A completed increasing insertion retains that published right spine in the
-/// same mutation buffer. A subsequent increasing insertion reuses it and repairs
-/// only the changed suffix after publication. Other scratch writers revoke this
-/// certificate before any fallible mutation; general insertion keeps its search.
-/// Insertion uses O(log n) path operations and at most two rotations. Vector growth is
-/// geometric (work admission includes possible relocation of live cells even
-/// for in-place allocator growth); commit moves only the pending suffix. Canonical order comes from
-/// the tree, without sorting historical atoms or shifting a sorted index.
+/// inverse to discovery positions. Foreign/ingress queries first resolve their
+/// signed predicate, each argument and then the row by content through the
+/// same exact hash indexes; any missing component proves absence. No ordered
+/// index is maintained: insertion publishes the canonical identity and its
+/// discovery position only. Typed enumeration sorts the selected positions
+/// with the one typed atom comparison, by a natural merge sort that pays
+/// n - 1 comparisons for positions already in typed order. Vector growth is geometric (work admission
+/// includes possible relocation of live cells even for in-place allocator
+/// growth); commit moves only the pending suffix.
 /// Positions are local to this owner; equal atoms in unrelated owners need not
 /// have equal positions. There is no process-global interning or shared truth.
 pub struct AtomInterner {
@@ -184,56 +160,16 @@ pub struct AtomInterner {
     snapshot: Snapshot,
     committed: Vec<AtomId>,
     pending: Vec<AtomId>,
-    /// The shared node index: each relation keeps the root of its subtree,
-    /// and the index publishes nodes alone.
-    index: Index,
+    /// Greatest admitted named storage of the current operation.
+    peak: u128,
     /// Discovery positions by canonical identity: a hash view, no order.
     discovery: Discovery,
-    spines: Spines,
-    subtrees: Vec<Subtree>,
-}
-
-/// One predicate's atoms: the root of its subtree in the shared node index.
-/// Subtrees are kept in the predicate's canonical identity order, so the
-/// trees in subtree order give the canonical order of all atoms.
-struct Subtree {
-    representative: AtomId,
-    root: Link,
-    /// The discovery position of the predicate's last atom in typed order:
-    /// it changes only when an atom arrives beyond it.
-    last: usize,
 }
 
 impl Default for AtomInterner {
     fn default() -> Self {
         Self::from_store(Store::new(usize::MAX))
     }
-}
-
-/// Find the subtree of `predicate`, or the position that keeps the subtrees
-/// ordered if none exists, comparing predicates with the charged identity
-/// comparator at each probe.
-fn subtree_of<E>(
-    store: &Store,
-    subtrees: &[Subtree],
-    predicate: PredicateRef<'_>,
-    before: &mut impl FnMut() -> Result<(), E>,
-) -> Result<Result<usize, usize>, E> {
-    let (mut start, mut end) = (0, subtrees.len());
-    while start < end {
-        let middle = start + (end - start) / 2;
-        before()?;
-        match AtomRef::new(store, subtrees[middle].representative)
-            .expect("admitted relation representative")
-            .predicate()
-            .compare_ref_with(predicate, &mut *before)?
-        {
-            Ordering::Less => start = middle + 1,
-            Ordering::Greater => end = middle,
-            Ordering::Equal => return Ok(Ok(middle)),
-        }
-    }
-    Ok(Err(start))
 }
 
 impl AtomInterner {
@@ -244,10 +180,8 @@ impl AtomInterner {
             snapshot,
             committed: Vec::new(),
             pending: Vec::new(),
-            index: Index::default(),
+            peak: 0,
             discovery: Discovery::default(),
-            spines: Spines::default(),
-            subtrees: Vec::new(),
         }
     }
 
@@ -344,13 +278,14 @@ impl AtomInterner {
 
     /// Find a borrowed atom's local position in committed and pending identities.
     ///
-    /// Borrows the owner immutably, allocates nothing and changes no payload,
-    /// index, scratch or capacity observation. Calls `before` before each visited
-    /// index operation. Authenticated local atoms use their identity directly;
-    /// local tuples use Store's exact coordinate hash index. Both resolve the
-    /// discovery position through logarithmic fixed-ID probes. Foreign/ingress
-    /// search uses logarithmic semantic AVL probes, with additional checked
-    /// descriptor/text comparison cost.
+    /// Borrows the owner immutably and changes no payload, index, scratch or
+    /// capacity observation. Calls `before` before each visited index
+    /// operation. Authenticated local atoms use their identity directly; local
+    /// tuples use Store's exact coordinate hash index. Both resolve the
+    /// discovery position through the fixed-ID hash inverse. Foreign/ingress
+    /// coordinates first resolve by content through the same exact hash
+    /// indexes, holding one arity-cell argument buffer and the term lookup's
+    /// expansion scratch; a missing component proves absence.
     ///
     /// # Errors
     /// Current population and storage must satisfy `limits` before probing.
@@ -405,9 +340,7 @@ impl AtomInterner {
             store: &self.store,
             committed: &self.committed,
             pending: &self.pending,
-            nodes: &self.index.nodes,
             discovery: &self.discovery,
-            subtrees: &self.subtrees,
             bytes: self.storage_bytes(),
         }
         .find(query, limits, before)
@@ -421,9 +354,6 @@ impl AtomInterner {
             + storage(
                 self.committed.capacity(),
                 self.pending.capacity(),
-                self.index.nodes.capacity(),
-                self.index.path.capacity(),
-                self.subtrees.capacity(),
                 self.discovery.bytes(),
             )
     }
@@ -433,7 +363,7 @@ impl AtomInterner {
     /// acquired before a later refusal remains reflected here and in capacity.
     #[must_use]
     pub fn storage_peak_bytes(&self) -> u128 {
-        self.index.peak.max(self.storage_bytes())
+        self.peak.max(self.storage_bytes())
     }
 
     /// Begin a new operation's peak observation at current retained capacity.
@@ -441,7 +371,7 @@ impl AtomInterner {
     /// retained storage, including unused canonical identities from prior work.
     pub fn restart_storage_peak(&mut self) {
         self.store.restart_peak();
-        self.index.peak = self.storage_bytes();
+        self.peak = self.storage_bytes();
     }
 
     /// Borrow the current committed prefix without mutating the owner.
@@ -468,10 +398,8 @@ impl AtomInterner {
                 committed: &self.committed,
                 committed_capacity: capacity,
                 pending: &mut self.pending,
-                index: &mut self.index,
+                peak: &mut self.peak,
                 discovery: &mut self.discovery,
-                spines: &mut self.spines,
-                subtrees: &mut self.subtrees,
             },
         )
     }
@@ -516,14 +444,14 @@ impl AtomInterner {
     }
 
     /// Return committed positions in exact typed Atom order. Owns only the
-    /// positions; no Atom is copied. Iterative inorder traversal visits O(n)
-    /// index nodes, including any pending identities, and filters the prefix.
-    /// Reuses the interner's checked path scratch. The returned vector's capacity
+    /// positions; no Atom is copied. A natural merge sort with the typed atom
+    /// comparison orders the committed prefix: n - 1 charged comparisons when
+    /// discovery order is already typed order, O(n log n) at worst. The returned vector's capacity
     /// is included in the operation's peak and must be retained by its consumer.
     ///
     /// # Errors
     /// Refuses work, storage or reservation without returning a partial order.
-    /// Existing atoms and index remain unchanged; scratch capacity may grow.
+    /// Existing atoms remain unchanged; no scratch is retained.
     pub fn ordered_ids_with<E>(
         &mut self,
         limits: Limits,
@@ -562,7 +490,7 @@ impl AtomInterner {
                 additional,
                 limits.max_atoms,
                 live,
-                &mut self.index.peak,
+                &mut self.peak,
                 limits,
                 &mut checked,
             )?;
@@ -585,7 +513,7 @@ impl AtomInterner {
             .map_err(|error| store_failure(error, metadata, limits))?;
         self.store.restart_peak();
         let publication = self.store.publish_into(&mut self.snapshot, metadata);
-        self.index.peak = self.index.peak.max(self.store.peak_bytes());
+        self.peak = self.peak.max(self.store.peak_bytes());
         publication.map_err(|error| store_failure(error, 0, limits))?;
         if self.committed.is_empty() {
             std::mem::swap(&mut self.committed, &mut self.pending);
@@ -633,8 +561,8 @@ impl AtomInterner {
     }
 
     /// Consume the writer into a catalog ordered by complete typed identity.
-    /// The existing AVL traversal supplies order; no term, atom or predicate
-    /// payload is copied. Temporary order and output ID maps are both charged
+    /// A merge sort with the typed atom comparison supplies order; no term,
+    /// atom or predicate payload is copied. Temporary order and output ID maps are both charged
     /// while live, then the writer indexes and discovery metadata are dropped.
     ///
     /// # Errors
@@ -671,7 +599,7 @@ impl AtomInterner {
             positions.len(),
             positions.len(),
             base,
-            &mut self.index.peak,
+            &mut self.peak,
             limits,
             &mut checked,
         )?;
@@ -776,9 +704,7 @@ struct Lookup<'a> {
     store: &'a Store,
     committed: &'a [AtomId],
     pending: &'a [AtomId],
-    nodes: &'a [Node],
     discovery: &'a Discovery,
-    subtrees: &'a [Subtree],
     bytes: u128,
 }
 impl Lookup<'_> {
@@ -804,34 +730,17 @@ impl Lookup<'_> {
         query: Query<'_>,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<Option<usize>, Failure<E>> {
-        if let Identity::Local(atom) = query.identity_with(self.store, &mut before)? {
-            return match atom.present() {
-                Some(atom) => self
-                    .discovery
-                    .find(self.committed, self.pending, atom, &mut before)
-                    .map_err(Failure::Stopped),
-                None => Ok(None),
-            };
-        }
-        let mut checked = || before().map_err(Failure::Stopped);
-        checked()?;
-        let Ok(relation) = subtree_of(
-            self.store,
-            self.subtrees,
-            query.predicate(self.store),
-            &mut checked,
-        )?
-        else {
-            return Ok(None);
+        let present = match query.identity_with(self.store, &mut before)? {
+            Identity::Local(atom) => atom.present(),
+            Identity::Foreign => query.resolve_with(self.store, &mut before)?,
         };
-        query.search(
-            self.store,
-            |id| get(self.store, self.committed, self.pending, id),
-            self.nodes,
-            self.subtrees[relation].root,
-            &mut checked,
-            |_| {},
-        )
+        match present {
+            Some(atom) => self
+                .discovery
+                .find(self.committed, self.pending, atom, &mut before)
+                .map_err(Failure::Stopped),
+            None => Ok(None),
+        }
     }
 }
 
@@ -842,10 +751,8 @@ pub struct AtomAppender<'a> {
     committed: &'a [AtomId],
     committed_capacity: usize,
     pending: &'a mut Vec<AtomId>,
-    index: &'a mut Index,
+    peak: &'a mut u128,
     discovery: &'a mut Discovery,
-    spines: &'a mut Spines,
-    subtrees: &'a mut Vec<Subtree>,
 }
 impl AtomAppender<'_> {
     fn lookup(&self) -> Lookup<'_> {
@@ -853,9 +760,7 @@ impl AtomAppender<'_> {
             store: self.store,
             committed: self.committed,
             pending: self.pending,
-            nodes: &self.index.nodes,
             discovery: self.discovery,
-            subtrees: self.subtrees,
             bytes: self.storage_bytes(),
         }
     }
@@ -984,7 +889,7 @@ impl AtomAppender<'_> {
         self.store.restart_peak();
         let receipt = ImportPeak {
             store: self.store,
-            peak: &mut self.index.peak,
+            peak: &mut *self.peak,
             metadata,
         };
         let imported = operation(&mut *receipt.store);
@@ -1017,22 +922,19 @@ impl AtomAppender<'_> {
             + storage(
                 self.committed_capacity,
                 self.pending.capacity(),
-                self.index.nodes.capacity(),
-                self.index.path.capacity(),
-                self.subtrees.capacity(),
                 self.discovery.bytes(),
             )
     }
     /// Peak named canonical and discovery capacity, including retained payload.
     #[must_use]
     pub fn storage_peak_bytes(&self) -> u128 {
-        self.index.peak.max(self.storage_bytes())
+        (*self.peak).max(self.storage_bytes())
     }
 
     /// Restart this append operation's peak at its actual retained capacity.
     pub fn restart_storage_peak(&mut self) {
         self.store.restart_peak();
-        self.index.peak = self.storage_bytes();
+        *self.peak = self.storage_bytes();
     }
 
     fn reborrow(&mut self) -> AtomAppender<'_> {
@@ -1042,20 +944,16 @@ impl AtomAppender<'_> {
             committed: self.committed,
             committed_capacity: self.committed_capacity,
             pending: self.pending,
-            index: self.index,
+            peak: self.peak,
             discovery: self.discovery,
-            spines: self.spines,
-            subtrees: self.subtrees,
         }
     }
 
-    /// Search without copying an owned atom; prepare a path only when vacant.
-    /// Node work includes fixed local direction recording. Occupied lookup
-    /// changes no retained scratch; a miss replays links without comparing keys.
+    /// Search without copying an owned atom. Lookup changes no retained
+    /// scratch; a vacant entry holds no placement, only the exclusive writer.
     ///
     /// # Errors
-    /// Refusal changes no membership. Vacant-path preparation may retain
-    /// admitted scratch capacity.
+    /// Refusal changes no membership or retained capacity.
     pub fn entry_atom_with<'owner, 'key, E>(
         &'owner mut self,
         atom: impl Into<AtomRef<'key>>,
@@ -1085,7 +983,7 @@ impl<'a> AtomAppender<'a> {
         population(self.len(), limits)?;
         let live = self.storage_bytes() + extra + PREPARED_BYTES;
         admit(live, limits)?;
-        self.index.peak = self.index.peak.max(live);
+        *self.peak = (*self.peak).max(live);
         Ok(())
     }
 
@@ -1100,186 +998,37 @@ impl<'a> AtomAppender<'a> {
             Identity::Foreign => None,
             Identity::Local(prepared) => Some(prepared),
         };
-        self.entry_prepared(query, prepared, None, limits, before)
+        self.entry_prepared(query, prepared, before)
     }
 
     /// The caller has admitted this query and prepared-result slot against the
     /// current population/storage limits. Only the same immutable query and
-    /// exclusive writer may consume the result. Metadata preparation below
-    /// cannot mutate the Store atom index.
+    /// exclusive writer may consume the result. A prepared local identity is
+    /// found through the discovery inverse; foreign coordinates resolve by
+    /// content. Neither path mutates the Store atom index or retained scratch.
     fn entry_prepared<'key, E>(
-        mut self,
+        self,
         query: Query<'key>,
         prepared: Option<storage::PreparedAtom>,
-        subtree: Option<usize>,
-        limits: Limits,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<AtomEntry<'a, 'key>, Failure<E>> {
-        let extra = query.extra_bytes() + PREPARED_BYTES;
-        if let Some(atom) = prepared.as_ref().and_then(storage::PreparedAtom::present)
-            && let Some(position) = self
+        let present = match &prepared {
+            Some(prepared) => prepared.present(),
+            None => query.resolve_with(self.store, &mut before)?,
+        };
+        let position = match present {
+            Some(atom) => self
                 .discovery
                 .find(self.committed, self.pending, atom, &mut before)
-                .map_err(Failure::Stopped)?
-        {
-            return Ok(AtomEntry {
-                appender: self,
-                query,
-                prepared,
-                position: EntryPosition::Occupied(position),
-            });
-        }
-        let mut checked = || before().map_err(Failure::Stopped);
-        checked()?;
-        let predicate = query.predicate(self.store);
-        let located =
-            if let (Some(position), Some((_, expected))) = (subtree, predicate.canonical()) {
-                checked()?;
-                self.subtrees
-                    .get(position)
-                    .is_some_and(|subtree| {
-                        AtomRef::new(&*self.store, subtree.representative)
-                            .expect("admitted predicate representative")
-                            .predicate()
-                            .canonical()
-                            .map(|(_, id)| id)
-                            == Some(expected)
-                    })
-                    .then_some(position)
-            } else {
-                None
-            };
-        let relation = match located {
-            Some(position) => Ok(position),
-            None => subtree_of(self.store, self.subtrees, predicate, &mut checked)?,
+                .map_err(Failure::Stopped)?,
+            None => None,
         };
-        let mut directions = Directions::default();
-        let mut beyond = false;
-        let found = match relation {
-            Ok(relation) => {
-                let root = self.subtrees[relation].root;
-                // An atom beyond the predicate's last is placed without a search.
-                match index::compare_last(
-                    root,
-                    Some(self.subtrees[relation].last),
-                    &mut checked,
-                    |id, checked| query.compare_at(self.store, &|id| self.get(id), id, checked),
-                )? {
-                    index::Last::Found(id) => Some(id),
-                    index::Last::Beyond => {
-                        beyond = true;
-                        None
-                    }
-                    index::Last::Search => query.search(
-                        self.store,
-                        |id| self.get(id),
-                        &self.index.nodes,
-                        root,
-                        &mut checked,
-                        |right| directions.push(right).expect("AVL height fits two words"),
-                    )?,
-                }
-            }
-            Err(_) => None,
-        };
-        if found.is_none() {
-            let root = relation.map_or(None, |relation| self.subtrees[relation].root);
-            let path = if beyond {
-                let relation = relation.expect("beyond-last placement has a relation");
-                InsertionPath::BeyondLast(self.subtrees[relation].last)
-            } else {
-                InsertionPath::Recorded(&directions)
-            };
-            self.prepare_path(root, path, extra, limits, &mut checked)?;
-        }
         Ok(AtomEntry {
             appender: self,
             query,
             prepared,
-            position: found.map_or(
-                EntryPosition::Vacant { relation, beyond },
-                EntryPosition::Occupied,
-            ),
+            position: position.map_or(EntryPosition::Vacant, EntryPosition::Occupied),
         })
-    }
-
-    fn prepare_path<E>(
-        &mut self,
-        root: Link,
-        route: InsertionPath<'_>,
-        extra: u128,
-        limits: Limits,
-        before: &mut impl FnMut() -> Result<(), Failure<E>>,
-    ) -> Result<(), Failure<E>> {
-        // Taking the certificate precedes every fallible step and scratch write.
-        // The exclusive vacant entry may reuse these published cells, but no
-        // tentative mutation can leave authority behind after refusal/unwind.
-        if let Some(spine) = self.spines.semantic.take() {
-            before()?;
-            if let InsertionPath::BeyondLast(last) = route
-                && spine.matches(self.index, root, last)
-            {
-                return Ok(());
-            }
-        }
-        let bound = path_bound(self.len());
-        let fixed = self.store.current_bytes()
-            + self.snapshot_bytes
-            + extra
-            + storage(
-                self.committed_capacity,
-                self.pending.capacity(),
-                self.index.nodes.capacity(),
-                0,
-                self.subtrees.capacity(),
-                self.discovery.bytes(),
-            );
-        let Index {
-            nodes, path, peak, ..
-        } = &mut *self.index;
-        path.clear();
-        // The exclusive entry keeps the published links unchanged. A recorded
-        // route replays its checked comparisons; BeyondLast follows only right
-        // links after the authoritative last-node comparison proved absence.
-        // Each node is read once and its Step is admitted before publication.
-        // Refusal changes only disposable path scratch, never published links.
-        let mut cursor = root;
-        let mut offset = 0;
-        while let Some(next) = cursor {
-            before()?; // Node read and constant-size route decode.
-            let right = match &route {
-                InsertionPath::Recorded(directions) => {
-                    directions.get(offset).expect("recorded vacant direction")
-                }
-                InsertionPath::BeyondLast(_) => true,
-            };
-            let id = position(next);
-            let node = nodes[id];
-            let live = fixed + cells::<Step>(path.capacity());
-            reserve(path, 1, bound, live, peak, limits, before)?;
-            before()?;
-            path.push(Step {
-                id,
-                node,
-                right,
-                changed: false,
-            });
-            cursor = node.children[usize::from(right)];
-            offset += 1;
-        }
-        match route {
-            InsertionPath::Recorded(directions) => assert_eq!(
-                offset,
-                directions.len(),
-                "exclusive vacant route reaches absence"
-            ),
-            InsertionPath::BeyondLast(last) => debug_assert_eq!(
-                path.last().map(|step| step.id),
-                Some(last),
-                "the held last node ends the spine"
-            ),
-        }
-        Ok(())
     }
 }
 
@@ -1298,15 +1047,10 @@ pub struct AtomEntry<'owner, 'key> {
 #[derive(Clone, Copy)]
 enum EntryPosition {
     Occupied(usize),
-    /// Predicate subtree, or insertion offset among typed predicate signatures,
-    /// and whether the atom arrives beyond the subtree's last.
-    Vacant {
-        relation: Result<usize, usize>,
-        beyond: bool,
-    },
+    Vacant,
 }
 impl<'owner> AtomEntry<'owner, '_> {
-    /// Import identity before publishing discovery or AVL links. A refusal may
+    /// Import identity before publishing discovery. A refusal may
     /// retain complete canonical components, but never a discovery position.
     fn intern<E>(
         &mut self,
@@ -1338,15 +1082,15 @@ impl<'owner> AtomEntry<'owner, '_> {
     pub const fn position(&self) -> Option<usize> {
         match self.position {
             EntryPosition::Occupied(position) => Some(position),
-            EntryPosition::Vacant { .. } => None,
+            EntryPosition::Vacant => None,
         }
     }
-    /// Current named storage after possible vacant-path preparation.
+    /// Current named storage, including the entry's owned slots.
     #[must_use]
     pub fn storage_bytes(&self) -> u128 {
         self.appender.storage_bytes() + self.extra_bytes()
     }
-    /// Current peak including actual retained vacant-path capacity.
+    /// Current peak including the entry's owned slots.
     #[must_use]
     pub fn storage_peak_bytes(&self) -> u128 {
         self.appender.storage_peak_bytes().max(self.storage_bytes())
@@ -1354,7 +1098,7 @@ impl<'owner> AtomEntry<'owner, '_> {
 
     /// Return an existing discovery position or publish a new one.
     ///
-    /// Import canonical identity before publishing discovery or AVL links.
+    /// Import canonical identity before publishing discovery.
     /// Same-authority terms reuse their IDs; ingress or foreign terms use the
     /// checked typed importer. Each visited descriptor, text byte, comparison,
     /// reservation and publication operation is admitted before its work. Named
@@ -1363,7 +1107,7 @@ impl<'owner> AtomEntry<'owner, '_> {
     /// Rust. Planned metadata writes publish as one indivisible update.
     ///
     /// # Errors
-    /// Refusal publishes no discovery position or partial AVL links. Complete
+    /// Refusal publishes no discovery position. Complete
     /// canonical components and reserved capacity may remain after a later
     /// refusal; they assert neither discovery nor truth and count toward storage.
     pub fn insert_with<E>(
@@ -1406,10 +1150,9 @@ impl<'owner> AtomEntry<'owner, '_> {
         let mut checked = || before().map_err(Failure::Stopped);
         population(self.appender.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
-        let (relation, beyond) = match self.position {
-            EntryPosition::Occupied(id) => return Ok(id),
-            EntryPosition::Vacant { relation, beyond } => (relation, beyond),
-        };
+        if let EntryPosition::Occupied(id) = self.position {
+            return Ok(id);
+        }
         let id = self.appender.len();
         let required = id.checked_add(1).ok_or(Failure::Overflow)?;
         population(required, limits)?;
@@ -1419,118 +1162,33 @@ impl<'owner> AtomEntry<'owner, '_> {
             1,
             limits.max_atoms,
             live,
-            &mut self.appender.index.peak,
+            self.appender.peak,
             limits,
             &mut checked,
         )?;
-        let live = self.storage_bytes();
-        reserve(
-            &mut self.appender.index.nodes,
-            1,
-            limits.max_atoms,
-            live,
-            &mut self.appender.index.peak,
-            limits,
-            &mut checked,
-        )?;
-        let live = self.storage_bytes();
-        reserve(
-            &mut self.appender.index.path,
-            1,
-            path_bound(required),
-            live,
-            &mut self.appender.index.peak,
-            limits,
-            &mut checked,
-        )?;
-        if relation.is_err() {
-            let live = self.storage_bytes();
-            reserve(
-                self.appender.subtrees,
-                1,
-                limits.max_atoms,
-                live,
-                &mut self.appender.index.peak,
-                limits,
-                &mut checked,
-            )?;
-        }
         checked()?;
-        self.appender.index.path.push(Step {
-            id,
-            node: Node::default(),
-            right: false,
-            changed: true,
-        });
-        let previous = relation.map_or(None, |relation| self.appender.subtrees[relation].root);
-        let plan = self
-            .appender
-            .index
-            .plan_changes_from(previous, id, &mut checked)?;
-        if let Err(at) = relation {
-            // The ordered relation metadata moved for a new predicate.
-            for _ in at..self.appender.subtrees.len() {
-                checked()?;
-            }
-        }
         let atom = self.intern(limits, &mut before)?;
         let extra = self.extra_bytes();
         self.appender
             .reserve_discovery(extra, limits, &mut before)?;
-        self.publish(atom, id, (relation, beyond), plan, &mut before)?;
+        self.publish(atom, id, &mut before)?;
         Ok(id)
     }
 
-    /// Discovery and both derived indexes become visible together, after all
-    /// writes have permits. No caller code or allocation runs between writes.
+    /// Discovery and its canonical identity become visible together, after
+    /// both writes have permits. No caller code or allocation runs between them.
     fn publish<E>(
         &mut self,
         atom: AtomId,
         id: usize,
-        (relation, beyond): (Result<usize, usize>, bool),
-        plan: Planned,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<(), Failure<E>> {
-        let mut checked = || before().map_err(Failure::Stopped);
-        let increasing = beyond || relation.is_err();
-        checked()?; // Discovery-to-canonical-identity write.
-        checked()?; // New AVL node.
-        for step in &self.appender.index.path[plan.changed_from..self.appender.index.path.len() - 1]
-        {
-            if step.changed {
-                checked()?;
-            }
-        }
-        checked()?; // Root publication.
-        checked()?; // Discovery position publication.
-        if increasing {
-            spine::admit(self.appender.index, plan, &mut checked)?;
-        }
-        self.appender.index.publish_nodes_from(plan.changed_from);
+        before().map_err(Failure::Stopped)?; // Discovery-to-canonical-identity write.
+        before().map_err(Failure::Stopped)?; // Discovery position publication.
         self.appender
             .discovery
             .insert(self.appender.committed, self.appender.pending, atom, id);
-        match relation {
-            Ok(relation) => {
-                let subtree = &mut self.appender.subtrees[relation];
-                subtree.root = plan.root;
-                if beyond {
-                    subtree.last = id;
-                }
-            }
-            Err(at) => self.appender.subtrees.insert(
-                at,
-                Subtree {
-                    representative: atom,
-                    root: plan.root,
-                    last: id,
-                },
-            ),
-        }
         self.appender.pending.push(atom);
-        if increasing {
-            self.appender.spines.semantic = Some(spine::retain(self.appender.index, plan, id));
-        }
         Ok(())
     }
 }
@@ -1559,20 +1217,10 @@ fn get<'a>(
     AtomRef::new(store, discovery::identity(committed, pending, id)?)
 }
 
-fn storage(
-    committed: usize,
-    pending: usize,
-    nodes: usize,
-    path: usize,
-    subtrees: usize,
-    discovery: u128,
-) -> u128 {
+fn storage(committed: usize, pending: usize, discovery: u128) -> u128 {
     (size_of::<AtomInterner>() - size_of::<Store>()) as u128
         + cells::<AtomId>(committed)
         + cells::<AtomId>(pending)
-        + cells::<Node>(nodes)
-        + cells::<Step>(path)
-        + cells::<Subtree>(subtrees)
         + discovery
 }
 fn cells<T>(count: usize) -> u128 {
@@ -1591,9 +1239,6 @@ fn population<E>(required: usize, limits: Limits) -> Result<(), Failure<E>> {
             required,
             limit: limits.max_atoms,
         })
-}
-fn path_bound(count: usize) -> usize {
-    2 * (usize::BITS - count.leading_zeros()) as usize + 1
 }
 
 fn reserve<T, E>(

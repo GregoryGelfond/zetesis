@@ -393,6 +393,42 @@ impl Store {
         Ok(id)
     }
 
+    /// Find a signed predicate by content without admitting text or a
+    /// signature. Same-vocabulary predicates reuse their identity.
+    pub(crate) fn find_predicate_with<E>(
+        &self,
+        predicate: PredicateRef<'_>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<PredicateId>, Failure<E>> {
+        let mut work = Work::new(&mut before);
+        work.step()?;
+        if let Some((read, id)) = predicate.canonical() {
+            work.step()?;
+            if read.vocabulary_belongs_to(self) {
+                return Ok(Some(id));
+            }
+        }
+        work.step()?;
+        let Some(name) = self.find_text_with(predicate.name(), &mut work)? else {
+            return Ok(None);
+        };
+        let signature = Signature {
+            name,
+            sign: predicate.sign(),
+            arity: predicate.arity(),
+        };
+        let hash = work.key_hash(signature, &[])?;
+        Ok(self
+            .vocabulary
+            .indexes()
+            .predicates
+            .find_with(hash, &mut work, |id, work| {
+                work.step()?;
+                Ok(self.signature(PredicateId(id)) == signature)
+            })?
+            .map(PredicateId))
+    }
+
     pub(super) fn intern_atom_with<E>(
         &mut self,
         predicate: PredicateId,

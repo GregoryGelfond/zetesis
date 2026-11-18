@@ -115,19 +115,6 @@ fn interleaved_signatures_preserve_prepared_identity() {
             .insert_prepared_pattern_with(&prepared, values.as_slice(), limits(), PERMIT)
             .unwrap();
         insert(append, &other("aa_before"));
-        let mut permit = PERMIT;
-        let actual = super::super::super::super::subtree_of(
-            append.store,
-            append.subtrees,
-            pattern.predicate(),
-            &mut permit,
-        )
-        .unwrap()
-        .unwrap();
-        assert_ne!(
-            prepared.locations.subtree, actual,
-            "exercise a shifted subtree"
-        );
         assign(append, values, 12);
         let second = append
             .insert_prepared_pattern_with(&prepared, values.as_slice(), limits(), PERMIT)
@@ -159,23 +146,10 @@ fn unoccupied_locations_do_not_certify_absence() {
             .unwrap();
         // Both candidate insertion positions can now name another predicate.
         insert(append, &other("aa_intervening"));
-        let mut permit = PERMIT;
-        let actual_subtree = super::super::super::super::subtree_of(
-            append.store,
-            append.subtrees,
-            pattern.predicate(),
-            &mut permit,
-        )
-        .unwrap()
-        .unwrap_err();
         let actual_column = append
             .store
             .atom_column_location_with(prepared.pattern.predicate, PERMIT)
             .unwrap();
-        assert_ne!(
-            prepared.locations.subtree, actual_subtree,
-            "exercise stale subtree location"
-        );
         assert_ne!(
             prepared.locations.column, actual_column,
             "exercise stale column location"

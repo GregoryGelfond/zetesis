@@ -12,8 +12,6 @@ fn fixture() -> AtomInterner {
     for number in [7, 3, 6, 4, 5] {
         insert(&mut owner, &atom(number));
     }
-    // Exercise path growth, including its actual old/new overlap.
-    owner.index.path = Vec::new();
     owner.restart_storage_peak();
     owner
 }
@@ -281,7 +279,7 @@ fn order_unwind_preserves_the_actual_peak_receipt() {
 }
 
 #[test]
-fn dense_order_uses_linear_metadata_work() {
+fn dense_order_work_is_n_log_n() {
     for count in [16, 64, 130] {
         let values: Vec<_> = (0..count).rev().collect();
         let mut owner = owner(&values);
@@ -294,38 +292,38 @@ fn dense_order_uses_linear_metadata_work() {
                 PERMIT()
             })
             .unwrap();
-        // Directory/node/path visits, bit operations and output/publication
-        // writes are linear; geometric path relocations fit this loose bound.
-        assert!(work <= 16 * owner.len() + 32, "n={count}, work={work}");
+        // Mask, copies and publication writes are linear; the merge sort makes
+        // at most n * ceil(log2 n) charged numeric comparisons.
+        let n = owner.len();
+        let passes = n.next_power_of_two().trailing_zeros() as usize;
+        assert!(
+            work <= 16 * n + 16 * n * passes + 32,
+            "n={count}, work={work}"
+        );
         let expected: Vec<_> = (0..owner.len()).rev().collect();
         assert_eq!(selected, expected);
     }
 }
 
-fn text_order_work(width: usize) -> usize {
-    let mut owner = AtomInterner::new();
-    for suffix in (0..8).rev() {
-        let atom = Atom::new(
-            Predicate::new("text", 1).unwrap(),
-            vec![Value::String(format!("{}{suffix}", "a".repeat(width)))],
-        )
-        .unwrap();
-        insert(&mut owner, &atom);
-    }
-    let mut selected: Vec<_> = (0..owner.len()).collect();
-    let mut work = 0;
-    owner
-        .appender()
-        .order_selected_with(&mut selected, limits(), || {
-            work += 1;
-            PERMIT()
-        })
-        .unwrap();
-    assert_eq!(selected, (0..8).rev().collect::<Vec<_>>());
-    work
-}
-
 #[test]
-fn selected_order_does_not_inspect_payload() {
-    assert_eq!(text_order_work(1), text_order_work(8192));
+fn presorted_selections_cost_one_comparison_per_position() {
+    // Discoveries arriving in typed order form one run: the natural merge
+    // sort only confirms it, so work is linear with a constant per position.
+    let work = |count: i32| {
+        let values: Vec<_> = (0..count).collect();
+        let mut owner = owner(&values);
+        let mut selected: Vec<_> = (0..owner.len()).collect();
+        let mut work = 0;
+        owner
+            .appender()
+            .order_selected_with(&mut selected, limits(), || {
+                work += 1;
+                PERMIT()
+            })
+            .unwrap();
+        assert_eq!(selected, (0..owner.len()).collect::<Vec<_>>());
+        work
+    };
+    let (small, large) = (work(64), work(128));
+    assert!(large - small <= small + 16, "64: {small}, 128: {large}");
 }

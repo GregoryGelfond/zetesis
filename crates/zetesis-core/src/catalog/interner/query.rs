@@ -2,19 +2,32 @@
 
 use crate::catalog::storage::{self, AtomId, PreparedAtom, Store, TermId};
 use crate::catalog::{AtomRef, PredicateRef, TermRef};
-use crate::{AtomKey, PatternTerms, TemplateTerm, ordered_index};
+use crate::{AtomKey, PatternTerms, TemplateTerm};
 
 use super::Failure;
-use super::index::{Link, Node};
 use super::terms::RowColumn;
 use crate::relation::Row;
 use crate::template::catalog::TermData;
 
-/// Unauthenticated coordinates require the general semantic lookup. A local
-/// miss, by contrast, establishes absence from the exact canonical row index.
+/// Unauthenticated coordinates resolve by content before the exact row lookup.
+/// A local miss establishes absence from the exact canonical row index.
 pub(super) enum Identity {
     Foreign,
     Local(PreparedAtom),
+}
+
+/// Content resolution applies no logical measure: it admits nothing.
+const UNBOUNDED: crate::catalog::Limits = crate::catalog::Limits {
+    max_nodes: usize::MAX,
+    max_depth: usize::MAX,
+    max_bytes: usize::MAX,
+};
+
+fn storage_failure<E>(error: storage::Failure<E>) -> Failure<E> {
+    match error {
+        storage::Failure::Storage(error) => Failure::Catalog(error),
+        storage::Failure::Stopped(error) => Failure::Stopped(error),
+    }
 }
 
 /// Concrete immutable inputs, rather than a stateful caller iterator.
@@ -140,10 +153,7 @@ impl<'a> Query<'a> {
                     before,
                 )
                 .map(Identity::Local)
-                .map_err(|error| match error {
-                    storage::Failure::Storage(error) => Failure::Catalog(error),
-                    storage::Failure::Stopped(error) => Failure::Stopped(error),
-                });
+                .map_err(storage_failure);
         }
         let read = storage::Read::from(store);
         if let Self::Atom(atom) = self
@@ -188,10 +198,7 @@ impl<'a> Query<'a> {
                 before,
             )
             .map(Identity::Local)
-            .map_err(|error| match error {
-                storage::Failure::Storage(error) => Failure::Catalog(error),
-                storage::Failure::Stopped(error) => Failure::Stopped(error),
-            })
+            .map_err(storage_failure)
     }
 
     pub(super) fn extra_bytes(self) -> u128 {
@@ -231,48 +238,42 @@ impl<'a> Query<'a> {
         }
     }
 
-    /// Search within one signed predicate. Discovery positions, not canonical
-    /// IDs, index the AVL nodes. Every argument resolves in its own read owner.
-    pub(super) fn search<'rows, E>(
+    /// Resolve unauthenticated coordinates by content through this store's
+    /// exact hash indexes: the signed predicate, each argument, then the row.
+    /// Any missing component proves the atom absent; nothing is imported.
+    /// Holds one arity-cell argument buffer and the term lookup's charged
+    /// expansion scratch while resolving.
+    pub(super) fn resolve_with<E>(
         self,
         store: &Store,
-        resolve: impl Fn(usize) -> Option<AtomRef<'rows>>,
-        nodes: &[Node],
-        cursor: Link,
         before: &mut impl FnMut() -> Result<(), E>,
-        descend: impl FnMut(bool),
-    ) -> Result<Option<usize>, E> {
-        ordered_index::search(
-            nodes,
-            cursor,
-            |id| self.compare_at(store, &resolve, id, &mut *before),
-            descend,
-        )
-    }
-
-    /// The query against the indexed atom at `id`, within one signed
-    /// predicate: its arguments in order, each in its own read owner.
-    pub(super) fn compare_at<'rows, E>(
-        self,
-        store: &Store,
-        resolve: &impl Fn(usize) -> Option<AtomRef<'rows>>,
-        id: usize,
-        before: &mut impl FnMut() -> Result<(), E>,
-    ) -> Result<std::cmp::Ordering, E> {
-        before()?;
-        let atom = resolve(id).expect("index references admitted atom");
-        before()?;
-        let arity = self.predicate(store).arity();
+    ) -> Result<Option<AtomId>, Failure<E>> {
+        let predicate = self.predicate(store);
+        let Some(id) = store
+            .find_predicate_with(predicate, &mut *before)
+            .map_err(storage_failure)?
+        else {
+            return Ok(None);
+        };
+        let arity = predicate.arity();
+        let mut lookup = storage::TermLookup::new(store);
+        let mut terms = Vec::new();
+        terms
+            .try_reserve_exact(arity)
+            .map_err(Failure::Allocation)?;
         for column in 0..arity {
-            before()?;
-            let left = self.argument(column, store);
-            let right = atom.values().at(column).expect("same predicate arity");
-            let order = left.compare_ref_with(right, &mut *before)?;
-            if !order.is_eq() {
-                return Ok(order);
-            }
+            let Some(term) = lookup
+                .find_term_with(self.argument(column, store), UNBOUNDED, &mut *before)
+                .map_err(storage_failure)?
+            else {
+                return Ok(None);
+            };
+            terms.push(term);
         }
-        Ok(std::cmp::Ordering::Equal)
+        let prepared = store
+            .prepare_atom_by_with(id, arity, |column| terms[column], before)
+            .map_err(storage_failure)?;
+        Ok(prepared.present())
     }
 
     pub(super) fn intern_with<E>(

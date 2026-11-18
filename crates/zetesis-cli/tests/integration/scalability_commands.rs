@@ -376,14 +376,16 @@ mod campaigns {
             "{}; retained stderr: {}",
             wide.1, evidence["report"]["samples"][wide.0]["capture"]["stderr"]["data"]
         );
-        let support_bytes = zetesis_solve::Resources::new(384 * 1024, std::num::NonZeroUsize::MIN)
-            .formula_limits()
-            .max_support_bytes;
+        // Either memory share may bind first: support storage, or the formula
+        // node share once support needs less memory per atom.
+        let limits =
+            zetesis_solve::Resources::new(384 * 1024, std::num::NonZeroUsize::MIN).formula_limits();
+        let detail = wide.1["detail"].as_str().unwrap();
         assert!(
-            wide.1["detail"]
-                .as_str()
-                .unwrap()
-                .contains(&format!("SupportBytes limit {support_bytes} exceeded")),
+            detail.contains(&format!(
+                "SupportBytes limit {} exceeded",
+                limits.max_support_bytes
+            )) || detail.contains(&format!("Nodes limit {} exceeded", limits.theory.max_nodes)),
             "{}",
             wide.1
         );

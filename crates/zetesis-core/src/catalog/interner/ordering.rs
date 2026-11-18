@@ -1,70 +1,37 @@
-//! Selected discovery order derives from the existing semantic AVL trees.
+//! Typed discovery order is sorted on demand; the interner keeps no ordered index.
 
 use zetesis_algebra::words::Words;
 
-use super::{
-    AtomAppender, Failure, Limits, Link, Node, Step, Subtree, admit, cells, path_bound, population,
-    position, reserve,
-};
-
-enum Selection<'a> {
-    Prefix(usize),
-    Mask {
-        words: Words<u64, &'a [u64]>,
-        count: usize,
-    },
-}
-
-impl Selection<'_> {
-    fn len(&self) -> usize {
-        match self {
-            Self::Prefix(count) | Self::Mask { count, .. } => *count,
-        }
-    }
-
-    fn contains(&self, position: usize) -> bool {
-        match self {
-            Self::Prefix(count) => position < *count,
-            Self::Mask { words, .. } => words.contains(position),
-        }
-    }
-}
+use super::{AtomAppender, Failure, Limits, admit, cells, population, reserve};
 
 impl AtomAppender<'_> {
     /// Prospective total named storage for dense selected ordering.
     ///
     /// Returns `None` when the strategy is inapplicable: for discovery population
-    /// n and selected count d, it requires 2 <= d <= n <= 2*d. This protects small
-    /// deltas from repeatedly traversing a large historical index. It does not
-    /// inspect the selected positions or establish their validity.
+    /// n and selected count d, it requires 2 <= d <= n <= 2*d. This keeps the
+    /// n-bit duplicate mask proportional to the selection. It does not inspect
+    /// the selected positions or establish their validity.
     ///
-    /// Includes this owner's current storage, an n-bit mask, d-position output,
-    /// their headers and conservative old/new path-buffer overlap. The caller's
-    /// selected slice and other live owners are excluded; compare the result with
-    /// the allowance remaining for this owner. The estimate uses requested
-    /// capacities. Actual allocator slack is checked by [`Self::order_selected_with`]
-    /// and can still cause a typed refusal. This read neither allocates nor changes
-    /// a peak receipt; it is not evidence that the operation completed.
+    /// Includes this owner's current storage, an n-bit mask, two d-position
+    /// merge buffers, a run-start buffer and their headers. The caller's selected slice and other
+    /// live owners are excluded; compare the result with the allowance remaining
+    /// for this owner. The estimate uses requested capacities. Actual allocator
+    /// slack is checked by [`Self::order_selected_with`] and can still cause a
+    /// typed refusal. This read neither allocates nor changes a peak receipt;
+    /// it is not evidence that the operation completed.
     #[must_use]
     pub fn selected_order_storage(&self, selected: usize) -> Option<u128> {
         let count = self.len();
         if selected < 2 || selected > count || count > selected.saturating_mul(2) {
             return None;
         }
-        let path = path_bound(count);
         Some(
             self.storage_bytes()
                 + size_of::<Words<u64>>() as u128
                 + cells::<u64>(count.div_ceil(64))
-                + size_of::<Vec<usize>>() as u128
-                + cells::<usize>(selected)
-                + if self.index.path.capacity() < path {
-                    // Incremental growth may overlap two later buffers, not
-                    // merely the original capacity and the final buffer.
-                    2 * cells::<Step>(path) - cells::<Step>(self.index.path.capacity())
-                } else {
-                    0
-                },
+                + 3 * size_of::<Vec<usize>>() as u128
+                + 3 * cells::<usize>(selected)
+                + cells::<usize>(1),
         )
     }
 
@@ -72,17 +39,16 @@ impl AtomAppender<'_> {
     ///
     /// Positions may select any committed or pending discoveries, including old
     /// identities that a caller has not previously selected. Canonical rows with
-    /// no discovery position are outside this operation. Inorder traversal of
-    /// the existing semantic index supplies order; numeric IDs only select rows.
-    /// For n discoveries and d selected positions, this visits O(n+d) metadata
-    /// and needs an n-bit mask, d-position temporary output and O(log n) retained
-    /// path scratch. No atom or term payload is copied or compared.
+    /// no discovery position are outside this operation. An n-bit mask rejects
+    /// duplicates; the typed atom comparison then orders the d selected
+    /// positions by a merge sort over two d-position buffers. No atom or term
+    /// payload is copied.
     ///
     /// All replacement writes receive permits before any caller position changes.
-    /// On refusal or a callback panic the caller slice is unchanged. The owner
-    /// retains any grown path capacity, and its peak includes actual temporary
-    /// buffers and growth overlap even when they are dropped on failure/unwind.
-    /// Empty and singleton selections need no temporary buffers.
+    /// On refusal or a callback panic the caller slice is unchanged. The peak
+    /// includes actual temporary buffers and growth overlap even when they are
+    /// dropped on failure/unwind. Empty and singleton selections need no
+    /// temporary buffers.
     ///
     /// # Errors
     /// Rejects duplicate or out-of-range positions as a canonical shape error,
@@ -111,15 +77,8 @@ impl AtomAppender<'_> {
         }
         let mask = self.selection_mask(selected, limits, &mut before)?;
         let extra = size_of::<Words<u64>>() as u128 + cells::<u64>(mask.capacity());
-        let output = self.collect_order(
-            &Selection::Mask {
-                words: Words::new(&mask[..]),
-                count: selected.len(),
-            },
-            extra,
-            limits,
-            &mut before,
-        )?;
+        let output = self.sort_positions(selected, extra, limits, &mut before)?;
+        drop(mask);
         for _ in 0..selected.len() {
             before().map_err(Failure::Stopped)?;
         }
@@ -142,7 +101,7 @@ impl AtomAppender<'_> {
             words,
             words,
             live,
-            &mut self.index.peak,
+            self.peak,
             limits,
             &mut checked,
         )?;
@@ -172,131 +131,120 @@ impl AtomAppender<'_> {
         limits: Limits,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<Vec<usize>, Failure<E>> {
-        self.collect_order(&Selection::Prefix(count), 0, limits, &mut before)
-    }
-
-    fn collect_order<E>(
-        &mut self,
-        selection: &Selection<'_>,
-        extra: u128,
-        limits: Limits,
-        before: &mut impl FnMut() -> Result<(), E>,
-    ) -> Result<Vec<usize>, Failure<E>> {
-        // Traversal repurposes the semantic mutation buffer. Revoke its
-        // published-spine certificate before any fallible preparation.
-        self.spines.semantic = None;
-        let count = self.len();
-        population(count, limits)?;
-        let base = self.storage_bytes() - cells::<Step>(self.index.path.capacity())
-            + extra
-            + size_of::<Vec<usize>>() as u128;
-        Traversal {
-            nodes: &self.index.nodes,
-            path: &mut self.index.path,
-            subtrees: self.subtrees,
-            peak: &mut self.index.peak,
-            base,
-            path_bound: path_bound(count),
-            limits,
-        }
-        .collect(selection, &mut || before().map_err(Failure::Stopped))
-    }
-}
-
-/// `base` excludes the mutable path and output capacities. Their current
-/// capacities are added before each reserve, including simultaneous growth.
-struct Traversal<'a> {
-    nodes: &'a [Node],
-    path: &'a mut Vec<Step>,
-    subtrees: &'a [Subtree],
-    peak: &'a mut u128,
-    base: u128,
-    path_bound: usize,
-    limits: Limits,
-}
-
-impl Traversal<'_> {
-    fn live(&self, output: usize) -> u128 {
-        self.base + cells::<Step>(self.path.capacity()) + cells::<usize>(output)
-    }
-
-    fn collect<E>(
-        mut self,
-        selection: &Selection<'_>,
-        before: &mut impl FnMut() -> Result<(), Failure<E>>,
-    ) -> Result<Vec<usize>, Failure<E>> {
+        population(self.len(), limits)?;
+        let mut checked = || before().map_err(Failure::Stopped);
         let mut output = Vec::new();
-        let count = selection.len();
-        let live = self.live(0);
+        let live = self.storage_bytes() + size_of::<Vec<usize>>() as u128;
         reserve(
             &mut output,
             count,
             count,
             live,
             self.peak,
-            self.limits,
-            before,
+            limits,
+            &mut checked,
         )?;
-        before()?;
-        self.path.clear();
-        // Predicate subtrees and each subtree's argument ordering are semantic.
-        // Each descent pushes a new ancestor, and each pop visits it once.
-        for relation in 0..self.subtrees.len() {
-            before()?;
-            let mut cursor = self.subtrees[relation].root;
-            loop {
-                self.descend(cursor, output.capacity(), before)?;
-                before()?;
-                let Some(step) = self.path.pop() else { break };
-                if selection.contains(step.id) {
-                    before()?;
-                    output.push(step.id);
-                }
-                cursor = step.node.children[1];
-            }
+        for position in 0..count {
+            checked()?;
+            output.push(position);
         }
-        if output.len() != count {
-            return Err(shape());
-        }
-        Ok(output)
+        let extra = size_of::<Vec<usize>>() as u128 + cells::<usize>(output.capacity());
+        let sorted = self.sort_positions(&output, extra, limits, &mut before)?;
+        Ok(sorted)
     }
 
-    fn descend<E>(
+    /// Return `positions` in exact typed atom order without changing them.
+    ///
+    /// A natural merge sort: one pass splits the positions into maximal
+    /// ascending runs, then adjacent runs merge pairwise until one remains.
+    /// Discoveries mostly arrive in typed order, so a sorted selection costs
+    /// n - 1 comparisons and r runs cost at most n * ceil(log2 r) more. Three
+    /// admitted buffers (positions, merge output and run starts); one permit
+    /// per copied position, one per run merge and one per comparison, whose
+    /// typed comparator admits its own navigation. Refusal drops the buffers
+    /// after their actual capacities enter the operation's peak.
+    fn sort_positions<E>(
         &mut self,
-        mut cursor: Link,
-        output_capacity: usize,
-        before: &mut impl FnMut() -> Result<(), Failure<E>>,
-    ) -> Result<(), Failure<E>> {
-        while let Some(next) = cursor {
-            before()?;
-            let id = position(next);
-            let node = self.nodes[id];
-            let live = self.live(output_capacity);
+        positions: &[usize],
+        extra: u128,
+        limits: Limits,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Vec<usize>, Failure<E>> {
+        let count = positions.len();
+        let mut checked = || before().map_err(Failure::Stopped);
+        let mut live = self.storage_bytes() + extra + 3 * size_of::<Vec<usize>>() as u128;
+        let mut values = Vec::new();
+        let mut scratch = Vec::new();
+        let mut runs = Vec::new();
+        for (buffer, cells_needed) in [
+            (&mut values, count),
+            (&mut scratch, count),
+            (&mut runs, count + 1),
+        ] {
             reserve(
-                self.path,
-                1,
-                self.path_bound,
+                buffer,
+                cells_needed,
+                cells_needed,
                 live,
                 self.peak,
-                self.limits,
-                before,
+                limits,
+                &mut checked,
             )?;
-            before()?;
-            self.path.push(Step {
-                id,
-                node,
-                right: false,
-                changed: false,
-            });
-            cursor = node.children[0];
+            live += cells::<usize>(buffer.capacity());
         }
-        Ok(())
+        let compare =
+            |left: usize, right: usize, checked: &mut dyn FnMut() -> Result<(), Failure<E>>| {
+                checked()?;
+                self.get(left)
+                    .expect("selected discovery position")
+                    .compare_ref_with(
+                        self.get(right).expect("selected discovery position"),
+                        &mut *checked,
+                    )
+            };
+        runs.push(0);
+        for (index, &position) in positions.iter().enumerate() {
+            checked()?;
+            if let Some(&previous) = values.last()
+                && compare(position, previous, &mut checked)?.is_lt()
+            {
+                runs.push(index);
+            }
+            values.push(position);
+        }
+        runs.push(count);
+        while runs.len() > 2 {
+            scratch.clear();
+            let mut kept = 0;
+            let mut run = 0;
+            while run + 1 < runs.len() {
+                checked()?;
+                let (start, middle) = (runs[run], runs[run + 1]);
+                let end = runs.get(run + 2).copied().unwrap_or(middle);
+                let (mut left, mut right) = (start, middle);
+                while left < middle && right < end {
+                    if compare(values[right], values[left], &mut checked)?.is_lt() {
+                        scratch.push(values[right]);
+                        right += 1;
+                    } else {
+                        scratch.push(values[left]);
+                        left += 1;
+                    }
+                }
+                scratch.extend_from_slice(&values[left..middle]);
+                scratch.extend_from_slice(&values[right..end]);
+                runs[kept] = start;
+                kept += 1;
+                run += 2;
+            }
+            runs[kept] = count;
+            runs.truncate(kept + 1);
+            std::mem::swap(&mut values, &mut scratch);
+        }
+        Ok(values)
     }
 }
 
 fn shape<E>() -> Failure<E> {
     Failure::Catalog(crate::catalog::Error::Shape)
 }
-
-#[cfg(test)]
-mod tests;

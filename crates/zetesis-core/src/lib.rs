@@ -31,7 +31,6 @@ pub mod intern;
 pub mod retention;
 pub mod table;
 mod identity;
-mod ordered_index;
 mod atom_lookup;
 mod checked_sort;
 mod word_mix;

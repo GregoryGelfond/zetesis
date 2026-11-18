@@ -286,7 +286,7 @@ impl AtomAppender<'_> {
         })
     }
 
-    /// Discover one complete assigned atom through the shared checked AVL path.
+    /// Discover one complete assigned atom through the shared checked entry path.
     /// Slot order and repetitions are preserved; no owned Atom or Value is built.
     /// Predicate declaration and assignment must belong to this vocabulary.
     /// The immutable slot projection serves lookup and canonical admission
@@ -408,7 +408,7 @@ impl AtomAppender<'_> {
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<usize, AssignedFailure<E>> {
         // Shared borrows keep this completely validated projection unchanged
-        // through exact preparation, semantic placement and row publication.
+        // through exact preparation and row publication.
         let query = Query::Projected(projected);
         let Identity::Local(prepared) = query.identity_with(self.store, &mut before)? else {
             unreachable!("validated projection has local canonical coordinates");
@@ -418,13 +418,7 @@ impl AtomAppender<'_> {
             None => prepared,
         };
         self.reborrow()
-            .entry_prepared(
-                query,
-                Some(prepared),
-                locations.map(|location| location.subtree),
-                limits,
-                &mut before,
-            )?
+            .entry_prepared(query, Some(prepared), &mut before)?
             .insert_with(limits, before)
             .map_err(Into::into)
     }
