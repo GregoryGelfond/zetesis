@@ -52,13 +52,53 @@ fn bundle(path: &Path) -> SourceBundle {
 }
 
 fn prepare(path: &Path) -> Result<crate::PreparedFormulaBundle, String> {
+    prepare_within(path, &Budget::default())
+}
+
+fn prepare_within(path: &Path, budget: &Budget) -> Result<crate::PreparedFormulaBundle, String> {
     crate::prepare_bundle_formula(
         bundle(path),
         BundleAdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+        budget.expansion,
+        budget.formula,
     )
     .map_err(|failure| failure.error().to_string())
+}
+
+/// The expansion and formula limits one comparison runs under.
+#[derive(Default)]
+struct Budget {
+    expansion: ExpansionLimits,
+    formula: FormulaLimits,
+}
+
+/// The corpus agreement test's own budget. The test compares the fact-arena
+/// path with the fact-rule path, and is meaningful only where both paths run
+/// to completion or refuse alike. The public defaults sit below what the
+/// largest corpus programs need: agg10k and closure10k ground about 104k and
+/// 95k atoms (as clingo does), stratrec10k charges about 17.2M work on the
+/// fact-rule path, and arith10k's source expansion charges about 23.7M scalar
+/// bytes on the fact-arena path. So the budget is set explicitly from those
+/// measurements, with room to spare, rather than from the public defaults,
+/// which it neither changes nor tests.
+fn corpus_budget() -> Budget {
+    let expansion = ExpansionLimits::default();
+    let formula = FormulaLimits::default();
+    Budget {
+        expansion: ExpansionLimits {
+            max_scalar_bytes: 4 * expansion.max_scalar_bytes,
+            max_family_bytes: 4 * expansion.max_family_bytes,
+            ..expansion
+        },
+        formula: FormulaLimits {
+            max_work: 64_000_000,
+            theory: zetesis_ferraris::AdmissionLimits {
+                max_atoms: 4 * formula.theory.max_atoms,
+                ..formula.theory
+            },
+            ..formula
+        },
+    }
 }
 
 fn atoms(catalog: &zetesis_core::AtomCatalog) -> String {
@@ -174,10 +214,10 @@ fn refused(error: &crate::FormulaFailure) -> String {
     }
 }
 
-fn observe(path: &Path) -> (Observed, Receipts) {
+fn observe(path: &Path, limits: &Budget) -> (Observed, Receipts) {
     let mut observed = Observed::default();
     let mut receipts = Receipts::default();
-    let (source, published) = rounds::capture(|| match prepare(path) {
+    let (source, published) = rounds::capture(|| match prepare_within(path, limits) {
         Err(error) => format!("refused {error}"),
         Ok(prepared) => match prepared.try_source() {
             Err(failure) => refused(failure.error()),
@@ -190,7 +230,7 @@ fn observe(path: &Path) -> (Observed, Receipts) {
         },
     });
     observed.source = format!("{source}\nrounds {published:?}");
-    let (ground, published) = rounds::capture(|| match prepare(path) {
+    let (ground, published) = rounds::capture(|| match prepare_within(path, limits) {
         Err(error) => format!("refused {error}"),
         Ok(prepared) => {
             let summary = &prepared.preparation().program.analysis;
@@ -214,7 +254,7 @@ fn observe(path: &Path) -> (Observed, Receipts) {
         }
     });
     observed.ground = format!("{ground}\nrounds {published:?}");
-    observed.adaptive = match prepare(path) {
+    observed.adaptive = match prepare_within(path, limits) {
         Err(error) => format!("refused {error}"),
         Ok(prepared) => match prepared.ground_adaptive() {
             Err(failure) => refused(failure.error()),
@@ -244,10 +284,17 @@ fn evidence(prepared: &crate::PreparedFormulaBundle) -> u128 {
         .sum()
 }
 
-/// Compare the two paths on `path`, and return its fact rows' evidence.
+/// Compare the two paths on `path` under the default limits, and return its
+/// fact rows' evidence.
 fn agree(path: &Path) -> u128 {
-    let (reference, rule_receipts) = with_facts_as_rules(|| observe(path));
-    let (actual, receipts) = observe(path);
+    agree_within(path, &Budget::default())
+}
+
+/// Compare the two paths on `path` under `limits`, and return its fact rows'
+/// evidence.
+fn agree_within(path: &Path, limits: &Budget) -> u128 {
+    let (reference, rule_receipts) = with_facts_as_rules(|| observe(path, limits));
+    let (actual, receipts) = observe(path, limits);
     assert_eq!(rule_receipts.evidence, 0, "{}", path.display());
     assert_eq!(actual.analysis, reference.analysis, "{}", path.display());
     assert_eq!(actual.source, reference.source, "{}", path.display());
@@ -414,8 +461,9 @@ fn corpus_programs_agree_with_fact_rules() {
     found.sort();
     assert!(found.len() > 100, "{}", found.len());
     let mut evidence = 0;
+    let budget = corpus_budget();
     for path in &found {
-        evidence += agree(path);
+        evidence += agree_within(path, &budget);
     }
     assert!(evidence > 0);
 }
