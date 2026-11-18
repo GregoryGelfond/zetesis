@@ -1,16 +1,12 @@
-//! A one-tuple transaction containing only equality IDs, new values and the
-//! row's tentative AVL path.
+//! A one-tuple transaction containing only equality IDs and new values.
 //!
 //! A new value is staged with its content hash; a later column of the same
 //! tuple that repeats it reuses its tentative ID. No row, dictionary
-//! representative, content chain or tree link changes before final admission.
+//! representative or content chain changes before final admission.
 //! The staged state depends on this tuple's width, never on the historical
 //! dictionary.
 
-use crate::{
-    catalog::{AtomRef, Atoms, storage::TermId},
-    ordered_index::{Directions, Index, Node, Planned, Step, position, spine::RightSpine},
-};
+use crate::catalog::{AtomRef, Atoms, storage::TermId};
 
 use super::super::{
     Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling,
@@ -132,81 +128,5 @@ pub(super) fn values(
         plan.ids
             .push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
     }
-    Ok(())
-}
-
-/// Both routes come from this owner's actual checked tuple comparisons.
-#[derive(Clone, Copy)]
-pub(super) enum RowPath<'a> {
-    Recorded(&'a Directions),
-    BeyondLast(usize),
-}
-
-pub(super) fn row(
-    index: &mut Index,
-    id: usize,
-    route: RowPath<'_>,
-    retained: Option<RightSpine>,
-    work: &mut Work,
-) -> Result<Planned, Failure> {
-    let reuse = match (&route, retained) {
-        (RowPath::BeyondLast(last), Some(spine)) => {
-            work.tick(1)?;
-            spine.matches(index, index.root, *last)
-        }
-        _ => false,
-    };
-    if !reuse {
-        index.path.clear();
-    }
-    let mut cursor = if reuse { None } else { index.root };
-    let mut offset = 0;
-    while let Some(link) = cursor {
-        work.tick(1)?;
-        let right = match &route {
-            RowPath::Recorded(directions) => directions.get(offset).ok_or(Failure::Dictionary)?,
-            RowPath::BeyondLast(_) => true,
-        };
-        let previous = position(link);
-        let node = index.nodes[previous];
-        push(
-            index,
-            Step {
-                id: previous,
-                node,
-                right,
-                changed: false,
-            },
-            work,
-        )?;
-        cursor = node.children[usize::from(right)];
-        offset += 1;
-    }
-    match route {
-        RowPath::Recorded(directions) if offset != directions.len() => {
-            return Err(Failure::Dictionary);
-        }
-        RowPath::BeyondLast(last) => {
-            debug_assert_eq!(index.path.last().map(|step| step.id), Some(last));
-        }
-        RowPath::Recorded(_) => {}
-    }
-    push(
-        index,
-        Step {
-            id,
-            node: Node::default(),
-            right: false,
-            changed: true,
-        },
-        work,
-    )?;
-    index.plan_changes_from(index.root, id, &mut || work.tick(1))
-}
-
-fn push(index: &mut Index, step: Step, work: &mut Work) -> Result<(), Failure> {
-    work.grow(&mut index.path, 1)?;
-    work.tick(1)?;
-    index.path.push(step);
     Ok(())
 }

@@ -7,10 +7,6 @@ use crate::{
     catalog::{
         AtomRef, Atoms, CatalogRead, DeclaredPredicate, Member, Membership, PredicateRef, TermRef,
     },
-    ordered_index::{
-        self, Directions, Index, Node, Planned, Step,
-        spine::{self, RightSpine},
-    },
 };
 
 mod plan;
@@ -21,7 +17,9 @@ pub use ordered::{Canonical, Preparation, Runs};
 
 use super::{
     Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source,
-    Storage, Work, ceiling, column::OwnedColumn,
+    Storage, Work, ceiling,
+    column::OwnedColumn,
+    dictionary::{self, Content},
 };
 
 /// One signed predicate's unique atom membership and appendable equality layout.
@@ -40,27 +38,19 @@ use super::{
 /// opaque bucket/control allocation. Fixed-ID hash operations each admit one
 /// container operation; their internal probes are not individually cancellable.
 ///
-/// Row membership visits O(log n) nodes. Increasing insertion retains the
-/// published right spine in the existing mutation buffer. It compares against
-/// the actual maximum, reuses the unchanged path prefix, and refreshes only the
-/// changed suffix after the complete row commits. Other row-path writers revoke
-/// that certificate before preparing a mutation. Same-vocabulary dictionary lookup uses
-/// expected O(1) fixed-ID hashing (O(d) worst case); foreign lookup and new-value
-/// placement visit O(log d) semantic nodes, with typed descriptor/text-prefix
-/// comparison work additional. Inserting a
-/// tuple with `a` newly distinct values retains O(a log d) tentative node patches;
-/// checked overlay scans can cost O(a² log² d) metadata work. Historical row and
-/// equality IDs do not shift. Ordered runs preserve the existing incremental
-/// preparation and separate allocation/work admission.
+/// Row membership is found by the hash of the row's equality IDs: a tuple's
+/// values resolve to their equality IDs first, and a tuple with a new value is
+/// new without any row comparison. Otherwise only the rows chained under the
+/// same hash are compared, one equality ID per column; no row order is kept on
+/// insertion. Same-vocabulary dictionary lookup uses expected O(1) fixed-ID
+/// hashing (O(d) worst case); a value the read cannot name is found by its
+/// content hash. Historical row and equality IDs do not shift. Order exists
+/// only in the prepared runs, which sort appended rows when they are prepared.
 pub struct Catalog {
     membership: Membership,
     arity: usize,
-    rows: Index,
-    /// The last row in typed order: it changes only when a row arrives
-    /// beyond it.
-    last_row: Option<usize>,
-    /// Published all-right path in `rows.path`, revoked before mutation.
-    spine: Option<RightSpine>,
+    /// Rows chained under the hash of their equality IDs.
+    rows: Content,
     ordered: ordered::Ordered,
     layout: Layout,
     encoding_bytes: u128,
@@ -144,9 +134,7 @@ impl Catalog {
             Ok(Self {
                 membership,
                 arity,
-                rows: Index::default(),
-                last_row: None,
-                spine: None,
+                rows: Content::default(),
                 ordered: ordered::Ordered::default(),
                 layout: Layout {
                     dictionary: Vec::new(),
@@ -227,6 +215,7 @@ impl Catalog {
                 + self.ordered.level_count() as u128
                 + index.identities.clear_work()
                 + index.content.clear_work()
+                + self.rows.clear_work()
                 + RESET_BOOKKEEPING,
         )
         .map_err(|error| self.failed(error, &work))?;
@@ -234,11 +223,7 @@ impl Catalog {
             unreachable!("catalog owns an append index");
         };
         self.membership.clear();
-        self.spine = None;
-        self.rows.nodes.clear();
-        self.rows.path.clear();
-        self.rows.root = None;
-        self.last_row = None;
+        self.rows.clear();
         index.identities.clear();
         index.content.clear();
         self.layout.dictionary.clear();
@@ -294,7 +279,6 @@ impl Catalog {
             atom.predicate(),
             |column| atom.values().at(column).expect("checked atom arity"),
             &mut work,
-            |_| {},
         )
         .map(|row| Lookup {
             row,
@@ -322,7 +306,6 @@ impl Catalog {
             key.predicate(),
             |column| key.argument(column),
             &mut work,
-            |_| {},
         )
         .map(|row| Lookup {
             row,
@@ -361,47 +344,35 @@ impl Catalog {
         work.tick(1)?;
         let member = self.membership.member(atom).map_err(Failure::Read)?;
         let atom = member.atom();
-        let mut route = Directions::default();
         work.tick(1)?;
         let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
-        let value = |column| atom.values().at(column).expect("checked atom arity");
-        // A row beyond the last in order is placed without a search.
-        let last =
-            ordered_index::compare_last(self.rows.root, self.last_row, work, |row, work| {
-                compare_row(atoms, row, &value, work)
-            })?;
-        // An empty tree's first row is its last, as is a row beyond the last.
-        let extends = matches!(last, ordered_index::Last::Beyond) || self.rows.root.is_none();
-        let found = match last {
-            ordered_index::Last::Found(row) => Some(row),
-            ordered_index::Last::Beyond => None,
-            ordered_index::Last::Search => self.locate_bound(atoms, value, work, |right| {
-                route.push(right).expect("AVL height fits two words");
-            })?,
+        // An occupied row is found from its values' equality IDs before any
+        // transaction scratch; a value without an equality ID makes it new.
+        let DictionaryIndex::Append(index) = &self.layout.index else {
+            return Err(Failure::Dictionary);
         };
-        if let Some(row) = found {
+        let read = atoms.read();
+        let value = |column| atom.values().at(column).expect("checked atom arity");
+        if let Some(row) = self.find_tuple(
+            |column, work| {
+                Ok(
+                    match index
+                        .identities
+                        .probe_with(read, value(column), &mut || work.tick(1))?
+                    {
+                        dictionary::Probe::Local { equality, .. } => equality,
+                        dictionary::Probe::Unavailable(_) => None,
+                    },
+                )
+            },
+            work,
+        )? {
             return Ok(Insertion {
                 row,
                 inserted: false,
                 storage: self.receipt(work),
             });
         }
-        let row = self.len();
-        ceiling(
-            Resource::Rows,
-            row as u128 + 1,
-            work.limits.max_rows as u128,
-        )?;
-        let path = if matches!(last, ordered_index::Last::Beyond) {
-            plan::RowPath::BeyondLast(self.last_row.expect("checked semantic maximum"))
-        } else {
-            plan::RowPath::Recorded(&route)
-        };
-        // Take authority before the first mutation of the shared path buffer.
-        // Later dictionary/reservation refusal cannot leave tentative cells
-        // reusable as a published spine.
-        let retained = self.spine.take();
-        let row_plan = plan::row(&mut self.rows, row, path, retained, work)?;
         if matches!(admission, plan::Admission::Temporary) {
             work.include(size_of::<plan::Plan>())?;
         }
@@ -413,21 +384,54 @@ impl Catalog {
             plan,
             work,
         )?;
-        self.reserve(plan, row_plan, extends, work)?;
-        Ok(self.publish(member, row_plan, plan, extends, work))
+        let hash = row_hash(&plan.ids, work)?;
+        let row = self.len();
+        ceiling(
+            Resource::Rows,
+            row as u128 + 1,
+            (work.limits.max_rows as u128).min(u128::from(u32::MAX)),
+        )?;
+        self.reserve(plan, work)?;
+        Ok(self.publish(member, plan, hash, work))
+    }
+
+    /// The row whose column `c` has the equality ID `resolve(c)`. The IDs
+    /// are resolved once for the row hash and again for each row chained
+    /// under it, so no ID buffer is allocated; a column without an ID is in
+    /// no row.
+    fn find_tuple(
+        &self,
+        mut resolve: impl FnMut(usize, &mut Work) -> Result<Option<u32>, Failure>,
+        work: &mut Work,
+    ) -> Result<Option<usize>, Failure> {
+        let mut hash = row_seed(self.arity);
+        for column in 0..self.arity {
+            let Some(id) = resolve(column, work)? else {
+                return Ok(None);
+            };
+            hash = crate::mix_word(hash, u64::from(id));
+        }
+        for _ in 0..=self.arity {
+            work.tick(1)?;
+        }
+        let columns = &self.layout.columns;
+        let found = self.rows.find(hash, |row| {
+            work.tick(1)?;
+            for (column, owned) in columns.iter().enumerate() {
+                if resolve(column, work)? != owned.view().get(row as usize) {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        })?;
+        Ok(found.map(|row| row as usize))
     }
 }
 
 impl Catalog {
-    fn reserve(
-        &mut self,
-        plan: &plan::Plan,
-        row: Planned,
-        increasing: bool,
-        work: &mut Work,
-    ) -> Result<(), Failure> {
+    fn reserve(&mut self, plan: &plan::Plan, work: &mut Work) -> Result<(), Failure> {
         work.grow(&mut self.membership.ids, 1)?;
-        work.grow(&mut self.rows.nodes, 1)?;
+        self.rows.reserve(1, work)?;
         work.grow(&mut self.layout.dictionary, plan.added.len())?;
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             return Err(Failure::Dictionary);
@@ -438,26 +442,16 @@ impl Catalog {
             column.reserve(id, work)?;
         }
         // Publication has no callbacks, allocations, payload comparisons or
-        // failure. Include each fixed-ID hash insertion, row-path inspection
-        // and tentative patch write before beginning the indivisible writes.
-        work.tick(
-            (self.rows.path.len() - row.changed_from) as u128
-                + plan.ids.len() as u128
-                + plan.added.len() as u128 * 3
-                + 3,
-        )?;
-        if increasing {
-            spine::admit(&self.rows, row, &mut || work.tick(1))?;
-        }
-        Ok(())
+        // failure. Include each fixed-ID hash insertion, the row's chain link
+        // and each column write before beginning the indivisible writes.
+        work.tick(plan.ids.len() as u128 + plan.added.len() as u128 * 3 + 3)
     }
 
     fn publish(
         &mut self,
         member: Member<'_>,
-        row_plan: Planned,
         plan: &plan::Plan,
-        increasing: bool,
+        hash: u64,
         work: &mut Work,
     ) -> Insertion {
         let row = self.len();
@@ -474,14 +468,10 @@ impl Catalog {
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
             column.push(id);
         }
-        self.rows.publish_nodes_from(row_plan.changed_from);
-        self.rows.root = row_plan.root;
+        self.rows
+            .publish(hash, u32::try_from(row).expect("admitted row ID"));
         self.membership.publish(member);
         self.encoding_bytes = plan.encoding_bytes;
-        if increasing {
-            self.last_row = Some(row);
-            self.spine = Some(spine::retain(&mut self.rows, row_plan, row));
-        }
         Insertion {
             row,
             inserted: true,
@@ -495,7 +485,6 @@ impl Catalog {
         predicate: PredicateRef<'_>,
         value: impl Fn(usize) -> TermRef<'value>,
         work: &mut Work,
-        descend: impl FnMut(bool),
     ) -> Result<Option<usize>, Failure> {
         work.tick(1)?;
         let atoms = self.atoms(read)?;
@@ -503,24 +492,10 @@ impl Catalog {
         if !predicate.equals_ref_with(expected, || work.tick(1))? {
             return Err(Failure::Predicate);
         }
-        self.locate_bound(atoms, value, work, descend)
-    }
-
-    /// Search this catalog's bound membership after the caller has checked the
-    /// query's signed predicate. Insertion establishes that through `member`;
-    /// public lookups retain their reader and predicate checks in `locate`.
-    fn locate_bound<'value>(
-        &self,
-        atoms: Atoms<'_>,
-        value: impl Fn(usize) -> TermRef<'value>,
-        work: &mut Work,
-        descend: impl FnMut(bool),
-    ) -> Result<Option<usize>, Failure> {
-        ordered_index::search(
-            &self.rows.nodes,
-            self.rows.root,
-            |row| compare_row(atoms, row, &value, work),
-            descend,
+        let source = Source::Canonical(atoms);
+        self.find_tuple(
+            |column, work| super::storage::lookup(&self.layout, &source, value(column), work),
+            work,
         )
     }
 
@@ -568,7 +543,7 @@ impl Catalog {
     pub fn retained_bytes(&self) -> usize {
         size_of::<Self>()
             + vector_bytes(&self.membership.ids)
-            + index_bytes(&self.rows)
+            + self.rows.bytes()
             + self.ordered.capacity_bytes()
             + self.layout.dictionary.capacity() * size_of::<Cell>()
             + match &self.layout.index {
@@ -599,26 +574,19 @@ fn vector_bytes<T>(values: &Vec<T>) -> usize {
     values.capacity() * size_of::<T>()
 }
 
-fn index_bytes(index: &Index) -> usize {
-    index.nodes.capacity() * size_of::<Node>() + index.path.capacity() * size_of::<Step>()
+/// The hash of a row's equality IDs, charged one unit per column and one
+/// for the hash itself.
+fn row_hash(ids: &[u32], work: &mut Work) -> Result<u64, Failure> {
+    for _ in 0..=ids.len() {
+        work.tick(1)?;
+    }
+    Ok(ids.iter().fold(row_seed(ids.len()), |state, &id| {
+        crate::mix_word(state, u64::from(id))
+    }))
 }
 
-/// A query tuple against the indexed row `row`: its values in column order.
-fn compare_row<'value>(
-    atoms: Atoms<'_>,
-    row: usize,
-    value: &impl Fn(usize) -> TermRef<'value>,
-    work: &mut Work,
-) -> Result<std::cmp::Ordering, Failure> {
-    work.tick(1)?;
-    let atom = atoms.at(row).ok_or(Failure::CatalogIndex)?;
-    for (column, right) in atom.values().iter().enumerate() {
-        let order = work.compare(value(column), right)?;
-        if !order.is_eq() {
-            return Ok(order);
-        }
-    }
-    Ok(std::cmp::Ordering::Equal)
+fn row_seed(arity: usize) -> u64 {
+    crate::mix_word(0, arity as u64)
 }
 
 #[cfg(test)]

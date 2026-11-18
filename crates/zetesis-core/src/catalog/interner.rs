@@ -184,8 +184,8 @@ pub struct AtomInterner {
     snapshot: Snapshot,
     committed: Vec<AtomId>,
     pending: Vec<AtomId>,
-    /// The shared node index. Its own root goes unused here: each relation
-    /// keeps the root of its subtree, and the index publishes nodes alone.
+    /// The shared node index: each relation keeps the root of its subtree,
+    /// and the index publishes nodes alone.
     index: Index,
     /// Discovery positions by canonical identity: a hash view, no order.
     discovery: Discovery,

@@ -34,7 +34,6 @@ pub(crate) struct Step {
 #[derive(Default)]
 pub(crate) struct Index {
     pub nodes: Vec<Node>,
-    pub root: Link,
     pub path: Vec<Step>,
     pub peak: u128,
 }
