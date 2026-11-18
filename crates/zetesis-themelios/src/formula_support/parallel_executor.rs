@@ -11,13 +11,16 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use rayon::{Scope, ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
+use rayon::{Scope, ThreadPool, ThreadPoolBuildError};
+use zetesis_algebra::threads;
 
 /// Logical task geometry is independent of the matched physical worker count.
 pub(super) const TASKS: usize = 14;
 
 pub(crate) struct Executor {
-    pool: ThreadPool,
+    /// `None`: one requested thread; the caller runs every task in slot
+    /// order with the same task geometry and receipts, spawning no thread.
+    pool: Option<Pool>,
     #[cfg(test)]
     submissions: AtomicUsize,
     #[cfg(test)]
@@ -26,10 +29,37 @@ pub(crate) struct Executor {
     peak: AtomicUsize,
 }
 
-/// Private comparison configuration, fixed in each frozen executable. This is
-/// not the solver's search-worker setting or a proposed portable default.
-#[cfg(not(test))]
-const PHYSICAL_WORKERS: usize = 14;
+/// The pool's threads: counted and joined on drop in production; a test may
+/// inject a plain Rayon pool to exercise build and spawn failures.
+enum Pool {
+    Counted(threads::Pool),
+    #[cfg(test)]
+    Plain(ThreadPool),
+}
+
+impl std::ops::Deref for Pool {
+    type Target = ThreadPool;
+
+    fn deref(&self) -> &ThreadPool {
+        match self {
+            Self::Counted(pool) => pool,
+            #[cfg(test)]
+            Self::Plain(pool) => pool,
+        }
+    }
+}
+
+/// Pool threads for a requested host-thread count (`--threads`, or the
+/// available parallelism when none is given, as `auto`). The coordinating
+/// caller thread runs tasks too, so the pool has one thread fewer than the
+/// request and grounding never runs more than the requested threads; one
+/// thread selects the ordinary serial path and spawns none. The logical task
+/// geometry (`TASKS`) and every charged receipt are independent of this count.
+pub(crate) fn pool_threads(requested: Option<NonZeroUsize>) -> Option<NonZeroUsize> {
+    let threads = requested
+        .unwrap_or_else(|| std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN));
+    NonZeroUsize::new(threads.get() - 1)
+}
 
 /// The owner spans one entire preparation, including support and emission.
 /// It never enters retained per-answer checks. Initialization failure retains
@@ -39,14 +69,29 @@ pub(crate) struct SourceExecution {
 }
 
 impl SourceExecution {
-    pub(crate) fn new() -> Self {
+    /// Honors the caller's host-thread request (`--threads`). Unit-test
+    /// fixtures instead use the count chosen by `with_source_workers`
+    /// (serial when none is chosen), as before.
+    pub(crate) fn with_workers(requested: Option<NonZeroUsize>) -> Self {
         #[cfg(not(test))]
-        let workers = NonZeroUsize::new(PHYSICAL_WORKERS);
+        let workers = Some(pool_threads(requested));
         #[cfg(test)]
-        let workers = TEST_WORKERS.with(|count| NonZeroUsize::new(count.get()));
+        let workers = {
+            let _ = requested;
+            TEST_WORKERS.with(|count| NonZeroUsize::new(count.get()))
+        };
         Self {
+            #[cfg(not(test))]
+            executor: workers
+                .map(|pool| pool.map_or_else(|| Ok(Executor::inline()), Executor::new)),
+            #[cfg(test)]
             executor: workers.map(Executor::new),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new() -> Self {
+        Self::with_workers(None)
     }
 
     pub(crate) fn executor(&self) -> Option<&Executor> {
@@ -107,24 +152,43 @@ impl Executor {
     /// Once per preparation owner. Failure precedes cursor claim and may select
     /// the ordinary serial path under the proposed private admission contract.
     pub(super) fn new(workers: NonZeroUsize) -> Result<Self, ThreadPoolBuildError> {
-        Self::with_factory(workers, |workers| {
-            ThreadPoolBuilder::new().num_threads(workers.get()).build()
-        })
+        threads::Pool::new(workers, |index| format!("zetesis-ground-{index}"))
+            .map(|pool| Self::with_pool(Pool::Counted(pool)))
     }
 
+    #[cfg(test)]
     fn with_factory(
         workers: NonZeroUsize,
         build: impl FnOnce(NonZeroUsize) -> Result<ThreadPool, ThreadPoolBuildError>,
     ) -> Result<Self, ThreadPoolBuildError> {
-        build(workers).map(|pool| Self {
-            pool,
+        build(workers).map(|pool| Self::with_pool(Pool::Plain(pool)))
+    }
+
+    fn with_pool(pool: Pool) -> Self {
+        Self {
+            pool: Some(pool),
             #[cfg(test)]
             submissions: AtomicUsize::new(0),
             #[cfg(test)]
             active: AtomicUsize::new(0),
             #[cfg(test)]
             peak: AtomicUsize::new(0),
-        })
+        }
+    }
+
+    /// The caller alone, for a one-thread request: no pool thread exists.
+    /// Unit tests choose their executors through `with_source_workers`.
+    #[cfg(not(test))]
+    fn inline() -> Self {
+        Self {
+            pool: None,
+            #[cfg(test)]
+            submissions: AtomicUsize::new(0),
+            #[cfg(test)]
+            active: AtomicUsize::new(0),
+            #[cfg(test)]
+            peak: AtomicUsize::new(0),
+        }
     }
 
     /// This closure is not `Send`: `Rc`-bearing canonical owners stay on the caller.
@@ -133,7 +197,10 @@ impl Executor {
     where
         F: FnOnce(&Scope<'scope>) -> R,
     {
-        self.pool.in_place_scope(action)
+        self.pool
+            .as_ref()
+            .expect("inline execution never enters a scope")
+            .in_place_scope(action)
     }
 
     /// All inputs and output slots are admitted before submission. Logical order
@@ -149,21 +216,53 @@ impl Executor {
         assert!(tasks.len() <= TASKS);
         assert_eq!(tasks.len(), slots.len());
         assert!(slots.iter().all(Option::is_none));
+        let (Some((first, tasks)), Some((first_slot, slots))) =
+            (tasks.split_first(), slots.split_first_mut())
+        else {
+            return;
+        };
+        // The coordinator runs the first task itself instead of waiting idle,
+        // so a one-task batch never enters the pool.
+        if tasks.is_empty() {
+            *first_slot = Some(Self::tracked(self, || run(first)));
+            return;
+        }
+        if self.pool.is_none() {
+            *first_slot = Some(Self::tracked(self, || run(first)));
+            for (task, slot) in tasks.iter().zip(slots.iter_mut()) {
+                *slot = Some(Self::tracked(self, || run(task)));
+            }
+            return;
+        }
         self.in_place(|scope| {
             let run = &run;
             for (task, slot) in tasks.iter().zip(slots.iter_mut()) {
                 scope.spawn(move |_| {
-                    #[cfg(test)]
-                    let _active = {
-                        self.submissions.fetch_add(1, Ordering::Relaxed);
-                        let active = self.active.fetch_add(1, Ordering::Relaxed) + 1;
-                        self.peak.fetch_max(active, Ordering::Relaxed);
-                        Active(self)
-                    };
-                    *slot = Some(run(task));
+                    *slot = Some(Self::tracked(self, || run(task)));
                 });
             }
+            *first_slot = Some(Self::tracked(self, || run(first)));
         });
+    }
+
+    /// The pool's threads, when more than one thread was requested. Work
+    /// installed on it runs there while the caller waits.
+    pub(super) fn pool(&self) -> Option<&ThreadPool> {
+        self.pool.as_deref()
+    }
+
+    /// Run one task, recording it in the test receipts.
+    fn tracked<R>(executor: &Self, task: impl FnOnce() -> R) -> R {
+        #[cfg(test)]
+        let _active = {
+            executor.submissions.fetch_add(1, Ordering::Relaxed);
+            let active = executor.active.fetch_add(1, Ordering::Relaxed) + 1;
+            executor.peak.fetch_max(active, Ordering::Relaxed);
+            Active(executor)
+        };
+        #[cfg(not(test))]
+        let _ = executor;
+        task()
     }
 }
 

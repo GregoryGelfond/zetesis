@@ -55,18 +55,6 @@ pub(crate) enum Rotation {
 }
 
 impl Index {
-    /// Plan against an unpublished root whose nodes were supplied in `path`.
-    /// This supports several leaves in one bounded metadata transaction.
-    pub(crate) fn plan_from<E>(
-        &mut self,
-        root: Link,
-        id: usize,
-        before: &mut impl FnMut() -> Result<(), E>,
-    ) -> Result<Link, E> {
-        self.plan_changes_from(root, id, before)
-            .map(|plan| plan.root)
-    }
-
     /// Compute a new root and its actual changed suffix without changing any
     /// published link. The path ends at the absent child's new leaf. Propagation
     /// stops once subtree height is unchanged. A consumer reusing an all-right

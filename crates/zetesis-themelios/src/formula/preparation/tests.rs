@@ -1,5 +1,4 @@
 //! The deferred owner moves real source identity and accepted accounting.
-
 use super::PreparedFormula;
 use crate::formula_support::{Computation, Counters, Support};
 use crate::grounding_observer::Work;

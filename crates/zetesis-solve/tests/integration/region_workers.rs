@@ -1,5 +1,6 @@
-//! Several workers walk the region tree together only on a CPU backend;
-//! otherwise one worker walks it and its leaves are batched.
+//! Several workers walk the region tree together only on a CPU backend,
+//! beside the coordinating caller, so the walk never exceeds `workers`
+//! threads; otherwise one worker walks it and its leaves are batched.
 
 use zetesis_solve::{Backend, SolveConfig};
 use zetesis_test_support::counts::nonzero as workers;
@@ -18,7 +19,17 @@ fn several_workers_walk_the_regions_on_a_cpu_backend() {
         backend: Backend::Cpu,
         ..parallel()
     };
-    assert_eq!(config.region_workers(), Some(workers(4)));
+    assert_eq!(config.region_workers(), Some(workers(3)));
+}
+
+#[test]
+fn two_threads_walk_the_regions_on_the_caller_alone() {
+    let config = SolveConfig {
+        workers: workers(2),
+        ..parallel()
+    };
+    assert_eq!(config.region_workers(), None);
+    assert_eq!(config.region_producers(), None);
 }
 
 #[test]
@@ -37,4 +48,5 @@ fn a_device_backend_keeps_the_scalar_walk() {
         ..parallel()
     };
     assert_eq!(config.region_workers(), None);
+    assert_eq!(config.region_producers(), Some(workers(4)));
 }

@@ -226,6 +226,7 @@ impl Catalog {
             self.layout.columns.len() as u128
                 + self.ordered.level_count() as u128
                 + index.identities.clear_work()
+                + index.content.clear_work()
                 + RESET_BOOKKEEPING,
         )
         .map_err(|error| self.failed(error, &work))?;
@@ -238,10 +239,8 @@ impl Catalog {
         self.rows.path.clear();
         self.rows.root = None;
         self.last_row = None;
-        index.order.nodes.clear();
-        index.order.path.clear();
-        index.order.root = None;
         index.identities.clear();
+        index.content.clear();
         self.layout.dictionary.clear();
         for column in &mut self.layout.columns {
             column.clear();
@@ -417,7 +416,9 @@ impl Catalog {
         self.reserve(plan, row_plan, extends, work)?;
         Ok(self.publish(member, row_plan, plan, extends, work))
     }
+}
 
+impl Catalog {
     fn reserve(
         &mut self,
         plan: &plan::Plan,
@@ -431,8 +432,8 @@ impl Catalog {
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             return Err(Failure::Dictionary);
         };
-        work.grow(&mut index.order.nodes, plan.added.len())?;
         index.identities.reserve(plan.added.len(), work)?;
+        index.content.reserve(plan.added.len(), work)?;
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
             column.reserve(id, work)?;
         }
@@ -443,7 +444,6 @@ impl Catalog {
             (self.rows.path.len() - row.changed_from) as u128
                 + plan.ids.len() as u128
                 + plan.added.len() as u128 * 3
-                + plan.patches.len() as u128
                 + 3,
         )?;
         if increasing {
@@ -464,18 +464,11 @@ impl Catalog {
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             unreachable!("catalog owns an append index");
         };
-        index
-            .order
-            .nodes
-            .resize(index.order.nodes.len() + plan.added.len(), Node::default());
-        for patch in &plan.patches {
-            index.order.nodes[patch.id] = patch.node;
-        }
-        index.order.root = plan.root;
         for added in &plan.added {
             let equality =
                 u32::try_from(self.layout.dictionary.len()).expect("admitted equality ID");
             index.identities.publish(added.term, equality);
+            index.content.publish(added.hash, equality);
             self.layout.dictionary.push(added.cell);
         }
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
@@ -580,9 +573,7 @@ impl Catalog {
             + self.layout.dictionary.capacity() * size_of::<Cell>()
             + match &self.layout.index {
                 DictionaryIndex::Sorted(ids) => ids.capacity() * size_of::<u32>(),
-                DictionaryIndex::Append(index) => {
-                    index_bytes(&index.order) + index.identities.bytes()
-                }
+                DictionaryIndex::Append(index) => index.identities.bytes() + index.content.bytes(),
             }
             + self.layout.columns.capacity() * size_of::<OwnedColumn>()
             + self

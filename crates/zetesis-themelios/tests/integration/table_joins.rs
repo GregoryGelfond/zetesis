@@ -48,7 +48,10 @@ fn ground(
         ExpansionLimits::default(),
         *limits,
     )?
-    .with_grounding_options(GroundingOptions { joins: strategy })
+    .with_grounding_options(GroundingOptions {
+        joins: strategy,
+        ..GroundingOptions::default()
+    })
     .ground_with_observer(Some(observer))
 }
 
@@ -232,4 +235,35 @@ fn nullary_table_rows_preserve_the_emitted_theory() {
 #[test]
 fn objective_queries_preserve_exact_templates() {
     equal_theory("d(1..3).{a(X)}:-d(X).#minimize{X@X,X:a(X),d(X)}.");
+}
+
+#[test]
+fn host_threads_change_neither_the_theory_nor_the_work() {
+    // `GroundingOptions::workers` (the CLI's --threads) sizes the eager
+    // grounding pool; the logical task geometry and receipts are fixed.
+    let source = "n(1..300). p(X,Y) :- n(X), n(Y), X < Y, Y < X + 7. q(X) :- p(X,Y), not p(Y,X).";
+    let run = |workers: usize| {
+        let observer = Observation::default();
+        let admitted = prepare_formula(
+            source.to_owned(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap()
+        .with_grounding_options(GroundingOptions {
+            workers: std::num::NonZeroUsize::new(workers),
+            ..GroundingOptions::default()
+        })
+        .ground_with_observer(Some(&observer))
+        .unwrap();
+        (admitted, observer.work.get())
+    };
+    let (serial, serial_work) = run(1);
+    for workers in [2, 4, 14] {
+        let (parallel, parallel_work) = run(workers);
+        assert_eq!(parallel.atoms(), serial.atoms(), "{workers} workers");
+        assert_eq!(parallel.theory().roots(), serial.theory().roots());
+        assert_eq!(parallel_work, serial_work, "{workers} workers");
+    }
 }

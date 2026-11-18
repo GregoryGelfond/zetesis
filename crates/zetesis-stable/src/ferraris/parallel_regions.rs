@@ -509,12 +509,17 @@ impl Shared {
         reserve: impl FnOnce(&mut std::collections::VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
         let parent = pending.take().expect("publication has a pending parent");
-        match self
-            .frontier
-            .publish_split_with(index, parent, reserve, |parent| {
+        match self.frontier.publish_split_shedding(
+            index,
+            parent,
+            reserve,
+            |parent| {
                 let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
                 ([cut, held], ())
-            }) {
+            },
+            super::region_frontier::KEPT_KNOWLEDGE,
+            super::region_frontier::shed,
+        ) {
             Ok(()) => Ok(()),
             Err((error, parent)) => {
                 *pending = Some(parent);
@@ -1330,11 +1335,9 @@ impl ParallelRegions {
     ) -> Result<(), Incomplete> {
         self.engage_with(budget, |shared, slot, sender| {
             let original = Arc::clone(index);
-            std::thread::Builder::new()
-                .name("zetesis-region".into())
-                .spawn(move || {
-                    contain_worker(&shared, || worker(&shared, &original, slot, &sender))
-                })
+            zetesis_algebra::threads::spawn("zetesis-region", move || {
+                contain_worker(&shared, || worker(&shared, &original, slot, &sender))
+            })
         })
     }
 

@@ -200,7 +200,7 @@ impl Driver {
             frontier: &self.proposals.frontier,
             maximum,
             remaining: u64::MAX,
-            hand_limit: super::slate_hands(maximum, self.proposals.pool.current_num_threads()),
+            hand_limit: super::slate_hands(maximum, self.proposals.producers),
             hands: AtomicUsize::new(0),
             output_slots: AtomicUsize::new(0),
             outcome: Mutex::new(Outcome {

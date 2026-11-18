@@ -8,6 +8,7 @@ mod cancellation;
 pub mod class;
 pub mod reduction;
 pub mod region;
+pub mod threads;
 pub mod walk;
 pub mod words;
 

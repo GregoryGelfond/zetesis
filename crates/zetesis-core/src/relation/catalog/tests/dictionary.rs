@@ -415,3 +415,32 @@ fn canonical_absence_does_not_hide_an_invalid_column() {
         Some(Failure::Column)
     );
 }
+
+/// Work of looking up an uninterned number after `count` distinct values.
+fn unnamed_lookup_work(count: i32, query: i32) -> (Option<u32>, u128) {
+    let mut fixture = owner();
+    for index in 0..count {
+        fixture
+            .insert(&atom(index, count + index), Limits::default())
+            .unwrap();
+    }
+    let view = fixture.view();
+    lookup(&view, (&Value::Number(query)).into())
+}
+
+#[test]
+fn an_unnamed_lookup_does_not_grow_with_the_dictionary() {
+    // A value the read cannot name is found by its content hash, so its
+    // charged comparisons do not grow with the values before it (a value
+    // order scan did, which made the prime sieve quadratic).
+    for query in [3, -5] {
+        let (small_found, small) = unnamed_lookup_work(64, query);
+        let (large_found, large) = unnamed_lookup_work(4096, query);
+        assert_eq!(small_found.is_some(), query >= 0);
+        assert_eq!(large_found.is_some(), query >= 0);
+        assert!(
+            large <= small + 4,
+            "query {query}: small {small}, large {large}"
+        );
+    }
+}

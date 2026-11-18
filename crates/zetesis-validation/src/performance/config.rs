@@ -165,7 +165,7 @@ impl Default for Schedule {
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
 }
-/// Check an explicit selection of manifest-relative cases: one through 95
+/// Check an explicit selection of manifest-relative cases: one through 109
 /// distinct normal relative paths of 1..=1024 bytes each. Whether each names a
 /// runnable case is decided later, against the admitted corpus.
 ///
@@ -175,7 +175,7 @@ pub(super) fn selection(paths: &[String]) -> Result<(), Error> {
     use std::collections::BTreeSet;
     use std::path::Component;
     if paths.is_empty() || paths.len() > super::MAX_CASES {
-        return Err(Error::Configuration("selected cases must be 1..=95"));
+        return Err(Error::Configuration("selected cases must be 1..=109"));
     }
     let mut seen = BTreeSet::new();
     for path in paths {
@@ -223,7 +223,7 @@ impl Schedule {
         })
     }
 
-    /// Select one through 95 distinct manifest-relative cases in caller order.
+    /// Select one through 109 distinct manifest-relative cases in caller order.
     /// Each path is bounded by 1024 bytes and must be a normal relative path.
     /// Corpus admission later requires every path to identify a runnable case.
     ///
@@ -376,8 +376,12 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
+            // The reconstructed Vaelii-shaped bundle retains about 4.6 MB of
+            // checked source with its originals, above the catalog's own
+            // 4 MiB default; the campaign default admits the whole corpus.
             corpus: examples::Limits {
                 cases: super::MAX_CASES,
+                total_source_bytes: 8_388_608,
                 ..examples::Limits::default()
             },
             process: process::Limits {

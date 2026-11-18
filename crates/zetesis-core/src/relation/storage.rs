@@ -260,17 +260,19 @@ pub(super) fn lookup_with<E: From<Failure>>(
             {
                 return Ok(equality);
             }
-            crate::ordered_index::search(
-                &index.order.nodes,
-                index.order.root,
-                |id| {
-                    before()?;
-                    value.compare_ref_with(layout.dictionary[id].value(source)?, &mut *before)
-                },
-                |_| {},
-            )?
-            .map(|id| u32::try_from(id).map_err(|_| Failure::Overflow.into()))
-            .transpose()
+            // Hashing reads every payload word once and is charged as such.
+            let bytes = value.canonical_bytes_with(&mut *before)?;
+            let hash_work = super::dictionary::Content::hash_work(value.expanded_nodes(), bytes);
+            for _ in 0..hash_work {
+                before()?;
+            }
+            let hash = super::dictionary::Content::hash(value);
+            index.content.find(hash, |id| {
+                before()?;
+                Ok(value
+                    .compare_ref_with(layout.dictionary[id as usize].value(source)?, &mut *before)?
+                    .is_eq())
+            })
         }
     }
 }

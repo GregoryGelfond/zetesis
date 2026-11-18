@@ -3,6 +3,7 @@ use crate::formula_support::Accounting;
 use crate::grounding_observer::Work;
 use crate::test_support::location;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
+use rayon::ThreadPoolBuilder;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::{Condvar, Mutex};
@@ -157,13 +158,23 @@ fn one_pool_is_reused_across_independent_batches() {
         ThreadPoolBuilder::new().num_threads(count.get()).build()
     })
     .unwrap();
-    let mut first = [None];
-    let mut second = [None];
-    executor.run(&[()], &mut first, |()| std::thread::current().id());
-    executor.run(&[()], &mut second, |()| std::thread::current().id());
+    let mut first = [None, None];
+    let mut second = [None, None];
+    executor.run(&[(), ()], &mut first, |()| std::thread::current().id());
+    executor.run(&[(), ()], &mut second, |()| std::thread::current().id());
     assert_eq!(factories.get(), 1);
     assert_eq!(first, second);
-    assert_ne!(first[0].unwrap(), std::thread::current().id());
+    // The coordinator runs the first task; the pool's one worker the other.
+    assert_eq!(first[0].unwrap(), std::thread::current().id());
+    assert_ne!(first[1].unwrap(), std::thread::current().id());
+}
+
+#[test]
+fn a_single_task_runs_on_the_coordinator() {
+    let executor = Executor::new(workers(4)).unwrap();
+    let mut slot = [None];
+    executor.run(&[()], &mut slot, |()| std::thread::current().id());
+    assert_eq!(slot[0], Some(std::thread::current().id()));
 }
 
 #[test]
@@ -339,4 +350,25 @@ fn empty_batches_create_no_worker_operation() {
         panic!("empty batch ran a worker")
     });
     assert!(slots.is_empty());
+}
+
+#[test]
+fn the_pool_with_its_caller_stays_within_the_requested_threads() {
+    // --threads N caps grounding at N threads: N - 1 pool threads plus the
+    // coordinating caller, which runs tasks too (it was a fixed 14 before).
+    assert_eq!(pool_threads(Some(workers(1))), None);
+    for count in [2, 3, 14] {
+        let pool = pool_threads(Some(workers(count))).unwrap();
+        assert_eq!(pool.get(), count - 1);
+        let executor = Executor::new(pool).unwrap();
+        assert_eq!(
+            executor.pool.as_ref().unwrap().current_num_threads(),
+            count - 1
+        );
+    }
+    let available = std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN);
+    assert_eq!(
+        pool_threads(None).map_or(1, |pool| pool.get() + 1),
+        available.get()
+    );
 }

@@ -166,6 +166,7 @@ impl PreparedFormula {
     #[must_use]
     pub const fn with_grounding_options(mut self, options: crate::GroundingOptions) -> Self {
         self.preparation.options.joins = options.joins;
+        self.preparation.options.workers = options.workers;
         self
     }
 
@@ -638,6 +639,7 @@ impl PreparedFormulaBundle {
     #[must_use]
     pub const fn with_grounding_options(mut self, options: crate::GroundingOptions) -> Self {
         self.preparation.options.joins = options.joins;
+        self.preparation.options.workers = options.workers;
         self
     }
 

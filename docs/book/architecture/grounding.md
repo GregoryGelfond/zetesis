@@ -2431,16 +2431,20 @@ The catalog cannot grow while its snapshot is borrowed. Once a round finishes,
 the snapshot drops before new atoms are appended. A failed tuple or posting
 extension returns no usable support owner. The completed final snapshot supplies
 formula emission and objective eligibility. The core catalog uses the shared
-checked AVL implementation for row order, new dictionary-value placement and
-foreign-value lookup. Nodes contain only IDs and links; typed comparisons inspect
-their actual descriptor/text prefixes. An insertion resolves existing values
-through the inverse, and plans genuinely new dictionary leaves in a bounded
-metadata overlay. Repeated new values share the same tentative local ID.
-Row membership, dictionary representatives, inverse entries and columns publish
-together after all fallible checks. No historical sorted row or dictionary
-sequence is shifted. If a tuple
-introduces `a` new values into a dictionary of size `d`, tentative patches occupy
-O(a log d) cells; the checked overlay lookups can use O(a² log² d) metadata work.
+checked AVL implementation for row order only. Nodes contain only IDs and
+links; typed comparisons inspect their actual descriptor/text prefixes. An
+insertion resolves existing values through the inverse; a genuinely new value
+is appended to the dictionary and chained under its semantic content hash
+(`Hash for TermRef`, consistent with term equality), with no value order to
+search or rebalance. A value the read cannot name (uninterned or foreign) is
+found by hashing it once and comparing only the values in its hash chain, so
+its comparisons do not grow with the dictionary. Hashing reads every payload
+word once and is charged one unit per expanded node and per eight canonical
+bytes, at insertion and at each such lookup; the chain adds one `u32` link per
+value and a head table to the catalog's named bytes. Repeated new values share
+the same tentative local ID. Row membership, dictionary representatives,
+inverse and content entries and columns publish together after all fallible
+checks. No historical sorted row or dictionary sequence is shifted.
 Typed comparisons, node inspection, append copies and posting construction
 consume the grounding work budget. Inverse lookup uses fixed integer keys with
 expected constant-time hash lookup; internal hash probes are not individually

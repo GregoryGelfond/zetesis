@@ -331,7 +331,9 @@ fn comparison_variant(
             append
                 .atom((&added).into(), &limits, &mut counters, rule.location)
                 .unwrap();
-            append.order(&limits, &mut counters, rule.location).unwrap();
+            append
+                .order(&limits, &mut counters, rule.location, None)
+                .unwrap();
         }
         catalog
             .publish(&limits, &mut counters, rule.location)

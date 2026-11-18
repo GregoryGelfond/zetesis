@@ -204,6 +204,7 @@ impl<'a> SupportAppend<'a> {
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
+        executor: Option<&crate::formula_support::Executor>,
     ) -> Result<(), FormulaFailure> {
         if let Some(checked) = self.selected_order_limits(limits, counters, location)? {
             let workspace = counters.accounting.workspace.bytes();
@@ -216,16 +217,36 @@ impl<'a> SupportAppend<'a> {
             result.map_err(|error| atom_failure(error, limits, outer, location))?;
             return refreshed;
         }
+        // One admitted scratch buffer for a block merge sort: the merges of
+        // one width are independent, so the executor's workers share each
+        // pass, and it compares about half as often as heapsort.
+        let workspace = counters.accounting.workspace.bytes();
+        let bytes = usize::try_from(self.owner.storage_bytes() + self.outer_bytes(0))
+            .map_err(|_| failure(Failure::Overflow, location))?;
+        let mut memory = Memory::new(bytes, workspace as u128, limits, counters, location);
+        let mut scratch = Vec::new();
+        memory.reserve(&mut scratch, self.pending.len())?;
         let owner = &self.owner;
-        crate::formula_support::sort::by(
+        let result = crate::formula_support::sort::merge_by(
             self.pending,
+            &mut scratch,
+            executor.and_then(crate::formula_support::Executor::pool),
             GroundingWork::new(limits, counters, location),
-            |left, right, work| {
+            |left, right, charged| {
                 let left = owner.get(*left).expect("round-local discovery");
                 let right = owner.get(*right).expect("round-local discovery");
-                left.compare_ref_with(right, || work.counters.work(work.limits, work.location))
+                let navigated = left.compare_ref_with(right, || {
+                    *charged += 1;
+                    Ok::<_, std::convert::Infallible>(())
+                });
+                match navigated {
+                    Ok(order) => order,
+                    Err(never) => match never {},
+                }
             },
-        )
+        );
+        memory.release(scratch.capacity() * size_of::<usize>());
+        result
     }
 
     /// Decline before execution if the selected population is sparse or the
