@@ -712,7 +712,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::disallowed_methods, reason = "a test's own thread")]
     fn worker_value_snapshots_merge_without_sharing_observers() {
         let coordinator = Work::worker(true);
         coordinator.record(Event::JoinRow);
