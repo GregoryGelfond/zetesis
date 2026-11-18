@@ -305,6 +305,12 @@ impl<T, E, R> Capture<T, E, R> {
         assert!(self.receipt.is_none(), "operation receipt is not settled");
         &mut self.outcome
     }
+
+    /// The outcome before settlement, for a coordinator choosing which
+    /// attempts to repeat.
+    pub(super) fn pending_outcome(&self) -> &Outcome<T, E> {
+        &self.outcome
+    }
 }
 
 /// Visit every completed attempt in logical order, retaining the first typed
