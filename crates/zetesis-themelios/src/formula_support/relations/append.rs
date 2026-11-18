@@ -226,6 +226,7 @@ impl<'a> SupportAppend<'a> {
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
+        executor: Option<&crate::formula_support::Executor>,
     ) -> Result<(), FormulaFailure> {
         if let Some(checked) = self.selected_order_limits(limits, counters, location)? {
             let workspace = counters.accounting.workspace.bytes();
@@ -240,7 +241,8 @@ impl<'a> SupportAppend<'a> {
         }
         // Admitted scratch and run-start buffers for a natural merge sort:
         // discoveries mostly arrive in typed order, so it mostly confirms
-        // runs, and it never compares more than a bottom-up merge sort.
+        // runs, and the merges of one pass are independent, so the
+        // executor's workers share each pass.
         let workspace = counters.accounting.workspace.bytes();
         let bytes = usize::try_from(self.owner.storage_bytes() + self.outer_bytes(0))
             .map_err(|_| failure(Failure::Overflow, location))?;
@@ -254,11 +256,19 @@ impl<'a> SupportAppend<'a> {
             self.pending,
             &mut scratch,
             &mut runs,
+            executor.and_then(crate::formula_support::Executor::pool),
             GroundingWork::new(limits, counters, location),
-            |left, right, work| {
+            |left, right, charged| {
                 let left = owner.get(*left).expect("round-local discovery");
                 let right = owner.get(*right).expect("round-local discovery");
-                left.compare_ref_with(right, || work.counters.work(work.limits, work.location))
+                let navigated = left.compare_ref_with(right, || {
+                    *charged += 1;
+                    Ok::<_, std::convert::Infallible>(())
+                });
+                match navigated {
+                    Ok(order) => order,
+                    Err(never) => match never {},
+                }
             },
         );
         memory.release((scratch.capacity() + runs.capacity()) * size_of::<usize>());

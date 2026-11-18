@@ -816,6 +816,7 @@ fn complete_with_executor(
                 &mut delta,
                 Some(&mut producers),
                 GroundingWork::new(limits, counters, fallback),
+                executor,
             )?
         };
         catalog.close_fact_rows();
@@ -910,6 +911,7 @@ fn advance_round(
     delta: &mut SupportAppend<'_>,
     producers: Option<&mut producers::Producers<'_>>,
     work: GroundingWork<'_>,
+    executor: Option<&Executor>,
 ) -> Result<bool, FormulaFailure> {
     let GroundingWork {
         limits,
@@ -920,7 +922,7 @@ fn advance_round(
         return Ok(false);
     }
     counters.observe_work(Event::SupportOrderWork, |counters| {
-        delta.order(limits, counters, location)
+        delta.order(limits, counters, location, executor)
     })?;
     #[cfg(test)]
     facts::rounds::record(delta.atoms());

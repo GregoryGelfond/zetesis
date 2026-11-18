@@ -245,6 +245,12 @@ impl Executor {
         });
     }
 
+    /// The pool's threads, when more than one thread was requested. Work
+    /// installed on it runs there while the caller waits.
+    pub(super) fn pool(&self) -> Option<&ThreadPool> {
+        self.pool.as_deref()
+    }
+
     /// Run one task, recording it in the test receipts.
     fn tracked<R>(executor: &Self, task: impl FnOnce() -> R) -> R {
         #[cfg(test)]
