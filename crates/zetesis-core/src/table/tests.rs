@@ -1,7 +1,3 @@
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests start their own threads and pools"
-)]
 use std::{collections::BTreeSet, time::Instant};
 
 use crate::{Atom, Predicate, Sign, relation::Limits as RelationLimits};
