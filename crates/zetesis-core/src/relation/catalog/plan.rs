@@ -145,16 +145,24 @@ fn terms(
     plan: &mut Plan,
     work: &mut Work,
 ) -> Result<(), Failure> {
-    plan.encoding_bytes = encoding_bytes;
+    identities(index, atoms, atom, plan, work)?;
+    encoding(atom, encoding_bytes, plan, work)
+}
+
+/// The term identities of an interned owner's tuple, staging each value new
+/// to the owner once. Encoding bytes are left to [`encoding`], which only a
+/// tuple that will be published needs.
+pub(super) fn identities(
+    index: &super::super::dictionary::Append,
+    atoms: Atoms<'_>,
+    atom: AtomRef<'_>,
+    plan: &mut Plan,
+    work: &mut Work,
+) -> Result<(), Failure> {
     work.grow(&mut plan.ids, atom.values().len())?;
     work.grow(&mut plan.added, atom.values().len())?;
     for (column, value) in atom.values().iter().enumerate() {
         work.tick(1)?;
-        let bytes = value.canonical_bytes_with(|| work.tick(1))?;
-        plan.encoding_bytes = plan
-            .encoding_bytes
-            .checked_add(bytes as u128)
-            .ok_or(Failure::Overflow)?;
         let (term, found) = match index
             .identities
             .probe_with(atoms.read(), value, &mut || work.tick(1))?
@@ -173,6 +181,25 @@ fn terms(
             });
         }
         plan.ids.push(term.word());
+    }
+    Ok(())
+}
+
+/// The owner's referenced encoding bytes once this tuple is published.
+pub(super) fn encoding(
+    atom: AtomRef<'_>,
+    encoding_bytes: u128,
+    plan: &mut Plan,
+    work: &mut Work,
+) -> Result<(), Failure> {
+    plan.encoding_bytes = encoding_bytes;
+    for value in atom.values() {
+        work.tick(1)?;
+        let bytes = value.canonical_bytes_with(|| work.tick(1))?;
+        plan.encoding_bytes = plan
+            .encoding_bytes
+            .checked_add(bytes as u128)
+            .ok_or(Failure::Overflow)?;
     }
     Ok(())
 }

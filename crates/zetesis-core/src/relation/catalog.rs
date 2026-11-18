@@ -380,6 +380,40 @@ impl Catalog {
         let DictionaryIndex::Append(index) = &self.layout.index else {
             return Err(Failure::Dictionary);
         };
+        // A session insertion into an interned owner resolves the values'
+        // term IDs once, for the plan; the row hash and any chain comparison
+        // then read the planned IDs, and a value new to this owner makes the
+        // row new with no lookup at all. Only a new row reads its encoding
+        // bytes. The session's plan is already retained scratch, so planning
+        // first admits no new bytes.
+        if index.terms && matches!(admission, plan::Admission::Retained) {
+            plan.clear();
+            plan::identities(index, atoms, atom, plan, work)?;
+            let hash = row_hash(&plan.ids, work)?;
+            if plan.added.is_empty() {
+                let columns = &self.layout.columns;
+                let ids = &plan.ids;
+                let found = self.rows.find(hash, |row| {
+                    work.tick(1)?;
+                    for (owned, &id) in columns.iter().zip(ids) {
+                        work.tick(1)?;
+                        if owned.view().get(row as usize) != Some(id) {
+                            return Ok(false);
+                        }
+                    }
+                    Ok(true)
+                })?;
+                if let Some(row) = found {
+                    return Ok(Insertion {
+                        row: row as usize,
+                        inserted: false,
+                        storage: self.receipt(work),
+                    });
+                }
+            }
+            plan::encoding(atom, self.encoding_bytes, plan, work)?;
+            return self.admit(member, plan, hash, work);
+        }
         let read = atoms.read();
         let value = |column| atom.values().at(column).expect("checked atom arity");
         if let Some(row) = self.find_tuple(
@@ -414,6 +448,16 @@ impl Catalog {
             work,
         )?;
         let hash = row_hash(&plan.ids, work)?;
+        self.admit(member, plan, hash, work)
+    }
+
+    fn admit(
+        &mut self,
+        member: Member<'_>,
+        plan: &plan::Plan,
+        hash: u64,
+        work: &mut Work,
+    ) -> Result<Insertion, Failure> {
         let row = self.len();
         ceiling(
             Resource::Rows,

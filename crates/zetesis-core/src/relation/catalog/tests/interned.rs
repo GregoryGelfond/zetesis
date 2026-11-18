@@ -132,3 +132,58 @@ fn clearing_an_interned_owner_starts_again() {
     }
     assert_eq!(interned.view().row_count(), tuples().len() - 1);
 }
+
+#[test]
+fn a_session_agrees_with_scalar_insertion_and_resolves_each_value_once() {
+    let pair = Predicate::new("pair", 2).unwrap();
+    let mut scalar = Fixture::interned(&pair, Limits::default()).unwrap();
+    let mut session = Fixture::interned(&pair, Limits::default()).unwrap();
+    let mut rows = Vec::new();
+    let mut appender = session.rows.appender(Limits::default()).unwrap();
+    let mut first = true;
+    // Every tuple twice: each second insertion finds the first one's row.
+    let tuples: Vec<Atom> = tuples().into_iter().flat_map(|t| [t.clone(), t]).collect();
+    for tuple in &tuples {
+        let left = scalar.insert(tuple, Limits::default()).unwrap();
+        let canonical = session
+            .authority
+            .entry_atom_with(tuple, super::atom_limits(), || Ok::<_, ()>(()))
+            .unwrap()
+            .insert_ref_with(super::atom_limits(), || Ok::<_, ()>(()))
+            .unwrap();
+        let right = appender.insert(canonical, Limits::default()).unwrap();
+        assert_eq!(
+            (left.row, left.inserted),
+            (right.insertion.row, right.insertion.inserted)
+        );
+        assert_eq!(right.equality_ids.is_some(), right.insertion.inserted);
+        // A new row resolves its values once, not once to look for the row
+        // and again to plan it; a duplicate costs no more than before. The
+        // first call grows the session's plan.
+        if left.inserted && !first {
+            assert!(
+                right.insertion.storage.construction_work < left.storage.construction_work,
+                "{tuple:?}"
+            );
+        } else if !left.inserted {
+            assert!(
+                right.insertion.storage.construction_work <= left.storage.construction_work,
+                "{tuple:?}"
+            );
+        }
+        first = false;
+        rows.push(right.insertion.row);
+    }
+    drop(appender);
+    let (left, right) = (scalar.view(), session.view());
+    assert_eq!(left.row_count(), right.row_count());
+    for row in 0..left.row_count() {
+        for column in 0..2 {
+            assert_eq!(
+                left.column(column).unwrap().iter().nth(row),
+                right.column(column).unwrap().iter().nth(row)
+            );
+        }
+    }
+    assert_eq!(rows.len(), tuples.len());
+}
