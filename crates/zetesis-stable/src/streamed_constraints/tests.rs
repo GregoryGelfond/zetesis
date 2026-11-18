@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use zetesis_algebra::region::Region;
 use zetesis_ferraris::Theory;
@@ -29,20 +30,55 @@ struct Counting {
     constraints: StreamedConstraints,
     caller: std::thread::ThreadId,
     checks: AtomicUsize,
+    caller_checks: AtomicUsize,
     parallel_checks: AtomicUsize,
+    hold_caller: bool,
 }
+
+/// How long a held caller waits for another thread's check before the test
+/// reports that no other producer took work, rather than hanging.
+const HOLD_LIMIT: Duration = Duration::from_secs(30);
 
 impl Counting {
     fn new(owner: &HybridFormula) -> Arc<Self> {
+        Arc::new(Self::unheld(owner))
+    }
+
+    /// Counting that holds the calling thread at its second check until
+    /// another thread has checked a region. The caller's first check splits
+    /// the root and publishes a sibling, which an idle producer takes, so the
+    /// hold only removes the schedule in which the caller drains the whole
+    /// search before any other producer is scheduled.
+    fn holding_caller(owner: &HybridFormula) -> Arc<Self> {
         Arc::new(Self {
+            hold_caller: true,
+            ..Self::unheld(owner)
+        })
+    }
+
+    fn unheld(owner: &HybridFormula) -> Self {
+        Self {
             constraints: StreamedConstraints::new(
                 owner.core().clone(),
                 ConstraintAllowance::new(ConstraintCheckLimits::default()),
             ),
             caller: std::thread::current().id(),
             checks: AtomicUsize::new(0),
+            caller_checks: AtomicUsize::new(0),
             parallel_checks: AtomicUsize::new(0),
-        })
+            hold_caller: false,
+        }
+    }
+
+    fn hold(&self) {
+        let started = Instant::now();
+        while self.parallel_checks.load(Ordering::Acquire) == 0 {
+            assert!(
+                started.elapsed() < HOLD_LIMIT,
+                "no producer other than the caller checked a region"
+            );
+            std::thread::yield_now();
+        }
     }
 }
 
@@ -72,10 +108,15 @@ impl InjectedWorker for CountingWorker<'_> {
         cancellation: &Cancellation,
     ) -> Result<RegionFeasibility, Incomplete> {
         self.counting.checks.fetch_add(1, Ordering::Relaxed);
-        if std::thread::current().id() != self.counting.caller {
+        if std::thread::current().id() == self.counting.caller {
+            let earlier = self.counting.caller_checks.fetch_add(1, Ordering::Relaxed);
+            if self.counting.hold_caller && earlier > 0 {
+                self.counting.hold();
+            }
+        } else {
             self.counting
                 .parallel_checks
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Release);
         }
         self.inner.check(theory, region, cancellation)
     }
@@ -91,7 +132,7 @@ fn producer_slates_check_the_streamed_constraints() {
     assert_eq!(owner.streamed_templates(), 1);
     assert_eq!(owner.streamed_instances(), 6);
     for count in [2, 4] {
-        let counting = Counting::new(&owner);
+        let counting = Counting::holding_caller(&owner);
         let mut search = StableModels::with_region_producers(
             owner.core_theory(),
             NonZeroUsize::new(count).unwrap(),
