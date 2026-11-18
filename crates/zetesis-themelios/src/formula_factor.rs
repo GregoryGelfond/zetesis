@@ -239,7 +239,20 @@ fn emit<'plan, 'source>(
             ),
         )?);
     }
-    if !inhabited(builder, rule, support, components, prepared.as_mut(), fixed)? {
+    // A rule with a head stops at its first component without an alternative,
+    // before that component or any later one names an atom, so only the
+    // components after the first need a witness in advance. A constraint
+    // names every component's atoms, so all of its components need one.
+    let first = usize::from(!matches!(rule.head, HeadIr::Normal(None)));
+    if !inhabited(
+        builder,
+        rule,
+        support,
+        components,
+        prepared.as_mut(),
+        fixed,
+        first,
+    )? {
         return Ok(());
     }
     let mut body = VERUM;
@@ -309,7 +322,8 @@ fn emit<'plan, 'source>(
     Ok(())
 }
 
-/// Establish a complete Cartesian witness before naming any component atoms.
+/// Establish a complete Cartesian witness, from component `first` on, before
+/// naming any component atoms.
 /// Naming an early component records the rule as an atom's first origin; a
 /// later empty component must not leave that unused origin in completion roots.
 /// The ordinary profile has only scalar leaves; the extended profile has its
@@ -324,8 +338,9 @@ fn inhabited<'plan, 'source>(
     components: &'plan plan::Plan,
     mut prepared: Option<&mut ComponentPlans<'plan, 'source>>,
     fixed: &Binding<'_>,
+    first: usize,
 ) -> Result<bool, FormulaFailure> {
-    for (index, component) in components.components.iter().enumerate() {
+    for (index, component) in components.components.iter().enumerate().skip(first) {
         let mut bindings = component.join(
             builder,
             rule,
