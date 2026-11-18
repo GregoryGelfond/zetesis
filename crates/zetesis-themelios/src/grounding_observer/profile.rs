@@ -7,6 +7,47 @@ use crate::ProgramSite;
 
 use super::GroundingObserver;
 
+/// One operator of a support-completion round, in round order. Index snapshot,
+/// join, dedup, wake and publication alternate per round; rule
+/// instantiation's emission is its own phase.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum GroundingOperator {
+    /// Split the round's relation snapshot and build or extend its indices.
+    SupportIndex,
+    /// Run the round's producers: joins, filters and head construction.
+    SupportJoin,
+    /// Order and deduplicate the round's pending atoms.
+    SupportDedup,
+    /// Select the producers the new atoms wake.
+    SupportWake,
+    /// Publish the round's atoms into the support relations.
+    SupportPublish,
+}
+
+impl GroundingOperator {
+    /// Every operator, in round order.
+    pub const ALL: [Self; 5] = [
+        Self::SupportIndex,
+        Self::SupportJoin,
+        Self::SupportDedup,
+        Self::SupportWake,
+        Self::SupportPublish,
+    ];
+
+    /// Stable machine-readable identifier; no allocation or clock access.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::SupportIndex => "support_index",
+            Self::SupportJoin => "support_join",
+            Self::SupportDedup => "support_dedup",
+            Self::SupportWake => "support_wake",
+            Self::SupportPublish => "support_publish",
+        }
+    }
+}
+
 /// A coarse operation inside formula materialization or certified source evaluation.
 ///
 /// These phases exclude parsing and prepared-IR/observation compilation. Their
@@ -582,13 +623,19 @@ impl GroundingWork {
 /// A future parallel grounder should retain worker-local value counters and merge
 /// their public snapshots, rather than add a global lock to these event sites.
 #[derive(Clone, Default)]
-pub(crate) struct Work(Option<Rc<RefCell<GroundingWork>>>);
+pub(crate) struct Work(
+    Option<Rc<RefCell<GroundingWork>>>,
+    Option<Rc<dyn super::OperatorObserver>>,
+);
 
 impl Work {
     /// Construct an independent bank on the worker itself. Only its value
     /// snapshot crosses threads; the coordinator's observer is never shared.
     pub(crate) fn worker(enabled: bool) -> Self {
-        Self(enabled.then(|| Rc::new(RefCell::new(GroundingWork::default()))))
+        Self(
+            enabled.then(|| Rc::new(RefCell::new(GroundingWork::default()))),
+            None,
+        )
     }
 
     pub(crate) fn snapshot(&self) -> GroundingWork {
@@ -616,6 +663,32 @@ impl Work {
             work.borrow_mut().record(event);
         }
     }
+
+    /// The operator observer, if one was requested with details.
+    pub(crate) fn operators(&self) -> Option<Rc<dyn super::OperatorObserver>> {
+        self.1.clone()
+    }
+}
+
+/// Bracket `action` as one operator, ending it on return, refusal and unwind.
+pub(crate) fn operator<S, T>(
+    operators: Option<Rc<dyn super::OperatorObserver>>,
+    operator: GroundingOperator,
+    state: S,
+    action: impl FnOnce(S) -> T,
+) -> T {
+    struct End(Rc<dyn super::OperatorObserver>, GroundingOperator);
+    impl Drop for End {
+        fn drop(&mut self) {
+            self.0.operator_exit(self.1);
+        }
+    }
+    let Some(operators) = operators else {
+        return action(state);
+    };
+    operators.operator_enter(operator);
+    let _end = End(operators, operator);
+    action(state)
 }
 
 pub(crate) struct Profile<'a> {
@@ -628,7 +701,10 @@ impl<'a> Profile<'a> {
     pub(crate) fn new(observer: Option<&'a dyn GroundingObserver>) -> Self {
         let source_observer = observer.filter(|observer| observer.domain_diagnostics_enabled());
         let observer = observer.filter(|observer| observer.details_enabled());
-        let work = Work(observer.map(|_| Rc::new(RefCell::new(GroundingWork::default()))));
+        let work = Work(
+            observer.map(|_| Rc::new(RefCell::new(GroundingWork::default()))),
+            observer.and_then(super::GroundingObserver::operators),
+        );
         Self {
             observer,
             source_observer,
