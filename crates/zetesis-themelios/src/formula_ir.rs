@@ -11,6 +11,7 @@ pub(crate) mod testing;
 
 mod objective_scope;
 
+mod constants;
 mod domain;
 
 mod comparison;
@@ -583,6 +584,7 @@ impl PreparationContext<'_> {
         let mut parts = Parts::default();
         let admission = catalog.component_admission(limits, counters, fallback)?;
         let domain = domain::Domain::new(&admission, limits, counters, fallback)?;
+        let imported = constants::Constants::new(&admission, limits, counters, fallback)?;
         let mut compiler = Compiler {
             options,
             limits,
@@ -590,6 +592,7 @@ impl PreparationContext<'_> {
             source: admission,
             counters,
             domain,
+            imported,
             next_aggregate: 0,
             dependency_projection: false,
             location: fallback,
@@ -1004,6 +1007,7 @@ pub(super) struct Compiler<'a> {
     pub(super) source: components::Admission<'a>,
     pub(super) counters: &'a mut Counters,
     pub(super) domain: domain::Domain,
+    pub(super) imported: constants::Constants,
     pub(super) next_aggregate: usize,
     pub(super) dependency_projection: bool,
     pub(super) location: ProgramSite,
@@ -1825,9 +1829,25 @@ impl Compiler<'_> {
     /// Admit one explicit source root. Interned descendants do not enlarge this
     /// scope's domain; objective and projection scopes own separate selections.
     pub(super) fn value(&mut self, value: &Value) -> Result<TermKey, FormulaFailure> {
-        let key = self
-            .source
-            .import(value.into(), self.limits, self.counters, self.location)?;
+        let found = self
+            .imported
+            .find(value, self.limits, self.counters, self.location)?;
+        let key = if let Some(key) = found {
+            key
+        } else {
+            let key =
+                self.source
+                    .import(value.into(), self.limits, self.counters, self.location)?;
+            self.imported.remember(
+                value,
+                &key,
+                &self.source,
+                self.limits,
+                self.counters,
+                self.location,
+            )?;
+            key
+        };
         if self.domain.insert(
             &key,
             &self.source,
