@@ -298,6 +298,21 @@ impl TermAssignment {
         self.slots.resize(len, None);
         Ok(())
     }
+    /// Whether `resize_with(len, max_bytes, ..)` would admit its capacity:
+    /// the ceiling its reservation applies, evaluated without reserving, so a
+    /// caller can decline optional growth instead of being refused.
+    #[must_use]
+    pub fn admits(&self, len: usize, max_bytes: usize) -> bool {
+        let slot = size_of::<Option<storage::TermId>>() as u128;
+        let capacity = self.slots.capacity();
+        let current = size_of::<Self>() as u128 + capacity as u128 * slot;
+        let target = if len <= capacity {
+            0
+        } else {
+            len.max(capacity.saturating_mul(2))
+        };
+        current + target as u128 * slot <= max_bytes as u128
+    }
     /// Remove a suffix while retaining reusable ID capacity.
     /// # Errors
     /// Refuses a longer prefix or caller work before changing any slot.

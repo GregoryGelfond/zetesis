@@ -121,6 +121,14 @@ impl Summary {
         }
     }
 
+    /// The compact carrier while no full program has been prepared: every
+    /// non-fact statement and the first fact of each signed signature, so it
+    /// has the full program's signatures, readers and non-fact producers and a
+    /// subset of its facts. `None` once the summary is complete or materialized.
+    pub(crate) fn compact_program(&self) -> Option<&Program> {
+        (self.plan.is_some() && self.prepared_full.get().is_none()).then_some(&self.program)
+    }
+
     /// Summary carriers for dependency/classes and the bounded rewrite passes.
     pub(crate) fn program(&self) -> &Program {
         &self.program

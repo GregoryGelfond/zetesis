@@ -12,6 +12,8 @@ mod cache;
 pub(crate) mod families;
 mod family_replay;
 mod canonical_suffix;
+mod captured_rows;
+use captured_rows::{CapturedRows, Recording};
 mod extremum_guards;
 mod decided_negation;
 use decided_negation::{Decide, Negated};
@@ -468,12 +470,15 @@ struct Streaming {
     /// Original positions of templates the core now holds, ascending.
     materialized: Option<Buffer<usize>>,
     /// Original positions and instance counts of captured templates that are
-    /// still streamed, ascending; retention may yet move them into the core.
-    streamed: Option<Buffer<(usize, u64)>>,
+    /// still streamed, ascending, with the passing rows capture kept for
+    /// retention; retention may yet move them into the core.
+    streamed: Option<Buffer<(usize, u64, Option<CapturedRows>)>>,
+    /// The retention share not yet promised to a template whose rows capture kept.
+    recording_share: u128,
 }
 
 enum Captured {
-    Streamed(u64),
+    Streamed(u64, Option<CapturedRows>),
     Materialized,
 }
 
@@ -872,7 +877,10 @@ impl<'source> Builder<'_, '_, 'source> {
         profile: &Profile<'_>,
         schedule: Schedule<'_>,
     ) -> Result<Streaming, FormulaFailure> {
-        let mut streaming = Streaming::default();
+        let mut streaming = Streaming {
+            recording_share: self.limits.max_retained_constraint_nodes as u128,
+            ..Streaming::default()
+        };
         for item in items.iter() {
             match item {
                 crate::formula_facts::Item::Rule(index, rule) => profile.phase(
@@ -882,12 +890,16 @@ impl<'source> Builder<'_, '_, 'source> {
                         if matches!(schedule, Schedule::Hybrid | Schedule::HybridRetained)
                             && crate::formula_hybrid::eligible(rule)
                         {
-                            match self.capture_constraint(rule, support)? {
-                                Captured::Streamed(instances) => {
+                            match self.capture_constraint(
+                                rule,
+                                support,
+                                &mut streaming.recording_share,
+                            )? {
+                                Captured::Streamed(instances, rows) => {
                                     streaming.instances += instances;
                                     self.record(
                                         &mut streaming.streamed,
-                                        (index, instances),
+                                        (index, instances, rows),
                                         rule.location,
                                     )
                                 }
@@ -1000,8 +1012,10 @@ impl<'source> Builder<'_, '_, 'source> {
         &mut self,
         rule: &'source RuleIr,
         support: &Support<'source>,
+        share: &mut u128,
     ) -> Result<Captured, FormulaFailure> {
         let mut instances = 0;
+        let mut recording = Recording::start(rule, *share);
         let mut join = Join::rule(
             Ir::Source(rule),
             support,
@@ -1040,6 +1054,13 @@ impl<'source> Builder<'_, '_, 'source> {
             }
             // Every retained count is bounded by the charged substitution cap.
             instances += 1;
+            self.record_row(
+                &mut recording,
+                &row.values,
+                instances,
+                *share,
+                rule.location,
+            )?;
             let view = self.matched_view(
                 &mut matched,
                 row.witnesses.as_ref(),
@@ -1070,7 +1091,8 @@ impl<'source> Builder<'_, '_, 'source> {
         {
             return Ok(Captured::Materialized);
         }
-        Ok(Captured::Streamed(instances))
+        let rows = recording.finish(instances, share);
+        Ok(Captured::Streamed(instances, rows))
     }
 
     /// Append to a disposition buffer, creating it at its first entry.
@@ -1107,7 +1129,9 @@ impl<'source> Builder<'_, '_, 'source> {
     /// template fits when an upper bound on what its instances add stays within
     /// what remains of `max_retained_constraint_nodes` and of the theory's own
     /// ceilings, so retention never ends in a refusal. A template that does not
-    /// fit stays streamed; a later, smaller one may still fit.
+    /// fit stays streamed; a later, smaller one may still fit. A fitting
+    /// template's instances are replayed from the rows capture kept, and its
+    /// body is joined again only when capture kept none.
     fn retain_fitting(
         &mut self,
         items: &'source crate::formula_facts::Items,
@@ -1119,12 +1143,13 @@ impl<'source> Builder<'_, '_, 'source> {
         if self.limits.max_retained_constraint_nodes == 0 {
             return Ok(());
         }
-        let Some(streamed) = streaming.streamed.take() else {
+        let Some(mut streamed) = streaming.streamed.take() else {
             return Ok(());
         };
         let mut share = self.limits.max_retained_constraint_nodes as u128;
         let mut positions = None;
-        for &(index, instances) in streamed.slice() {
+        for (index, instances, rows) in streamed.slice_mut() {
+            let (index, instances, rows) = (*index, *instances, rows.take());
             let rule = &items.rules()[index];
             let bound = InstanceBound::of(rule).times(instances);
             if bound.nodes > share || !self.holds(bound) {
@@ -1134,7 +1159,10 @@ impl<'source> Builder<'_, '_, 'source> {
             profile.phase(
                 GroundingPhase::RuleInstantiation,
                 Some(rule.location),
-                || self.retain_template(rule, support),
+                || match rows {
+                    Some(rows) => self.replay_rows(rule, support, rows),
+                    None => self.retain_template(rule, support),
+                },
             )?;
             self.retained_constraints.templates += 1;
             self.retained_constraints.instances += instances;
@@ -1163,8 +1191,9 @@ impl<'source> Builder<'_, '_, 'source> {
             && origins <= self.limits.max_origin_locations as u128
     }
 
-    /// Instantiate a captured template as eager grounding instantiates a
-    /// constraint, over the join capture took: the same rows name the same atoms.
+    /// Instantiate a captured template whose rows capture did not keep as
+    /// eager grounding instantiates a constraint, over the join capture took:
+    /// the same rows name the same atoms.
     fn retain_template(
         &mut self,
         rule: &'source RuleIr,
@@ -1308,9 +1337,7 @@ impl<'source> Builder<'_, '_, 'source> {
             rule.location,
         )?;
         outer.select_total_body(rule, self.computation, self.limits, self.counters)?;
-        if matches!(schedule, Schedule::Eager(_)) {
-            outer.select_numeric_probes(rule, self.limits, self.counters)?;
-        }
+        outer.select_numeric_probes(rule, self.limits, self.counters)?;
         if crate::formula_factor::continuations(self, rule, &mut outer, support)? {
             return Ok(());
         }

@@ -236,7 +236,7 @@ pub struct GroundingWork {
     /// Kept expression indexes extended with the rows a later support round appended, instead of rebuilt over its snapshot.
     pub numeric_index_extensions: Option<u64>,
     /// Completed integer-column ordering probes, including empty unions, in
-    /// eager emission or possible-head production. Family evidence is excluded.
+    /// rule instantiation or possible-head production. Family evidence is excluded.
     pub range_probes: Option<u64>,
     /// Source-ordered range-union rows visited before matching and residual
     /// comparisons, already clipped to the occurrence's first-new interval.

@@ -117,6 +117,71 @@ pub(super) fn partition(mut preparation: Preparation) -> Result<Partition, Formu
     })
 }
 
+/// The terminal classifier's ceilings within the formula work that remains.
+fn domain_limits(limits: &crate::FormulaLimits, counters: &Counters) -> zetesis_domain::Limits {
+    let mut domain_limits = zetesis_domain::Limits::default();
+    domain_limits.max_work = domain_limits
+        .max_work
+        .min(limits.max_work.saturating_sub(counters.accounting.work));
+    domain_limits
+}
+
+/// Whether the full program can have a terminal definition that the policy
+/// defers, decided on the compact summary before the full program is built.
+///
+/// The policy defers only selected rules that enumerate bindings, and
+/// whole-rule matching pairs such a rule only with a source definition that
+/// binds a variable in a body atom ([`may_bind`]); a fact never does. The
+/// compact carrier holds every non-fact statement unchanged and the first fact
+/// of each signed signature, so it has the full program's signatures and reads
+/// and a subset of each signature's producers. The classifier therefore selects
+/// on it every signature the full program selects, with the same non-fact
+/// producers. It inspects a subset of the full program's statements, so it is
+/// unknown or stopped only when the full classification would be too, and the
+/// partition declines either way. Without a binding definition here there is
+/// none in the full program, and the split is declined without building it.
+/// The scan's work is charged as the full classification's is; the declined
+/// full program, its classification and its correspondence are never charged
+/// because they are never performed.
+fn binding_definition_possible(
+    compact: &Program,
+    limits: &crate::FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    counters.poll(location)?;
+    let analysis = terminal::analyze(compact, domain_limits(limits, counters));
+    counters.absorb(u128::from(analysis.statistics().work), limits, location)?;
+    Ok(analysis.status() == terminal::Status::Complete
+        && analysis
+            .definitions()
+            .iter()
+            .any(|definition| may_bind(reads::source(definition))))
+}
+
+/// Whether whole-rule matching could pair `rule` with a compiled rule that has
+/// variables: that needs a variable argument of a plain body atom, as every
+/// compiled variable must be bound by one. Any other body element answers yes.
+fn may_bind(rule: &themelios_program::program::Rule) -> bool {
+    use themelios_program::program::{Arguments, BodyElement, LiteralInner};
+    use themelios_program::term::Term;
+    rule.body()
+        .get()
+        .elements()
+        .any(|element| match element.get() {
+            BodyElement::Literal(literal) => match &literal.inner {
+                LiteralInner::Atom(atom) => match &atom.get().arguments {
+                    Arguments::Single(arguments) => arguments
+                        .iter()
+                        .any(|argument| matches!(argument, Term::Variable(_))),
+                    Arguments::Pooled(_) => true,
+                },
+                _ => true,
+            },
+            _ => true,
+        })
+}
+
 fn prepare(
     preparation: &mut Preparation,
     counters: &mut Counters,
@@ -133,18 +198,19 @@ fn prepare(
     {
         return Ok(None);
     }
+    if let Some(compact) = program.analyzed.compact_program()
+        && !binding_definition_possible(compact, limits, counters, location)?
+    {
+        return Ok(None);
+    }
     // This is the one preparation consumer that requires every normalized
     // source producer. Materialization is explicit and budgeted, after the
     // unchanged partition eligibility gate and after constraint replacement.
     let analyzed = program
         .analyzed
         .materialize(&mut preparation.budget, location)?;
-    let mut domain_limits = zetesis_domain::Limits::default();
-    domain_limits.max_work = domain_limits
-        .max_work
-        .min(limits.max_work.saturating_sub(counters.accounting.work));
     counters.poll(location)?;
-    let analysis = terminal::analyze(analyzed, domain_limits);
+    let analysis = terminal::analyze(analyzed, domain_limits(limits, counters));
     counters.absorb(u128::from(analysis.statistics().work), limits, location)?;
     if analysis.status() != terminal::Status::Complete
         || analysis.definitions().is_empty()
