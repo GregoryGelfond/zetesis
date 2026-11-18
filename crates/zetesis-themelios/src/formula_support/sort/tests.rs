@@ -130,10 +130,12 @@ fn sorting_respects_a_logarithmic_work_bound() {
 fn merged(original: &[i32], limits: &FormulaLimits) -> (Result<(), FormulaFailure>, Vec<i32>, u64) {
     let mut values = original.to_vec();
     let mut scratch = Vec::with_capacity(values.len());
+    let mut runs = Vec::with_capacity(values.len() + 1);
     let mut counters = Counters::default();
     let result = merge_by(
         &mut values,
         &mut scratch,
+        &mut runs,
         GroundingWork::new(limits, &mut counters, location()),
         compare,
     );
@@ -192,5 +194,36 @@ fn merge_sorting_refusal_preserves_the_population() {
         ));
         values.sort_unstable();
         assert_eq!(values, expected);
+    }
+}
+
+#[test]
+fn presorted_merge_sorting_costs_one_comparison_per_value() {
+    for count in [0_i32, 1, 2, 100, 1000] {
+        let original: Vec<_> = (0..count).collect();
+        let (result, actual, work) = merged(&original, &FormulaLimits::default());
+        result.unwrap();
+        assert_eq!(actual, original);
+        // One permit and one comparator permit per adjacent pair.
+        assert_eq!(work, 2 * u64::try_from(count.max(1) - 1).unwrap());
+    }
+}
+
+#[test]
+fn ordered_heapsort_input_costs_one_comparison_per_value() {
+    for count in [0_i32, 1, 2, 100] {
+        let mut values: Vec<_> = (0..count).collect();
+        let mut counters = Counters::default();
+        by(
+            &mut values,
+            GroundingWork::new(&FormulaLimits::default(), &mut counters, location()),
+            compare,
+        )
+        .unwrap();
+        assert_eq!(values, (0..count).collect::<Vec<_>>());
+        assert_eq!(
+            counters.accounting.work,
+            2 * u64::try_from(count.max(1) - 1).unwrap()
+        );
     }
 }
