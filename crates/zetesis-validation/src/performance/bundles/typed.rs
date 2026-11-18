@@ -89,7 +89,7 @@ fn check_manifest(manifest: &Manifest) -> Result<(), Error> {
         || manifest.sources.len() > crate::performance::MAX_CASES
     {
         return Err(Error::Configuration(
-            "typed workload manifest requires schema 2 and 1..=109 cases",
+            "typed workload manifest requires schema 2 and 1..=117 cases",
         ));
     }
     for (index, source) in manifest.sources.iter().enumerate() {
