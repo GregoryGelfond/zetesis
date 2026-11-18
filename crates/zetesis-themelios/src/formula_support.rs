@@ -1143,8 +1143,10 @@ fn derive_rule_with_executor<'source>(
         budget,
         counters,
     };
+    // A body-less rule has one binding, so asking first whether its head is
+    // already derived saves nothing: deriving it again finds the same atom.
     let projected = match &rule.head {
-        HeadIr::Normal(head) => *head,
+        HeadIr::Normal(head) if !rule.body.is_empty() => *head,
         _ => None,
     };
     let certainty = support.certainty();
