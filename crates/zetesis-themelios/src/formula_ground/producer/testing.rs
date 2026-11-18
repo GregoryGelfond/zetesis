@@ -3,11 +3,6 @@
 //! Scoped state restores on return or unwind. Child threads retain the normal
 //! production route. Counters name attempted materialization calls; Publish
 //! records a completed normal root and its producer metadata.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests start their own threads and pools"
-)]
-
 use std::cell::RefCell;
 
 use zetesis_algebra::Cancellation;

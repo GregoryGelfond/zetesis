@@ -177,7 +177,8 @@ impl Executor {
     }
 
     /// The caller alone, for a one-thread request: no pool thread exists.
-    #[cfg_attr(test, allow(dead_code))]
+    /// Unit tests choose their executors through `with_source_workers`.
+    #[cfg(not(test))]
     fn inline() -> Self {
         Self {
             pool: None,

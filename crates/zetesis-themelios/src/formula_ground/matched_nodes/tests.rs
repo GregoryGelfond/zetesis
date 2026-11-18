@@ -1,8 +1,4 @@
 //! Exact graph/catalog comparisons select the new route in the same binary.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests start their own threads and pools"
-)]
 use super::{MatchedNodes, testing as route};
 use crate::formula::Compiled;
 use crate::formula_ground::{Builder, Purpose, ground, ground_hybrid};

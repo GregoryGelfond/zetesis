@@ -797,7 +797,7 @@ impl Cancellation {
     /// Never fails; the `io::Result` is kept for source compatibility.
     pub fn with_deadline(deadline: Instant) -> io::Result<Self> {
         Ok(Self {
-            deadline: Some(Arc::new(DeadlineOwner::arm(deadline)?)),
+            deadline: Some(Arc::new(DeadlineOwner::arm(deadline))),
             ..Self::default()
         })
     }
@@ -878,11 +878,7 @@ impl CancellationPoll<'_> {
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
-    #[allow(
-        clippy::inline_always,
-        reason = "measured: the deadline check out of line is cheaper only when every poll inlines"
-    )]
-    #[inline(always)]
+    #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
         if self.cancelled.load(Ordering::Relaxed)
             || slot::MembershipPoll::is_cancelled(self.membership)
@@ -953,14 +949,13 @@ impl DeadlineOwner {
         Some(&deadline?.deadline)
     }
 
-    #[allow(clippy::unnecessary_wraps)] // `with_deadline` keeps its io::Result.
-    fn arm(at: Instant) -> io::Result<Self> {
-        Ok(Self {
+    fn arm(at: Instant) -> Self {
+        Self {
             deadline: Arc::new(Deadline {
                 at,
                 expired: AtomicBool::new(Instant::now() >= at),
             }),
-        })
+        }
     }
 }
 

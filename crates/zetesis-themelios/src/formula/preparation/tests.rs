@@ -1,9 +1,4 @@
 //! The deferred owner moves real source identity and accepted accounting.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests start their own threads and pools"
-)]
-
 use super::PreparedFormula;
 use crate::formula_support::{Computation, Counters, Support};
 use crate::grounding_observer::Work;
