@@ -7,6 +7,7 @@
 //! Publication remains ordered and single-owner. The coordinator owns execution
 //! policy; the original binding-transport prototype remains a test fixture.
 
+pub(crate) mod component_rows;
 pub(crate) mod cursor_rows;
 mod objective_rows;
 #[cfg(test)]
