@@ -2,13 +2,13 @@
 
 use zetesis_core::PatternRef;
 use zetesis_core::atom_interner::{PreparedPattern, PreparedRows, RowColumn};
-use zetesis_core::catalog::AtomRef;
+use zetesis_core::catalog::{AtomRef, PredicateRef};
 use zetesis_core::relation::{Relation, Row};
 
 use super::{Computation, Counters, FormulaFailure, FormulaLimits, ProgramSite, Terms};
 use crate::formula_binding::Binding;
 use crate::formula_support::GroundingWork;
-use crate::formula_support::relations::{SourceAtom, SourceScope};
+use crate::formula_support::relations::{FactRows, SourceAtom, SourceScope};
 
 impl Computation<'_, '_> {
     pub(crate) fn signed(
@@ -68,6 +68,66 @@ impl Computation<'_, '_> {
             return Err(owner_failure(location));
         };
         append.assigned(
+            pattern,
+            binding.slots(),
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// Authenticate a fact block's predicate and reserve its rows.
+    pub(crate) fn prepare_facts(
+        &mut self,
+        predicate: PredicateRef<'_>,
+        rows: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<FactRows, FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.prepare_facts(
+            predicate,
+            rows,
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// End a prepared fact block, giving back room its found rows left.
+    pub(crate) fn finish_facts(
+        &mut self,
+        rows: FactRows,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.finish_facts(
+            rows,
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// [`Self::atom`] for one row of a prepared fact block.
+    pub(crate) fn fact_atom(
+        &mut self,
+        facts: &FactRows,
+        pattern: PatternRef<'_>,
+        binding: &Binding<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.fact_assigned(
+            facts,
             pattern,
             binding.slots(),
             self.support.workspace_bytes(),

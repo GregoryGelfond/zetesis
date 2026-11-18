@@ -25,7 +25,7 @@ mod close;
 mod publication;
 mod streamed;
 pub(super) use append::SupportAppend;
-pub(crate) use append::{SourceAtom, SourceScope};
+pub(crate) use append::{FactRows, SourceAtom, SourceScope};
 pub(crate) use close::ClosedSource;
 pub(crate) use streamed::StreamedRows;
 
@@ -1420,6 +1420,31 @@ impl<'limits> Memory<'limits> {
             return Ok(());
         }
         let proposed = needed.max(values.capacity().saturating_mul(2));
+        self.grow(values, proposed)
+    }
+
+    /// Room for `additional` more cells at the capacity that reserving them
+    /// one at a time would reach, in one growth.
+    pub(super) fn reserve_rows<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+    ) -> Result<(), FormulaFailure> {
+        let needed = values
+            .len()
+            .checked_add(additional)
+            .ok_or_else(|| failure(Failure::Overflow, self.location))?;
+        let mut proposed = values.capacity();
+        if needed <= proposed {
+            return Ok(());
+        }
+        while proposed < needed {
+            proposed = proposed.saturating_mul(2).max(proposed + 1);
+        }
+        self.grow(values, proposed)
+    }
+
+    fn grow<T>(&mut self, values: &mut Vec<T>, proposed: usize) -> Result<(), FormulaFailure> {
         // Growth admits old and replacement buffers simultaneously. Retained
         // bytes become only the final capacity after the allocation succeeds.
         let replacement = proposed

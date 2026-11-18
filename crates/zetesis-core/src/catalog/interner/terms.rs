@@ -10,7 +10,9 @@ use crate::catalog::{
 };
 use crate::{PatternRef, TemplateTerm, ValueNodeRef};
 
+mod facts;
 mod prepared;
+pub use facts::PreparedFacts;
 pub use prepared::{PreparedPattern, PreparedRows, RowColumn};
 
 /// Assigned construction preserves frame errors and the interner's typed failures.
@@ -317,8 +319,8 @@ impl AtomAppender<'_> {
             predicate,
             values,
             ProjectionSource::Slots(arguments),
-            term_limits,
-            limits,
+            (term_limits, limits),
+            None,
             before,
         )
     }
@@ -355,19 +357,21 @@ impl AtomAppender<'_> {
             predicate,
             values,
             ProjectionSource::Pattern(pattern.terms()),
-            term_limits,
-            limits,
+            (term_limits, limits),
+            None,
             before,
         )
     }
 
+    /// A candidate `locations`, when known, spares the predicate's column
+    /// block search; a stale one falls back to it.
     fn insert_projected_with<'a, E>(
         &mut self,
         predicate: storage::PredicateId,
         values: AssignmentSlice<'a>,
         arguments: ProjectionSource<'a>,
-        term_limits: TermLimits,
-        limits: Limits,
+        (term_limits, limits): (TermLimits, Limits),
+        locations: Option<PredicateLocations>,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<usize, AssignedFailure<E>> {
         let projected = Projected {
@@ -388,16 +392,7 @@ impl AtomAppender<'_> {
                     storage::Failure::Stopped(error) => Failure::Stopped(error),
                 })?;
         }
-        self.insert_validated_projection(&projected, limits, before)
-    }
-
-    fn insert_validated_projection<E>(
-        &mut self,
-        projected: &Projected<'_>,
-        limits: Limits,
-        before: impl FnMut() -> Result<(), E>,
-    ) -> Result<usize, AssignedFailure<E>> {
-        self.insert_projection_at(projected, None, limits, before)
+        self.insert_projection_at(&projected, locations, limits, before)
     }
 
     fn insert_projection_at<E>(

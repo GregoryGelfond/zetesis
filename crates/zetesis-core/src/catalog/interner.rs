@@ -13,7 +13,9 @@ mod ordering;
 mod query;
 mod terms;
 pub use closed::{CloseFailure, ClosedCatalog};
-pub use terms::{AssignedFailure, PreparedPattern, PreparedRows, RowColumn, TermLookup};
+pub use terms::{
+    AssignedFailure, PreparedFacts, PreparedPattern, PreparedRows, RowColumn, TermLookup,
+};
 
 use std::{collections::TryReserveError, fmt};
 
@@ -1241,6 +1243,20 @@ fn population<E>(required: usize, limits: Limits) -> Result<(), Failure<E>> {
         })
 }
 
+/// The capacity [`reserve`] reaches from `capacity` growing one cell at a
+/// time until it holds `required` cells.
+fn grown(mut capacity: usize, required: usize, maximum: usize) -> usize {
+    while capacity < required {
+        capacity = capacity
+            .checked_mul(2)
+            .unwrap_or(maximum)
+            .max(4)
+            .min(maximum)
+            .max(capacity + 1);
+    }
+    capacity
+}
+
 fn reserve<T, E>(
     values: &mut Vec<T>,
     additional: usize,
@@ -1259,13 +1275,8 @@ fn reserve<T, E>(
     if required <= values.capacity() {
         return Ok(());
     }
-    let capacity = values
-        .capacity()
-        .checked_mul(2)
-        .unwrap_or(maximum)
-        .max(4)
-        .min(maximum)
-        .max(required);
+    // One growth to the capacity growing one cell at a time would reach.
+    let capacity = grown(values.capacity(), required, maximum);
     let envelope = live + cells::<T>(capacity);
     admit(envelope, limits)?;
     before()?;

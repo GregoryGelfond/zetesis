@@ -33,7 +33,7 @@ use rows::{RowBase, RowView};
 
 use budget::Budget;
 use index::Index;
-pub(crate) use intern::PreparedAtom;
+pub(crate) use intern::{PreparedAtom, RowsStart};
 pub(crate) use lookup::TermLookup;
 pub(crate) use read::{AtomScope, Read, VocabularyScope};
 pub(super) use segments::{Atom, Predicate, Term};

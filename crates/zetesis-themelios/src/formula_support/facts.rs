@@ -9,6 +9,7 @@
 use zetesis_core::catalog::PredicateRef;
 use zetesis_core::{PatternRef, TemplateTerm};
 
+use super::relations::FactRows;
 use super::{Computation, Counters, SourceAtom, Support, SupportAppend};
 use crate::formula_binding::Binding;
 use crate::formula_facts::{FactBlock, Item, Items, Row};
@@ -21,6 +22,8 @@ pub(crate) struct FactHead<'source> {
     predicate: PredicateRef<'source>,
     terms: Vec<TemplateTerm<'source>>,
     empty: Binding<'static>,
+    /// The predicate authenticated, and the block's rows reserved, at once.
+    prepared: Option<FactRows>,
 }
 
 impl<'source> FactHead<'source> {
@@ -42,7 +45,37 @@ impl<'source> FactHead<'source> {
             predicate,
             terms,
             empty,
+            prepared: None,
         })
+    }
+
+    /// Authenticate the predicate and reserve `rows` atoms before the first
+    /// row, so no row repeats either.
+    pub(crate) fn prepare(
+        &mut self,
+        rows: usize,
+        computation: &mut Computation<'_, 'source>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        self.prepared =
+            Some(computation.prepare_facts(self.predicate, rows, limits, counters, location)?);
+        Ok(())
+    }
+
+    /// End the prepared block, giving back room its found rows left.
+    pub(crate) fn finish(
+        &mut self,
+        computation: &mut Computation<'_, 'source>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        match self.prepared.take() {
+            Some(rows) => computation.finish_facts(rows, limits, counters, location),
+            None => Ok(()),
+        }
     }
 
     /// Intern `row`'s atom, as a fact rule's head is interned.
@@ -61,7 +94,12 @@ impl<'source> FactHead<'source> {
         }
         let pattern = PatternRef::from_parts(self.predicate, &self.terms)
             .map_err(|error| AdmissionFailure::Construction { error, location })?;
-        computation.atom(pattern, &self.empty, limits, counters, location)
+        match &self.prepared {
+            Some(facts) => {
+                computation.fact_atom(facts, pattern, &self.empty, limits, counters, location)
+            }
+            None => computation.atom(pattern, &self.empty, limits, counters, location),
+        }
     }
 }
 
@@ -148,6 +186,13 @@ fn intern<'source>(
 ) -> Result<(), FormulaFailure> {
     let mut computation = Computation::new(delta, support);
     let mut head = FactHead::new(block, &computation, limits, counters, block.location())?;
+    head.prepare(
+        block.len(),
+        &mut computation,
+        limits,
+        counters,
+        block.location(),
+    )?;
     for row in block.rows() {
         let location = row.location();
         counters.work(limits, location)?;
@@ -157,7 +202,7 @@ fn intern<'source>(
             computation.record_fact(&atom, limits, counters, location)
         })?;
     }
-    Ok(())
+    head.finish(&mut computation, limits, counters, block.location())
 }
 
 #[cfg(test)]

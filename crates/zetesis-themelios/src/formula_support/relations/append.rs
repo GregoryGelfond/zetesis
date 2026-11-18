@@ -9,7 +9,7 @@ use crate::formula_support::GroundingWork;
 use zetesis_algebra::words::Words;
 
 mod assigned;
-pub(crate) use assigned::{SourceAtom, SourceScope};
+pub(crate) use assigned::{FactRows, SourceAtom, SourceScope};
 
 #[cfg(test)]
 mod order_tests;

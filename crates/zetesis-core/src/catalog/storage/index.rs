@@ -51,6 +51,29 @@ impl Index {
         Ok(())
     }
 
+    /// Room for `rows` more consecutive IDs' links. Hash heads still grow
+    /// one at a time: their capacity follows the table's own policy.
+    pub(super) fn reserve_rows_with<E>(
+        &mut self,
+        rows: usize,
+        budget: &mut Budget,
+        work: &mut Work<'_, E>,
+    ) -> Result<(usize, usize), Failure<E>> {
+        let start = (self.next.len(), self.next.capacity());
+        work.reserve_rows(&mut self.next, rows, budget)?;
+        Ok(start)
+    }
+
+    /// Give back link room a batch reserved for rows it did not publish.
+    pub(super) fn trim_rows_with<E>(
+        &mut self,
+        start: (usize, usize),
+        budget: &mut Budget,
+        work: &mut Work<'_, E>,
+    ) -> Result<(), Failure<E>> {
+        work.trim_rows(&mut self.next, start, budget)
+    }
+
     // Caller has reserved both components and publishes IDs consecutively.
     pub(super) fn insert(&mut self, hash: u64, id: u32) {
         debug_assert_eq!(self.next.len(), id as usize);
