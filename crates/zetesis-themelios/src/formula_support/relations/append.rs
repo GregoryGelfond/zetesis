@@ -7,6 +7,7 @@ use super::{
 };
 use crate::formula_support::GroundingWork;
 use zetesis_algebra::words::Words;
+use zetesis_core::catalog::PredicateRef;
 
 mod assigned;
 pub(crate) use assigned::{FactRows, SourceAtom, SourceScope};
@@ -236,8 +237,8 @@ impl<'a> SupportAppend<'a> {
         self.retain(&atom, 0, limits, counters, location)
     }
 
-    /// Dense selections reuse the catalog's semantic order. Sparse selections
-    /// keep constant-scratch sorting, avoiding scans of unrelated history.
+    /// Put the round's discoveries in typed atom order. Each atom is read
+    /// once into a key; the natural merge sort then compares keys only.
     pub(in crate::formula_support) fn order(
         &mut self,
         limits: &FormulaLimits,
@@ -245,67 +246,111 @@ impl<'a> SupportAppend<'a> {
         location: ProgramSite,
         executor: Option<&crate::formula_support::Executor>,
     ) -> Result<(), FormulaFailure> {
-        if let Some(checked) = self.selected_order_limits(limits, counters, location)? {
-            let workspace = counters.accounting.workspace.bytes();
-            let outer = self.outer_bytes(workspace);
-            self.owner.restart_storage_peak();
-            let result = self
-                .owner
-                .order_selected_with(self.pending, checked, || counters.work(limits, location));
-            let refreshed = self.refresh(workspace, limits, counters, location);
-            result.map_err(|error| atom_failure(error, limits, outer, location))?;
-            return refreshed;
-        }
-        // Admitted scratch and run-start buffers for a natural merge sort:
-        // discoveries mostly arrive in typed order, so it mostly confirms
-        // runs, and the merges of one pass are independent, so the
+        // Admitted keys, scratch and run-start buffers for a natural merge
+        // sort: discoveries mostly arrive in typed order, so it mostly
+        // confirms runs, and the merges of one pass are independent, so the
         // executor's workers share each pass.
         let workspace = counters.accounting.workspace.bytes();
         let bytes = usize::try_from(self.owner.storage_bytes() + self.outer_bytes(0))
             .map_err(|_| failure(Failure::Overflow, location))?;
         let mut memory = Memory::new(bytes, workspace as u128, limits, counters, location);
+        let owner = &self.owner;
+        let mut keys = Vec::new();
+        let mut terms = Vec::new();
         let mut scratch = Vec::new();
         let mut runs = Vec::new();
-        memory.reserve(&mut scratch, self.pending.len())?;
-        memory.reserve(&mut runs, self.pending.len() + 1)?;
-        let owner = &self.owner;
-        let result = crate::formula_support::sort::merge_by(
-            self.pending,
-            &mut scratch,
-            &mut runs,
-            executor.and_then(crate::formula_support::Executor::pool),
-            GroundingWork::new(limits, counters, location),
-            |left, right, charged| {
-                let left = owner.get(*left).expect("round-local discovery");
-                let right = owner.get(*right).expect("round-local discovery");
-                let navigated = left.compare_ref_with(right, || {
-                    *charged += 1;
-                    Ok::<_, std::convert::Infallible>(())
+        let result = (|| {
+            memory.reserve(&mut keys, self.pending.len())?;
+            memory.reserve(&mut scratch, self.pending.len())?;
+            memory.reserve(&mut runs, self.pending.len() + 1)?;
+            // Each atom's row, arity and columns are read once, with the
+            // permits a typed atom comparison pays for reading them; the
+            // comparisons then read only these keys.
+            for &position in self.pending.iter() {
+                counters.charge_work(2, limits, location)?;
+                let atom = owner.get(position).expect("round-local discovery");
+                let predicate = atom.predicate();
+                let arity = predicate.arity();
+                counters.charge_work(arity as u128, limits, location)?;
+                memory.reserve(&mut terms, arity)?;
+                let start = terms.len();
+                terms.extend((0..arity).map(|column| {
+                    atom.values()
+                        .at(column)
+                        .expect("an atom has a value per column")
+                }));
+                keys.push(Key {
+                    position,
+                    predicate,
+                    start,
                 });
-                match navigated {
-                    Ok(order) => order,
-                    Err(never) => match never {},
-                }
-            },
-        );
-        memory.release((scratch.capacity() + runs.capacity()) * size_of::<usize>());
+            }
+            let terms = &terms;
+            crate::formula_support::sort::merge_by(
+                &mut keys,
+                &mut scratch,
+                &mut runs,
+                executor.and_then(crate::formula_support::Executor::pool),
+                GroundingWork::new(limits, counters, location),
+                |left, right, charged| left.compare(right, terms, charged),
+            )?;
+            // One permit per position written back in typed order.
+            counters.charge_work(keys.len() as u128, limits, location)?;
+            for (cell, key) in self.pending.iter_mut().zip(&keys) {
+                *cell = key.position;
+            }
+            Ok(())
+        })();
+        // Release exactly what this receipt recorded; the buffers drop here.
+        let admitted = memory.bytes - bytes;
+        memory.release(admitted);
+        drop((keys, scratch, terms, runs));
         result
     }
+}
 
-    /// Decline before execution if the selected population is sparse or the
-    /// prospective scratch does not fit. A chosen operation's failure is never
-    /// retried through the comparison route.
-    fn selected_order_limits(
+/// A pending atom's position with its predicate and the start of its
+/// columns in the sort's term buffer, read once before sorting.
+#[derive(Clone, Copy)]
+struct Key<'a> {
+    position: usize,
+    predicate: PredicateRef<'a>,
+    start: usize,
+}
+
+impl Key<'_> {
+    /// The typed atom order: predicates, then columns left to right, each
+    /// compared as a typed atom comparison compares them. Distinct positions
+    /// are distinct atoms, so no identity check precedes the fields.
+    fn compare(
         &self,
-        limits: &FormulaLimits,
-        counters: &Counters,
-        location: ProgramSite,
-    ) -> Result<Option<atom_interner::Limits>, FormulaFailure> {
-        let Some(required) = self.owner.selected_order_storage(self.pending.len()) else {
-            return Ok(None);
+        other: &Self,
+        terms: &[TermRef<'_>],
+        charged: &mut u64,
+    ) -> std::cmp::Ordering {
+        let mut before = || {
+            *charged += 1;
+            Ok::<_, std::convert::Infallible>(())
         };
-        let outer = self.outer_bytes(counters.accounting.workspace.bytes());
-        let checked = owner_limits(limits, outer, location)?;
-        Ok((required <= checked.max_bytes).then_some(checked))
+        let order: Result<_, std::convert::Infallible> = (|| {
+            let predicate = self
+                .predicate
+                .compare_ref_with(other.predicate, &mut before)?;
+            if !predicate.is_eq() {
+                return Ok(predicate);
+            }
+            for column in 0..self.predicate.arity() {
+                let order = terms[self.start + column]
+                    .compare_ref_with(terms[other.start + column], &mut before)?;
+                if !order.is_eq() {
+                    return Ok(order);
+                }
+            }
+            Ok(std::cmp::Ordering::Equal)
+        })();
+        match order {
+            Ok(order) => order,
+            Err(never) => match never {},
+        }
     }
 }
