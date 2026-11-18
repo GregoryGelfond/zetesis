@@ -10,7 +10,6 @@ use std::ops::Range;
 
 use zetesis_core::PatternRef;
 use zetesis_core::TemplateTerm as Term;
-use zetesis_core::catalog::AssignmentError;
 use zetesis_core::relation::Row;
 
 use super::coordinator::{self, Completed};
@@ -125,6 +124,9 @@ fn block_instances<'source>(
     };
     // Planned from the first admitted head binding, as the serial route plans.
     let mut plans = None;
+    // One head frame per block, rebound row by row, so no row takes its own
+    // storage lease or vocabulary handle.
+    let mut fixed = frame(rule, computation, limits, counters)?;
     let start = block.start;
     for (offset, atom) in support
         .rows(head.predicate())
@@ -133,9 +135,9 @@ fn block_instances<'source>(
         .enumerate()
     {
         counters.work(limits, location)?;
-        let Some(fixed) = head_binding(rule, head, atom, computation, limits, counters)? else {
+        if !head_binding(rule, head, atom, &mut fixed, computation, limits, counters)? {
             continue;
-        };
+        }
         if plans.is_none() {
             plans = Some(ComponentPlans::new(
                 components.len(),
@@ -247,18 +249,25 @@ fn frame(
     Ok(fixed)
 }
 
-/// The head binding of one head row, as the serial factored route fixes it;
-/// `None` when a constant or repeated variable disagrees with the row.
+/// Rebind `fixed` to one head row, as the serial factored route fixes it;
+/// false when a constant or repeated variable disagrees with the row. Only
+/// head variables are ever bound in `fixed`, so clearing them first leaves the
+/// frame exactly as a fresh one.
 fn head_binding(
     rule: &RuleIr,
     head: PatternRef<'_>,
     atom: Row<'_, '_>,
+    fixed: &mut Binding<'static>,
     computation: &Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-) -> Result<Option<Binding<'static>>, FormulaFailure> {
+) -> Result<bool, FormulaFailure> {
     let location: ProgramSite = rule.location;
-    let mut fixed = frame(rule, computation, limits, counters)?;
+    for column in 0..head.terms().len() {
+        if let Some(Term::Variable(variable)) = head.terms().at(column) {
+            fixed.clear(variable, limits, counters, location)?;
+        }
+    }
     for column in 0..head.terms().len() {
         counters.work(limits, location)?;
         let term = head.terms().at(column).expect("checked head arity");
@@ -266,24 +275,23 @@ fn head_binding(
         match term {
             Term::Constant(constant) => {
                 if !constant.equals_ref_with(value, || counters.work(limits, location))? {
-                    return Ok(None);
+                    return Ok(false);
                 }
             }
             Term::Variable(variable) => {
                 if fixed.is_bound(variable, location)? {
                     let previous = fixed.read(variable, computation.read(), location)?;
                     if !previous.equals_ref_with(value, || counters.work(limits, location))? {
-                        return Ok(None);
+                        return Ok(false);
                     }
                 } else {
                     counters.work(limits, location)?;
-                    let key = computation.read().term_key(value).map_err(|error| {
-                        crate::formula_binding::assignment(AssignmentError::Read(error), location)
+                    fixed.set_term_with(variable, value, computation.read(), location, || {
+                        counters.work(limits, location)
                     })?;
-                    fixed.set(variable, &key, limits, counters, location)?;
                 }
             }
         }
     }
-    Ok(Some(fixed))
+    Ok(true)
 }

@@ -2413,18 +2413,19 @@ impl<'a, 'source> Join<'a, 'source> {
         } = work;
         for slot in 0..fixed.len().min(self.values.len()) {
             counters.work(limits, location)?;
-            let value = fixed
+            let present = fixed
                 .slots()
-                .key(slot)
+                .is_bound(slot)
                 .map_err(|error| crate::formula_binding::assignment(error, location))?;
-            if expected.is_some_and(|expected| expected[slot] != value.is_some()) {
+            if expected.is_some_and(|expected| expected[slot] != present) {
                 return Err(FormulaFailure::SupportRelation {
                     error: zetesis_core::relation::Failure::Owner,
                     location,
                 });
             }
-            if let Some(value) = value {
-                self.values.set(slot, &value, limits, counters, location)?;
+            if present {
+                self.values
+                    .copy_present(slot, fixed.slots(), slot, limits, counters, location)?;
             }
         }
         let mut used_cursor = 0;
