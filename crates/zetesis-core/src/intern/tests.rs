@@ -233,40 +233,20 @@ proptest! {
     }
 }
 
-/// Design comparison (Gregory: build both): the fixed-block sort (H) against
-/// Rayon's parallel sort on the same counted pool (R). Run with
-/// `cargo test -p zetesis-core --release -- --ignored --nocapture freeze_sort_designs`.
+/// The fixed-block sort and Rayon's parallel sort on the same counted pool
+/// order identically; only the fixed-block sort's count is split-invariant.
 #[test]
-#[ignore = "timing comparison; prints, asserts only equal results"]
-fn freeze_sort_designs() {
+fn block_sort_agrees_with_parallel_sort() {
     use rayon::slice::ParallelSliceMut;
-    for exponent in [16_u32, 18, 20, 22] {
-        let items: Vec<u64> = (0..1_u64 << exponent)
-            .map(|value| value.wrapping_mul(0x9e37_79b9_7f4a_7c15))
-            .collect();
-        for threads in [1, 4, 14] {
-            let pool = pool(threads);
-            let mut h = items.clone();
-            let start = std::time::Instant::now();
-            let h_compares = sort_by_content(&mut h, Some(&pool), u64::cmp);
-            let h_time = start.elapsed();
-            let mut r = items.clone();
-            let r_compares = std::sync::atomic::AtomicU64::new(0);
-            let start = std::time::Instant::now();
-            pool.install(|| {
-                r.par_sort_by(|a, b| {
-                    r_compares.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    a.cmp(b)
-                });
-            });
-            let r_time = start.elapsed();
-            assert_eq!(h, r);
-            eprintln!(
-                "SORT 2^{exponent} t{threads}: H {:.2} ms {h_compares} cmp | R {:.2} ms {} cmp",
-                h_time.as_secs_f64() * 1e3,
-                r_time.as_secs_f64() * 1e3,
-                r_compares.into_inner()
-            );
-        }
+    let items: Vec<u64> = (0..1_u64 << 12)
+        .map(|value| value.wrapping_mul(0x9e37_79b9_7f4a_7c15))
+        .collect();
+    for threads in [1, 4, 14] {
+        let pool = pool(threads);
+        let mut block = items.clone();
+        sort_by_content(&mut block, Some(&pool), u64::cmp);
+        let mut parallel = items.clone();
+        pool.install(|| parallel.par_sort_by(u64::cmp));
+        assert_eq!(block, parallel);
     }
 }
