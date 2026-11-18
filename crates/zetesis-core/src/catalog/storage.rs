@@ -54,6 +54,15 @@ impl TermId {
     pub(crate) fn position(self) -> usize {
         self.0 as usize
     }
+    /// The identity word an interned relation uses as its equality ID.
+    pub(crate) const fn word(self) -> u32 {
+        self.0
+    }
+    /// The identity a published equality word denotes; meaningful only in
+    /// the vocabulary that assigned it.
+    pub(crate) const fn from_word(word: u32) -> Self {
+        Self(word)
+    }
 }
 identifier!(PredicateId);
 impl PredicateId {

@@ -78,6 +78,9 @@ pub(super) fn values(
     let DictionaryIndex::Append(index) = index else {
         return Err(Failure::Dictionary);
     };
+    if index.terms {
+        return terms(index, atoms, atom, encoding_bytes, plan, work);
+    }
     plan.encoding_bytes = encoding_bytes;
     work.grow(&mut plan.ids, atom.values().len())?;
     work.grow(&mut plan.added, atom.values().len())?;
@@ -127,6 +130,49 @@ pub(super) fn values(
         work.tick(1)?;
         plan.ids
             .push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
+    }
+    Ok(())
+}
+
+/// An interned owner's IDs are the values' own term identities: a value new
+/// to this owner is staged once for its presence entry, with no content hash,
+/// representative or renumbering.
+fn terms(
+    index: &super::super::dictionary::Append,
+    atoms: Atoms<'_>,
+    atom: AtomRef<'_>,
+    encoding_bytes: u128,
+    plan: &mut Plan,
+    work: &mut Work,
+) -> Result<(), Failure> {
+    plan.encoding_bytes = encoding_bytes;
+    work.grow(&mut plan.ids, atom.values().len())?;
+    work.grow(&mut plan.added, atom.values().len())?;
+    for (column, value) in atom.values().iter().enumerate() {
+        work.tick(1)?;
+        let bytes = value.canonical_bytes_with(|| work.tick(1))?;
+        plan.encoding_bytes = plan
+            .encoding_bytes
+            .checked_add(bytes as u128)
+            .ok_or(Failure::Overflow)?;
+        let (term, found) = match index
+            .identities
+            .probe_with(atoms.read(), value, &mut || work.tick(1))?
+        {
+            Probe::Local { term, equality } => (term, equality.is_some()),
+            Probe::Unavailable(error) => return Err(Failure::Read(error)),
+        };
+        if !found && plan.staged(term, 0, work)?.is_none() {
+            plan.added.push(Added {
+                cell: Cell {
+                    row: atoms.len(),
+                    column,
+                },
+                term,
+                hash: 0,
+            });
+        }
+        plan.ids.push(term.word());
     }
     Ok(())
 }

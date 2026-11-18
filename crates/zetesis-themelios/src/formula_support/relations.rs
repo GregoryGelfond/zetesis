@@ -608,7 +608,7 @@ impl CatalogRows {
             .map_err(|_| failure(Failure::Owner, location))?;
         let outer_bytes = memory.outside(0)?;
         counters.poll(location)?;
-        let catalog = Catalog::new(
+        let catalog = Catalog::interned(
             read,
             declared,
             relation_limits(limits, counters, predicate.arity(), memory.remaining()?),

@@ -7,6 +7,7 @@ use crate::relation::{Failure, Limits, Relation, Resource, Storage};
 use crate::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 
 mod dictionary;
+mod interned;
 mod rows;
 
 fn atom(left: i32, right: i32) -> Atom {
@@ -35,6 +36,16 @@ impl Fixture {
             .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
             .unwrap();
         let rows = Catalog::new(authority.read(), declared, limits)?;
+        Ok(Self { authority, rows })
+    }
+
+    /// The same owner with the interner's term identities as equality IDs.
+    fn interned(predicate: &Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
+        let mut authority = AtomInterner::default();
+        let declared = authority
+            .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
+            .unwrap();
+        let rows = Catalog::interned(authority.read(), declared, limits)?;
         Ok(Self { authority, rows })
     }
 

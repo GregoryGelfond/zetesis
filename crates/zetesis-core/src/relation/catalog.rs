@@ -115,6 +115,32 @@ impl Catalog {
         predicate: DeclaredPredicate,
         limits: Limits,
     ) -> Result<Self, CatalogFailure> {
+        Self::with_ids(read, predicate, limits, false)
+    }
+
+    /// Create an empty owner whose equality IDs are its vocabulary's own term
+    /// identities. Values are never copied, renumbered or hashed again: an
+    /// argument's ID is its interned identity and the read resolves it.
+    /// Equal values still share an ID, absent values still have none, and a
+    /// value the read cannot name is found by content as before. Only the
+    /// numbering differs from [`Self::new`], so IDs are no longer dense.
+    ///
+    /// # Errors
+    /// As [`Self::new`].
+    pub fn interned(
+        read: CatalogRead<'_>,
+        predicate: DeclaredPredicate,
+        limits: Limits,
+    ) -> Result<Self, CatalogFailure> {
+        Self::with_ids(read, predicate, limits, true)
+    }
+
+    fn with_ids(
+        read: CatalogRead<'_>,
+        predicate: DeclaredPredicate,
+        limits: Limits,
+        terms: bool,
+    ) -> Result<Self, CatalogFailure> {
         let mut work =
             Work::new(limits, size_of::<Self>() as u128).map_err(|error| CatalogFailure {
                 error,
@@ -138,7 +164,10 @@ impl Catalog {
                 ordered: ordered::Ordered::default(),
                 layout: Layout {
                     dictionary: Vec::new(),
-                    index: DictionaryIndex::Append(super::dictionary::Append::default()),
+                    index: DictionaryIndex::Append(super::dictionary::Append {
+                        terms,
+                        ..super::dictionary::Append::default()
+                    }),
                     columns,
                 },
                 encoding_bytes: 0,
@@ -432,19 +461,29 @@ impl Catalog {
     fn reserve(&mut self, plan: &plan::Plan, work: &mut Work) -> Result<(), Failure> {
         work.grow(&mut self.membership.ids, 1)?;
         self.rows.reserve(1, work)?;
-        work.grow(&mut self.layout.dictionary, plan.added.len())?;
+        let DictionaryIndex::Append(index) = &mut self.layout.index else {
+            return Err(Failure::Dictionary);
+        };
+        let terms = index.terms;
+        if !terms {
+            work.grow(&mut self.layout.dictionary, plan.added.len())?;
+        }
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             return Err(Failure::Dictionary);
         };
         index.identities.reserve(plan.added.len(), work)?;
-        index.content.reserve(plan.added.len(), work)?;
+        if !terms {
+            index.content.reserve(plan.added.len(), work)?;
+        }
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
             column.reserve(id, work)?;
         }
         // Publication has no callbacks, allocations, payload comparisons or
         // failure. Include each fixed-ID hash insertion, the row's chain link
-        // and each column write before beginning the indivisible writes.
-        work.tick(plan.ids.len() as u128 + plan.added.len() as u128 * 3 + 3)
+        // and each column write before beginning the indivisible writes. An
+        // interned owner publishes one presence entry per new value.
+        let per_value = if terms { 1 } else { 3 };
+        work.tick(plan.ids.len() as u128 + plan.added.len() as u128 * per_value + 3)
     }
 
     fn publish(
@@ -459,6 +498,10 @@ impl Catalog {
             unreachable!("catalog owns an append index");
         };
         for added in &plan.added {
+            if index.terms {
+                index.identities.publish(added.term, added.term.word());
+                continue;
+            }
             let equality =
                 u32::try_from(self.layout.dictionary.len()).expect("admitted equality ID");
             index.identities.publish(added.term, equality);
