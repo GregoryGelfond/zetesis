@@ -487,7 +487,8 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
             crate::formula_support::advance_round(
                 &mut append,
                 None,
-                GroundingWork::new(&limits, counters, rule.location)
+                GroundingWork::new(&limits, counters, rule.location),
+                None,
             )
             .unwrap()
         );

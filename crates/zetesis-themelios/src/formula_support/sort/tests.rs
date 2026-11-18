@@ -127,6 +127,12 @@ fn sorting_respects_a_logarithmic_work_bound() {
     }
 }
 
+/// Charges one navigation permit, as `compare` does.
+fn merge_compare<T: Ord>(left: &T, right: &T, charged: &mut u64) -> Ordering {
+    *charged += 1;
+    left.cmp(right)
+}
+
 fn merged(original: &[i32], limits: &FormulaLimits) -> (Result<(), FormulaFailure>, Vec<i32>, u64) {
     let mut values = original.to_vec();
     let mut scratch = Vec::with_capacity(values.len());
@@ -134,8 +140,9 @@ fn merged(original: &[i32], limits: &FormulaLimits) -> (Result<(), FormulaFailur
     let result = merge_by(
         &mut values,
         &mut scratch,
+        None,
         GroundingWork::new(limits, &mut counters, location()),
-        compare,
+        merge_compare,
     );
     (result, values, counters.accounting.work)
 }
@@ -192,5 +199,41 @@ fn merge_sorting_refusal_preserves_the_population() {
         ));
         values.sort_unstable();
         assert_eq!(values, expected);
+    }
+}
+
+/// The sort and its receipt are the same on the caller alone and on pools
+/// of several sizes, with a comparator whose navigation varies by value.
+#[test]
+fn merge_sorting_is_identical_for_every_worker_count() {
+    let original: Vec<u64> = (0..50_000u64)
+        .map(|i| (i * 2_654_435_761) % 1_000_003)
+        .collect();
+    let sort = |pool: Option<&rayon::ThreadPool>| {
+        let mut values = original.clone();
+        let mut scratch = Vec::with_capacity(values.len());
+        let mut counters = Counters::default();
+        merge_by(
+            &mut values,
+            &mut scratch,
+            pool,
+            GroundingWork::new(&FormulaLimits::default(), &mut counters, location()),
+            |left: &u64, right: &u64, charged: &mut u64| {
+                *charged += (left ^ right) % 4;
+                left.cmp(right)
+            },
+        )
+        .unwrap();
+        (values, counters.accounting.work)
+    };
+    let serial = sort(None);
+    let mut expected = original.clone();
+    expected.sort_unstable();
+    assert_eq!(serial.0, expected);
+    for workers in [2, 4, 14] {
+        let executor =
+            crate::formula_support::Executor::new(std::num::NonZeroUsize::new(workers).unwrap())
+                .unwrap();
+        assert_eq!(sort(executor.pool()), serial, "{workers} workers");
     }
 }
