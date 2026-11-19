@@ -148,7 +148,7 @@ impl ObjectiveReadSetError {
 }
 impl fmt::Debug for ObjectiveReadSetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ObjectiveProjectionError")
+        f.debug_struct("ObjectiveReadSetError")
             .field("kind", &self.kind)
             .field("template", &self.receipt.template_index())
             .field("statistics", &self.receipt.statistics())

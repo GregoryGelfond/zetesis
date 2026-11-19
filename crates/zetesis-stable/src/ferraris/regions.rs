@@ -426,7 +426,7 @@ self_cell::self_cell! {
 
 impl std::fmt::Debug for RetainedRefuter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RetainedFilter")
+        f.debug_struct("RetainedRefuter")
             .field("factory", self.borrow_owner())
             .finish_non_exhaustive()
     }
