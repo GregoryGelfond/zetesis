@@ -24,6 +24,11 @@ pub(super) struct Witnesses<'source> {
 }
 
 impl<'source> Witnesses<'source> {
+    /// Forget every held row, keeping the capacity its lease accounts.
+    pub(super) fn clear(&mut self) {
+        self.rows.clear();
+        self.unchanged = 0;
+    }
     pub(super) fn capacity_bytes(&self) -> usize {
         self.rows.capacity() * size_of::<MatchedRow<'source, 'source>>()
     }

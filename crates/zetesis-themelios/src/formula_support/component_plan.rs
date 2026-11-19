@@ -214,6 +214,56 @@ impl<'a, 'source: 'a> ComponentPlans<'a, 'source> {
         )
     }
 
+    /// [`Self::join_prepared`] for a join this owner already lent for
+    /// component `index`: the same entry checks and charges, then the join is
+    /// rebound to `fixed` in place instead of being built anew.
+    pub(crate) fn rejoin<'cursor>(
+        &'cursor self,
+        join: &mut Join<'cursor, 'source>,
+        index: usize,
+        scope: ComponentScope<'a>,
+        fixed: &Binding<'_>,
+        support: &'a Support<'source>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context { computation, work } = context;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        counters.work(limits, location)?;
+        if !std::ptr::eq(support, self.support)
+            || fixed.len() != self.fixed_len
+            || !self.is_prepared(index)
+        {
+            return Err(owner(location));
+        }
+        computation.storage_observed(
+            &self.lease,
+            self.lease.bytes(),
+            0,
+            limits,
+            counters,
+            location,
+        )?;
+        let prepared = self.slots.slice()[index]
+            .as_ref()
+            .expect("prepared component");
+        if !std::ptr::eq(scope.literals, prepared.scope.literals)
+            || !std::ptr::eq(scope.used, prepared.scope.used)
+        {
+            return Err(owner(location));
+        }
+        join.rebind(
+            &prepared.plan,
+            fixed,
+            scope.used,
+            Some(self.bound.slice()),
+            Context::new(computation, limits, counters, location),
+        )
+    }
+
     fn cursor<'cursor>(
         &'cursor self,
         index: usize,

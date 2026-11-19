@@ -2441,6 +2441,98 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         Ok(())
     }
+    /// Return a join that [`ComponentPlans`] lent to its state just after it
+    /// was lent, for another fixed binding of the same component. The lease,
+    /// buffers and evaluation scratch stay, so successive head rows take no
+    /// new storage handle or vocabulary witness. Every reset cell is charged
+    /// as constructing it was, and the borrowed plan replaces any plan a
+    /// scalar selection installed.
+    pub(in crate::formula_support) fn rebind(
+        &mut self,
+        plan: &'a order::Plan<'a>,
+        fixed: &Binding<'_>,
+        used: &[usize],
+        expected: Option<&[bool]>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        self.plan = JoinPlan::Borrowed(plan);
+        self.scalar_selection = scalar_selection::Preparation::Pending;
+        self.comparisons = Comparisons::Deferred;
+        self.pending_comparisons = Comparisons::Deferred;
+        self.source_evidence = false;
+        self.certified_total = false;
+        self.expression_keys = None;
+        self.multiples = None;
+        self.range_selection = None;
+        self.family = family::Evidence::default();
+        self.delta = self.plan.pivot;
+        self.failure = None;
+        self.evaluation.clear_zero_divisor();
+        self.pending = None;
+        self.pending_head = None;
+        self.anchor = None;
+        self.positive_prefix = None;
+        self.structural_query = None;
+        self.held = None;
+        self.depth = 0;
+        self.traversal = Traversal::Searching;
+        self.pattern_captures.clear();
+        self.probe_selections.clear();
+        if let Some(witnesses) = self.witnesses.as_mut() {
+            witnesses.clear();
+        }
+        for slot in 0..self.values.len() {
+            self.values.clear(slot, limits, counters, location)?;
+        }
+        for slot in &mut self.slots {
+            counters.work(limits, location)?;
+            *slot = Slot::Relational;
+        }
+        for verdict in &mut self.verdicts {
+            counters.work(limits, location)?;
+            *verdict = true;
+        }
+        for position in &mut self.positions {
+            counters.work(limits, location)?;
+            *position = 0;
+        }
+        for probe in &mut self.probes {
+            counters.work(limits, location)?;
+            *probe = None;
+        }
+        for resolution in &mut self.resolutions {
+            counters.work(limits, location)?;
+            *resolution = Resolution::Unresolved;
+        }
+        for changes in &mut self.changes {
+            counters.work(limits, location)?;
+            changes.clear();
+        }
+        for target in self
+            .literals
+            .get()
+            .iter()
+            .filter_map(crate::formula_binding_cursor::target)
+        {
+            self.slots[target] = Slot::Generated;
+        }
+        self.lease.observe(self.storage_bytes(), location)?;
+        self.fix_component(
+            fixed,
+            used,
+            expected,
+            Context::new(computation, limits, counters, location),
+        )
+    }
     /// Share the existing final Builder's family stages. This is installed
     /// before traversal; the query borrow keeps the exact Support alive.
     pub(crate) fn share_families(

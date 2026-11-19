@@ -16,7 +16,7 @@ use super::coordinator::{self, Completed};
 use super::{Binding, Buffer, Computation, Context, Counters, LiteralIr, StorageLease, Support};
 use crate::expansion::Budget;
 use crate::formula_ir::RuleIr;
-use crate::formula_support::{ComponentPlans, ComponentScope, Executor};
+use crate::formula_support::{ComponentPlans, ComponentScope, Executor, Join};
 use crate::{FormulaFailure, FormulaLimits, JoinStrategy, ProgramSite};
 use themelios_program::program::DefaultNegation;
 
@@ -122,90 +122,157 @@ fn block_instances<'source>(
         rows: Buffer::new(computation, limits, counters, location)?,
         _lease: lease,
     };
-    // Planned from the first admitted head binding, as the serial route plans.
-    let mut plans = None;
     // One head frame per block, rebound row by row, so no row takes its own
     // storage lease or vocabulary handle.
     let mut fixed = frame(rule, computation, limits, counters)?;
     let start = block.start;
-    for (offset, atom) in support
+    let mut atoms = support
         .rows(head.predicate())
         .skip(start)
         .take(block.len())
-        .enumerate()
-    {
-        counters.work(limits, location)?;
-        if !head_binding(rule, head, atom, &mut fixed, computation, limits, counters)? {
-            continue;
+        .enumerate();
+    let mut next = |fixed: &mut Binding<'static>,
+                    computation: &Computation<'_, 'source>,
+                    counters: &mut Counters|
+     -> Result<Option<usize>, FormulaFailure> {
+        for (offset, atom) in atoms.by_ref() {
+            counters.work(limits, location)?;
+            if head_binding(rule, head, atom, fixed, computation, limits, counters)? {
+                return Ok(Some(start + offset));
+            }
         }
-        if plans.is_none() {
-            plans = Some(ComponentPlans::new(
-                components.len(),
-                rule.variables,
-                &fixed,
+        Ok(None)
+    };
+    let Some(mut row) = next(&mut fixed, computation, counters)? else {
+        return Ok(staged);
+    };
+    // Planned from the first admitted head binding, as the serial route plans;
+    // every component is planned once here so the block's joins can borrow
+    // the plans together.
+    let mut plans = ComponentPlans::new(
+        components.len(),
+        rule.variables,
+        &fixed,
+        support,
+        Context::new(&*computation, limits, counters, location),
+    )?;
+    for (index, scope) in components.iter().enumerate() {
+        plans.prepare(
+            index,
+            *scope,
+            budget,
+            Context::new(&*computation, limits, counters, location),
+        )?;
+    }
+    let plans = plans;
+    // One join per component, lent on its first head row and rebound after.
+    let mut joins = Buffer::new(computation, limits, counters, location)?;
+    for _ in components {
+        joins.push(None, computation, limits, counters, location)?;
+    }
+    loop {
+        if stage_head_row(
+            row,
+            (components, &plans, &mut joins),
+            (&fixed, support),
+            &mut staged,
+            computation,
+            budget,
+            (limits, counters, location),
+        )? {
+            staged.declined = true;
+            return Ok(staged);
+        }
+        let Some(following) = next(&mut fixed, computation, counters)? else {
+            break;
+        };
+        row = following;
+    }
+    Ok(staged)
+}
+
+/// Stage one admitted head row's component rows through the block's joins.
+/// True when a worker met a row this route does not stage.
+fn stage_head_row<'plans, 'source>(
+    row: usize,
+    (components, plans, joins): (
+        &[ComponentScope<'plans>],
+        &'plans ComponentPlans<'plans, 'source>,
+        &mut Buffer<Option<Join<'plans, 'source>>>,
+    ),
+    (fixed, support): (&Binding<'static>, &'plans Support<'source>),
+    staged: &mut Staged<'source>,
+    computation: &mut Computation<'_, 'source>,
+    budget: &mut Budget,
+    (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+) -> Result<bool, FormulaFailure> {
+    let (shape, rows) = (staged.shape.len(), staged.rows.len());
+    staged
+        .shape
+        .push(row, computation, limits, counters, location)?;
+    let mut inhabited = true;
+    for (index, scope) in components.iter().enumerate() {
+        let slot = &mut joins.slice_mut()[index];
+        if let Some(join) = slot.as_mut() {
+            plans.rejoin(
+                join,
+                index,
+                *scope,
+                fixed,
+                support,
+                Context::new(&*computation, limits, counters, location),
+            )?;
+        } else {
+            *slot = Some(plans.join_prepared(
+                index,
+                *scope,
+                fixed,
                 support,
                 Context::new(&*computation, limits, counters, location),
             )?);
         }
-        let plans = plans.as_mut().expect("planned above");
-        let (shape, rows) = (staged.shape.len(), staged.rows.len());
+        let join = slot.as_mut().expect("lent above");
+        join.select_numeric_local(Context::new(&*computation, limits, counters, location))?;
+        join.retain_witnesses(Context::new(&*computation, limits, counters, location))?;
+        let mut passing = 0_usize;
+        while let Some(matched) = join.next_matched_row(
+            budget,
+            Context::new(computation, limits, counters, location),
+        )? {
+            if !matched.passes {
+                continue;
+            }
+            let Some(witnesses) = matched.witnesses.as_ref() else {
+                return Ok(true);
+            };
+            if !stage_row(
+                witnesses,
+                scope,
+                &mut staged.rows,
+                computation,
+                (limits, counters, location),
+            )? {
+                return Ok(true);
+            }
+            passing += 1;
+        }
+        if passing == 0 {
+            inhabited = false;
+            break;
+        }
         staged
             .shape
-            .push(start + offset, computation, limits, counters, location)?;
-        let mut inhabited = true;
-        for (index, scope) in components.iter().enumerate() {
-            let mut join = plans.join(
-                index,
-                *scope,
-                &fixed,
-                support,
-                budget,
-                Context::new(&*computation, limits, counters, location),
-            )?;
-            join.select_numeric_local(Context::new(&*computation, limits, counters, location))?;
-            join.retain_witnesses(Context::new(&*computation, limits, counters, location))?;
-            let mut passing = 0_usize;
-            while let Some(row) = join.next_matched_row(
-                budget,
-                Context::new(computation, limits, counters, location),
-            )? {
-                if !row.passes {
-                    continue;
-                }
-                let Some(witnesses) = row.witnesses.as_ref() else {
-                    staged.declined = true;
-                    return Ok(staged);
-                };
-                if !stage_row(
-                    witnesses,
-                    scope,
-                    &mut staged.rows,
-                    computation,
-                    (limits, counters, location),
-                )? {
-                    staged.declined = true;
-                    return Ok(staged);
-                }
-                passing += 1;
-            }
-            if passing == 0 {
-                inhabited = false;
-                break;
-            }
-            staged
-                .shape
-                .push(passing, computation, limits, counters, location)?;
+            .push(passing, computation, limits, counters, location)?;
+    }
+    if !inhabited {
+        while staged.shape.len() > shape {
+            staged.shape.pop();
         }
-        if !inhabited {
-            while staged.shape.len() > shape {
-                staged.shape.pop();
-            }
-            while staged.rows.len() > rows {
-                staged.rows.pop();
-            }
+        while staged.rows.len() > rows {
+            staged.rows.pop();
         }
     }
-    Ok(staged)
+    Ok(false)
 }
 
 /// Copy one passing row's positive atom rows in literal order. False when the
