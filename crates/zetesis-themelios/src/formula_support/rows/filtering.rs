@@ -10,7 +10,7 @@ use zetesis_core::{
     Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode, ValueNodeRef,
 };
 
-use super::RowFilter;
+use super::NecessaryRowCondition;
 use super::tests::exported;
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
@@ -101,7 +101,7 @@ fn with_observed_fixture<T>(
 
 struct Select<F>(F);
 
-impl<F> RowFilter for Select<F>
+impl<F> NecessaryRowCondition for Select<F>
 where
     F: Fn(zetesis_core::relation::Row<'_, '_>) -> bool,
 {
@@ -511,7 +511,7 @@ fn empty_positive_inputs_keep_their_scalar_row() {
 
 struct RefuseSecond(Cell<usize>);
 
-impl RowFilter for RefuseSecond {
+impl NecessaryRowCondition for RefuseSecond {
     fn resolve(
         &self,
         _: zetesis_core::catalog::Atoms<'_>,
@@ -675,7 +675,7 @@ struct ResolvedSources<'a> {
     refuse: Cell<bool>,
 }
 
-impl RowFilter for ResolvedSources<'_> {
+impl NecessaryRowCondition for ResolvedSources<'_> {
     fn resolve(
         &self,
         atoms: zetesis_core::catalog::Atoms<'_>,
@@ -741,7 +741,7 @@ fn backtracking_reuses_each_occurrences_source() {
             refuse: Cell::new(false),
         };
         let mut results = Vec::new();
-        for filter in [Some(&selection as &dyn RowFilter), None] {
+        for filter in [Some(&selection as &dyn NecessaryRowCondition), None] {
             let mut rows = Join::filtered_rule(
                 &rule,
                 support,

@@ -418,7 +418,7 @@ self_cell::self_cell! {
     /// source or frozen-reduct query. The cell is allocated only when a filter
     /// is installed; its small allocation follows the boxed-checker contract.
     struct RetainedFilter {
-        owner: crate::region_filter::Filter,
+        owner: crate::region_filter::RegionFilter,
         #[not_covariant]
         dependent: Checker,
     }
@@ -861,13 +861,13 @@ impl RegionSearch {
         self.parts.set_learned_store(store);
     }
 
-    pub(super) fn filter(&self) -> Option<&crate::region_filter::Filter> {
+    pub(super) fn filter(&self) -> Option<&crate::region_filter::RegionFilter> {
         self.filter.as_ref().map(RetainedFilter::borrow_owner)
     }
 
     /// The caller allows installation only before traversal and never replaces
     /// an installed factory, so no checker can outlive its source identity.
-    pub(super) fn set_filter(&mut self, filter: crate::region_filter::Filter) {
+    pub(super) fn set_filter(&mut self, filter: crate::region_filter::RegionFilter) {
         self.filter = Some(RetainedFilter::new(filter, |_| None));
     }
 
@@ -1204,7 +1204,7 @@ fn prefer_split<Q: Quota, R>(
 /// restriction owners and their accounted narrowing primitive are reused.
 pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
     restrictions: &Conditions<R>,
-    filter: Option<&crate::region_filter::Filter>,
+    filter: Option<&crate::region_filter::RegionFilter>,
     candidate: &Interpretation,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_>,

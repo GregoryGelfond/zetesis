@@ -109,7 +109,7 @@ use relations::RelationRows;
 pub(crate) use relations::{
     ClosedSource, Relations, SourceAtom, SourceScope, SupportCatalog, atom_failure, owner_limits,
 };
-pub(crate) use rows::{FilteredRows, PositiveRows, RowFilter, RowSelection};
+pub(crate) use rows::{FilteredRows, NecessaryRowCondition, PositiveRows, RowSelection};
 
 /// Possible atoms after a complete support round added no new head.
 ///
@@ -1561,7 +1561,7 @@ enum Traversal {
 /// The cursor owns its current assignment, undo trails and bounded expression
 /// storage. Ordinary joins enumerate upper support and retain negative gates
 /// in emitted formulas. An explicit admitted-source scan may additionally
-/// borrow a necessary positive-row filter; it never supplies family evidence.
+/// borrow a necessary positive-row condition; it never supplies family evidence.
 pub(crate) struct Join<'a, 'source> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
     scalar_selection: scalar_selection::Preparation,
@@ -1600,7 +1600,7 @@ pub(crate) struct Join<'a, 'source> {
     domains: Option<&'a queries::Guards<'a, 'source>>,
     // Installed only by filtered_rule before traversal; never replaced while
     // its authenticated source slots or held prefix can be retained.
-    row_filter: Option<&'a dyn RowFilter>,
+    row_condition: Option<&'a dyn NecessaryRowCondition>,
     /// An admitted selected query's one original positive occurrence. Its
     /// immutable source row remains resolved across ordinary backtracking.
     anchor: Option<rows::Anchor<'a>>,
@@ -1617,7 +1617,7 @@ pub(crate) struct Join<'a, 'source> {
     positions: Vec<usize>,
     probes: Vec<Option<Probe<'a, 'source>>>,
     /// Completed necessary selections of short postings, owned by their fixed
-    /// positive occurrence and used only with an immutable row filter.
+    /// positive occurrence and used only with an immutable row condition.
     probe_selections: Vec<probe_selection::Receipt<'a>>,
     /// Borrowed relations are resolved once per occurrence in this snapshot.
     resolutions: Vec<Resolution<'source>>,
@@ -1665,7 +1665,7 @@ enum Resolution<'source> {
     Unresolved,
     Resolved {
         rows: Option<&'source relations::RelationRows<'source>>,
-        /// A slot in this join's row filter, authenticated for these exact
+        /// A slot in this join's row condition, authenticated for these exact
         /// source occurrences. Absent without a filter or an offered source.
         filter_source: Option<usize>,
     },
@@ -1812,7 +1812,7 @@ impl<'a, 'source> Join<'a, 'source> {
     fn filtered_rule(
         rule: impl Into<Ir<'a, 'source, crate::formula_ir::RuleIr>>,
         support: &'a Support<'source>,
-        filter: Option<&'a dyn RowFilter>,
+        filter: Option<&'a dyn NecessaryRowCondition>,
         prepared: Option<&'a PreparedRule<'a>>,
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
@@ -1855,7 +1855,7 @@ impl<'a, 'source> Join<'a, 'source> {
         } else {
             Self::rule(source_rule, support, computation, limits, budget, counters)?
         };
-        join.row_filter = filter;
+        join.row_condition = filter;
         join.prepare_selections(Context::new(computation, limits, counters, rule.location))?;
         Ok(FilteredRows::new(join))
     }
@@ -2797,7 +2797,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 &Context::new(computation, limits, counters, location),
             )?,
             domains: None,
-            row_filter: None,
+            row_condition: None,
             anchor: None,
             positive_prefix: None,
             support,
@@ -3102,7 +3102,7 @@ impl<'a, 'source> Join<'a, 'source> {
             .map(Frame::into_owned))
     }
     /// Return each completed positive binding with its scalar selection result.
-    /// Ordinary admission joins have no external row filter and visit the full family.
+    /// Ordinary admission joins have no external row condition and visit the full family.
     pub(crate) fn next_row(
         &mut self,
         computation: &mut Computation<'_, '_>,
@@ -3650,7 +3650,7 @@ impl<'a, 'source> Join<'a, 'source> {
             let rows = self
                 .support
                 .resolve(pattern.atom(), limits, counters, location)?;
-            let filter_source = match (self.row_filter, rows) {
+            let filter_source = match (self.row_condition, rows) {
                 (Some(filter), Some(source)) if source.row_count() != 0 => {
                     Some(filter.resolve(source.atoms, limits, counters, location)?)
                 }
@@ -3906,7 +3906,7 @@ impl<'a, 'source> Join<'a, 'source> {
     }
     /// External admitted-source selection and ordinary necessary domains meet
     /// at the same pre-binding boundary. Complete arithmetic admission ignores
-    /// domains as before; only an explicit filtered consumer has a row filter.
+    /// domains as before; only an explicit filtered consumer has a row condition.
     fn permits_row(
         &self,
         pattern: PatternOccurrence<'_>,
@@ -3915,7 +3915,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<RowSelection, FormulaFailure> {
-        let selected = if let Some(filter) = self.row_filter {
+        let selected = if let Some(filter) = self.row_condition {
             let source = self.resolutions[self.depth]
                 .filter_source()
                 .expect("an offered filtered row has an authenticated source");

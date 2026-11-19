@@ -210,7 +210,7 @@ struct Shared {
     /// What the walk reads of the original theory beyond the theory itself.
     parts: super::regions::OriginalParts,
     certificate: Option<Arc<Certification>>,
-    filter: Option<crate::region_filter::Filter>,
+    filter: Option<crate::region_filter::RegionFilter>,
     restrictions: RwLock<Conditions<Arc<(Theory, Narrower)>>>,
     /// One deque per worker and the walk's termination record. All entry
     /// preparation and evaluation happens outside the deque locks.
@@ -778,7 +778,7 @@ impl ParallelRegions {
 
     pub(crate) fn set_filter(
         &mut self,
-        filter: crate::region_filter::Filter,
+        filter: crate::region_filter::RegionFilter,
     ) -> Result<(), Incomplete> {
         if !matches!(self.record, WalkRecord::NotBegun) {
             return Err(Incomplete::LateRegionFilter);
@@ -824,7 +824,7 @@ impl ParallelRegions {
         statistics
     }
 
-    pub(crate) fn filter(&self) -> Option<&crate::region_filter::Filter> {
+    pub(crate) fn filter(&self) -> Option<&crate::region_filter::RegionFilter> {
         self.shared.filter.as_ref()
     }
 

@@ -3,7 +3,7 @@
 use crate::formula_support::Context;
 
 use crate::ProgramSite;
-use crate::formula_support::components::{Filter, Pattern as AtomPattern, Term};
+use crate::formula_support::components::{FilterCoordinate, Pattern as AtomPattern, Term};
 use std::ops::Range;
 use zetesis_core::catalog::{AssignmentError, DeclaredPredicate, TermKey};
 use zetesis_core::{FilterRef, PatternRef, TemplateTerm};
@@ -110,7 +110,7 @@ impl Components {
     }
     pub(super) fn filter(
         &mut self,
-        filter: Filter,
+        filter: FilterCoordinate,
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,

@@ -137,7 +137,7 @@ self_cell::self_cell! {
     /// existing infallible boxed-checker contract, not a universal OOM
     /// guarantee.
     struct Workers {
-        owner: Option<crate::region_filter::Filter>,
+        owner: Option<crate::region_filter::RegionFilter>,
         #[not_covariant]
         dependent: Workspaces,
     }
@@ -228,7 +228,7 @@ impl RegionProposals {
         &mut self.statistics.counts
     }
 
-    pub(super) fn filter(&self) -> Option<&crate::region_filter::Filter> {
+    pub(super) fn filter(&self) -> Option<&crate::region_filter::RegionFilter> {
         self.workers.borrow_owner().as_ref()
     }
 
@@ -288,7 +288,7 @@ impl RegionProposals {
 
     /// The caller permits installation only before traversal, when no
     /// producer has prepared a checker or retained a worklist.
-    pub(super) fn set_filter(&mut self, filter: crate::region_filter::Filter) {
+    pub(super) fn set_filter(&mut self, filter: crate::region_filter::RegionFilter) {
         self.workers = Workers::new(Some(filter), |_| Vec::new());
     }
 
@@ -534,7 +534,7 @@ struct Outcome {
 /// outcome.
 struct SlateFill<'a, 'filter> {
     theory: &'a Theory,
-    filter: Option<&'filter crate::region_filter::Filter>,
+    filter: Option<&'filter crate::region_filter::RegionFilter>,
     parts: &'a regions::OriginalParts,
     narrower: &'a Narrower,
     restrictions: &'a Conditions<(Theory, Narrower)>,

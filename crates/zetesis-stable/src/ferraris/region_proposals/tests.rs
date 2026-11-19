@@ -941,7 +941,7 @@ impl InjectedWorker for PanicOnDecidedWorker {
 fn a_panicking_producers_counts_reach_the_merged_receipts() {
     let theory = tautologies(2);
     let mut proposals = proposals(&theory, 1);
-    proposals.set_filter(crate::region_filter::Filter::new(
+    proposals.set_filter(crate::region_filter::RegionFilter::new(
         crate::region_filter::Source::Fixture(Arc::new(PanicOnDecided)),
     ));
     let before = proposals.statistics().counts.regions;

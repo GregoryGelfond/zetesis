@@ -129,7 +129,7 @@ fn run(theory: &Theory, reply: Reply, mut counts: RegionCounts) -> Attempt {
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
-    let filter = region_filter::Filter::new(Source::Fixture(Arc::new(SourceFixture {
+    let filter = region_filter::RegionFilter::new(Source::Fixture(Arc::new(SourceFixture {
         theory: theory.clone(),
         reply,
     })));

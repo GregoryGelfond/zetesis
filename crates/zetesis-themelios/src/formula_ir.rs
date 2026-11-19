@@ -25,7 +25,7 @@ mod facts;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::formula_support::components::{
-    Filter, Pattern as AtomPattern, Predicate, Term as CoreTerm,
+    FilterCoordinate, Pattern as AtomPattern, Predicate, Term as CoreTerm,
 };
 use crate::{ProgramSite, StatementId};
 use themelios_program::program::{
@@ -135,7 +135,7 @@ pub(crate) struct ObjectiveIr {
     pub priority: Expression,
     pub tuple: Vec<ObjectiveField>,
     pub positive: Vec<AtomPattern>,
-    pub filters: Vec<Filter>,
+    pub filters: Vec<FilterCoordinate>,
     pub polarity: WeightPolarity,
     /// Positive conditions whose generated values affect priority evaluation or
     /// source eligibility through a literal, filter or repeated variable.

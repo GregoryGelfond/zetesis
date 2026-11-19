@@ -698,7 +698,7 @@ fn an_allocation_stop_closes_and_settles_the_frontier() {
 fn allocation_stop_closes_and_settles_the_frontier(engagement: Engagement) {
     let (mut search, original) = search_engaging(2, 1, engagement);
     search
-        .set_filter(crate::region_filter::Filter::new(
+        .set_filter(crate::region_filter::RegionFilter::new(
             crate::region_filter::Source::Fixture(Arc::new(RefuseChildren(
                 original.theory().clone(),
             ))),

@@ -58,13 +58,16 @@ impl injection::Worker for TraceWorker<'_> {
     }
 }
 
-fn source(theory: &Theory, force: Option<usize>) -> (Arc<TraceSource>, region_filter::Filter) {
+fn source(
+    theory: &Theory,
+    force: Option<usize>,
+) -> (Arc<TraceSource>, region_filter::RegionFilter) {
     let trace = Arc::new(TraceSource {
         theory: theory.clone(),
         force,
         passes: Mutex::new(Vec::new()),
     });
-    let filter = region_filter::Filter::new(Source::Fixture(trace.clone()));
+    let filter = region_filter::RegionFilter::new(Source::Fixture(trace.clone()));
     (trace, filter)
 }
 
@@ -185,7 +188,7 @@ fn a_native_source_starts_even_when_global_progress_has_continued() {
         owner.core().clone(),
         ConstraintAllowance::new(ConstraintCheckLimits::default()),
     ));
-    let filter = region_filter::Filter::new(Source::Streamed(source.clone()));
+    let filter = region_filter::RegionFilter::new(Source::Streamed(source.clone()));
     let mut worker = None;
     let mut timings = None;
     let cancellation = Cancellation::default();

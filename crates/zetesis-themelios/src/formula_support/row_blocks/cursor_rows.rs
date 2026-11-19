@@ -217,7 +217,7 @@ fn initial_kind(
     require!(cursor.multiples.is_none());
     require!(cursor.range_selection.is_none());
     require!(cursor.checked_guard.is_none());
-    require!(cursor.row_filter.is_none());
+    require!(cursor.row_condition.is_none());
     require!(cursor.anchor.is_none());
     require!(cursor.positive_prefix.is_none());
     require!(cursor.pattern_rows.is_none());

@@ -104,8 +104,10 @@ pub struct RegionFilterStatistics {
     pub overflowed: bool,
 }
 
+/// The search's streamed-constraint region check: a refuting subject
+/// (`Algebra.refuting`, `StreamedRegions`), not a grounding scalar filter.
 #[derive(Debug)]
-pub(crate) struct Filter {
+pub(crate) struct RegionFilter {
     factory: Source,
     preparations: AtomicU64,
     checks: AtomicU64,
@@ -114,7 +116,7 @@ pub(crate) struct Filter {
     overflowed: AtomicBool,
 }
 
-impl Filter {
+impl RegionFilter {
     pub(crate) fn new(factory: Source) -> Self {
         Self {
             factory,
@@ -189,7 +191,7 @@ impl Filter {
 }
 
 pub(crate) struct Worker<'a> {
-    filter: &'a Filter,
+    filter: &'a RegionFilter,
     checker: Checker<'a>,
 }
 
@@ -247,7 +249,7 @@ impl Worker<'_> {
 /// One closure's callback state. The worker survives between closures; the pass
 /// marker does not. Neither preparation nor a source pass changes region truth.
 pub(crate) struct Check<'a, 'b> {
-    pub(crate) filter: &'a Filter,
+    pub(crate) filter: &'a RegionFilter,
     pub(crate) worker: &'b mut Option<Worker<'a>>,
     pub(crate) timings: &'b mut Option<SearchPhaseTimings>,
 }

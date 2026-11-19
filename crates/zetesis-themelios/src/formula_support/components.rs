@@ -73,8 +73,10 @@ pub(crate) struct Constructor(usize);
 pub(crate) struct Predicate(usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Pattern(usize);
+/// The coordinate of one admitted template filter, a substituted comparison
+/// (`zetesis_core::Filter`, a scalar condition of `Lifted.Filter`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Filter(usize);
+pub(crate) struct FilterCoordinate(usize);
 
 /// Source-variable coordinates and compiled scalar occurrences. Equality here
 /// compares metadata positions; constant semantic equality requires resolution.

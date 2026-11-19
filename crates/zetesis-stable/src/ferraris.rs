@@ -859,7 +859,7 @@ impl StableModels {
         if self.proposer.filter().is_some() {
             return Err(Incomplete::RegionFilterAlreadySet);
         }
-        let filter = crate::region_filter::Filter::new(source);
+        let filter = crate::region_filter::RegionFilter::new(source);
         match &mut self.proposer {
             Proposer::Refuted(root) => root.filter = Some(filter),
             Proposer::Regions(regions) => regions.set_filter(filter),
@@ -1053,7 +1053,7 @@ impl StableModels {
         statistics.region_filter = self
             .proposer
             .filter()
-            .map(crate::region_filter::Filter::statistics);
+            .map(crate::region_filter::RegionFilter::statistics);
         statistics
     }
 
@@ -1221,7 +1221,7 @@ enum Proposal {
 struct RefutedRoot {
     parts: Option<regions::OriginalParts>,
     statistics: RegionSearchStatistics,
-    filter: Option<crate::region_filter::Filter>,
+    filter: Option<crate::region_filter::RegionFilter>,
 }
 
 impl RefutedRoot {
@@ -1238,7 +1238,7 @@ impl Proposer {
         matches!(self, Self::Refuted(_))
     }
 
-    fn filter(&self) -> Option<&crate::region_filter::Filter> {
+    fn filter(&self) -> Option<&crate::region_filter::RegionFilter> {
         match self {
             Self::Refuted(root) => root.filter.as_ref(),
             Self::Regions(regions) => regions.filter(),

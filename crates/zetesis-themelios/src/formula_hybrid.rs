@@ -26,7 +26,7 @@ use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_owner::Owner;
 use crate::formula_support::{
-    Accounting, CompletedSupport, Counters, PositiveRows, PreparedRule, RowFilter,
+    Accounting, CompletedSupport, Counters, NecessaryRowCondition, PositiveRows, PreparedRule,
 };
 use crate::{
     ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, ProgramSite, SourceBundle,
@@ -1218,7 +1218,7 @@ impl ConstraintChecker<'_> {
             prepared.prepare_rule(rule_index, budget, counters)?;
             let model_selection;
             let region_selection;
-            let filter: &dyn RowFilter = match candidate {
+            let filter: &dyn NecessaryRowCondition = match candidate {
                 Candidate::Model(model) => {
                     model_selection = ModelSelection {
                         rows: prepared.rows.as_ref().expect("prepared before model scan"),

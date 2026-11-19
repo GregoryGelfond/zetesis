@@ -514,7 +514,7 @@ fn handoff(
     }
     if let Some(filter) = filter {
         search
-            .set_filter(crate::region_filter::Filter::new(
+            .set_filter(crate::region_filter::RegionFilter::new(
                 crate::region_filter::Source::Fixture(Arc::clone(filter)),
             ))
             .unwrap();
@@ -959,7 +959,7 @@ fn a_failed_release_at_engagement_starts_no_thread() {
     let theory = tautologies(3);
     let (mut search, index) = walk(&theory, LATE);
     search
-        .set_filter(crate::region_filter::Filter::new(
+        .set_filter(crate::region_filter::RegionFilter::new(
             crate::region_filter::Source::Fixture(Arc::new(Faulty {
                 theory: theory.clone(),
                 panic_on_drop: true,
@@ -991,7 +991,7 @@ fn a_panic_in_a_coordinator_step_merges_nothing_of_its_pull() {
     omit_producers_for_membership_test(&mut search);
     let panic_at = Arc::new(AtomicUsize::new(0));
     search
-        .set_filter(crate::region_filter::Filter::new(
+        .set_filter(crate::region_filter::RegionFilter::new(
             crate::region_filter::Source::Fixture(Arc::new(Faulty {
                 theory: theory.clone(),
                 panic_on_drop: false,
@@ -1106,7 +1106,7 @@ fn configuration_is_refused_once_the_walk_has_begun() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        search.set_filter(crate::region_filter::Filter::new(
+        search.set_filter(crate::region_filter::RegionFilter::new(
             crate::region_filter::Source::Fixture(Arc::new(Pass {
                 theory: theory.clone(),
                 live: Arc::new(AtomicUsize::new(0)),

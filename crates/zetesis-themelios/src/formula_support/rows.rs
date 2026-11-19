@@ -20,8 +20,12 @@ use crate::{FormulaFailure, FormulaLimits};
 /// Row positions are predicate-local support coordinates. Any interpretation
 /// in another catalog must authenticate that mapping; no equality of positions
 /// is implied. Unmapped rows may be retained conservatively. Only already
-/// admitted witness scans attach this filter, never source-family validation.
-pub(crate) trait RowFilter {
+/// admitted witness scans attach this condition, never source-family validation.
+///
+/// The condition is pushed below binding as in `Lifted.PushdownBind`: it may be
+/// only necessary (`necessary_gate_pushdown_exact`), and it is distinct from the
+/// scalar `Lifted.Filter` the join evaluates on bindings.
+pub(crate) trait NecessaryRowCondition {
     /// Successful selection is fixed for each authenticated source occurrence
     /// and row during this join's immutable borrow. This permits reusing only
     /// completed necessary-selection results; matching and scalar diagnostics
@@ -231,11 +235,13 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
     pub(super) fn new(mut join: Join<'a, 'source>) -> Self {
         // This proof describes the current base binding. Generated continuations
         // and head suffixes retain the ordinary lookup path.
-        join.positive_prefix = (join.row_filter.is_some()
+        join.positive_prefix = (join.row_condition.is_some()
             && !join.generated
             && join.head_slots.is_empty())
         .then(|| PositivePrefix {
-            single_open: join.row_filter.is_some_and(RowFilter::single_open),
+            single_open: join
+                .row_condition
+                .is_some_and(NecessaryRowCondition::single_open),
             ..PositivePrefix::default()
         });
         Self { join }
@@ -260,7 +266,7 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
             found |= pattern.source == occurrence;
         }
         if !found
-            || self.join.row_filter.is_none()
+            || self.join.row_condition.is_none()
             || self.join.generated
             || self.join.coverage != super::Coverage::Selected
             || !self.join.head_slots.is_empty()

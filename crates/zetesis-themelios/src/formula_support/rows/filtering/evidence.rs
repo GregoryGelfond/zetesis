@@ -3,7 +3,9 @@ use crate::formula_support::{Context, RowSelection};
 
 struct Evidence<F>(F);
 
-impl<F: Fn(zetesis_core::relation::Row<'_, '_>) -> RowSelection> RowFilter for Evidence<F> {
+impl<F: Fn(zetesis_core::relation::Row<'_, '_>) -> RowSelection> NecessaryRowCondition
+    for Evidence<F>
+{
     fn resolve(
         &self,
         _: zetesis_core::catalog::Atoms<'_>,
@@ -327,7 +329,7 @@ struct Pivot {
     first: Cell<Option<usize>>,
 }
 
-impl RowFilter for Pivot {
+impl NecessaryRowCondition for Pivot {
     fn resolve(
         &self,
         _: zetesis_core::catalog::Atoms<'_>,
@@ -557,7 +559,7 @@ struct OpenRows {
     bounded: bool,
 }
 
-impl RowFilter for OpenRows {
+impl NecessaryRowCondition for OpenRows {
     fn single_open(&self) -> bool {
         self.bounded
     }

@@ -8,7 +8,9 @@ struct Selection<F> {
     visits: Cell<usize>,
 }
 
-impl<F: Fn(usize, zetesis_core::relation::Row<'_, '_>) -> RowSelection> RowFilter for Selection<F> {
+impl<F: Fn(usize, zetesis_core::relation::Row<'_, '_>) -> RowSelection> NecessaryRowCondition
+    for Selection<F>
+{
     fn immutable_selection(&self) -> bool {
         self.reuse
     }
@@ -275,7 +277,7 @@ fn optional_selection_respects_remaining_storage() {
     with_fixture(fixture, |support, computation, budget, counters| {
         let limits = FormulaLimits::default();
         let mut join = Join::rule(&rule, support, computation, &limits, budget, counters).unwrap();
-        join.row_filter = Some(&selection);
+        join.row_condition = Some(&selection);
         let observer = computation.lease();
         let current = limits.max_support_bytes
             - computation
