@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use themelios_analysis::Analysis;
 use themelios_program::program::{Atom, Program, Statement};
@@ -24,8 +24,8 @@ pub(crate) struct Summary {
 }
 
 struct Plan {
-    source: Arc<Program>,
     families: Families,
+    leaves: facts::Leaves,
     facts: Vec<facts::Fact>,
     nonfacts: Vec<Option<StatementId>>,
 }
@@ -53,7 +53,7 @@ impl std::fmt::Debug for Summary {
 
 impl Summary {
     pub(crate) fn collect(
-        source: Arc<Program>,
+        source: &Program,
         statements: Vec<WithProvenance<Statement>>,
         owners: Vec<Option<StatementId>>,
         sources: Vec<StatementId>,
@@ -62,7 +62,8 @@ impl Summary {
         site: ProgramSite,
     ) -> Result<(Self, Owners), FormulaFailure> {
         let mut allocation = Checked { budget, site };
-        let reader = families.read(&source, &mut allocation)?;
+        let leaves = families.leaves(source, &mut allocation)?;
+        let reader = families.reader(&leaves);
         let mut representatives = Vec::new();
         let mut signatures = BTreeSet::new();
         for position in families.first_rows() {
@@ -85,7 +86,6 @@ impl Summary {
         }
         let facts = reader.canonical(&mut allocation)?;
         drop(signatures);
-        drop(reader);
         let (program, owners, nonfacts) = Owners::collect_summary(
             statements,
             owners,
@@ -98,8 +98,8 @@ impl Summary {
             Self {
                 program,
                 plan: Some(Plan {
-                    source,
                     families,
+                    leaves,
                     facts,
                     nonfacts,
                 }),
@@ -203,13 +203,8 @@ impl Summary {
         let Some(plan) = &self.plan else {
             return super::analyze(&self.program, limits, budget, fallback);
         };
-        let reader = plan.families.read(
-            &plan.source,
-            &mut Checked {
-                budget,
-                site: fallback,
-            },
-        )?;
+        budget.poll(fallback)?;
+        let reader = plan.families.reader(&plan.leaves);
         let mut scan = super::Preflight::default();
         for entry in self.entries(&reader) {
             match entry {
@@ -273,10 +268,7 @@ impl Summary {
 
     fn rebuild(&self) -> FullProgram {
         let plan = self.plan.as_ref().expect("only compact summaries rebuild");
-        let reader = plan
-            .families
-            .read(&plan.source, &mut Inspection)
-            .unwrap_or_else(|never| match never {});
+        let reader = plan.families.reader(&plan.leaves);
         self.rebuild_with(&reader, &mut Inspection)
             .unwrap_or_else(|never| match never {})
     }
@@ -377,7 +369,7 @@ impl Summary {
         self.charge_atoms(budget, site)?;
         let plan = self.plan.as_ref().expect("compact preparation");
         let mut allocation = Checked { budget, site };
-        let reader = plan.families.read(&plan.source, &mut allocation)?;
+        let reader = plan.families.reader(&plan.leaves);
         let mut count = 0_usize;
         for _ in self.entries(&reader) {
             allocation.budget.poll(site)?;
@@ -431,7 +423,7 @@ impl Summary {
         let mut atoms = Vec::new();
         if let Some(plan) = &self.plan {
             let mut allocation = Checked { budget, site };
-            let reader = plan.families.read(&plan.source, &mut allocation)?;
+            let reader = plan.families.reader(&plan.leaves);
             for entry in self.entries(&reader) {
                 allocation.budget.poll(site)?;
                 match entry {
@@ -462,9 +454,8 @@ impl Summary {
 
     fn charge_atoms(&self, budget: &mut Budget, site: ProgramSite) -> Result<(), FormulaFailure> {
         if let Some(plan) = &self.plan {
-            let reader = plan
-                .families
-                .read(&plan.source, &mut Checked { budget, site })?;
+            budget.poll(site)?;
+            let reader = plan.families.reader(&plan.leaves);
             for entry in self.entries(&reader) {
                 budget.poll(site)?;
                 let (arity, name_bytes) = match entry {

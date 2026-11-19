@@ -243,11 +243,7 @@ impl<'source> Registration<'source> {
         );
         memory.add(0)?;
         let nodes = super::graph_nodes(prepared, &mut memory, limits, counters, location)?;
-        let resolver = certain::Resolver {
-            nodes: &nodes,
-            view,
-            limits,
-        };
+        let resolver = certain::Resolver::new(&nodes, view, limits);
         let mut rules = Vec::new();
         let mut predicates = Vec::new();
         let mut always = Vec::new();
@@ -273,7 +269,9 @@ impl<'source> Registration<'source> {
                         counters.work(limits, rule.location)?;
                         let pattern = positive(&rule.body[occurrence])
                             .expect("a registered input is a positive occurrence");
-                        if let Some(node) = resolver.node(pattern, counters, rule.location)? {
+                        if let Some(node) =
+                            resolver.node(pattern, &mut memory, counters, rule.location)?
+                        {
                             memory.reserve(&mut predicates, 1)?;
                             predicates.push(node);
                         } else {
@@ -303,12 +301,14 @@ impl<'source> Registration<'source> {
                 wake.mark(index, limits, counters, location)?;
             }
         }
-        let scratch_bytes = size_of::<Vec<super::Node<'_>>>()
+        let scratch_bytes = resolver.bytes()
+            + size_of::<Vec<super::Node<'_>>>()
             + nodes.capacity() * size_of::<super::Node<'_>>()
             + size_of::<Vec<Option<Range<usize>>>>()
             + rules.capacity() * size_of::<Option<Range<usize>>>()
             + size_of::<Vec<usize>>()
             + predicates.capacity() * size_of::<usize>();
+        drop(resolver);
         drop(rules);
         drop(predicates);
         drop(nodes);
@@ -513,7 +513,7 @@ fn classify(
             | LiteralIr::HeadGuard(_)
             | LiteralIr::Bind { .. }
             | LiteralIr::Range { .. } => {}
-            LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
+            LiteralIr::AnonymousAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
                 return Ok(Kind::Rich);
             }
         }

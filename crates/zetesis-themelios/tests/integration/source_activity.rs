@@ -13,8 +13,11 @@ fn constant_aggregate_producers_exclude_negative_domains() {
         "q:-2=#max{2}.",
     ] {
         let admitted = formula(&format!("{producer}{{p}}.#project p:not q."));
-        assert!(admitted.projection().is_explicit());
-        assert!(admitted.projection().atoms().is_empty(), "{producer}");
+        assert!(admitted.projective_domain().is_explicit());
+        assert!(
+            admitted.projective_domain().atoms().is_empty(),
+            "{producer}"
+        );
     }
 }
 
@@ -22,7 +25,10 @@ fn constant_aggregate_producers_exclude_negative_domains() {
 fn empty_local_obligations_can_establish_source_facts() {
     for producer in ["q:-r(X):missing(X).", "q:-not r(_)."] {
         let admitted = formula(&format!("{producer}{{p}}.#project p:not q."));
-        assert!(admitted.projection().atoms().is_empty(), "{producer}");
+        assert!(
+            admitted.projective_domain().atoms().is_empty(),
+            "{producer}"
+        );
     }
 }
 
@@ -30,7 +36,7 @@ fn empty_local_obligations_can_establish_source_facts() {
 fn contradictory_optional_guards_keep_the_fixed_domain() {
     for program in ["{p;q}.", "{p;r}.q:-1=#count{1:r}."] {
         let admitted = formula(&format!("{program}#project p:q,not q."));
-        let domain = admitted.projection().atoms();
+        let domain = admitted.projective_domain().atoms();
         assert_eq!(domain.len(), 1, "{program}");
         assert_eq!(domain.at(0).unwrap().predicate().name(), "p");
         assert!(domain.at(0).unwrap().values().is_empty());
@@ -75,30 +81,33 @@ fn rich_activity_work_refusal_is_inclusive() {
         |middle| attempt(middle).is_ok(),
     );
     let accepted = attempt(upper).unwrap();
-    assert_eq!(accepted.projection().atoms().len(), 1);
+    assert_eq!(accepted.projective_domain().atoms().len(), 1);
     let failure = attempt(upper - 1).unwrap_err();
     assert!(matches!(failure, FormulaFailure::Limit {
         resource: FormulaResource::Work, limit, observed, ..
     } if limit == u128::from(upper - 1) && observed == u128::from(upper)));
-    assert_eq!(attempt(upper).unwrap().projection(), accepted.projection());
+    assert_eq!(
+        attempt(upper).unwrap().projective_domain(),
+        accepted.projective_domain()
+    );
 }
 
 #[test]
 fn a_fact_remains_required_in_its_positive_cycle() {
     let admitted = formula("q.q:-q.{p}.#project p:not q.");
-    assert!(admitted.projection().atoms().is_empty());
+    assert!(admitted.projective_domain().atoms().is_empty());
 }
 
 #[test]
 fn unsupported_positive_cycles_have_no_source_atoms() {
     let admitted = formula("q:-r.r:-q.{p}.#project p:q.");
-    assert!(admitted.projection().atoms().is_empty());
+    assert!(admitted.projective_domain().atoms().is_empty());
 }
 
 #[test]
 fn negative_cycles_remain_optional_without_correlation() {
     let admitted = formula("q:-not r.r:-not q.{p}.#project p:q,not q.");
-    let domain = admitted.projection().atoms();
+    let domain = admitted.projective_domain().atoms();
     assert_eq!(domain.len(), 1);
     assert_eq!(domain.at(0).unwrap().predicate().name(), "p");
 }
@@ -106,11 +115,11 @@ fn negative_cycles_remain_optional_without_correlation() {
 #[test]
 fn complete_absence_can_establish_required_negation() {
     let admitted = formula("q:-r.r:-q.s:-not q.{p}.#project p:not s.");
-    assert!(admitted.projection().atoms().is_empty());
+    assert!(admitted.projective_domain().atoms().is_empty());
 }
 
 #[test]
 fn required_cycle_truth_can_eliminate_a_negative_producer() {
     let admitted = formula("q.q:-q.r:-not q.{p}.#project p:r.");
-    assert!(admitted.projection().atoms().is_empty());
+    assert!(admitted.projective_domain().atoms().is_empty());
 }

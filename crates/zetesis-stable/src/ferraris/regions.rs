@@ -409,7 +409,7 @@ impl RegionWalkEngagement {
     }
 }
 
-type Checker<'a> = Option<crate::region_filter::Worker<'a>>;
+type Checker<'a> = Option<crate::constraint_refutation::Worker<'a>>;
 
 self_cell::self_cell! {
     /// The original-source factory owns the preparation borrowed by this
@@ -417,16 +417,16 @@ self_cell::self_cell! {
     /// owner relative to its checker. No checker is shared with another stream,
     /// source or frozen-reduct query. The cell is allocated only when a filter
     /// is installed; its small allocation follows the boxed-checker contract.
-    struct RetainedFilter {
-        owner: crate::region_filter::Filter,
+    struct RetainedRefuter {
+        owner: crate::constraint_refutation::ConstraintRefuter,
         #[not_covariant]
         dependent: Checker,
     }
 }
 
-impl std::fmt::Debug for RetainedFilter {
+impl std::fmt::Debug for RetainedRefuter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RetainedFilter")
+        f.debug_struct("RetainedRefuter")
             .field("factory", self.borrow_owner())
             .finish_non_exhaustive()
     }
@@ -447,7 +447,7 @@ pub(crate) struct RegionSearch {
     /// The tier's sharing state.
     tier: Tier,
     statistics: RegionSearchStatistics,
-    filter: Option<RetainedFilter>,
+    filter: Option<RetainedRefuter>,
     native_byte_limit: u64,
 }
 
@@ -834,7 +834,11 @@ impl RegionSearch {
             statistics,
             parts,
             traversal: Walk::with_state(root, Counting::Never, CandidateKnowledge::default())
-                .with_held_first(),
+                .with_held_first()
+                .with_recomputation(
+                    super::region_frontier::KEPT_KNOWLEDGE,
+                    CandidateKnowledge::shed,
+                ),
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
             tier: Tier::default(),
@@ -857,14 +861,14 @@ impl RegionSearch {
         self.parts.set_learned_store(store);
     }
 
-    pub(super) fn filter(&self) -> Option<&crate::region_filter::Filter> {
-        self.filter.as_ref().map(RetainedFilter::borrow_owner)
+    pub(super) fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
+        self.filter.as_ref().map(RetainedRefuter::borrow_owner)
     }
 
     /// The caller allows installation only before traversal and never replaces
     /// an installed factory, so no checker can outlive its source identity.
-    pub(super) fn set_filter(&mut self, filter: crate::region_filter::Filter) {
-        self.filter = Some(RetainedFilter::new(filter, |_| None));
+    pub(super) fn set_refuter(&mut self, filter: crate::constraint_refutation::ConstraintRefuter) {
+        self.filter = Some(RetainedRefuter::new(filter, |_| None));
     }
 
     /// Release the retained checker on completion, failure or explicit stop.
@@ -950,7 +954,7 @@ impl RegionSearch {
     ) -> Result<bool, Incomplete> {
         permits(
             &self.restrictions,
-            self.filter.as_ref().map(RetainedFilter::borrow_owner),
+            self.filter.as_ref().map(RetainedRefuter::borrow_owner),
             candidate,
             &mut self.scratch,
             budget,
@@ -1015,7 +1019,7 @@ impl RegionSearch {
         let (formulas, narrower) = index.subject(theory)?;
         parts.seed_tier(tier, scratch, budget, &mut statistics.counts)?;
         let before = traversal.statistics();
-        let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
+        let mut advance = |mut check: Option<crate::constraint_refutation::Check<'_, '_>>| {
             let mut context = (&mut *budget, &mut statistics.counts);
             traversal.next_with_copy(
                 &mut context,
@@ -1041,7 +1045,7 @@ impl RegionSearch {
         };
         let visit = if let Some(filter) = filter {
             filter.with_dependent_mut(|filter, worker| {
-                advance(Some(crate::region_filter::Check {
+                advance(Some(crate::constraint_refutation::Check {
                     filter,
                     worker,
                     timings,
@@ -1101,7 +1105,7 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
-    filter: Option<&mut crate::region_filter::Check<'_, '_>>,
+    filter: Option<&mut crate::constraint_refutation::Check<'_, '_>>,
 ) -> Result<Narrowing, Incomplete> {
     let original = reading.original;
     let narrower = reading.narrower;
@@ -1200,7 +1204,7 @@ fn prefer_split<Q: Quota, R>(
 /// restriction owners and their accounted narrowing primitive are reused.
 pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
     restrictions: &Conditions<R>,
-    filter: Option<&crate::region_filter::Filter>,
+    filter: Option<&crate::constraint_refutation::ConstraintRefuter>,
     candidate: &Interpretation,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_>,

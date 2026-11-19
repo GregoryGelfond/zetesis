@@ -45,8 +45,8 @@ pub(super) fn statistics(earlier: &Statistics, later: &Statistics) -> Statistics
             (Some(earlier), Some(later)) => Some(regions(&earlier, later)),
             (earlier, later) => later.or(earlier),
         },
-        region_filter: match (earlier.region_filter, later.region_filter) {
-            (Some(earlier), Some(later)) => Some(crate::RegionFilterStatistics {
+        constraint_refutation: match (earlier.constraint_refutation, later.constraint_refutation) {
+            (Some(earlier), Some(later)) => Some(crate::ConstraintRefutationStatistics {
                 preparations: earlier.preparations.saturating_add(later.preparations),
                 checks: earlier.checks.saturating_add(later.checks),
                 refuted: earlier.refuted.saturating_add(later.refuted),

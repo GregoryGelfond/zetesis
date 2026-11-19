@@ -3,7 +3,7 @@
 
 use std::convert::Infallible;
 
-use zetesis_core::atom_interner::{AtomInterner, Failure as InternFailure, Limits as InternLimits};
+use zetesis_core::atom_registry::{AtomRegistry, Failure as InternFailure, Limits as InternLimits};
 use zetesis_core::catalog::Error as StorageError;
 use zetesis_core::{
     AtomCatalog, FilterRef, PatternRef, TemplateCatalog, TemplateCatalogBuilder, TemplateTerm,
@@ -55,7 +55,7 @@ pub(super) fn admit(
     // Its allowance therefore excludes only the other template metadata.
     let other_catalog = catalog.storage_bytes() - catalog.shared_vocabulary_bytes();
     let owner_limit = remaining(external + other_catalog, limits.max_bytes, None)?;
-    let mut owner = AtomInterner::for_template_catalog(&catalog, owner_limit)
+    let mut owner = AtomRegistry::for_template_catalog(&catalog, owner_limit)
         .map_err(|error| storage(None, error))?;
     for (index, template) in templates.into_iter().enumerate() {
         let existing = template.condition.canonical_catalog().is_some();

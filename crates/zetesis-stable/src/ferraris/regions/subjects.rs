@@ -12,7 +12,7 @@ use super::super::conditions::{Bound, CandidateKnowledge, CountermodelKnowledge}
 use super::arithmetic_counts::ArithmeticKind;
 use super::{BudgetQuota, CandidateReading, meter_failure};
 use crate::budget::{Budget, Quota};
-use crate::region_filter::Check;
+use crate::constraint_refutation::Check;
 use crate::streamed_constraints::ConstraintConsequence;
 use crate::subject::{Pass, Subject, SubjectAttempt, SubjectContext, SubjectStep};
 use crate::{Cancellation, Incomplete, RegionCounts};

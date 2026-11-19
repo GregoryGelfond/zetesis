@@ -4,7 +4,7 @@ use std::convert::Infallible;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use super::support::canonical::template_catalog;
-use zetesis_core::catalog::interner::{AtomInterner, Failure, Limits};
+use zetesis_core::catalog::registry::{AtomRegistry, Failure, Limits};
 use zetesis_core::catalog::{AtomRef, Error};
 use zetesis_core::{
     Atom, AtomCatalog, AtomPattern, Model, Predicate, Template, TemplateCatalog, Term, Value,
@@ -42,7 +42,7 @@ fn limits() -> Limits {
     Limits::for_atoms(16, 1024 * 1024)
 }
 
-fn insert(owner: &mut AtomInterner, value: &str) {
+fn insert(owner: &mut AtomRegistry, value: &str) {
     let value = atom(value);
     owner
         .entry_atom_with(&value, limits(), || Ok::<_, Infallible>(()))
@@ -54,8 +54,8 @@ fn insert(owner: &mut AtomInterner, value: &str) {
 #[test]
 fn independent_writers_do_not_alias_atom_positions() {
     let catalog = vocabulary();
-    let mut left = AtomInterner::for_template_catalog(&catalog, 1024 * 1024).unwrap();
-    let mut right = AtomInterner::for_template_catalog(&catalog, 1024 * 1024).unwrap();
+    let mut left = AtomRegistry::for_template_catalog(&catalog, 1024 * 1024).unwrap();
+    let mut right = AtomRegistry::for_template_catalog(&catalog, 1024 * 1024).unwrap();
     insert(&mut left, "first");
     insert(&mut right, "second");
     let left = left
@@ -73,7 +73,7 @@ fn independent_writers_do_not_alias_atom_positions() {
 #[test]
 fn frozen_catalog_writer_refuses_unknown_terms() {
     let catalog = vocabulary();
-    let mut owner = AtomInterner::for_template_catalog(&catalog, 1024 * 1024).unwrap();
+    let mut owner = AtomRegistry::for_template_catalog(&catalog, 1024 * 1024).unwrap();
     let unknown = atom("not-in-the-vocabulary");
     let result = owner
         .entry_atom_with(&unknown, limits(), || Ok::<_, Infallible>(()))

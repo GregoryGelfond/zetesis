@@ -118,11 +118,12 @@ fn factored_components_decide_their_copied_comparisons() {
             .map(|record| field(record).unwrap())
             .sum()
     };
-    // One witness per component establishes existence before either publishes
-    // atoms. Full emission then visits both two-row components. Every selected
-    // row uses its copied integer comparison, including the existence checks.
-    assert_eq!(total(|record| record.work.join_rows), 2 + 4);
-    assert_eq!(total(|record| record.work.integer_comparisons), 2 + 4);
+    // A witness for the second component establishes existence before the
+    // first publishes atoms. Full emission then visits both two-row
+    // components. Every selected row uses its copied integer comparison,
+    // including the existence check.
+    assert_eq!(total(|record| record.work.join_rows), 1 + 4);
+    assert_eq!(total(|record| record.work.integer_comparisons), 1 + 4);
     assert_eq!(total(|record| record.work.integer_comparison_declines), 0);
     assert_eq!(
         exhaustive(&admitted),

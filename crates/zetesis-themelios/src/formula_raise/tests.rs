@@ -170,3 +170,22 @@ proptest::proptest! {
         occurrence_raise_agrees(&text);
     }
 }
+
+#[test]
+fn unmerged_statements_collect_to_the_merged_program() {
+    use themelios_program::program::Program;
+    for text in [
+        "p(1). p(1). q :- p(1). p(2). q :- p(1).",
+        "a. #program base. a. b :- a. #program base. b :- a. a.",
+        "1{x;y}1. 1{x;y}1. #show x/0. #show x/0. :- x, y.",
+    ] {
+        let source = source(text);
+        let parsed = parse(&source, Dialect::Clingo);
+        let merged = raise(&parsed, &mut metadata::Builder::default()).unwrap();
+        let merged = Program::of_nodes(merged.statements().cloned());
+        let unmerged = raise_statements(&parsed, &mut metadata::Builder::default()).unwrap();
+        let unmerged = Program::of_nodes(unmerged);
+        // Debug renders each statement with its provenance, nested origins included.
+        assert_eq!(format!("{unmerged:?}"), format!("{merged:?}"), "{text}");
+    }
+}

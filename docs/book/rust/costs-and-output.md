@@ -49,7 +49,7 @@ The caller must still establish complete catalog coverage and answer-set
 membership. Equal-looking theories are distinct owners.
 
 `AdmittedFormula`, `AdmittedFormulaBundle` and `StreamedCore` supply an
-`ObjectiveSource` borrow for `ObjectivePlan::new_projected`. The handle ties the
+`ObjectiveSource` borrow for `ObjectivePlan::new_read_set`. The handle ties the
 original theory, complete atom catalog and objectives to the same admitted
 owner. Source interning and publication establish unique catalog coordinates;
 arbitrary catalogs cannot mint this handle. The ordinary `ObjectivePlan::new`
@@ -69,9 +69,9 @@ selected-position storage and the shared index's preparation storage. It counts
 headers, actual vector capacities and live replacement/sort overlap; existing
 limits still govern formula DAGs, joins, tuple keys and priority rows. It is not
 a total process-memory ceiling. Preparation charges scans, identity comparisons,
-shifts and copies to the same work allowance. `new_projected` returns an
-`ObjectiveProjectionAttempt`: `into_parts` separates the completed plan or small
-typed refusal from its `ObjectiveProjectionReceipt`. The receipt retains actual
+shifts and copies to the same work allowance. `new_read_set` returns an
+`ObjectiveReadSetAttempt`: `into_parts` separates the completed plan or small
+typed refusal from its `ObjectiveReadSetReceipt`. The receipt retains actual
 work and observed projection capacity on both success and refusal. Before
 consuming the attempt, `error()` provides the typed refusal with its active
 objective template, performed-work statistics and observed projection peak.

@@ -231,3 +231,48 @@ fn a_narrowing_refusal_precedes_state_copy() {
     assert_eq!(walk.statistics(), RegionStatistics::default());
     assert_eq!(walk.pending(), 1);
 }
+
+#[test]
+fn recomputation_sheds_state_beyond_the_window_and_keeps_coverage() {
+    fn shed(state: &mut State) {
+        state.path.clear();
+    }
+    let visit = |window: Option<usize>| {
+        let mut context = Context::default();
+        let mut walk = Walk::with_state(
+            Region::all_open(4),
+            Counting::Never,
+            State { path: vec![true] },
+        );
+        if let Some(window) = window {
+            walk = walk.with_recomputation(window, shed);
+        }
+        let mut leaves = Vec::new();
+        let mut deepest = 0;
+        while let Some(visit) = walk
+            .next_with_copy(
+                &mut context,
+                |context, entry| Ok(narrow(context, entry)),
+                copy,
+            )
+            .unwrap()
+        {
+            let kept = walk
+                .regions
+                .iter()
+                .filter(|entry| !entry.state.path.is_empty())
+                .count();
+            deepest = deepest.max(kept);
+            if let Visit::Leaf(region, _) = visit {
+                leaves.push(represented(&region));
+            }
+        }
+        (leaves, deepest)
+    };
+    let (all, unbounded) = visit(None);
+    let (shed_leaves, bounded) = visit(Some(1));
+    assert_eq!(all, shed_leaves);
+    assert_eq!(all.len(), 16);
+    assert!(unbounded > 1);
+    assert!(bounded <= 1);
+}

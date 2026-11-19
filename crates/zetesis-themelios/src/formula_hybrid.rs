@@ -26,7 +26,7 @@ use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_owner::Owner;
 use crate::formula_support::{
-    Accounting, CompletedSupport, Counters, PositiveRows, PreparedRule, RowFilter,
+    Accounting, BindRestriction, CompletedSupport, Counters, PositiveRows, PreparedRule,
 };
 use crate::{
     ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, ProgramSite, SourceBundle,
@@ -181,7 +181,7 @@ impl HybridFormula {
 
     /// Complete original projection domain, independent of candidate truth.
     #[must_use]
-    pub fn projection(&self) -> &crate::PreparedProjection {
+    pub fn projective_domain(&self) -> &crate::ProjectiveDomain {
         &self.0.core.0.compiled.projection
     }
 
@@ -1218,7 +1218,7 @@ impl ConstraintChecker<'_> {
             prepared.prepare_rule(rule_index, budget, counters)?;
             let model_selection;
             let region_selection;
-            let filter: &dyn RowFilter = match candidate {
+            let filter: &dyn BindRestriction = match candidate {
                 Candidate::Model(model) => {
                     model_selection = ModelSelection {
                         rows: prepared.rows.as_ref().expect("prepared before model scan"),
@@ -1280,7 +1280,7 @@ pub(crate) fn eligible(rule: &RuleIr) -> bool {
         && rule.body.iter().all(|literal| {
             !matches!(
                 literal,
-                LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_)
+                LiteralIr::AnonymousAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_)
             )
         })
 }
@@ -1393,7 +1393,7 @@ fn literal_atom(
         | LiteralIr::HeadGuard(_)
         | LiteralIr::Bind { .. }
         | LiteralIr::Range { .. } => None,
-        LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
+        LiteralIr::AnonymousAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
             unreachable!("only admitted ordinary constraints are streamed")
         }
     }

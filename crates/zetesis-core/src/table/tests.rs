@@ -68,7 +68,7 @@ fn assert_reference(
     domains: &[&[Value]],
 ) {
     let actual = table
-        .project(domains, Limits::default(), &Cancellation::default())
+        .support(domains, Limits::default(), &Cancellation::default())
         .unwrap();
     let (positions, expected) = reference(source, indices, table.scope(), domains);
     let actual_positions: Vec<_> = (0..indices.len())
@@ -151,7 +151,7 @@ fn catalog_occurrences_retain_their_row_identity() {
     .unwrap();
     let domain = numbers(&[0, 1]);
     let projection = table
-        .project(&[&domain], Limits::default(), &Cancellation::default())
+        .support(&[&domain], Limits::default(), &Cancellation::default())
         .unwrap();
     assert!(projection.table().relation().same_owner(&relation));
     assert_eq!(
@@ -212,7 +212,7 @@ fn typed_domains_do_not_conflate_equal_spellings() {
             .unwrap();
         assert_eq!(selected.rows().collect::<Vec<_>>(), vec![index]);
         let projection = table
-            .project(
+            .support(
                 &[std::slice::from_ref(value)],
                 Limits::default(),
                 &Cancellation::default(),
@@ -256,7 +256,7 @@ fn widening_restores_rows_excluded_by_an_earlier_call() {
     let small = numbers(&[0]);
     let wide = numbers(&[0, 1]);
     let narrow = table
-        .project(
+        .support(
             &[&small, &wide],
             Limits::default(),
             &Cancellation::default(),
@@ -264,7 +264,7 @@ fn widening_restores_rows_excluded_by_an_earlier_call() {
         .unwrap();
     assert_eq!(narrow.words(), &[1]);
     let restored = table
-        .project(&[&wide, &wide], Limits::default(), &Cancellation::default())
+        .support(&[&wide, &wide], Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(restored.words(), &[7]);
     assert_eq!(narrow.words(), &[1]);
@@ -281,14 +281,14 @@ fn equal_domain_sizes_do_not_reuse_stale_rows() {
     let one = numbers(&[1]);
     assert_eq!(
         table
-            .project(&[&zero], Limits::default(), &Cancellation::default())
+            .support(&[&zero], Limits::default(), &Cancellation::default())
             .unwrap()
             .words(),
         &[1]
     );
     assert_eq!(
         table
-            .project(&[&one], Limits::default(), &Cancellation::default())
+            .support(&[&one], Limits::default(), &Cancellation::default())
             .unwrap()
             .words(),
         &[2]
@@ -317,7 +317,7 @@ fn supported_domain_projection_preserves_surviving_rows() {
     let first = numbers(&[0, 1, 2]);
     let second = numbers(&[1, 2]);
     let projected = table
-        .project(
+        .support(
             &[&first, &second],
             Limits::default(),
             &Cancellation::default(),
@@ -327,7 +327,7 @@ fn supported_domain_projection_preserves_surviving_rows() {
         .map(|variable| projected.domain(variable).unwrap().collect())
         .collect();
     let again = table
-        .project_domains(
+        .support_domains(
             &narrowed
                 .iter()
                 .map(|values| Domain::Finite(values.as_slice().into()))
@@ -349,7 +349,7 @@ fn nullary_projection_preserves_every_occurrence() {
         let table =
             Table::prepare(&relation, &[], Limits::default(), &Cancellation::default()).unwrap();
         let projection = table
-            .project(&[], Limits::default(), &Cancellation::default())
+            .support(&[], Limits::default(), &Cancellation::default())
             .unwrap();
         assert_eq!(
             projection
@@ -374,7 +374,7 @@ fn domain_duplicates_have_set_meaning() {
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domain = numbers(&[1, 1, 7]);
     let projection = table
-        .project(&[&domain], Limits::default(), &Cancellation::default())
+        .support(&[&domain], Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(projection.words(), &[1]);
     assert_eq!(
@@ -437,7 +437,7 @@ fn projection_limits_do_not_replace_an_existing_result() {
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domain = numbers(&[1]);
     let first = table
-        .project(&[&domain], Limits::default(), &Cancellation::default())
+        .support(&[&domain], Limits::default(), &Cancellation::default())
         .unwrap();
     let stats = first.statistics();
     let exact = Limits {
@@ -447,11 +447,11 @@ fn projection_limits_do_not_replace_an_existing_result() {
     };
     assert!(
         table
-            .project(&[&domain], exact, &Cancellation::default())
+            .support(&[&domain], exact, &Cancellation::default())
             .is_ok()
     );
     let failure = table
-        .project(
+        .support(
             &[&domain],
             Limits {
                 max_work: stats.work - 1,
@@ -471,7 +471,7 @@ fn projection_limits_do_not_replace_an_existing_result() {
     assert_eq!(first.words(), &[2]);
     assert_eq!(
         table
-            .project(&[&domain], exact, &Cancellation::default())
+            .support(&[&domain], exact, &Cancellation::default())
             .unwrap()
             .words(),
         first.words()
@@ -508,7 +508,7 @@ fn expired_deadlines_preserve_the_prepared_owner() {
     let table =
         Table::prepare(&relation, &[], Limits::default(), &Cancellation::default()).unwrap();
     let failure = table
-        .project(
+        .support(
             &[],
             Limits::default(),
             &Cancellation::with_deadline(Instant::now()).unwrap(),
@@ -518,7 +518,7 @@ fn expired_deadlines_preserve_the_prepared_owner() {
     assert_eq!(failure.cause, Cause::Interrupted(Stop::Deadline));
     assert_eq!(
         table
-            .project(&[], Limits::default(), &Cancellation::default())
+            .support(&[], Limits::default(), &Cancellation::default())
             .unwrap()
             .words(),
         &[1]
@@ -552,7 +552,7 @@ fn invalid_shapes_are_explicit_refusals() {
     .unwrap();
     assert_eq!(
         table
-            .project(&[], Limits::default(), &Cancellation::default())
+            .support(&[], Limits::default(), &Cancellation::default())
             .err()
             .unwrap()
             .cause,
@@ -578,13 +578,13 @@ fn indexed_rayon_preserves_independent_projection_order() {
             .par_iter()
             .map(|domain| {
                 table
-                    .project(&[domain], Limits::default(), &Cancellation::default())
+                    .support(&[domain], Limits::default(), &Cancellation::default())
                     .unwrap()
             })
             .collect()
     });
     assert_eq!(
-        results.iter().map(Projection::words).collect::<Vec<_>>(),
+        results.iter().map(DomainSupport::words).collect::<Vec<_>>(),
         vec![&[4][..], &[3], &[0]]
     );
 }
@@ -628,12 +628,12 @@ fn projection_byte_ceiling_includes_prepared_inputs() {
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domain = numbers(&[1]);
     let actual = table
-        .project(&[&domain], Limits::default(), &Cancellation::default())
+        .support(&[&domain], Limits::default(), &Cancellation::default())
         .unwrap();
     let peak = actual.statistics().peak_bytes;
     assert!(peak > relation.storage().retained_bytes + table.statistics().retained_bytes);
     let failure = table
-        .project(
+        .support(
             &[&domain],
             Limits {
                 max_bytes: peak - 1,
@@ -666,7 +666,7 @@ fn empty_relations_remove_every_supplied_value() {
     .unwrap();
     let domain = numbers(&[1, 2]);
     let actual = table
-        .project(
+        .support(
             &[&domain, &domain],
             Limits::default(),
             &Cancellation::default(),
@@ -711,7 +711,7 @@ fn singleton_domains_match_prepared_equality_queries() {
                 .select_mask(&query, &input, RelationLimits::default())
                 .unwrap();
             let actual = table
-                .project(
+                .support(
                     &[std::slice::from_ref(&left), std::slice::from_ref(&right)],
                     Limits::default(),
                     &Cancellation::default(),

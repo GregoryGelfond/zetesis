@@ -80,7 +80,7 @@ admission policy.
 `AtomCatalog` retains authoritative canonical atom occurrences. `AtomRef`,
 `PredicateRef`, and `TermRef` borrow that storage or ingress descriptions. Semantic
 Eq/Ord/Hash use complete signed and typed contents across independent owners.
-`AtomInterner::for_template_catalog` starts an independent atom writer over a
+`AtomRegistry::for_template_catalog` starts an independent atom writer over a
 closed indexed template vocabulary. It shares term/predicate identities and
 refuses new vocabulary; shared vocabulary never confers shared atom identity.
 

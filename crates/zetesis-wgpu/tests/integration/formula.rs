@@ -2,12 +2,12 @@
 
 use zetesis_algebra::region::Region;
 use zetesis_ferraris::{AdmissionLimits, Node, NodeView, Theory};
-use zetesis_wgpu::{FormulaLimits, FormulaVerdict, GateProjection, ResidualReason};
+use zetesis_wgpu::{BinaryNodeKernel, FormulaLimits, FormulaVerdict, ResidualReason};
 
 pub(crate) mod frozen_guards;
 mod gate_transfer;
 mod numeric_settled;
-mod projection;
+mod node_kernel;
 pub(crate) mod wide;
 
 #[test]
@@ -246,7 +246,7 @@ fn propagate_with(
     theory: &Theory,
     candidate: usize,
     round_limit: usize,
-    projection: GateProjection,
+    node_kernel: BinaryNodeKernel,
 ) -> FormulaVerdict {
     let mask = values(theory, candidate, None);
     if !model(theory, candidate, None) {
@@ -296,9 +296,9 @@ fn propagate_with(
                 variable(theory, b),
                 variable(theory, n),
             ];
-            let permitted = match projection {
-                GateProjection::Enumerated => row_support(node, ids, &domains),
-                GateProjection::Bitwise => bitwise_support(node, ids, &domains),
+            let permitted = match node_kernel {
+                BinaryNodeKernel::Enumerated => row_support(node, ids, &domains),
+                BinaryNodeKernel::Bitwise => bitwise_support(node, ids, &domains),
             };
             for i in 0..3 {
                 domains[ids[i]] &= permitted[i];
@@ -346,7 +346,7 @@ fn propagate_with(
     )
 }
 #[test]
-fn projections_preserve_frozen_query_completions() {
+fn node_kernels_preserve_frozen_query_completions() {
     let mut checked = 0;
     let mut residuals = 0;
     let mut refuted = 0;
@@ -382,8 +382,8 @@ fn projections_preserve_frozen_query_completions() {
                                     || inner & !candidate != 0
                                     || !model(&theory, inner, Some(&mask))
                             });
-                        for projection in GateProjection::ALL {
-                            match propagate_with(&theory, candidate, 32, projection) {
+                        for node_kernel in BinaryNodeKernel::ALL {
+                            match propagate_with(&theory, candidate, 32, node_kernel) {
                                 FormulaVerdict::NotModel => {
                                     assert!(!model(&theory, candidate, None));
                                 }
@@ -417,13 +417,13 @@ fn empty_queries_and_inactive_composites_do_not_forge_stability() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    for projection in GateProjection::ALL {
+    for node_kernel in BinaryNodeKernel::ALL {
         assert_eq!(
-            propagate_with(&empty, 0, 1, projection),
+            propagate_with(&empty, 0, 1, node_kernel),
             FormulaVerdict::NoProperSubset
         );
         assert_eq!(
-            propagate_with(&empty, 0, 0, projection),
+            propagate_with(&empty, 0, 0, node_kernel),
             FormulaVerdict::Residual(ResidualReason::RoundLimit, Region::all_open(0))
         );
     }
@@ -447,9 +447,9 @@ fn empty_queries_and_inactive_composites_do_not_forge_stability() {
     // connective must be disabled. The proper empty subset remains possible.
     let mut only_empty = Region::all_open(1);
     assert!(only_empty.cut(0));
-    for projection in GateProjection::ALL {
+    for node_kernel in BinaryNodeKernel::ALL {
         assert_eq!(
-            propagate_with(&theory, 1, 16, projection),
+            propagate_with(&theory, 1, 16, node_kernel),
             FormulaVerdict::Residual(ResidualReason::FixedPoint, only_empty.clone())
         );
     }

@@ -4,7 +4,7 @@
 use crate::test_support::theory;
 use zetesis_algebra::{Cancellation, Stop};
 
-use super::super::{Closure, Meter, Step, support::Progress};
+use super::super::{Meter, NarrowingState, Step, support::Progress};
 
 use crate::{
     AdmissionLimits, Narrower, Narrowing, NarrowingScratch, NarrowingStatistics, Node,
@@ -145,7 +145,7 @@ fn support_attempt<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     let mut knowledge = index.knowledge();
     let mut lists = NarrowingScratch::default();
     lists.common.prepare(theory.atom_count());
-    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: super::compact_mut(&mut knowledge),
         lists: &mut lists.common,
         learning: &mut lists.learning,

@@ -135,6 +135,24 @@ impl<'a> TermRef<'a> {
         }
     }
 
+    /// A canonical term's dense identity in its vocabulary, for keying a
+    /// caller's table or rank; `None` for a derived, ingress or node term.
+    /// Identities of different vocabularies may coincide: confirm with
+    /// [`Self::same_vocabulary`].
+    #[must_use]
+    pub fn canonical_position(self) -> Option<usize> {
+        self.canonical().map(|(_, id)| id.position())
+    }
+
+    /// Whether two canonical terms share one vocabulary, so their
+    /// [`Self::canonical_position`]s are comparable; `None` when either is
+    /// not canonical.
+    #[must_use]
+    pub fn same_vocabulary(self, other: Self) -> Option<bool> {
+        let ((left, _), (right, _)) = (self.canonical()?, other.canonical()?);
+        Some(left.same_vocabulary(right))
+    }
+
     // Prefix membership suffices: the segment directory covers exactly the
     // counted identities, and an operation resolves the term when it reads it.
     pub(crate) fn new(snapshot: impl Into<Read<'a>>, id: TermId) -> Option<Self> {
@@ -727,6 +745,23 @@ impl<'a> PredicateRef<'a> {
     fn canonical_equality(self, other: Self) -> Option<bool> {
         let ((left, left_id), (right, right_id)) = (self.canonical()?, other.canonical()?);
         left.same_vocabulary(right).then_some(left_id == right_id)
+    }
+
+    /// Whether two canonical predicates of one vocabulary are the same, by
+    /// identity alone: no name is read. `None` when either is not canonical
+    /// or their vocabularies differ.
+    #[must_use]
+    pub fn same_canonical(self, other: Self) -> Option<bool> {
+        self.canonical_equality(other)
+    }
+
+    /// A canonical predicate's dense position in its vocabulary, for keying
+    /// a caller's table; `None` for an ingress predicate. Positions of
+    /// different vocabularies may coincide: confirm a hit with
+    /// [`Self::same_canonical`].
+    #[must_use]
+    pub fn canonical_position(self) -> Option<usize> {
+        self.canonical().map(|(_, id)| id.position())
     }
 
     fn read(self) -> PredicateRead<'a> {

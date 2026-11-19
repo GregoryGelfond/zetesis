@@ -1,11 +1,11 @@
 //! Append-built columns can have different physical widths in one upload.
 
 use super::*;
-use zetesis_core::atom_interner::{AtomInterner, Limits as AtomLimits};
+use zetesis_core::atom_registry::{AtomRegistry, Limits as AtomLimits};
 use zetesis_core::relation::{Catalog, Column};
 
-fn appended() -> (AtomInterner, Catalog) {
-    let mut owner = AtomInterner::default();
+fn appended() -> (AtomRegistry, Catalog) {
+    let mut owner = AtomRegistry::default();
     let atom_limits = AtomLimits::for_atoms(1_024, 4 * 1024 * 1024);
     let predicate = Predicate::new("mixed", 3).unwrap();
     let declared = owner

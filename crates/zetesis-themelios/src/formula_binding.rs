@@ -153,6 +153,24 @@ impl Binding<'static> {
             .map_err(|error| failure(error, location))
     }
 
+    /// Copy a present source slot's identity under its borrowed witness, so no
+    /// vocabulary handle is retained; charged exactly as [`Self::set`].
+    pub(crate) fn copy_present(
+        &mut self,
+        variable: usize,
+        source: AssignmentSlice<'_>,
+        source_variable: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        self.owned()
+            .copy_slot_with(variable, source, source_variable, || {
+                counters.work(limits, location)
+            })
+            .map_err(|error| failure(error, location))
+    }
+
     /// A metadata copy keeps source absence ahead of destination failures and
     /// imposes no accessible-reader-prefix requirement on either frame.
     pub(crate) fn copy_slot(

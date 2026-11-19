@@ -281,17 +281,17 @@ fn require_profile_device(profile: &GpuFormulaProfile, backend: GpuApi) {
     println!(
         "profile adapter={:?} projection={}",
         profile.info().metadata(),
-        profile.projection().label()
+        profile.node_kernel().label()
     );
 }
 
 fn reused_profile(backend: GpuApi) {
     use zetesis_ferraris::{AdmissionLimits, Node};
-    for projection in GateProjection::ALL {
-        let profile = GpuFormulaProfile::new_selected_with_projection(
+    for node_kernel in BinaryNodeKernel::ALL {
+        let profile = GpuFormulaProfile::new_selected_with_node_kernel(
             GpuOptions::default(),
             GpuSelection { api: backend },
-            projection,
+            node_kernel,
         )
         .unwrap();
         require_profile_device(&profile, backend);
@@ -320,7 +320,7 @@ fn reused_profile(backend: GpuApi) {
                     .same_instance(previous.compiled_profile())
             );
             assert!(oracle.context().same_instance(profile.context()));
-            assert_eq!(oracle.projection(), projection);
+            assert_eq!(oracle.node_kernel(), node_kernel);
             assert_eq!(oracle.epoch, 0);
             assert!(oracle.resident.is_none());
             assert!(oracle.last_batch_stats().is_none());
@@ -370,13 +370,15 @@ fn compilation_identity(backend: GpuApi) {
     assert!(profile.same_instance(&profile.clone()));
     let independent = GpuFormulaProfile::from_context(profile.context()).unwrap();
     assert!(profile.context().same_instance(independent.context()));
-    assert_eq!(profile.projection(), independent.projection());
+    assert_eq!(profile.node_kernel(), independent.node_kernel());
     assert!(!profile.same_instance(&independent));
-    let bitwise =
-        GpuFormulaProfile::from_context_with_projection(profile.context(), GateProjection::Bitwise)
-            .unwrap();
+    let bitwise = GpuFormulaProfile::from_context_with_node_kernel(
+        profile.context(),
+        BinaryNodeKernel::Bitwise,
+    )
+    .unwrap();
     assert!(profile.context().same_instance(bitwise.context()));
-    assert_eq!(bitwise.projection(), GateProjection::Bitwise);
+    assert_eq!(bitwise.node_kernel(), BinaryNodeKernel::Bitwise);
     assert!(!profile.same_instance(&bitwise));
 }
 
@@ -474,7 +476,7 @@ fn fixed_compilation(backend: GpuApi) {
             .unwrap();
     let fixed = GpuFormulaProfile::from_context_with_kernel(
         &context,
-        GateProjection::default(),
+        BinaryNodeKernel::default(),
         crate::GpuKernelOptions {
             workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(crate::GpuWorkgroupSize::Threads128),
             ..crate::GpuKernelOptions::default()

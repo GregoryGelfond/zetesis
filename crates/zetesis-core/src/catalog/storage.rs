@@ -33,7 +33,7 @@ use rows::{RowBase, RowView};
 
 use budget::Budget;
 use index::Index;
-pub(crate) use intern::PreparedAtom;
+pub(crate) use intern::{PreparedAtom, RowsStart};
 pub(crate) use lookup::TermLookup;
 pub(crate) use read::{AtomScope, Read, VocabularyScope};
 pub(super) use segments::{Atom, Predicate, Term};
@@ -54,6 +54,15 @@ impl TermId {
     pub(crate) fn position(self) -> usize {
         self.0 as usize
     }
+    /// The identity word an interned relation uses as its equality ID.
+    pub(crate) const fn word(self) -> u32 {
+        self.0
+    }
+    /// The identity a published equality word denotes; meaningful only in
+    /// the vocabulary that assigned it.
+    pub(crate) const fn from_word(word: u32) -> Self {
+        Self(word)
+    }
 }
 identifier!(PredicateId);
 impl PredicateId {
@@ -62,6 +71,11 @@ impl PredicateId {
     }
 }
 identifier!(AtomId);
+impl AtomId {
+    pub(crate) fn word(self) -> u32 {
+        self.0
+    }
+}
 
 /// A typed refusal; previously published snapshots remain valid.
 #[derive(Clone, Debug, PartialEq, Eq)]

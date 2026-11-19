@@ -6,22 +6,24 @@ use zetesis_core::{Predicate, Template, Term, Value};
 
 use super::{
     columns::{self, Column},
-    reserved,
+    reserve_exact,
 };
 use crate::expansion::Budget;
 use crate::{AdmissionFailure, ExpansionFailure, ExpansionResource, ProgramSite};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(super) struct Product {
-    predicate: Predicate,
+    predicate: Option<Predicate>,
     columns: Vec<Column>,
     rows: usize,
+    /// Column shells kept from an earlier use of this product.
+    spare: Vec<Column>,
 }
 
 impl Product {
     #[cfg(test)]
     pub(super) fn retained_bytes(&self) -> usize {
-        self.predicate.name().len()
+        self.predicate().name().len()
             + self.columns.capacity() * size_of::<Column>()
             + self
                 .columns
@@ -30,14 +32,20 @@ impl Product {
                 .sum::<usize>()
     }
 
+    /// Check one alternative into this product, reusing its storage; false,
+    /// with nothing kept, when the alternative has no row.
     pub(super) fn prepare(
+        &mut self,
         atom: &Atom,
         arguments: &[SourceTerm],
+        sizes: &mut Vec<(u128, u128)>,
         logical_bytes: &mut u128,
         budget: &mut Budget,
         location: ProgramSite,
-    ) -> Result<Option<Self>, ExpansionFailure> {
-        let mut sizes = reserved(arguments.len(), budget, location)?;
+    ) -> Result<bool, ExpansionFailure> {
+        self.recycle();
+        sizes.clear();
+        reserve_exact(sizes, arguments.len(), budget, location)?;
         for term in arguments {
             sizes.push(columns::size(term, budget, location)?);
         }
@@ -55,7 +63,7 @@ impl Product {
             location,
         )?;
         if count == 0 {
-            return Ok(None);
+            return Ok(false);
         }
         budget.charge(
             ExpansionResource::ScalarBytes,
@@ -64,7 +72,7 @@ impl Product {
         )?;
         logical_family(
             atom,
-            &sizes,
+            sizes,
             count,
             intermediate,
             logical_bytes,
@@ -77,20 +85,28 @@ impl Product {
             crate::coherence::core_sign(atom.sign),
         )
         .map_err(|error| AdmissionFailure::Construction { error, location })?;
-        let mut columns = reserved(arguments.len(), budget, location)?;
+        reserve_exact(&mut self.columns, arguments.len(), budget, location)?;
         let mut copied_bytes = 0_u128;
-        for (term, (width, _)) in arguments.iter().zip(sizes) {
-            let (column, payload) = Column::prepare(term, budget, location)?;
+        for (term, (width, _)) in arguments.iter().zip(sizes.iter()) {
+            let mut column = self.spare.pop().unwrap_or_default();
+            let payload = column.prepare(term, budget, location)?;
             copied_bytes = copied_bytes.saturating_add((count / width).saturating_mul(payload));
-            columns.push(column);
+            self.columns.push(column);
         }
-        let mut product = Self {
-            predicate,
-            columns,
-            rows: usize::try_from(count).expect("Templates charge has a usize ceiling"),
-        };
-        product.charge_copies(copied_bytes, budget, location)?;
-        Ok(Some(product))
+        self.predicate = Some(predicate);
+        self.rows = usize::try_from(count).expect("Templates charge has a usize ceiling");
+        self.charge_copies(copied_bytes, budget, location)?;
+        Ok(true)
+    }
+
+    /// Drop this product's values and keep its storage for the next use.
+    pub(super) fn recycle(&mut self) {
+        self.predicate = None;
+        self.rows = 0;
+        for mut column in self.columns.drain(..).rev() {
+            column.recycle();
+            self.spare.push(column);
+        }
     }
 
     pub(super) fn len(&self) -> usize {
@@ -98,7 +114,9 @@ impl Product {
     }
 
     pub(super) fn predicate(&self) -> &Predicate {
-        &self.predicate
+        self.predicate
+            .as_ref()
+            .expect("a kept product has its predicate")
     }
 
     pub(super) fn columns(&self) -> &[Column] {

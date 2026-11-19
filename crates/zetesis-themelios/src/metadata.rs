@@ -9,9 +9,9 @@ pub(crate) use vocabulary::{
 };
 pub use vocabulary::{MetadataStorageError, MetadataStorageLimits};
 mod selection;
-mod projection;
+mod projective;
 
-pub use projection::{PreparedProjection, ProjectSelection};
+pub use projective::{ProjectDirectives, ProjectiveDomain};
 
 pub use selection::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, OutputSelection, PreparedSelection,
@@ -153,7 +153,7 @@ pub struct SourceMetadata {
     directives: Vec<Directive>,
     output: OutputSelection,
     observations: crate::observation::ObservationProgram,
-    projection: ProjectSelection,
+    projection: ProjectDirectives,
 }
 impl PartialEq for SourceMetadata {
     fn eq(&self, other: &Self) -> bool {
@@ -172,7 +172,7 @@ pub(crate) struct Builder {
     directives: Vec<Directive>,
     output: selection::Builder,
     observations: Vec<crate::observation::Directive>,
-    projection: projection::Builder,
+    projection: projective::Builder,
 }
 impl SourceMetadata {
     /// Every original occurrence in source identity/span order, including duplicates.
@@ -215,7 +215,7 @@ impl SourceMetadata {
     }
     /// Authored projection policy, independent of full answer identity.
     #[must_use]
-    pub fn project_selection(&self) -> &ProjectSelection {
+    pub fn project_directives(&self) -> &ProjectDirectives {
         &self.projection
     }
     pub(crate) fn into_observations(self) -> crate::observation::ObservationProgram {

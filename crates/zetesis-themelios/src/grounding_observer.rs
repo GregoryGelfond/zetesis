@@ -4,8 +4,21 @@ mod profile;
 
 use crate::ProgramSite;
 
-pub(crate) use profile::{Event, Profile, Work};
-pub use profile::{GroundingOutcome, GroundingPhase, GroundingWork};
+pub(crate) use profile::{Event, Profile, Work, operator};
+pub use profile::{GroundingOperator, GroundingOutcome, GroundingPhase, GroundingWork};
+
+/// Receives the boundaries of the operators inside one grounding phase.
+///
+/// Operators of one phase are sequential and do not nest; each enter is
+/// followed by its exit on the coordinating thread, including on refusal and
+/// unwind. Callbacks introduce no work charge, and the frontend reads no clock:
+/// an implementation owns any timing. Parallel workers never call it.
+pub trait OperatorObserver {
+    /// An operator begins.
+    fn operator_enter(&self, operator: GroundingOperator);
+    /// The operator that began last ends.
+    fn operator_exit(&self, operator: GroundingOperator);
+}
 
 /// Outcome of optional numeric analysis over all prepared producers and compact
 /// fact columns. This synchronous borrowed view cannot outlive the attempt.
@@ -67,6 +80,13 @@ pub trait GroundingObserver {
     /// Observers delegating the domain callback can delegate this request too.
     fn domain_diagnostics_enabled(&self) -> bool {
         true
+    }
+
+    /// Request operator boundaries inside the phases, sampled with
+    /// [`Self::details_enabled`] when each grounding profile is created and
+    /// used only when details are enabled. The default requests none.
+    fn operators(&self) -> Option<std::rc::Rc<dyn OperatorObserver>> {
+        None
     }
 
     /// Observe the actual optional domain attempt before final rule guards.

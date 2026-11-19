@@ -94,7 +94,7 @@ for the exact callback, capacity and final allocation boundaries, and the
 
 ## Building a catalog during grounding
 
-`zetesis_core::atom_interner::AtomInterner` combines one canonical store with
+`zetesis_core::atom_registry::AtomRegistry` combines one canonical store with
 committed and pending discovery maps. Lookup returns an existing discovery
 position or a checked vacant entry. Insertion imports missing canonical
 components before publishing the new discovery position. An inverse index maps
@@ -152,7 +152,7 @@ semantic descent in two target-sized words and replay links without repeating
 comparisons. Occupied entries do not change mutation scratch. The certificates
 add only fixed owner metadata; both indexes still contain one node per discovered
 atom, and the inverse needs no array spanning undiscovered canonical identities. These paths share the same checked insertion and publication in
-[`AtomAppender`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs).
+[`AtomAppender`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/registry.rs).
 
 `AtomAppender::order_selected_with` orders a unique selection of committed or
 pending discovery positions through that same semantic index. It validates the
@@ -184,7 +184,7 @@ order. Consuming an interner transfers its discovery map and shares the sealed
 canonical prefix with the immutable catalog; it releases construction indexes. Positions
 belong to their owner and must not be compared across unrelated catalogs as
 semantic identities. The
-[`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs)
+[`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/registry.rs)
 documents the entry, borrowing, allocation and final-transfer contracts.
 The bounded
 [`atom_interning` example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#appendable-atom-interning-probe)
@@ -192,7 +192,7 @@ checks typed identities and append rounds, and reports work and storage separate
 
 ## Sharing a closed catalog
 
-`AtomInterner::into_closed_with` consumes a writer into a `ClosedCatalog`, retaining
+`AtomRegistry::into_closed_with` consumes a writer into a `ClosedCatalog`, retaining
 its canonical rows, vocabulary and exact lookup index. `for_closed_catalog`
 creates an independent writer over that shared base. Its discovery set starts
 empty; later discoveries may select an existing base row or append a new row
@@ -221,7 +221,7 @@ accounts for external owners separately. `prior_publication_metadata_bytes`
 authenticates a publication from the original writer and reports only its
 independent metadata. Equal content or a shared vocabulary is insufficient to
 deduct shared storage. See the
-[`closed-catalog API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner/closed.rs)
+[`closed-catalog API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/registry/closed.rs)
 and [`lookup correspondence`](../lean/correspondence.md).
 
 ## Borrowing and explicit copies

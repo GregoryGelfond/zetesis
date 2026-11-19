@@ -45,7 +45,7 @@ fn prepare(text: &str) -> crate::formula::Preparation {
     }
     .prepare(
         &std::sync::Arc::new(raised.program().clone()),
-        metadata.project_selection().clone(),
+        metadata.project_directives().clone(),
     )
     .unwrap();
     crate::formula::Preparation {
@@ -286,7 +286,7 @@ fn objective_declarations_exclude_partition() {
 #[test]
 fn signature_projection_excludes_partition() {
     let prepared = prepare("p(1). d(X):-p(X). #project d/1.");
-    assert!(prepared.program.project_selection.is_explicit());
+    assert!(prepared.program.project_directives.is_explicit());
     assert!(matches!(
         partition(prepared).unwrap(),
         Partition { terminal: None, .. }

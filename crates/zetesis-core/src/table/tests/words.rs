@@ -110,17 +110,17 @@ fn projection_keeps_its_original_record_layout() {
         statistics: Statistics,
     }
     assert_eq!(
-        size_of::<Projection<'_, '_, '_>>(),
+        size_of::<DomainSupport<'_, '_, '_>>(),
         size_of::<Original<'_>>()
     );
     assert_eq!(
-        align_of::<Projection<'_, '_, '_>>(),
+        align_of::<DomainSupport<'_, '_, '_>>(),
         align_of::<Original<'_>>()
     );
     macro_rules! offset {
         ($field:ident) => {
             assert_eq!(
-                offset_of!(Projection<'_, '_, '_>, $field),
+                offset_of!(DomainSupport<'_, '_, '_>, $field),
                 offset_of!(Original<'_>, $field)
             );
         };
@@ -144,10 +144,10 @@ fn projections_borrow_the_same_unchanged_table() {
     let supports = (table.supports.as_ptr(), table.supports.capacity());
     let coherent = (table.coherent.as_ptr(), table.coherent.capacity());
     let first = table
-        .project(&[&values], Limits::default(), &Cancellation::default())
+        .support(&[&values], Limits::default(), &Cancellation::default())
         .unwrap();
     let second = table
-        .project(&[&values], Limits::default(), &Cancellation::default())
+        .support(&[&values], Limits::default(), &Cancellation::default())
         .unwrap();
     assert!(std::ptr::eq(first.table, &raw const table));
     assert!(std::ptr::eq(second.table, &raw const table));
