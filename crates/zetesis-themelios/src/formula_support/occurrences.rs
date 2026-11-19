@@ -9,7 +9,7 @@
 use super::components::{Pattern, Predicate};
 use crate::FormulaFailure;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
-use crate::formula_ir::{AggregateKey, HeadIr, LiteralIr, Projection, RuleIr};
+use crate::formula_ir::{AggregateKey, ExistentialProjection, HeadIr, LiteralIr, RuleIr};
 
 /// One atom occurrence, by its compiled coordinate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -113,15 +113,15 @@ pub(super) fn frame(
 }
 
 fn projection<'ir>(
-    value: &'ir Projection,
+    value: &'ir ExistentialProjection,
     visitor: &mut impl Visitor,
     pending: &mut Vec<&'ir [LiteralIr]>,
 ) -> Result<(), FormulaFailure> {
     match value {
-        Projection::Arguments { predicate, .. } => {
+        ExistentialProjection::Arguments { predicate, .. } => {
             visitor.occurrence(Occurrence::Projected(*predicate))?;
         }
-        Projection::Witnesses { atom, bindings, .. } => {
+        ExistentialProjection::Witnesses { atom, bindings, .. } => {
             visitor.occurrence(Occurrence::Atom(*atom))?;
             pending.push(bindings);
         }

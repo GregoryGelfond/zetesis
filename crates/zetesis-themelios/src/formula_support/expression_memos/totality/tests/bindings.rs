@@ -15,7 +15,7 @@ fn certificate(source: &str, family: bool) -> bool {
                 .any(|literal| matches!(literal, LiteralIr::Bind { .. }))
         );
         let limits = FormulaLimits::default();
-        let mut projections = Projections::new(&Context::new(
+        let mut expression_memos = ExpressionMemos::new(&Context::new(
             &*computation,
             &limits,
             counters,
@@ -40,14 +40,14 @@ fn certificate(source: &str, family: bool) -> bool {
                 )
                 .unwrap()
             );
-            projections.total_family(
+            expression_memos.total_family(
                 rule,
                 support,
                 &mut Evaluation::default(),
                 Context::new(computation, &limits, counters, rule.location),
             )
         } else {
-            projections.total_body(
+            expression_memos.total_body(
                 rule,
                 support,
                 &mut Evaluation::default(),
@@ -120,7 +120,7 @@ fn generated_hulls_do_not_publish_empty_projection_domains() {
         |program, support, computation, counters| {
             let rule = constraints(program).next().unwrap();
             let limits = FormulaLimits::default();
-            let mut projections = Projections::new(&Context::new(
+            let mut expression_memos = ExpressionMemos::new(&Context::new(
                 &*computation,
                 &limits,
                 counters,
@@ -128,7 +128,7 @@ fn generated_hulls_do_not_publish_empty_projection_domains() {
             ))
             .unwrap();
             assert!(
-                projections
+                expression_memos
                     .total_body(
                         rule,
                         support,
@@ -145,7 +145,7 @@ fn generated_hulls_do_not_publish_empty_projection_domains() {
                     _ => None,
                 })
                 .unwrap();
-            let projection = projections
+            let projection = expression_memos
                 .values
                 .iter()
                 .find(|projection| projection.slot == target)

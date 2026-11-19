@@ -125,7 +125,7 @@ fn body_totality_keeps_generated_head_obligations_separate() {
         assert!(join.certified_total);
         assert!(
             !join
-                .projections
+                .expression_memos
                 .total_family(
                     rule,
                     support,

@@ -10,7 +10,7 @@ use themelios_program::term::{Term, Variable};
 use zetesis_core::ValueNodeRef;
 
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, LiteralIr, Operation, Projection, Variables};
+use crate::formula_ir::{Compiler, ExistentialProjection, LiteralIr, Operation, Variables};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode, push, reserve};
 use crate::{ExpansionResource, FormulaFailure, FormulaResource};
 
@@ -76,7 +76,7 @@ impl Compiler<'_> {
             crate::coherence::core_sign(atom.sign),
         )?;
         let projection = if patterns.is_empty() {
-            Projection::Arguments { predicate, terms }
+            ExistentialProjection::Arguments { predicate, terms }
         } else {
             self.projection_witnesses(predicate, terms, patterns, variables)?
         };
@@ -177,7 +177,7 @@ impl Compiler<'_> {
         terms: Vec<Option<CoreTerm>>,
         arguments: Vec<ArgumentPattern>,
         variables: &Variables,
-    ) -> Result<Projection, FormulaFailure> {
+    ) -> Result<ExistentialProjection, FormulaFailure> {
         let inputs = variables.count;
         let mut count = inputs;
         let mut captured = Vec::new();
@@ -205,7 +205,7 @@ impl Compiler<'_> {
             self.budget,
             self.location,
         )?;
-        Ok(Projection::Witnesses {
+        Ok(ExistentialProjection::Witnesses {
             atom,
             bindings,
             variables: count,

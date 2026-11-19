@@ -12,7 +12,7 @@ use zetesis_core::PatternRef;
 use super::Component;
 use crate::FormulaFailure;
 use crate::formula_ground::Builder;
-use crate::formula_ir::{Expression, LiteralIr, Operation, Projection, RuleIr};
+use crate::formula_ir::{ExistentialProjection, Expression, LiteralIr, Operation, RuleIr};
 use crate::formula_support::{StorageLease, reserve};
 
 pub(super) struct Plan {
@@ -310,7 +310,7 @@ fn scope(
             pattern_scope(builder, rule, pattern.atom, scratch)?;
         }
         LiteralIr::ProjectedAtom(_, projection) => {
-            let Projection::Arguments { terms, .. } = projection else {
+            let ExistentialProjection::Arguments { terms, .. } = projection else {
                 return Ok(false);
             };
             for term in terms.iter().flatten() {
@@ -461,7 +461,7 @@ fn copy_literal(
             )
         }
         LiteralIr::ProjectedAtom(negation, projection) => {
-            let Projection::Arguments {
+            let ExistentialProjection::Arguments {
                 predicate,
                 terms: original,
             } = projection
@@ -481,7 +481,7 @@ fn copy_literal(
             }
             LiteralIr::ProjectedAtom(
                 *negation,
-                Projection::Arguments {
+                ExistentialProjection::Arguments {
                     predicate: *predicate,
                     terms,
                 },

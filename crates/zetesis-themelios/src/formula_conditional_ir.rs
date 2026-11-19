@@ -7,7 +7,7 @@ use themelios_program::program::{
 use themelios_program::term::Term;
 
 use crate::formula_guard::Guard;
-use crate::formula_ir::{Compiler, LiteralIr, LocalFamily, Projection, Variables};
+use crate::formula_ir::{Compiler, ExistentialProjection, LiteralIr, LocalFamily, Variables};
 use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, InputLimit};
 
 pub(crate) struct ConditionalIr {
@@ -44,7 +44,7 @@ pub(crate) struct Alternative {
 /// the caller disjoins the resulting signed source alternatives afterwards.
 pub(crate) enum ConsequentOperand {
     Atom(AtomPattern),
-    Projection(Projection),
+    Projection(ExistentialProjection),
 }
 
 impl Compiler<'_> {

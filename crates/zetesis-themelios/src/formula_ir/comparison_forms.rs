@@ -3,7 +3,7 @@
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 
 use super::integer::WithoutForm;
-use super::{Comparison, HeadIr, LiteralIr, ObjectiveIr, Projection, RuleIr};
+use super::{Comparison, ExistentialProjection, HeadIr, LiteralIr, ObjectiveIr, RuleIr};
 
 /// How the comparison literals of a prepared program were compiled: with an
 /// integer comparison form, which decides a row with machine integers when the
@@ -126,8 +126,8 @@ impl ComparisonForms {
         }
     }
 
-    fn projection(&mut self, projection: &Projection) {
-        if let Projection::Witnesses { bindings, .. } = projection {
+    fn projection(&mut self, projection: &ExistentialProjection) {
+        if let ExistentialProjection::Witnesses { bindings, .. } = projection {
             self.literals(bindings);
         }
     }

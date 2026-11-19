@@ -28,7 +28,7 @@ use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
-use crate::formula_ir::{HeadIr, LiteralIr, Prepared, Projection, RuleIr};
+use crate::formula_ir::{ExistentialProjection, HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::family::{Evidence, Warnings};
 use crate::formula_support::{Computation, Counters, Ir, Join, Support};
 use crate::{FormulaFailure, FormulaLimits};
@@ -38,7 +38,7 @@ enum Continue<'a> {
     None,
     Head(&'a HeadIr),
     Consequent(&'a Consequent),
-    Projection(&'a Projection),
+    Projection(&'a ExistentialProjection),
 }
 
 struct Frame<'a, 'source> {
@@ -407,13 +407,13 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn projection(
         &mut self,
-        projection: &'source Projection,
+        projection: &'source ExistentialProjection,
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         match projection {
-            Projection::Arguments { .. } => Ok(false),
-            Projection::Witnesses {
+            ExistentialProjection::Arguments { .. } => Ok(false),
+            ExistentialProjection::Witnesses {
                 bindings,
                 variables,
                 inputs,
@@ -729,7 +729,10 @@ impl<'a> SyntaxScan<'a, '_> {
                     self.push(Syntax::Body(&alternative.bindings))?;
                 }
             }
-            Syntax::Continued(Continue::Projection(Projection::Witnesses { bindings, .. })) => {
+            Syntax::Continued(Continue::Projection(ExistentialProjection::Witnesses {
+                bindings,
+                ..
+            })) => {
                 self.push(Syntax::Body(bindings))?;
             }
             Syntax::Continued(_) => {}

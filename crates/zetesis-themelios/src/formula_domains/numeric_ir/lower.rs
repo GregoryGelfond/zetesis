@@ -14,7 +14,9 @@ use zetesis_domain::{Widening, numeric};
 
 use crate::ProgramSite;
 use crate::formula_facts::ColumnSegment;
-use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, Prepared, Projection, RuleIr};
+use crate::formula_ir::{
+    ExistentialProjection, Expression, HeadIr, LiteralIr, Operation, Prepared, RuleIr,
+};
 use crate::formula_support::components::{Pattern, Scalar, Term};
 
 use super::census::{Occurrence, Query, Requests};
@@ -505,7 +507,7 @@ impl<'prepared> Lowering<'_, 'prepared> {
                     self.positive(atom, visible, &mut rule.bindings, input)?;
                 }
                 LiteralIr::ProjectedAtom(DefaultNegation::None, projection) => match projection {
-                    Projection::Arguments { predicate, terms } => {
+                    ExistentialProjection::Arguments { predicate, terms } => {
                         let predicate = predicate
                             .resolve(self.components)
                             .ok_or(Error::InvalidInput)?;
@@ -523,7 +525,7 @@ impl<'prepared> Lowering<'_, 'prepared> {
                             }
                         }
                     }
-                    Projection::Witnesses { atom, inputs, .. } => {
+                    ExistentialProjection::Witnesses { atom, inputs, .. } => {
                         let atom = atom.resolve(self.components).ok_or(Error::InvalidInput)?;
                         self.positive(atom, visible.min(*inputs), &mut rule.bindings, input)?;
                     }

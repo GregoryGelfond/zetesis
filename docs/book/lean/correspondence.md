@@ -5123,7 +5123,7 @@ owner authentication and preservation of admission remain Rust obligations;
 existing Lean laws do not certify this new execution consumer.
 
 The optional Rust
-[finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/totality.rs)
+[finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/expression_memos/totality.rs)
 adds a separate justification for ordinary row selection. A full positive
 column of the immutable snapshot covers every full binding's value at that
 variable, even when it contains extra values excluded by another argument or

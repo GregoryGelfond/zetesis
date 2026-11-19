@@ -619,7 +619,7 @@ fn all_allowed_groups_keep_indexed_probes() {
             };
             // No spare storage is available for even a temporary domain header.
             assert!(
-                join.projections
+                join.expression_memos
                     .domains(
                         join.literals.get(),
                         target(join, "p"),
@@ -643,8 +643,8 @@ fn matching_prefix_is_not_compared_twice() {
         "p(0..63).q(0;1). :-p(X),q(Y),X/32=Y.",
         |join, computation, counters, location| {
             let limits = FormulaLimits::default();
-            assert_eq!(join.projections.values.len(), 1);
-            let projection = &join.projections.values[0];
+            assert_eq!(join.expression_memos.values.len(), 1);
+            let projection = &join.expression_memos.values[0];
             assert_eq!(projection.covered, Some(64));
             let zero = computation.number(0, &limits, counters, location).unwrap();
             let zero = computation.read().term(&zero).unwrap();
@@ -673,7 +673,7 @@ fn matching_prefix_is_not_compared_twice() {
                 let live = counters.workspace_bytes();
                 let before = counters.accounting.work;
                 let domains = join
-                    .projections
+                    .expression_memos
                     .domains(
                         join.literals.get(),
                         target(join, "p"),
@@ -739,7 +739,7 @@ fn uncovered_known_inputs_decline_selection() {
                 location,
             );
             let domains = join
-                .projections
+                .expression_memos
                 .domains(
                     join.literals.get(),
                     target(join, "c"),
@@ -768,7 +768,7 @@ fn foreign_known_values_cannot_select_local_rows() {
                 )
             });
             assert!(matches!(
-                join.projections.domains(
+                join.expression_memos.domains(
                     join.literals.get(),
                     target(join, "p"),
                     &values,
@@ -798,7 +798,7 @@ fn domain_work_cutoffs_are_inclusive() {
             let limits = FormulaLimits::default();
             let before = counters.accounting.work;
             let domains = join
-                .projections
+                .expression_memos
                 .domains(
                     join.literals.get(),
                     pattern,
@@ -817,7 +817,7 @@ fn domain_work_cutoffs_are_inclusive() {
                     max_work: counters.accounting.work + cutoff,
                     ..limits
                 };
-                let result = join.projections.domains(
+                let result = join.expression_memos.domains(
                     join.literals.get(),
                     pattern,
                     &values,
@@ -857,7 +857,7 @@ fn cancelled_domains_cannot_publish_a_restriction() {
             cancellation.cancel();
             counters.attach_test_control(&cancellation);
             assert!(matches!(
-                join.projections.domains(
+                join.expression_memos.domains(
                     join.literals.get(),
                     target(join, "p"),
                     &values,

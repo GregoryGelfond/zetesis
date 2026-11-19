@@ -285,7 +285,10 @@ fn conditionals_and_nested_witness_projection_never_cache_by_first_binding() {
                     } else {
                         matches!(
                             literal,
-                            LiteralIr::ProjectedAtom(_, super::super::Projection::Witnesses { .. })
+                            LiteralIr::ProjectedAtom(
+                                _,
+                                super::super::ExistentialProjection::Witnesses { .. }
+                            )
                         )
                     }),
                 "fixture reaches its scope-bearing source form: {source}"
@@ -321,7 +324,7 @@ fn flat_anonymous_projection_is_absent_only_from_nested_scope_scanning() {
                 objective.condition.literals(),
                 [LiteralIr::ProjectedAtom(
                     _,
-                    super::super::Projection::Arguments { .. }
+                    super::super::ExistentialProjection::Arguments { .. }
                 )]
             ));
             let limits = FormulaLimits::default();

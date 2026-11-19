@@ -10,7 +10,7 @@ use super::{
 };
 use crate::FormulaFailure;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
-use crate::formula_ir::{AggregateKey, HeadIr, LiteralIr, Projection, RuleIr};
+use crate::formula_ir::{AggregateKey, ExistentialProjection, HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::components::Pattern;
 
 pub(super) fn selected(
@@ -76,7 +76,7 @@ pub(super) fn rule(
 }
 
 fn projection<'ir>(
-    value: &'ir Projection,
+    value: &'ir ExistentialProjection,
     defined: &Defined<'_>,
     pending: &mut Scratch<&'ir [LiteralIr]>,
     context: &mut Context<'_, '_>,
@@ -90,7 +90,7 @@ fn projection<'ir>(
     if selected(predicate, defined, context)? {
         return Ok(true);
     }
-    if let Projection::Witnesses { bindings, .. } = value {
+    if let ExistentialProjection::Witnesses { bindings, .. } = value {
         pending.push(bindings.as_slice(), context)?;
     }
     Ok(false)

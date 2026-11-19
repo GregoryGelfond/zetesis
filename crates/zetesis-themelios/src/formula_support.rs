@@ -71,8 +71,8 @@ mod parallel_executor;
 pub(crate) use parallel_executor::with_source_workers;
 pub(crate) use parallel_executor::{Executor, SourceExecution};
 pub(crate) mod row_blocks;
-mod projections;
-pub(crate) use projections::supports_column_totality;
+mod expression_memos;
+pub(crate) use expression_memos::supports_column_totality;
 mod queries;
 mod relations;
 mod rows;
@@ -1592,7 +1592,7 @@ pub(crate) struct Join<'a, 'source> {
     /// met it; released when that depth is undone.
     failure: Option<(usize, EvalError)>,
     evaluation: Evaluation,
-    projections: projections::Projections<'a>,
+    expression_memos: expression_memos::ExpressionMemos<'a>,
     pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     head_slots: std::ops::Range<usize>,
@@ -1909,7 +1909,7 @@ impl<'a, 'source> Join<'a, 'source> {
         variant: delta::Variant,
         support: &'a Support<'source>,
         domains: Option<&'a queries::Guards<'a, 'source>>,
-        total: Option<&'a projections::ProjectionValues<'a>>,
+        total: Option<&'a expression_memos::ExpressionMemoTable<'a>>,
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
@@ -1987,7 +1987,7 @@ impl<'a, 'source> Join<'a, 'source> {
         }) {
             return Ok(());
         }
-        if self.projections.total_body(
+        if self.expression_memos.total_body(
             rule,
             self.support,
             &mut self.evaluation,
@@ -2081,7 +2081,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
         if (self.coverage != Coverage::Complete
-            && !projections::needs_totality(&rule.body)
+            && !expression_memos::needs_totality(&rule.body)
             && !self.generated)
             || self.source_evidence
             || self.delta.is_some()
@@ -2094,7 +2094,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 location: rule.location,
             });
         }
-        let total = self.projections.total_body(
+        let total = self.expression_memos.total_body(
             rule,
             self.support,
             &mut self.evaluation,
@@ -2137,7 +2137,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 location: rule.location,
             });
         }
-        if !projections::supports_column_totality(rule, limits, counters)?
+        if !expression_memos::supports_column_totality(rule, limits, counters)?
             || !keys::covered_family(
                 rule,
                 &self.plan,
@@ -2146,7 +2146,7 @@ impl<'a, 'source> Join<'a, 'source> {
         {
             return Ok(false);
         }
-        let total = self.projections.total_family(
+        let total = self.expression_memos.total_family(
             rule,
             self.support,
             &mut self.evaluation,
@@ -2682,7 +2682,7 @@ impl<'a, 'source> Join<'a, 'source> {
         context: Context<'_, &Computation<'_, '_>>,
         (variant, total): (
             delta::Variant,
-            Option<&'a projections::ProjectionValues<'a>>,
+            Option<&'a expression_memos::ExpressionMemoTable<'a>>,
         ),
     ) -> Result<Self, FormulaFailure> {
         let Context {
@@ -2728,7 +2728,7 @@ impl<'a, 'source> Join<'a, 'source> {
         variables: usize,
         support: &'a Support<'source>,
         plan: JoinPlan<'a>,
-        total: Option<&'a projections::ProjectionValues<'a>>,
+        total: Option<&'a expression_memos::ExpressionMemoTable<'a>>,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
         let Context {
@@ -2749,7 +2749,7 @@ impl<'a, 'source> Join<'a, 'source> {
         let header = size_of::<Self>()
             - size_of::<Binding>()
             - size_of::<Evaluation>()
-            - usize::from(total.is_none()) * size_of::<projections::ProjectionValues<'_>>();
+            - usize::from(total.is_none()) * size_of::<expression_memos::ExpressionMemoTable<'_>>();
         let initial = usize::try_from(plan_bytes + header as u128).map_err(|_| {
             crate::formula_binding::assignment(
                 zetesis_core::catalog::AssignmentError::Storage(
@@ -2792,7 +2792,7 @@ impl<'a, 'source> Join<'a, 'source> {
             verdicts: Vec::new(),
             failure: None,
             evaluation: Evaluation::default(),
-            projections: projections::Projections::for_cursor(
+            expression_memos: expression_memos::ExpressionMemos::for_cursor(
                 total,
                 &Context::new(computation, limits, counters, location),
             )?,
@@ -2861,7 +2861,7 @@ impl<'a, 'source> Join<'a, 'source> {
         size_of::<Self>()
             - size_of::<Binding>()
             - size_of::<Evaluation>()
-            - self.projections.leased_header()
+            - self.expression_memos.leased_header()
             - self.scalar_selection.leased_header()
             - self
                 .structural_query
@@ -3758,14 +3758,14 @@ impl<'a, 'source> Join<'a, 'source> {
             source,
             Context::new(computation, limits, counters, location),
         )? {
-            projections::Computed::Probe(probe) => {
+            expression_memos::Computed::Probe(probe) => {
                 return Ok(Narrowed {
                     probe: Some(probe),
                     declined: None,
                 });
             }
-            projections::Computed::Declined(ticket) => Some(ticket),
-            projections::Computed::Absent => None,
+            expression_memos::Computed::Declined(ticket) => Some(ticket),
+            expression_memos::Computed::Absent => None,
         };
         let probe = self.expression_key_probe(
             pattern,
@@ -4076,7 +4076,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 .and_then(|view| view.operands(index))
             {
                 // The selected operands have their own DAG. Original unary
-                // projection descriptors name generated slots and cannot serve it.
+                // expression-memo descriptors name generated slots and cannot serve it.
                 self.evaluation.source_comparison(
                     operands,
                     &self.values,
@@ -4094,7 +4094,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 if let Some(holds) = decided {
                     Ok(holds)
                 } else if self.certified_total {
-                    self.projections.compare(
+                    self.expression_memos.compare(
                         index,
                         ([left, right], relation),
                         &self.values,

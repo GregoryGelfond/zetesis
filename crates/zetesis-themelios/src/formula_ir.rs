@@ -330,7 +330,7 @@ pub(super) enum ComparisonParts {
 pub(crate) enum LiteralIr {
     Atom(DefaultNegation, AtomPattern),
     PatternAtom(crate::formula_pattern::PatternAtom),
-    ProjectedAtom(DefaultNegation, Projection),
+    ProjectedAtom(DefaultNegation, ExistentialProjection),
     Compare(Comparison),
     /// Equality between a captured positive subterm and its source expression:
     /// the comparison `captured = value`, captured on the left. This is
@@ -355,8 +355,10 @@ pub(crate) enum LiteralIr {
         binder: bool,
     },
 }
-/// Complete existential witnesses, with a flat relational fast path.
-pub(crate) enum Projection {
+/// Complete existential witnesses, with a flat relational fast path: a
+/// body atom whose local variables are projected out, as `exists y. p(x, y)`.
+/// Not head projection (`Lifted.Project`) or a source `#project` domain.
+pub(crate) enum ExistentialProjection {
     Arguments {
         predicate: Predicate,
         terms: Vec<Option<CoreTerm>>,
@@ -370,7 +372,7 @@ pub(crate) enum Projection {
         inputs: usize,
     },
 }
-impl Projection {
+impl ExistentialProjection {
     pub(crate) fn predicate<'a>(
         &self,
         view: zetesis_core::TemplateComponentsRef<'a>,

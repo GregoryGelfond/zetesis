@@ -9,8 +9,8 @@ use zetesis_core::TemplateTerm;
 use crate::diagnostic::unsupported;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 use crate::formula_ir::{
-    AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, Expression, LiteralIr,
-    Operation, Projection, Variables,
+    AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, ExistentialProjection,
+    Expression, LiteralIr, Operation, Variables,
 };
 use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
 
@@ -299,15 +299,15 @@ impl Compiler<'_> {
 
     fn projection_uses(
         &mut self,
-        projection: &Projection,
+        projection: &ExistentialProjection,
         variable: usize,
     ) -> Result<bool, FormulaFailure> {
         match projection {
-            Projection::Arguments { terms, .. } => {
+            ExistentialProjection::Arguments { terms, .. } => {
                 self.scope_work(terms.len())?;
                 Ok(terms.contains(&Some(Term::Variable(variable))))
             }
-            Projection::Witnesses {
+            ExistentialProjection::Witnesses {
                 bindings, inputs, ..
             } => {
                 if variable >= *inputs {

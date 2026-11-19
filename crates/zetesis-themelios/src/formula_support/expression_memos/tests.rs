@@ -25,7 +25,7 @@ fn with_expression(
     nodes: impl FnOnce(&mut Fixture) -> Vec<Operation>,
     run: impl FnOnce(
         &[LiteralIr],
-        &mut Projections<'_>,
+        &mut ExpressionMemos<'_>,
         &mut Evaluation,
         &mut Computation<'_, '_>,
         &mut Counters,
@@ -41,9 +41,10 @@ fn with_expression(
     ))];
     fixture.with(location(), |_, computation, counters| {
         let limits = FormulaLimits::default();
-        let mut projections =
-            Projections::new(&Context::new(&*computation, &limits, counters, location())).unwrap();
-        projections
+        let mut expression_memos =
+            ExpressionMemos::new(&Context::new(&*computation, &limits, counters, location()))
+                .unwrap();
+        expression_memos
             .prepare(
                 &literals,
                 Context::new(&*computation, &limits, counters, location()),
@@ -51,7 +52,7 @@ fn with_expression(
             .unwrap();
         run(
             &literals,
-            &mut projections,
+            &mut expression_memos,
             &mut Evaluation::default(),
             computation,
             counters,
@@ -68,21 +69,21 @@ fn quotient(fixture: &mut Fixture) -> Vec<Operation> {
 }
 
 fn evaluate(
-    projections: &mut Projections<'_>,
+    expression_memos: &mut ExpressionMemos<'_>,
     literals: &[LiteralIr],
     values: &Binding<'_>,
     evaluation: &mut Evaluation,
     context: Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
     let comparison = comparison(&literals[0]).unwrap();
-    projections.compare(0, comparison.operands(), values, evaluation, context)
+    expression_memos.compare(0, comparison.operands(), values, evaluation, context)
 }
 
 #[test]
 fn equal_inputs_reuse_successful_results() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(Value::Number(14)), Some(Value::Number(7))],
                 computation,
@@ -95,7 +96,7 @@ fn equal_inputs_reuse_successful_results() {
                 let before = counters.accounting.work;
                 assert!(
                     evaluate(
-                        projections,
+                        expression_memos,
                         literals,
                         &values,
                         evaluation,
@@ -105,7 +106,7 @@ fn equal_inputs_reuse_successful_results() {
                 );
                 work.push(counters.accounting.work - before);
             }
-            assert_eq!(projections.values[0].results.len(), 1);
+            assert_eq!(expression_memos.values[0].results.len(), 1);
             assert!(work[1] < work[0]);
         },
     );
@@ -115,7 +116,7 @@ fn equal_inputs_reuse_successful_results() {
 fn changed_inputs_keep_separate_results() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let limits = FormulaLimits::default();
             for (input, expected) in [(14, true), (16, false), (14, true)] {
                 let values = binding(
@@ -126,7 +127,7 @@ fn changed_inputs_keep_separate_results() {
                 );
                 assert_eq!(
                     evaluate(
-                        projections,
+                        expression_memos,
                         literals,
                         &values,
                         evaluation,
@@ -136,7 +137,7 @@ fn changed_inputs_keep_separate_results() {
                     expected
                 );
             }
-            assert_eq!(projections.values[0].results.len(), 2);
+            assert_eq!(expression_memos.values[0].results.len(), 2);
         },
     );
 }
@@ -151,8 +152,8 @@ fn multiple_inputs_use_ordinary_evaluation() {
                 Operation::Binary(BinaryOp::Add, 0, 1),
             ]
         },
-        |literals, projections, evaluation, computation, counters| {
-            assert!(projections.values.is_empty());
+        |literals, expression_memos, evaluation, computation, counters| {
+            assert!(expression_memos.values.is_empty());
             let values = binding(
                 &[Some(Value::Number(0)), Some(Value::Number(7))],
                 computation,
@@ -161,7 +162,7 @@ fn multiple_inputs_use_ordinary_evaluation() {
             );
             assert!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -183,8 +184,8 @@ fn repeated_variable_reads_share_one_projection() {
                 Operation::Binary(BinaryOp::Add, 0, 1),
             ]
         },
-        |literals, projections, evaluation, computation, counters| {
-            assert_eq!(projections.values.len(), 1);
+        |literals, expression_memos, evaluation, computation, counters| {
+            assert_eq!(expression_memos.values.len(), 1);
             let values = binding(
                 &[Some(Value::Number(2)), Some(Value::Number(4))],
                 computation,
@@ -194,7 +195,7 @@ fn repeated_variable_reads_share_one_projection() {
             for _ in 0..2 {
                 assert!(
                     evaluate(
-                        projections,
+                        expression_memos,
                         literals,
                         &values,
                         evaluation,
@@ -203,7 +204,7 @@ fn repeated_variable_reads_share_one_projection() {
                     .unwrap()
                 );
             }
-            assert_eq!(projections.values[0].results.len(), 1);
+            assert_eq!(expression_memos.values[0].results.len(), 1);
         },
     );
 }
@@ -216,7 +217,7 @@ fn uncached_failure(
 ) {
     with_expression(
         nodes,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(input), Some(Value::Number(0))],
                 computation,
@@ -225,7 +226,7 @@ fn uncached_failure(
             );
             for _ in 0..2 {
                 let result = evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -235,7 +236,7 @@ fn uncached_failure(
                     matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. })) if &error == expected)
                 );
                 assert_eq!(evaluation.zero_divisor(), zero);
-                assert_eq!(projections.values[0].results.len(), 0);
+                assert_eq!(expression_memos.values[0].results.len(), 0);
             }
         },
     );
@@ -287,7 +288,7 @@ fn overflowing_failures_are_not_retained() {
 fn successful_hits_clear_prior_zero_evidence() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(Value::Number(14)), Some(Value::Number(7))],
                 computation,
@@ -297,7 +298,7 @@ fn successful_hits_clear_prior_zero_evidence() {
             let limits = FormulaLimits::default();
             assert!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -308,7 +309,7 @@ fn successful_hits_clear_prior_zero_evidence() {
             evaluation.zero_divisor_failure(location());
             assert!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -333,7 +334,7 @@ fn foreign_inputs_never_reuse_local_results() {
     });
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let local = binding(
                 &[Some(Value::Number(14)), Some(Value::Number(7))],
                 computation,
@@ -343,7 +344,7 @@ fn foreign_inputs_never_reuse_local_results() {
             let limits = FormulaLimits::default();
             assert!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &local,
                     evaluation,
@@ -353,7 +354,7 @@ fn foreign_inputs_never_reuse_local_results() {
             );
             assert!(matches!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &foreign,
                     evaluation,
@@ -364,7 +365,7 @@ fn foreign_inputs_never_reuse_local_results() {
                     ..
                 })
             ));
-            assert_eq!(projections.values[0].results.len(), 1);
+            assert_eq!(expression_memos.values[0].results.len(), 1);
         },
     );
 }
@@ -373,7 +374,7 @@ fn foreign_inputs_never_reuse_local_results() {
 fn cache_hits_obey_inclusive_work_limits() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(Value::Number(14)), Some(Value::Number(7))],
                 computation,
@@ -382,7 +383,7 @@ fn cache_hits_obey_inclusive_work_limits() {
             );
             let limits = FormulaLimits::default();
             evaluate(
-                projections,
+                expression_memos,
                 literals,
                 &values,
                 evaluation,
@@ -391,7 +392,7 @@ fn cache_hits_obey_inclusive_work_limits() {
             .unwrap();
             let before = counters.accounting.work;
             evaluate(
-                projections,
+                expression_memos,
                 literals,
                 &values,
                 evaluation,
@@ -406,7 +407,7 @@ fn cache_hits_obey_inclusive_work_limits() {
                     ..limits
                 };
                 let result = evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -424,7 +425,7 @@ fn cache_hits_obey_inclusive_work_limits() {
                     ));
                 }
                 assert!(counters.accounting.work <= bounded.max_work);
-                assert_eq!(projections.values[0].results.len(), 1);
+                assert_eq!(expression_memos.values[0].results.len(), 1);
             }
         },
     );
@@ -434,7 +435,7 @@ fn cache_hits_obey_inclusive_work_limits() {
 fn cache_hits_obey_current_storage_limits() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(Value::Number(14)), Some(Value::Number(7))],
                 computation,
@@ -442,7 +443,7 @@ fn cache_hits_obey_current_storage_limits() {
                 location(),
             );
             evaluate(
-                projections,
+                expression_memos,
                 literals,
                 &values,
                 evaluation,
@@ -455,7 +456,7 @@ fn cache_hits_obey_current_storage_limits() {
             };
             assert!(matches!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -474,7 +475,7 @@ fn cache_hits_obey_current_storage_limits() {
 fn cancelled_hits_never_return_a_value() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(Value::Number(14)), Some(Value::Number(7))],
                 computation,
@@ -483,7 +484,7 @@ fn cancelled_hits_never_return_a_value() {
             );
             let limits = FormulaLimits::default();
             evaluate(
-                projections,
+                expression_memos,
                 literals,
                 &values,
                 evaluation,
@@ -495,7 +496,7 @@ fn cancelled_hits_never_return_a_value() {
             counters.attach_test_control(&cancellation);
             assert!(matches!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -527,17 +528,18 @@ fn descriptor_growth_releases_nested_leases() {
     fixture.with(location(), |_, computation, counters| {
         let before = counters.accounting.workspace.bytes();
         let limits = FormulaLimits::default();
-        let mut projections =
-            Projections::new(&Context::new(&*computation, &limits, counters, location())).unwrap();
-        projections
+        let mut expression_memos =
+            ExpressionMemos::new(&Context::new(&*computation, &limits, counters, location()))
+                .unwrap();
+        expression_memos
             .prepare(
                 &literals,
                 Context::new(&*computation, &limits, counters, location()),
             )
             .unwrap();
-        assert_eq!(projections.values.len(), 6);
+        assert_eq!(expression_memos.values.len(), 6);
         assert!(counters.accounting.workspace.bytes() > before);
-        drop(projections);
+        drop(expression_memos);
         assert_eq!(counters.accounting.workspace.bytes(), before);
     });
 }
@@ -546,7 +548,7 @@ fn descriptor_growth_releases_nested_leases() {
 fn borrowed_maps_do_not_retain_uncovered_inputs() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let limits = FormulaLimits::default();
             let covered = binding(
                 &[Some(Value::Number(14)), Some(Value::Number(7))],
@@ -556,7 +558,7 @@ fn borrowed_maps_do_not_retain_uncovered_inputs() {
             );
             assert!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &covered,
                     evaluation,
@@ -564,8 +566,8 @@ fn borrowed_maps_do_not_retain_uncovered_inputs() {
                 )
                 .unwrap()
             );
-            let retained = projections.values[0].results.len();
-            let mut borrowed = Projections::Prepared(projections);
+            let retained = expression_memos.values[0].results.len();
+            let mut borrowed = ExpressionMemos::Prepared(expression_memos);
             for input in [16, 16] {
                 let values = binding(
                     &[Some(Value::Number(input)), Some(Value::Number(7))],
@@ -593,14 +595,14 @@ fn borrowed_maps_do_not_retain_uncovered_inputs() {
 fn borrowed_map_misses_preserve_arithmetic_errors() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(Value::Symbol("symbol".into())), Some(Value::Number(7))],
                 computation,
                 counters,
                 location(),
             );
-            let mut borrowed = Projections::Prepared(projections);
+            let mut borrowed = ExpressionMemos::Prepared(expression_memos);
             assert!(matches!(
                 evaluate(
                     &mut borrowed,

@@ -108,7 +108,7 @@ impl Compiler<'_> {
         let mut result = Vec::with_capacity(count);
         for position in 0..count {
             self.budget.poll(self.location)?;
-            let mut projection = Projection { position };
+            let mut projection = PoolAlternative { position };
             let rewritten = rewrite(Program::of_nodes([statement.clone()]), &mut projection);
             debug_assert_eq!(projection.position, 0);
             result.push(
@@ -141,17 +141,19 @@ impl Visit for Width {
         }
     }
 }
-struct Projection {
+/// Selects one alternative of every pool in a statement by mixed-radix
+/// position; a syntax choice, not a relational or answer projection.
+struct PoolAlternative {
     position: usize,
 }
-impl Projection {
+impl PoolAlternative {
     fn take(&mut self, width: usize) -> usize {
         let selected = self.position % width;
         self.position /= width;
         selected
     }
 }
-impl Rewrite for Projection {
+impl Rewrite for PoolAlternative {
     fn tag(&self) -> TransformTag {
         TransformTag::new("zetesis-pool-dependencies")
     }

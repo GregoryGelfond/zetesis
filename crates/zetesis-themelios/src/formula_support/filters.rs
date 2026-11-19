@@ -35,7 +35,7 @@ impl Join<'_, '_> {
         // the current slots never prevents the evaluator from using its scratch.
         let binding = frame.binding(&self.values);
         if self.coverage == Coverage::Complete {
-            self.projections.prepare(
+            self.expression_memos.prepare(
                 self.literals.get(),
                 super::Context::new(&*computation, limits, counters, location),
             )?;
@@ -66,7 +66,7 @@ impl Join<'_, '_> {
                 if let Some(holds) = decided {
                     Ok(holds)
                 } else {
-                    self.projections.compare(
+                    self.expression_memos.compare(
                         index,
                         comparison.operands(),
                         &binding,

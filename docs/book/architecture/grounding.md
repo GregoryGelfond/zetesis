@@ -1184,7 +1184,7 @@ O(D) scoped IDs and positions. Lookup takes O(log D) identity comparisons;
 inserting all D values can require O(D²) position shifts in the shared sorted
 coordinate index. Descriptor preparation, misses, lookup and insertion remain
 cumulative grounding work, while retained metadata uses `SupportBytes`. The
-[projection regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/tests.rs)
+[expression-memo regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/expression_memos/tests.rs)
 check value reuse, owner boundaries, arithmetic failures and inclusive limits.
 
 After source-family validation, a flat normal-rule body can establish finite
@@ -1322,7 +1322,7 @@ mask construction and all refused prefixes spend the same cumulative grounding
 work; tables, masks and lists share `SupportBytes`. Numerical work cutoffs can
 change, and optional preparation can itself refuse. These operations establish
 no runtime speedup or default-budget admission for an arbitrary program. The
-[computed-domain regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/domains/tests.rs)
+[computed-domain regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/expression_memos/domains/tests.rs)
 check exact selected bindings, typed equality, evidence coverage and refusal
 boundaries. The [Lean correspondence](../lean/correspondence.md) states the
 separate obligations connecting finite coverage, table selection and reduct

@@ -1,4 +1,4 @@
-//! Necessary finite input domains derived from covered successful projections.
+//! Necessary finite input domains derived from covered successful expression memos.
 //!
 //! A completed source column covers every possible complete binding of its
 //! variable. Reversing that finite input/result mapping for one known equality
@@ -16,7 +16,7 @@ use std::ops::Range;
 use zetesis_core::catalog::{TermKey, TermRef};
 use zetesis_core::{PatternRef, TemplateTerm};
 
-use super::{Projection, ProjectionValues, tick};
+use super::{ExpressionMemo, ExpressionMemoTable, tick};
 use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
@@ -75,7 +75,7 @@ impl<'a, 'source> Join<'a, 'source> {
         let PositivePattern::Flat(flat) = pattern else {
             return Ok(Computed::Absent);
         };
-        let Some(domains) = self.projections.domains(
+        let Some(domains) = self.expression_memos.domains(
             self.literals.get(),
             flat,
             &self.values,
@@ -114,7 +114,7 @@ impl<'a, 'source> Join<'a, 'source> {
     }
 }
 
-impl ProjectionValues<'_> {
+impl ExpressionMemoTable<'_> {
     /// Called only under the complete constraint's totality witness. At most
     /// one restricting equality per unbound variable is selected; all remaining
     /// comparisons stay with the ordinary residual prefix/full-row checks.
@@ -273,7 +273,7 @@ impl ProjectionValues<'_> {
     }
 }
 
-impl Projection<'_> {
+impl ExpressionMemo<'_> {
     /// Every input before this position matches the immutable wanted value.
     /// If all covered inputs match, keep the ordinary probe without constructing
     /// a domain merely because source totality was established.

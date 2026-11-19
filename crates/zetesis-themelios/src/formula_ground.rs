@@ -65,8 +65,8 @@ use crate::formula::{Compiled, ceiling};
 use crate::formula_assignment::{Contributions, Kind, Numeric, Reduced, Sides};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadLiteral,
-    HeadMeasure, HeadOperand, LiteralIr, Projection, RuleIr,
+    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, ExistentialProjection, HeadElementKey,
+    HeadIr, HeadLiteral, HeadMeasure, HeadOperand, LiteralIr, RuleIr,
 };
 use crate::formula_support::{self, Buffer, Computation, Counters, Join, Support, TermTable};
 use crate::grounding_observer::{Event, Profile};
@@ -2012,13 +2012,13 @@ impl<'source> Builder<'_, '_, 'source> {
     }
     pub(super) fn project(
         &mut self,
-        projection: Ir<'_, 'source, Projection>,
+        projection: Ir<'_, 'source, ExistentialProjection>,
         assignment: &Binding,
         support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         match projection.get() {
-            Projection::Arguments { predicate, terms } => {
+            ExistentialProjection::Arguments { predicate, terms } => {
                 let predicate = self.computation.static_predicate(
                     *predicate,
                     self.limits,
@@ -2027,7 +2027,7 @@ impl<'source> Builder<'_, '_, 'source> {
                 )?;
                 self.project_arguments(predicate, terms, assignment, support, location)
             }
-            Projection::Witnesses {
+            ExistentialProjection::Witnesses {
                 atom,
                 bindings: _,
                 variables,
@@ -2035,7 +2035,7 @@ impl<'source> Builder<'_, '_, 'source> {
             } => {
                 let mut rows = Join::local(
                     projection.map(|projection| {
-                        let Projection::Witnesses { bindings, .. } = projection else {
+                        let ExistentialProjection::Witnesses { bindings, .. } = projection else {
                             unreachable!("witness projection")
                         };
                         bindings.as_slice()

@@ -10,14 +10,14 @@ use themelios_program::symbol::Signature;
 
 use super::{Context, signature};
 use crate::formula_conditional_ir::{Alternative, Consequent, ConsequentOperand};
-use crate::formula_ir::{AggregateElementIr, AggregateKey, LiteralIr, Projection};
+use crate::formula_ir::{AggregateElementIr, AggregateKey, ExistentialProjection, LiteralIr};
 use crate::{ExpansionResource, FormulaFailure};
 
 enum Frame<'a> {
     Literals(&'a [LiteralIr]),
     Elements(&'a [AggregateElementIr]),
     Alternatives(&'a [Alternative]),
-    Projection(&'a Projection),
+    Projection(&'a ExistentialProjection),
     Atom(Pattern),
     Predicate(Predicate),
 }
@@ -89,14 +89,14 @@ impl Context<'_, '_, '_> {
                     add(Frame::Literals(&alternative.bindings))?;
                 }
                 Frame::Projection(projection) => {
-                    if let Projection::Witnesses { bindings, .. } = projection {
+                    if let ExistentialProjection::Witnesses { bindings, .. } = projection {
                         add(Frame::Literals(bindings))?;
                     }
                     match projection {
-                        Projection::Arguments { predicate, .. } => {
+                        ExistentialProjection::Arguments { predicate, .. } => {
                             add(Frame::Predicate(*predicate))?;
                         }
-                        Projection::Witnesses { atom, .. } => add(Frame::Atom(*atom))?,
+                        ExistentialProjection::Witnesses { atom, .. } => add(Frame::Atom(*atom))?,
                     }
                 }
                 Frame::Atom(pattern) => {

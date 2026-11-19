@@ -1,4 +1,7 @@
-//! Successful unary expression projections for source joins.
+//! Memoized successful unary expression results for source joins.
+//!
+//! These memos cache scalar expression values. They are not `Lifted.Project`
+//! (head projection), an existential body projection, or a `#project` domain.
 //!
 //! A descriptor borrows its exact immutable expression, never its transient
 //! address as an unowned key. Reached checks and optional totality preparation
@@ -31,18 +34,18 @@ use crate::formula_ir::{Expression, LiteralIr};
 
 /// A cursor either owns its successful memo entries or borrows the immutable
 /// complete-column preparation of its exact rule. Borrowed maps never grow.
-pub(super) enum Projections<'a> {
-    Local(ProjectionValues<'a>),
-    Prepared(&'a ProjectionValues<'a>),
+pub(super) enum ExpressionMemos<'a> {
+    Local(ExpressionMemoTable<'a>),
+    Prepared(&'a ExpressionMemoTable<'a>),
 }
 
-pub(super) struct ProjectionValues<'a> {
-    values: Vec<Projection<'a>>,
+pub(super) struct ExpressionMemoTable<'a> {
+    values: Vec<ExpressionMemo<'a>>,
     prepared: bool,
     lease: StorageLease,
 }
 
-struct Projection<'a> {
+struct ExpressionMemo<'a> {
     literal: usize,
     side: usize,
     expression: &'a Expression,
@@ -56,7 +59,7 @@ struct Projection<'a> {
     covered: Option<usize>,
 }
 
-impl<'a> ProjectionValues<'a> {
+impl<'a> ExpressionMemoTable<'a> {
     pub(super) fn new(context: &Context<'_, &Computation<'_, '_>>) -> Result<Self, FormulaFailure> {
         let mut result = Self {
             values: Vec::new(),
@@ -120,8 +123,8 @@ impl<'a> ProjectionValues<'a> {
                 if expression.nodes.len() == 1 || !inputs.all(|input| input == slot) {
                     continue;
                 }
-                self.reserve_projection(&mut context)?;
-                self.values.push(Projection {
+                self.reserve_memo(&mut context)?;
+                self.values.push(ExpressionMemo {
                     literal,
                     side,
                     expression,
@@ -147,7 +150,7 @@ impl<'a> ProjectionValues<'a> {
         Ok(())
     }
 
-    fn reserve_projection(
+    fn reserve_memo(
         &mut self,
         context: &mut Context<'_, &Computation<'_, '_>>,
     ) -> Result<(), FormulaFailure> {
@@ -169,11 +172,11 @@ impl<'a> ProjectionValues<'a> {
             )
         })?;
         let capacity = super::storage::growth_capacity(self.values.capacity(), required);
-        let old_buffer = self.values.capacity() * size_of::<Projection>();
+        let old_buffer = self.values.capacity() * size_of::<ExpressionMemo>();
         // Child leases already own the occupied TermTable/Binding headers.
         // Reallocation additionally holds one entire replacement vector; its
         // empty cells do not yet have separately owned embedded containers.
-        let peak = self.bytes() as u128 + capacity as u128 * size_of::<Projection>() as u128;
+        let peak = self.bytes() as u128 + capacity as u128 * size_of::<ExpressionMemo>() as u128;
         crate::formula::ceiling(
             crate::FormulaResource::SupportBytes,
             (context.work.limits.max_support_bytes - allowance) as u128 + peak,
@@ -199,7 +202,7 @@ impl<'a> ProjectionValues<'a> {
     fn bytes(&self) -> usize {
         // Occupied descriptors lend these two headers to their existing leases.
         // Spare vector cells remain wholly charged to this container.
-        size_of::<Self>() + self.values.capacity() * size_of::<Projection>()
+        size_of::<Self>() + self.values.capacity() * size_of::<ExpressionMemo>()
             - self.values.len() * (size_of::<TermTable>() + size_of::<Binding>())
     }
 
@@ -224,8 +227,8 @@ impl<'a> ProjectionValues<'a> {
     }
 }
 
-impl<'a> Deref for Projections<'a> {
-    type Target = ProjectionValues<'a>;
+impl<'a> Deref for ExpressionMemos<'a> {
+    type Target = ExpressionMemoTable<'a>;
 
     fn deref(&self) -> &Self::Target {
         match self {
@@ -235,16 +238,16 @@ impl<'a> Deref for Projections<'a> {
     }
 }
 
-impl<'a> Projections<'a> {
+impl<'a> ExpressionMemos<'a> {
     pub(super) fn new(context: &Context<'_, &Computation<'_, '_>>) -> Result<Self, FormulaFailure> {
-        ProjectionValues::new(context).map(Self::Local)
+        ExpressionMemoTable::new(context).map(Self::Local)
     }
 
-    /// A cursor's projections: the borrowed complete-column map of its prepared
+    /// A cursor's expression memos: the borrowed complete-column map of its prepared
     /// rule or support round, when one is supplied, as [`Self::borrowed`]
     /// borrows it, and otherwise its own.
     pub(super) fn for_cursor(
-        total: Option<&'a ProjectionValues<'a>>,
+        total: Option<&'a ExpressionMemoTable<'a>>,
         context: &Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
         match total {
@@ -257,7 +260,7 @@ impl<'a> Projections<'a> {
     /// The caller's completed-rule or round owner separately authenticates the
     /// exact rule and immutable support snapshot.
     pub(super) fn borrowed(
-        values: &'a ProjectionValues<'a>,
+        values: &'a ExpressionMemoTable<'a>,
         context: &Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
         context
@@ -281,7 +284,7 @@ impl<'a> Projections<'a> {
     /// A borrowed view contributes no second receipt for retained payload.
     pub(super) fn leased_header(&self) -> usize {
         match self {
-            Self::Local(_) => size_of::<ProjectionValues<'_>>(),
+            Self::Local(_) => size_of::<ExpressionMemoTable<'_>>(),
             Self::Prepared(_) => 0,
         }
     }
@@ -401,7 +404,7 @@ impl<'a> Projections<'a> {
     }
 }
 
-impl Projection<'_> {
+impl ExpressionMemo<'_> {
     fn insert(
         &mut self,
         input: &TermKey,

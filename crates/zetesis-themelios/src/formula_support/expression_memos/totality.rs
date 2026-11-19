@@ -5,7 +5,7 @@
 //! use the same body proof within its exact immutable support snapshot; the
 //! proof covers complete current columns, not later rounds or family evidence. A rule
 //! can alternatively receive static totality from the completed all-producer
-//! analysis, which permits support-round prefix selection without a projection
+//! analysis, which permits support-round prefix selection without an expression-memo
 //! map. That separate certificate never broadens this snapshot's authority.
 //! Each expression
 //! in an eligible flat normal body is either a leaf, reads one source variable
@@ -29,7 +29,7 @@
 use themelios_program::program::DefaultNegation;
 use zetesis_core::TemplateTerm;
 
-use super::{Projections, tick};
+use super::{ExpressionMemos, tick};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
 use crate::formula_support::relations::{Postings, RelationRows};
@@ -93,7 +93,7 @@ struct Domain<'source> {
     column: usize,
 }
 
-impl<'a> Projections<'a> {
+impl<'a> ExpressionMemos<'a> {
     /// Use full, candidate-independent columns of one immutable source snapshot.
     /// Success establishes scalar totality for complete positive bindings within
     /// that snapshot. This includes every scalar body assignment but excludes
@@ -457,7 +457,7 @@ fn domain<'source>(
 
 /// Prove scalar intermediates on the original range and full positive columns.
 /// The caller authenticates the one generated slot and flat positive profile.
-/// Unlike complete-column projection preparation, this populates no expression
+/// Unlike complete-column expression-memo preparation, this populates no expression
 /// map and grants neither table coverage nor original-family admission.
 pub(in crate::formula_support) fn range_body(
     rule: &RuleIr,

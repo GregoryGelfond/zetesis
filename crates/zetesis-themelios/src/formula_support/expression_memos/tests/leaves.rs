@@ -1,4 +1,4 @@
-//! The projection consumer reuses the existing canonical leaf comparison.
+//! The expression-memo consumer reuses the existing canonical leaf comparison.
 
 use super::*;
 
@@ -10,7 +10,7 @@ fn leaves() -> [Expression; 2] {
 fn leaf_dispatch_retains_an_unrelated_projection() {
     with_expression(
         quotient,
-        |literals, projections, evaluation, computation, counters| {
+        |literals, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(Value::Number(14)), Some(Value::Number(7))],
                 computation,
@@ -20,7 +20,7 @@ fn leaf_dispatch_retains_an_unrelated_projection() {
             let limits = FormulaLimits::default();
             assert!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -28,7 +28,7 @@ fn leaf_dispatch_retains_an_unrelated_projection() {
                 )
                 .unwrap()
             );
-            let identity = projections.values.as_ptr();
+            let identity = expression_memos.values.as_ptr();
             let expressions = leaves();
             let before = counters.accounting.work;
             let expected = evaluation
@@ -41,7 +41,7 @@ fn leaf_dispatch_retains_an_unrelated_projection() {
             let borrowed_work = counters.accounting.work - before;
             evaluation.zero_divisor_failure(location());
             let before = counters.accounting.work;
-            let actual = projections
+            let actual = expression_memos
                 .compare(
                     1,
                     ([&expressions[0], &expressions[1]], Relation::Gt),
@@ -52,14 +52,14 @@ fn leaf_dispatch_retains_an_unrelated_projection() {
                 .unwrap();
             assert!(expected && actual);
             // Negative control: the old wrapper performs two additional result-key
-            // resolutions despite both operands having no projection descriptor.
+            // resolutions despite both operands having no expression-memo descriptor.
             assert_eq!(counters.accounting.work - before, borrowed_work);
             assert!(!evaluation.zero_divisor());
-            assert_eq!(projections.values.as_ptr(), identity);
-            assert_eq!(projections.values.len(), 1);
-            assert_eq!(projections.values[0].results.len(), 1);
+            assert_eq!(expression_memos.values.as_ptr(), identity);
+            assert_eq!(expression_memos.values.len(), 1);
+            assert_eq!(expression_memos.values[0].results.len(), 1);
             assert_eq!(
-                projections.values[0]
+                expression_memos.values[0]
                     .results
                     .read(0, computation.read(), location())
                     .unwrap(),
@@ -67,7 +67,7 @@ fn leaf_dispatch_retains_an_unrelated_projection() {
             );
             assert!(
                 evaluate(
-                    projections,
+                    expression_memos,
                     literals,
                     &values,
                     evaluation,
@@ -75,7 +75,7 @@ fn leaf_dispatch_retains_an_unrelated_projection() {
                 )
                 .unwrap()
             );
-            assert_eq!(projections.values[0].results.len(), 1);
+            assert_eq!(expression_memos.values[0].results.len(), 1);
         },
     );
 }
@@ -99,7 +99,7 @@ fn leaf_order_does_not_follow_interning_order() {
     ] {
         with_expression(
             |_| vec![Operation::Variable(0)],
-            |_, projections, evaluation, computation, counters| {
+            |_, expression_memos, evaluation, computation, counters| {
                 // Import left first. Raw coordinate order cannot explain the first
                 // three semantic greater-than results or the shared equal identity.
                 let values = binding(
@@ -110,7 +110,7 @@ fn leaf_order_does_not_follow_interning_order() {
                 );
                 let expressions = leaves();
                 assert!(
-                    projections
+                    expression_memos
                         .compare(
                             0,
                             ([&expressions[0], &expressions[1]], relation),
@@ -125,7 +125,7 @@ fn leaf_order_does_not_follow_interning_order() {
                         )
                         .unwrap()
                 );
-                assert!(projections.values.is_empty());
+                assert!(expression_memos.values.is_empty());
             },
         );
     }
@@ -143,7 +143,7 @@ fn leaf_failures_keep_source_presence_and_owner() {
     });
     with_expression(
         |_| vec![Operation::Variable(0)],
-        |_, projections, evaluation, computation, counters| {
+        |_, expression_memos, evaluation, computation, counters| {
             let absent = binding(
                 &[None, Some(Value::Number(3))],
                 computation,
@@ -152,7 +152,7 @@ fn leaf_failures_keep_source_presence_and_owner() {
             );
             let expressions = leaves();
             let limits = FormulaLimits::default();
-            let result = projections.compare(
+            let result = expression_memos.compare(
                 0,
                 ([&expressions[0], &expressions[1]], Relation::Eq),
                 &absent,
@@ -162,7 +162,7 @@ fn leaf_failures_keep_source_presence_and_owner() {
             assert!(
                 matches!(result, Err(FormulaFailure::UnsafeVariable { variable: 0, location: site }) if site == location())
             );
-            let result = projections.compare(
+            let result = expression_memos.compare(
                 0,
                 ([&expressions[0], &expressions[1]], Relation::Eq),
                 &foreign,
@@ -179,7 +179,7 @@ fn leaf_failures_keep_source_presence_and_owner() {
                 location(),
             );
             assert!(
-                projections
+                expression_memos
                     .compare(
                         0,
                         ([&expressions[0], &expressions[1]], Relation::Eq),
@@ -189,7 +189,7 @@ fn leaf_failures_keep_source_presence_and_owner() {
                     )
                     .unwrap()
             );
-            assert!(projections.values.is_empty());
+            assert!(expression_memos.values.is_empty());
         },
     );
 }
@@ -198,7 +198,7 @@ fn leaf_failures_keep_source_presence_and_owner() {
 fn cancelled_leaf_dispatch_cannot_return_a_value() {
     with_expression(
         |_| vec![Operation::Variable(0)],
-        |_, projections, evaluation, computation, counters| {
+        |_, expression_memos, evaluation, computation, counters| {
             let values = binding(
                 &[Some(Value::Number(3)), Some(Value::Number(3))],
                 computation,
@@ -210,7 +210,7 @@ fn cancelled_leaf_dispatch_cannot_return_a_value() {
             cancellation.cancel();
             counters.attach_test_control(&cancellation);
             assert!(matches!(
-                projections.compare(
+                expression_memos.compare(
                     0,
                     ([&expressions[0], &expressions[1]], Relation::Eq),
                     &values,
@@ -222,7 +222,7 @@ fn cancelled_leaf_dispatch_cannot_return_a_value() {
                     ..
                 })
             ));
-            assert!(projections.values.is_empty());
+            assert!(expression_memos.values.is_empty());
         },
     );
 }
