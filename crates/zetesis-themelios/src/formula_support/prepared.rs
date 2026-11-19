@@ -4,8 +4,8 @@ mod pattern_rows;
 pub(super) use pattern_rows::PatternRows;
 
 use super::{
-    CompletedQueries, CompletedSupport, Completion, Computation, Context, Counters, Evaluation,
-    FilteredRows, Join, NecessaryRowCondition,
+    BindRestriction, CompletedQueries, CompletedSupport, Completion, Computation, Context,
+    Counters, Evaluation, Join, RestrictedRows,
     expression_memos::{ExpressionMemoTable, ExpressionMemos, needs_totality},
     order,
 };
@@ -188,12 +188,12 @@ impl<'source> PreparedRule<'source> {
     pub(crate) fn rows<'a, 'queries>(
         &'a self,
         queries: &'a CompletedQueries<'queries>,
-        filter: Option<&'a dyn NecessaryRowCondition>,
+        filter: Option<&'a dyn BindRestriction>,
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-    ) -> Result<FilteredRows<'a, 'queries>, FormulaFailure>
+    ) -> Result<RestrictedRows<'a, 'queries>, FormulaFailure>
     where
         'source: 'queries,
     {

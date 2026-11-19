@@ -19,7 +19,7 @@ use zetesis_core::{
 };
 
 use crate::formula_ir::RuleIr;
-use crate::formula_support::{CompletedSupport, Counters, NecessaryRowCondition, RowSelection};
+use crate::formula_support::{BindRestriction, CompletedSupport, Counters, RowSelection};
 use crate::{FormulaFailure, FormulaLimits};
 
 /// Each kept source predicate's occurrence positions in the core's dense
@@ -205,7 +205,7 @@ pub(super) struct ModelSelection<'a, 'source> {
     pub(super) model: &'a Model,
 }
 
-impl NecessaryRowCondition for ModelSelection<'_, '_> {
+impl BindRestriction for ModelSelection<'_, '_> {
     fn immutable_selection(&self) -> bool {
         true
     }
@@ -525,7 +525,7 @@ impl<'a, 'source> ConsequenceSelection<'a, 'source> {
     }
 }
 
-impl NecessaryRowCondition for ConsequenceSelection<'_, '_> {
+impl BindRestriction for ConsequenceSelection<'_, '_> {
     fn immutable_selection(&self) -> bool {
         true
     }
@@ -592,7 +592,7 @@ impl NecessaryRowCondition for ConsequenceSelection<'_, '_> {
     }
 }
 
-impl NecessaryRowCondition for Selection<'_, '_> {
+impl BindRestriction for Selection<'_, '_> {
     fn immutable_selection(&self) -> bool {
         true
     }

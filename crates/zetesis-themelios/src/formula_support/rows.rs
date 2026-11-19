@@ -22,10 +22,11 @@ use crate::{FormulaFailure, FormulaLimits};
 /// is implied. Unmapped rows may be retained conservatively. Only already
 /// admitted witness scans attach this condition, never source-family validation.
 ///
-/// The condition is pushed below binding as in `Lifted.PushdownBind`: it may be
-/// only necessary (`necessary_gate_pushdown_exact`), and it is distinct from the
-/// scalar `Lifted.Filter` the join evaluates on bindings.
-pub(crate) trait NecessaryRowCondition {
+/// A restriction of `Lifted.Bind`: either a necessary condition pushed below
+/// binding (`Lifted.PushdownBind`, `necessary_gate_pushdown_exact`) or the sparse
+/// `selected` relation of `Lifted.RestrictedBind`. It is distinct from the scalar
+/// `Lifted.Filter` the join evaluates on bindings.
+pub(crate) trait BindRestriction {
     /// Successful selection is fixed for each authenticated source occurrence
     /// and row during this join's immutable borrow. This permits reusing only
     /// completed necessary-selection results; matching and scalar diagnostics
@@ -227,23 +228,22 @@ pub(super) enum AnchorRow {
 
 /// One existing join cursor with a selected-row-only consumer interface. Its
 /// private cursor cannot export partial arithmetic evidence as a whole family.
-pub(crate) struct FilteredRows<'a, 'source> {
+pub(crate) struct RestrictedRows<'a, 'source> {
     join: Join<'a, 'source>,
 }
 
-impl<'a, 'source> FilteredRows<'a, 'source> {
+impl<'a, 'source> RestrictedRows<'a, 'source> {
     pub(super) fn new(mut join: Join<'a, 'source>) -> Self {
         // This proof describes the current base binding. Generated continuations
         // and head suffixes retain the ordinary lookup path.
-        join.positive_prefix = (join.row_condition.is_some()
-            && !join.generated
-            && join.head_slots.is_empty())
-        .then(|| PositivePrefix {
-            single_open: join
-                .row_condition
-                .is_some_and(NecessaryRowCondition::single_open),
-            ..PositivePrefix::default()
-        });
+        join.positive_prefix =
+            (join.bind_restriction.is_some() && !join.generated && join.head_slots.is_empty())
+                .then(|| PositivePrefix {
+                    single_open: join
+                        .bind_restriction
+                        .is_some_and(BindRestriction::single_open),
+                    ..PositivePrefix::default()
+                });
         Self { join }
     }
 
@@ -266,7 +266,7 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
             found |= pattern.source == occurrence;
         }
         if !found
-            || self.join.row_condition.is_none()
+            || self.join.bind_restriction.is_none()
             || self.join.generated
             || self.join.coverage != super::Coverage::Selected
             || !self.join.head_slots.is_empty()
@@ -378,6 +378,6 @@ pub(super) struct Staged {
 }
 
 #[cfg(test)]
-mod filtering;
+mod restriction;
 #[cfg(test)]
 mod tests;

@@ -109,7 +109,7 @@ use relations::RelationRows;
 pub(crate) use relations::{
     ClosedSource, Relations, SourceAtom, SourceScope, SupportCatalog, atom_failure, owner_limits,
 };
-pub(crate) use rows::{FilteredRows, NecessaryRowCondition, PositiveRows, RowSelection};
+pub(crate) use rows::{BindRestriction, PositiveRows, RestrictedRows, RowSelection};
 
 /// Possible atoms after a complete support round added no new head.
 ///
@@ -1600,7 +1600,7 @@ pub(crate) struct Join<'a, 'source> {
     domains: Option<&'a queries::Guards<'a, 'source>>,
     // Installed only by filtered_rule before traversal; never replaced while
     // its authenticated source slots or held prefix can be retained.
-    row_condition: Option<&'a dyn NecessaryRowCondition>,
+    bind_restriction: Option<&'a dyn BindRestriction>,
     /// An admitted selected query's one original positive occurrence. Its
     /// immutable source row remains resolved across ordinary backtracking.
     anchor: Option<rows::Anchor<'a>>,
@@ -1812,11 +1812,11 @@ impl<'a, 'source> Join<'a, 'source> {
     fn filtered_rule(
         rule: impl Into<Ir<'a, 'source, crate::formula_ir::RuleIr>>,
         support: &'a Support<'source>,
-        filter: Option<&'a dyn NecessaryRowCondition>,
+        filter: Option<&'a dyn BindRestriction>,
         prepared: Option<&'a PreparedRule<'a>>,
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
-    ) -> Result<FilteredRows<'a, 'source>, FormulaFailure> {
+    ) -> Result<RestrictedRows<'a, 'source>, FormulaFailure> {
         let source_rule = rule.into();
         let rule = source_rule.get();
         let Context {
@@ -1855,9 +1855,9 @@ impl<'a, 'source> Join<'a, 'source> {
         } else {
             Self::rule(source_rule, support, computation, limits, budget, counters)?
         };
-        join.row_condition = filter;
+        join.bind_restriction = filter;
         join.prepare_selections(Context::new(computation, limits, counters, rule.location))?;
-        Ok(FilteredRows::new(join))
+        Ok(RestrictedRows::new(join))
     }
 
     /// Attach necessary domains to their exact rule and support owner.
@@ -2797,7 +2797,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 &Context::new(computation, limits, counters, location),
             )?,
             domains: None,
-            row_condition: None,
+            bind_restriction: None,
             anchor: None,
             positive_prefix: None,
             support,
@@ -3650,7 +3650,7 @@ impl<'a, 'source> Join<'a, 'source> {
             let rows = self
                 .support
                 .resolve(pattern.atom(), limits, counters, location)?;
-            let filter_source = match (self.row_condition, rows) {
+            let filter_source = match (self.bind_restriction, rows) {
                 (Some(filter), Some(source)) if source.row_count() != 0 => {
                     Some(filter.resolve(source.atoms, limits, counters, location)?)
                 }
@@ -3915,7 +3915,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<RowSelection, FormulaFailure> {
-        let selected = if let Some(filter) = self.row_condition {
+        let selected = if let Some(filter) = self.bind_restriction {
             let source = self.resolutions[self.depth]
                 .filter_source()
                 .expect("an offered filtered row has an authenticated source");
