@@ -165,7 +165,7 @@ fn a_stopped_width_witness_preserves_closed_state_and_can_retry() {
     let Width::Compact16(known) = &mut knowledge.width else {
         panic!("the small residual fixture uses compact counters");
     };
-    let closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+    let closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut crate::regions::CommonScratch::default(),
         learning: &mut crate::regions::LearningScratch::default(),

@@ -26,7 +26,7 @@ fn a_batch_keeps_its_processed_snapshot_until_events_drain() {
         };
         let before = known.thresholds[0];
         let mut scratch = NarrowingScratch::default();
-        let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+        let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -173,7 +173,7 @@ fn correlated_forced_conditions_return_through_the_boolean_queues() {
     };
     let before = known.thresholds[0];
     let mut scratch = NarrowingScratch::default();
-    let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut scratch.common,
         learning: &mut scratch.learning,
@@ -360,7 +360,7 @@ fn suffix_storage_is_metered_and_does_not_cross_owners_or_siblings() {
     };
     let mut scratch = NarrowingScratch::default();
     assert!(matches!(
-        NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+        NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,

@@ -1,7 +1,7 @@
 //! Capacity implications require original aliases, grouped unit rows and paid
 //! condition events. Pending truth can weaken a bound but cannot strengthen it.
 
-use crate::regions::{Known, Meter, NarrowingClosure, Step, bit};
+use crate::regions::{Known, Meter, NarrowingState, Step, bit};
 use crate::test_support::{SinglePermits, close};
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, Narrower, Narrowing, NarrowingScratch, Node,
@@ -103,7 +103,7 @@ fn pending_truth_waits_for_its_counted_event() {
     known.thresholds[0].upper = Some(3);
     let mut lists = NarrowingScratch::default();
     lists.common.prepare_thresholds(1).unwrap();
-    let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut lists.common,
         learning: &mut lists.learning,
@@ -164,7 +164,7 @@ fn attempt<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     known.thresholds[0].known = 1;
     known.thresholds[0].upper = Some(3);
     let mut lists = NarrowingScratch::default();
-    let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut lists.common,
         learning: &mut lists.learning,

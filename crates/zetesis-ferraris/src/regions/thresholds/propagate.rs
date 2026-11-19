@@ -5,9 +5,9 @@
 use zetesis_algebra::{Failure, Quota};
 
 use crate::Theory;
-use crate::regions::{Count, Meter, Narrower, NarrowingClosure, Step};
+use crate::regions::{Count, Meter, Narrower, NarrowingState, Step};
 
-impl<W: Count, C: crate::regions::ReadingClass> NarrowingClosure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingState<'_, W, C> {
     pub(in crate::regions) fn seed_thresholds<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,

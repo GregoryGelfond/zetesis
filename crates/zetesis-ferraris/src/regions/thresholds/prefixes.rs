@@ -19,7 +19,7 @@ use zetesis_algebra::{Failure, Quota};
 
 use zetesis_algebra::Stop;
 
-use crate::regions::{Count, Meter, Narrower, NarrowingClosure, Step};
+use crate::regions::{Count, Meter, Narrower, NarrowingState, Step};
 
 use super::{Adjacency, Row, reserve};
 
@@ -86,7 +86,7 @@ fn links(rows: &[Row]) -> Result<Vec<(usize, usize)>, Stop> {
     Ok(links)
 }
 
-impl<W: Count, C: crate::regions::ReadingClass> NarrowingClosure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingState<'_, W, C> {
     /// Consume one dirty row and its actual neighbour visits. Tightening a
     /// requirement queues the target even when it has no guard at that bound;
     /// absent intermediate guards therefore cannot interrupt transitive closure.

@@ -13,7 +13,7 @@ fn coprime_complements_need_no_suffix_storage() {
     let before = known.thresholds[0];
     let mut scratch = NarrowingScratch::default();
     let mut work = Meter::local(8);
-    let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut scratch.common,
         learning: &mut scratch.learning,
@@ -46,7 +46,7 @@ fn a_partial_gcd_witness_avoids_the_unread_tail() {
     let mut scratch = NarrowingScratch::default();
     let mut work = Meter::local(8);
     assert!(matches!(
-        NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+        NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -150,7 +150,7 @@ fn interrupted_utility_checks_publish_no_state() {
             };
             let before = known.thresholds[0];
             let mut scratch = NarrowingScratch::default();
-            let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+            let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
                 known: known.borrow(),
                 lists: &mut scratch.common,
                 learning: &mut scratch.learning,

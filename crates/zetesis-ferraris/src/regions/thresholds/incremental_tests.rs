@@ -1,7 +1,7 @@
 //! Differential closure and processed-event accounting for shared native rows.
 
 use crate::regions::{
-    Context, Knowledge, Meter, Narrower, NarrowingClosure, NarrowingScratch, NarrowingStatistics,
+    Context, Knowledge, Meter, Narrower, NarrowingScratch, NarrowingState, NarrowingStatistics,
     RegionLimits, Step, Width, bit,
 };
 use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Node, Region, Theory};
@@ -209,7 +209,7 @@ fn incremental_class<C: crate::regions::ReadingClass>(
     let mut scratch = NarrowingScratch::default();
     scratch.common.prepare(theory.atom_count());
     let result = {
-        let mut closure = NarrowingClosure::<_, C> {
+        let mut closure = NarrowingState::<_, C> {
             known: knowledge.borrow(),
             lists: &mut scratch.common,
             learning: C::borrow_learning(&mut scratch.learning),

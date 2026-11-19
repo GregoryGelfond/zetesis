@@ -452,7 +452,7 @@ fn an_anchor_at_a_chain_root_marks_that_chain() {
 
 #[test]
 fn an_unanchored_chain_skips_connective_discovery() {
-    use crate::regions::{NarrowingClosure, Step, Width, witnesses};
+    use crate::regions::{NarrowingState, Step, Width, witnesses};
     let (theory, cones) = cone_theory();
     let index = crate::Narrower::new(&theory);
     let chain = |node: usize| super::chain_position(index.chain_of[node].expect("chain root"));
@@ -470,7 +470,7 @@ fn an_unanchored_chain_skips_connective_discovery() {
             .prepare_thresholds(index.thresholds.rows.len())
             .unwrap();
         let mut work = Meter::local(u64::MAX);
-        let step = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+        let step = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,

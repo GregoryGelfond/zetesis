@@ -8,7 +8,7 @@ use crate::{
     RegionLimits, Theory,
 };
 
-use super::super::{Context, Meter, NarrowingClosure, NarrowingScratch, Step, producers};
+use super::super::{Context, Meter, NarrowingScratch, NarrowingState, Step, producers};
 use super::compact_mut;
 
 fn chain(disjunction: bool, atoms: usize) -> Theory {
@@ -55,7 +55,7 @@ fn chain_refutation_visits_only_its_prefix() {
                     scratch.common.prepare(9);
                     let mut quota = SinglePermits::new(limit, failure);
                     let mut work = Meter::reserved(&mut quota);
-                    let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+                    let result = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
                         known: compact_mut(&mut knowledge),
                         lists: &mut scratch.common,
                         learning: &mut scratch.learning,
@@ -108,7 +108,7 @@ fn parent_refutation_visits_only_its_prefix() {
             scratch.common.prepare(9);
             let mut quota = SinglePermits::new(limit, failure);
             let mut work = Meter::reserved(&mut quota);
-            let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+            let result = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
                 known: compact_mut(&mut knowledge),
                 lists: &mut scratch.common,
                 learning: &mut scratch.learning,
@@ -162,7 +162,7 @@ fn downward_refutation_omits_support_wakeups() {
     let mut scratch = NarrowingScratch::default();
     scratch.common.prepare(3);
     let mut work = Meter::local(u64::MAX);
-    let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+    let result = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
         lists: &mut scratch.common,
         learning: &mut scratch.learning,
@@ -191,7 +191,7 @@ fn early_refutation_leaves_no_scratch_authority() {
     known.never[0] |= 1 << 4;
     let mut scratch = NarrowingScratch::default();
     scratch.common.prepare(9);
-    let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+    let result = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
         lists: &mut scratch.common,
         learning: &mut scratch.learning,
@@ -236,7 +236,7 @@ fn atom_refutation_stops_before_later_occurrences() {
     compact_mut(&mut knowledge).never[0] |= 1 << 1;
     let mut scratch = NarrowingScratch::default();
     scratch.common.prepare(1);
-    let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+    let result = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
         lists: &mut scratch.common,
         learning: &mut scratch.learning,

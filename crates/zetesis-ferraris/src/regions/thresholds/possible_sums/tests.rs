@@ -235,7 +235,7 @@ fn a_witness_publishes_no_knowledge() {
     let masks = known.masks.slices().map(<[u64]>::to_vec);
     let mut scratch = NarrowingScratch::default();
     assert!(matches!(
-        NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+        NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -476,7 +476,7 @@ fn representation_ineligibility_has_no_work_or_storage() {
     let mut scratch = NarrowingScratch::default();
     let mut work = Meter::local(0);
     assert!(matches!(
-        NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+        NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::regions::{
-    Context, Known, Meter, NarrowingClosure, Step, Width, chain_position, witnesses,
+    Context, Known, Meter, NarrowingState, Step, Width, chain_position, witnesses,
 };
 
 const ROWS: usize = 8;
@@ -148,7 +148,7 @@ fn selected_rows_preserve_order_and_closed_knowledge() {
             let mut scratch = warmed(&index, chain);
             let bytes = scratch.common.witnesses.retained_bytes();
             let mut work = Meter::local(u64::MAX);
-            let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+            let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
                 known: compact(&mut actual).borrow(),
                 lists: &mut scratch.common,
                 learning: &mut scratch.learning,
@@ -213,7 +213,7 @@ fn opposite_bounds_survive_selection_until_refuted() {
             state.lower = 4;
         }
         let mut scratch = warmed(&index, chain);
-        let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+        let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact(&mut known).borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -260,7 +260,7 @@ fn interrupted_selection_retries_without_partial_ids() {
         scratch: &mut NarrowingScratch,
         work: &mut Meter<'_, Q>,
     ) -> Result<Step, Stop> {
-        NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+        NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact(knowledge).borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,

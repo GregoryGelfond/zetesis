@@ -1,4 +1,4 @@
-//! Ordered incidences for one completed founded body projection.
+//! Ordered parent and cyclic-head incidences for one completed founded body.
 //!
 //! Parent destinations are included, nonabsorbed Boolean nodes. Head rows flatten
 //! original producer/head rows, retaining only exact cyclic heads. One additional
@@ -25,7 +25,7 @@ use super::{
 use zetesis_algebra::Stop;
 
 #[derive(Debug)]
-pub(super) struct Projection {
+pub(super) struct FoundedIncidences {
     pub(super) parents: Adjacency,
     pub(super) heads: Adjacency,
     pub(super) initial: Vec<Initial>,
@@ -33,7 +33,7 @@ pub(super) struct Projection {
     pub(super) seed_start: usize,
 }
 
-impl Projection {
+impl FoundedIncidences {
     pub(super) fn prepare<Q: Quota + ?Sized>(
         theory: &Theory,
         index: &Narrower,
