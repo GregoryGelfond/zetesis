@@ -103,7 +103,7 @@ pass. A representation's name alone establishes no coverage or membership law.
 | Shared primitive (`zetesis_algebra`) | Grounding consumer / use |
 | --- | --- |
 | `Cancellation`, `Stop`, `poll_due`, `POLL_INTERVAL` | themelios `expansion.rs`, `formula_support/storage.rs`, and core catalog operations: cooperative stop propagation, never false or empty-result evidence. |
-| `Meter`, `MeterBytes`, `MeterWorkError` | themelios `formula_support/storage.rs`, core `catalog/storage/control.rs`, `relation/control.rs`: bounded work and retained storage. |
+| `Meter`, `MeterBytes`, `MeterWorkError` | themelios `formula_support.rs` and `formula_support/storage.rs`; core `relation.rs`, `table/accounting.rs`, `catalog/storage/budget.rs`, and `atom_lookup/selected.rs`: bounded work and retained storage. |
 | `words::Words` | themelios `formula_support/relations/append.rs` supported-atom marks; core `table` and `relation`: packed row selection. |
 | `words::union_shifted` and related packed operations | themelios `formula_assignment/sums/packed.rs`: possible assignment sums, not an answer-count fold. |
 | `threads::Pool` | themelios `formula_support/parallel_executor.rs`: counted grounding workers, wrapped by the executor. |
