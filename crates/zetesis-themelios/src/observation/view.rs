@@ -555,13 +555,27 @@ impl<'a> Buffer<'a> {
             work: 0,
         }
     }
+    /// Charge `count` view operations. Control flags are read at every step;
+    /// the deadline clock only when the step crosses a
+    /// [`zetesis_algebra::POLL_INTERVAL`] boundary of the work count.
     fn step(&mut self, count: u128) -> Result<(), ViewError> {
         self.cancellation.poll().map_err(ViewError::Stopped)?;
+        if zetesis_algebra::poll_due(self.work, u64::try_from(count).unwrap_or(u64::MAX)) {
+            self.observe_deadline()?;
+        }
         let work = u128::from(self.work) + count;
         Meter::check_wide_receipt(work, 0, u128::from(self.limits.max_work))
             .map_err(|_| ViewError::Work)?;
         self.work = u64::try_from(work).expect("checked u64 work ceiling");
         Ok(())
+    }
+    /// The coarse deadline observation at a work boundary, out of line.
+    #[cold]
+    #[inline(never)]
+    fn observe_deadline(&self) -> Result<(), ViewError> {
+        self.cancellation
+            .poll_deadline()
+            .map_err(ViewError::Stopped)
     }
     /// A typed atom: its predicate, sign and arguments.
     fn atom(&mut self, atom: AtomRef<'_>) -> Result<(), ViewError> {

@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use zetesis_algebra::{Cancellation, CancellationPoll, Meter};
+use zetesis_algebra::{Cancellation, CancellationPoll, Meter, poll_due};
 use zetesis_core::catalog::{AtomRef, TermRef};
 use zetesis_core::{AtomRows, Model, PatternRef, TemplateTerm, ValueNodeRef};
 
@@ -11,7 +11,9 @@ use crate::{
 
 pub(super) struct Work<'a> {
     limits: Limits,
-    /// The control flags, read at every tick without traversing the token.
+    /// The control flags, read at every tick without traversing the token;
+    /// the deadline clock is read only at each [`zetesis_algebra::POLL_INTERVAL`]
+    /// boundary of the meter and at the final poll.
     control: CancellationPoll<'a>,
     meter: Meter<'static>,
     bindings: u64,
@@ -57,8 +59,12 @@ impl<'control> Work<'control> {
     pub(super) fn stop(&self, reason: Stop) -> Error {
         self.error(ErrorKind::Stopped(reason))
     }
+    /// Observe control, deadline included: a coarse boundary.
     pub(super) fn poll(&self) -> Result<(), Error> {
-        self.control.poll().map_err(|reason| {
+        self.observe(self.control.poll_deadline())
+    }
+    fn observe(&self, observed: Result<(), zetesis_algebra::Stop>) -> Result<(), Error> {
+        observed.map_err(|reason| {
             self.stop(match reason {
                 zetesis_algebra::Stop::Cancelled => Stop::Cancelled,
                 zetesis_algebra::Stop::Deadline => Stop::Deadline,
@@ -67,8 +73,13 @@ impl<'control> Work<'control> {
         })
     }
     pub(super) fn tick(&mut self) -> Result<(), Error> {
-        // Objective operations observe control at every tick, including refusals.
-        self.poll()?;
+        // Objective operations observe control flags at every tick, including
+        // refusals, and the deadline clock at each meter boundary.
+        if poll_due(self.meter.charged(), 1) {
+            self.poll()?;
+        } else {
+            self.observe(self.control.poll())?;
+        }
         self.meter.tick().map_err(|failure| {
             self.stop(match failure.into_stop() {
                 zetesis_algebra::Stop::WorkLimit => Stop::WorkLimit,
@@ -532,6 +543,32 @@ mod tests {
             panic!("string evidence");
         };
         assert!(std::ptr::eq(source, retained));
+    }
+
+    #[test]
+    fn an_expired_deadline_stops_evaluation_at_a_meter_boundary() {
+        use std::time::{Duration, Instant};
+        let at = Instant::now() + Duration::from_millis(30);
+        let cancellation = zetesis_algebra::Cancellation::with_deadline(at).unwrap();
+        let mut work = super::Work::new(crate::Limits::default(), &cancellation);
+        work.tick().unwrap();
+        while Instant::now() < at {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        // Between meter boundaries a tick reads control flags only.
+        work.tick().unwrap();
+        let interval = zetesis_algebra::POLL_INTERVAL;
+        let stopped = loop {
+            match work.tick() {
+                Ok(()) => assert!(
+                    work.meter.charged() <= 64 * interval,
+                    "evaluation must observe its deadline at a coarse boundary"
+                ),
+                Err(error) => break error,
+            }
+        };
+        assert_eq!(stopped.kind, ErrorKind::Stopped(crate::Stop::Deadline));
+        assert_eq!(work.meter.charged() % interval, 0);
     }
 
     #[test]
