@@ -1,11 +1,11 @@
 //! A prepared head borrows exact immutable source rows instead of a copied frame.
 
 use super::{
-    AssignedFailure, AtomAppender, Failure, Limits, PatternRef, PreparedPattern, Projected,
-    ProjectionSource, ReadError, TermData, TermLimits, assigned_storage, storage,
+    AssignedFailure, AtomAppender, Failure, Limits, PatternRef, PreparedPattern, ReadError,
+    SlotQuery, SlotSource, TermData, TermLimits, assigned_storage, storage,
 };
 use crate::catalog::AssignmentError;
-use crate::catalog::interner::query::RowArguments;
+use crate::catalog::registry::query::RowArguments;
 use crate::relation::{Relation, Row};
 
 /// One variable argument projected from an original source-row occurrence.
@@ -162,7 +162,7 @@ impl AtomAppender<'_> {
             )));
         }
         self.admit_entry(
-            Projected::HEADER_BYTES + size_of::<RowArguments<'_>>() as u128,
+            SlotQuery::HEADER_BYTES + size_of::<RowArguments<'_>>() as u128,
             limits,
         )?;
         if rows.len() != prepared.sources.len() {
@@ -197,10 +197,10 @@ impl AtomAppender<'_> {
                 }
             }
         }
-        let projected = Projected {
+        let projected = SlotQuery {
             predicate: prepared.pattern.pattern.predicate,
             values: &[],
-            arguments: ProjectionSource::Rows(&arguments),
+            arguments: SlotSource::Rows(&arguments),
         };
         self.insert_projection_at(&projected, Some(prepared.pattern.locations), limits, before)
     }

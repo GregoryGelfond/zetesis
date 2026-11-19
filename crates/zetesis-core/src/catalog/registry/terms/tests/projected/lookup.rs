@@ -120,7 +120,7 @@ fn selected_authentication_ignores_a_newer_unused_cell() {
 #[test]
 fn complete_lookup_authenticates_empty_frame_scope() {
     for arity in [0, 3] {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let (_, mut append) = owner.split();
         let predicate = append
             .declare_predicate_with(&Predicate::new("empty", arity).unwrap(), limits(), SUCCESS)
@@ -134,7 +134,7 @@ fn complete_lookup_authenticates_empty_frame_scope() {
             )
             .unwrap();
         owner.commit_with(limits(), SUCCESS).unwrap();
-        let other = AtomInterner::new();
+        let other = AtomRegistry::new();
         let foreign = other.read().assignment();
         let (prefix, append) = owner.split();
         let terms = vec![TemplateTerm::Constant(prefix.read().term(&constant).unwrap()); arity];
@@ -241,7 +241,7 @@ fn insertion_preserves_argument_error_order() {
                 limits(),
                 SUCCESS,
             ),
-            Err(AssignedFailure::Interner(Failure::Catalog(
+            Err(AssignedFailure::Registry(Failure::Catalog(
                 crate::catalog::Error::Value(crate::ValueError::Limit {
                     resource: crate::ValueResource::Nodes,
                     observed: 1,
@@ -277,7 +277,7 @@ fn projected_lookup_requires_discovery_publication() {
 #[test]
 fn projected_lookup_reads_admitted_template_constants() {
     let (catalog, expected) = admitted_catalog();
-    let mut owner = AtomInterner::for_template_catalog(&catalog, 1_048_576).unwrap();
+    let mut owner = AtomRegistry::for_template_catalog(&catalog, 1_048_576).unwrap();
     let values = owner.read().assignment();
     let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     let (_, mut append) = owner.split();
@@ -304,7 +304,7 @@ fn projected_lookup_admits_its_exact_header() {
     let mut fixture = occupied();
     let bytes = fixture.owner.split().1.pattern_lookup_bytes();
     let retained = fixture.owner.storage_bytes();
-    assert_eq!(bytes, retained + Projected::HEADER_BYTES);
+    assert_eq!(bytes, retained + SlotQuery::HEADER_BYTES);
     assert_eq!(
         lookup(
             &mut fixture,
@@ -324,7 +324,7 @@ fn projected_lookup_admits_its_exact_header() {
         matches!(lookup(&mut fixture, Limits { max_bytes: bytes - 1, ..limits() }, || {
         calls += 1;
         SUCCESS()
-    }), Err(AssignedFailure::Interner(Failure::Bytes { required, limit }))
+    }), Err(AssignedFailure::Registry(Failure::Bytes { required, limit }))
         if required == bytes && limit == bytes - 1)
     );
     assert_eq!(calls, 0);
@@ -342,7 +342,7 @@ fn lookup_population_precedes_header_admission() {
             },
             SUCCESS
         ),
-        Err(AssignedFailure::Interner(Failure::Atoms {
+        Err(AssignedFailure::Registry(Failure::Atoms {
             required: 1,
             limit: 0
         }))
@@ -379,7 +379,7 @@ fn lookup_refusal_preserves_the_owner() {
                 Ok(())
             });
             assert!(
-                matches!(result, Err(AssignedFailure::Interner(Failure::Stopped(actual))) if actual == cut)
+                matches!(result, Err(AssignedFailure::Registry(Failure::Stopped(actual))) if actual == cut)
             );
             assert_eq!(visited, cut);
             assert_eq!(

@@ -6,7 +6,7 @@ use crate::test_support::PERMIT;
 const SELECTED: [usize; 9] = [8, 0, 7, 1, 6, 2, 5, 3, 4];
 const ORDERED: [usize; 9] = [1, 3, 5, 7, 8, 6, 4, 2, 0];
 
-fn fixture() -> AtomInterner {
+fn fixture() -> AtomRegistry {
     let mut owner = owner(&[9, 1, 8, 2]);
     owner.commit_with(limits(), PERMIT).unwrap();
     for number in [7, 3, 6, 4, 5] {
@@ -33,7 +33,7 @@ fn work() -> usize {
 
 #[test]
 fn selected_order_matches_typed_atom_order() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let mut atoms = Vec::new();
     for number in (0..130).rev() {
         let value = match number % 3 {
@@ -128,7 +128,7 @@ fn trivial_selections_need_no_scratch() {
 
 #[test]
 fn dense_strategy_excludes_sparse_history() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     for count in 1..65 {
         insert(&mut owner, &atom(count));
         let append = owner.appender();
@@ -223,7 +223,7 @@ fn every_order_cut_preserves_the_original_selection() {
     }
 }
 
-fn unwind_order(cut: usize) -> (AtomInterner, [usize; 9]) {
+fn unwind_order(cut: usize) -> (AtomRegistry, [usize; 9]) {
     let mut owner = fixture();
     let mut selected = SELECTED;
     let mut visited = 0;

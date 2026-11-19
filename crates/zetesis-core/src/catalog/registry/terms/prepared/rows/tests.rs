@@ -1,6 +1,6 @@
 use super::super::tests::limits;
 use super::*;
-use crate::atom_interner::AtomInterner;
+use crate::atom_registry::AtomRegistry;
 use crate::catalog::TermAssignment;
 use crate::test_support::PERMIT;
 use crate::{
@@ -31,14 +31,14 @@ fn columns() -> Vec<Option<RowColumn>> {
 }
 
 struct Fixture {
-    owner: AtomInterner,
+    owner: AtomRegistry,
     components: TemplateComponents,
     count: usize,
 }
 
 impl Fixture {
     fn new(values: &[Value]) -> Self {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let source = Predicate::new("source", 2).unwrap();
         let unused = Value::from_nodes(
             vec![ValueNode::Tuple { arity: 1 }, ValueNode::Number(99)],
@@ -209,7 +209,7 @@ fn projected_rows_require_the_exact_prepared_relation() {
         ));
         assert!(matches!(
             append.insert_prepared_rows_with(&prepared, &[], limits(), PERMIT),
-            Err(AssignedFailure::Interner(Failure::Catalog(
+            Err(AssignedFailure::Registry(Failure::Catalog(
                 storage::Fault::Shape
             )))
         ));
@@ -234,7 +234,7 @@ fn row_preparation_rejects_inconsistent_repeated_slots() {
                 limits(),
                 PERMIT
             ),
-            Err(AssignedFailure::Interner(Failure::Catalog(
+            Err(AssignedFailure::Registry(Failure::Catalog(
                 storage::Fault::Shape
             )))
         ));
@@ -276,7 +276,7 @@ fn finite_row_limits_apply_only_when_the_argument_is_selected() {
                 limits(),
                 PERMIT
             ),
-            Err(AssignedFailure::Interner(Failure::Catalog(
+            Err(AssignedFailure::Registry(Failure::Catalog(
                 storage::Fault::Value(crate::ValueError::Limit {
                     resource: crate::ValueResource::Nodes,
                     ..
@@ -357,26 +357,26 @@ fn every_row_publication_stop_preserves_publication_coherence() {
             let mut work = 0;
             assert!(matches!(append.insert_prepared_rows_with(&prepared, &[source.row(0).unwrap()], limits(), || {
                 if work == cutoff { Err(cutoff) } else { work += 1; Ok(()) }
-            }), Err(AssignedFailure::Interner(Failure::Stopped(actual))) if actual == cutoff));
+            }), Err(AssignedFailure::Registry(Failure::Stopped(actual))) if actual == cutoff));
             assert_eq!(work, cutoff);
             assert_eq!(append.len(), initial);
             assert_eq!(append.discovery.len(), initial);
             let binding = frame(append, source.row(0).unwrap());
-            let projected = Projected {
+            let projected = SlotQuery {
                 predicate: prepared.pattern.pattern.predicate,
                 values: binding.as_slice().slots,
-                arguments: ProjectionSource::Admitted(
+                arguments: SlotSource::Admitted(
                     prepared.pattern.source,
                     &prepared.pattern.pattern.terms,
                 ),
             };
             let mut permit = PERMIT;
-            let identity = crate::catalog::interner::query::Query::Projected(&projected)
+            let identity = crate::catalog::registry::query::Query::Slots(&projected)
                 .identity_with(append.store, &mut permit)
                 .unwrap();
             retained_canonical_row |= matches!(
                 identity,
-                crate::catalog::interner::query::Identity::Local(atom) if atom.present().is_some()
+                crate::catalog::registry::query::Identity::Local(atom) if atom.present().is_some()
             );
             assert_eq!(append.find_pattern_with(pattern, binding.as_slice(), limits(), PERMIT).unwrap(), None);
             let id = append.insert_prepared_rows_with(&prepared, &[source.row(0).unwrap()], limits(), PERMIT).unwrap();
@@ -398,9 +398,9 @@ fn projected_query_header_counts_at_an_occupied_boundary() {
         let prepared = append.prepare_row_pattern_with(pattern, vec![source], columns(), unrestricted(), limits(), PERMIT).unwrap().unwrap();
         let rows = [source.row(0).unwrap()];
         let id = append.insert_prepared_rows_with(&prepared, &rows, limits(), PERMIT).unwrap();
-        let required = append.storage_bytes() + Projected::HEADER_BYTES + size_of::<RowArguments<'_>>() as u128 + crate::catalog::interner::PREPARED_BYTES;
+        let required = append.storage_bytes() + SlotQuery::HEADER_BYTES + size_of::<RowArguments<'_>>() as u128 + crate::catalog::registry::PREPARED_BYTES;
         assert_eq!(append.insert_prepared_rows_with(&prepared, &rows, Limits { max_bytes: required, ..limits() }, PERMIT).unwrap(), id);
-        assert!(matches!(append.insert_prepared_rows_with(&prepared, &rows, Limits { max_bytes: required - 1, ..limits() }, PERMIT), Err(AssignedFailure::Interner(Failure::Bytes { required: actual, .. })) if actual == required));
+        assert!(matches!(append.insert_prepared_rows_with(&prepared, &rows, Limits { max_bytes: required - 1, ..limits() }, PERMIT), Err(AssignedFailure::Registry(Failure::Bytes { required: actual, .. })) if actual == required));
     });
 }
 
@@ -429,7 +429,7 @@ fn finite_byte_limits_are_checked_on_an_occupied_row() {
             .unwrap();
         assert!(matches!(
             append.insert_prepared_rows_with(&prepared, &[row], limits(), PERMIT),
-            Err(AssignedFailure::Interner(Failure::Catalog(
+            Err(AssignedFailure::Registry(Failure::Catalog(
                 storage::Fault::Value(crate::ValueError::Limit {
                     resource: crate::ValueResource::Bytes,
                     observed: 7,
@@ -494,7 +494,7 @@ fn prepared_rows_refuse_a_different_writer() {
             )
             .unwrap()
             .unwrap();
-        let mut other = AtomInterner::new();
+        let mut other = AtomRegistry::new();
         assert!(matches!(
             other.appender().insert_prepared_rows_with(
                 &prepared,
@@ -537,7 +537,7 @@ fn every_row_preparation_stop_leaves_the_writer_unchanged() {
             let mut work = 0;
             assert!(matches!(append.prepare_row_pattern_with(pattern, vec![source], columns(), unrestricted(), limits(), || {
                 if work == cutoff { Err(cutoff) } else { work += 1; Ok(()) }
-            }), Err(AssignedFailure::Interner(Failure::Stopped(actual))) if actual == cutoff));
+            }), Err(AssignedFailure::Registry(Failure::Stopped(actual))) if actual == cutoff));
             assert_eq!(work, cutoff);
             assert_eq!(append.storage_bytes(), bytes);
             assert_eq!(append.storage_peak_bytes(), peak);
@@ -548,7 +548,7 @@ fn every_row_preparation_stop_leaves_the_writer_unchanged() {
 
 #[test]
 fn canonical_admission_bounds_combined_lengths_before_projection() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let mut append = owner.appender();
     let mut key = append
         .import_term_with((&Value::Number(0)).into(), unrestricted(), limits(), PERMIT)
@@ -567,7 +567,7 @@ fn canonical_admission_bounds_combined_lengths_before_projection() {
             PERMIT,
         ) {
             Ok(next) => key = next,
-            Err(AssignedFailure::Interner(Failure::Catalog(storage::Fault::Value(
+            Err(AssignedFailure::Registry(Failure::Catalog(storage::Fault::Value(
                 crate::ValueError::Limit {
                     resource: crate::ValueResource::Bytes,
                     observed,

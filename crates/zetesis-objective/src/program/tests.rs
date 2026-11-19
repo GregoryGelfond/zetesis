@@ -352,9 +352,9 @@ fn catalog_admission_bounds_simultaneous_safety_scratch() {
 fn selected_conditions_count_the_shared_snapshot_once() {
     use zetesis_core::{
         TemplateCatalogSelection,
-        atom_interner::{AtomInterner, Limits},
+        atom_registry::{AtomRegistry, Limits},
     };
-    let mut owner = AtomInterner::default();
+    let mut owner = AtomRegistry::default();
     let limits = Limits {
         max_atoms: 8,
         max_bytes: usize::MAX as u128,

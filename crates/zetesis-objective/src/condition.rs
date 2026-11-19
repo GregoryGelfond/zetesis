@@ -3,7 +3,7 @@
 
 use std::{convert::Infallible, fmt, iter::FusedIterator, sync::Arc};
 
-use zetesis_core::atom_interner::{AtomInterner, Failure as InternFailure, Limits as InternLimits};
+use zetesis_core::atom_registry::{AtomRegistry, Failure as InternFailure, Limits as InternLimits};
 use zetesis_core::catalog::{AtomRef, Error as CatalogError};
 use zetesis_core::{Atom, AtomCatalog};
 
@@ -286,7 +286,7 @@ impl Condition {
     /// additionally admits its own node buffer before allocation and row import.
     pub(crate) fn prepare_in(
         self,
-        owner: &mut AtomInterner,
+        owner: &mut AtomRegistry,
         limits: InternLimits,
         node_limit: usize,
     ) -> Result<PendingCondition, ConditionError> {

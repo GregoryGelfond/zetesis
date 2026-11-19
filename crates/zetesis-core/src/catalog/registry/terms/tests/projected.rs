@@ -2,7 +2,7 @@ use super::*;
 use crate::catalog::TermAssignment;
 
 struct Fixture {
-    owner: AtomInterner,
+    owner: AtomRegistry,
     predicate: DeclaredPredicate,
     constant: TermKey,
     values: TermAssignment,
@@ -26,7 +26,7 @@ fn expected() -> crate::Atom {
 
 impl Fixture {
     fn new() -> Self {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let (_, mut append) = owner.split();
         let predicate = append
             .declare_predicate_with(&predicate(), limits(), SUCCESS)
@@ -158,7 +158,7 @@ fn projected_occupied_entry_checks_logical_limits() {
             limits(),
             SUCCESS,
         ),
-        Err(AssignedFailure::Interner(Failure::Catalog(
+        Err(AssignedFailure::Registry(Failure::Catalog(
             crate::catalog::Error::Value(crate::ValueError::Limit {
                 resource: crate::ValueResource::Nodes,
                 observed: 1,
@@ -226,7 +226,7 @@ fn projected_pattern_rejects_foreign_constant() {
 #[test]
 fn constant_projection_checks_empty_frame_scope() {
     let mut fixture = Fixture::new();
-    let other = AtomInterner::new();
+    let other = AtomRegistry::new();
     let empty = other.read().assignment();
     fixture.with_pattern(|append, local, _| {
         let constant = local.terms().at(1).unwrap();
@@ -328,7 +328,7 @@ fn every_projection_work_stop_withholds_discovery() {
             Ok(())
         });
         assert!(matches!(result,
-            Err(AssignedFailure::Interner(Failure::Stopped(actual))) if actual == cut));
+            Err(AssignedFailure::Registry(Failure::Stopped(actual))) if actual == cut));
         assert_eq!(visited, cut);
         assert!(fixture.owner.is_empty(), "cut {cut}");
         assert_eq!(
@@ -423,7 +423,7 @@ fn occupied_projection_counts_live_scratch() {
     fixture
         .insert(TermLimits::default(), limits(), SUCCESS)
         .unwrap();
-    let scratch = size_of::<Projected<'_>>() as u128 + super::super::super::PREPARED_BYTES;
+    let scratch = size_of::<SlotQuery<'_>>() as u128 + super::super::super::PREPARED_BYTES;
     assert_eq!(fixture.owner.storage_bytes(), retained);
     assert_eq!(fixture.owner.storage_peak_bytes(), retained + scratch);
 }
@@ -462,7 +462,7 @@ fn projected_admission_refuses_below_combined_peak() {
     let mut bounded = Fixture::new();
     assert!(matches!(bounded.insert(
         TermLimits::default(), Limits { max_bytes: peak - 1, ..limits() }, SUCCESS,
-    ), Err(AssignedFailure::Interner(Failure::Bytes { required, limit }))
+    ), Err(AssignedFailure::Registry(Failure::Bytes { required, limit }))
         if required > limit && limit == peak - 1));
     assert!(bounded.owner.is_empty());
     assert_eq!(
@@ -512,7 +512,7 @@ fn admitted_catalog() -> (crate::TemplateCatalog, crate::Atom) {
 #[test]
 fn admitted_pattern_publishes_its_borrowed_constants() {
     let (catalog, expected) = admitted_catalog();
-    let mut owner = AtomInterner::for_template_catalog(&catalog, 1_048_576).unwrap();
+    let mut owner = AtomRegistry::for_template_catalog(&catalog, 1_048_576).unwrap();
     let values = owner.read().assignment();
     let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     // This producer is PatternTerms::Admitted, rather than from_parts metadata.
@@ -538,7 +538,7 @@ fn admitted_pattern_publishes_its_borrowed_constants() {
 #[test]
 fn occupied_projection_checks_nested_bounds() {
     let (catalog, _) = admitted_catalog();
-    let mut owner = AtomInterner::for_template_catalog(&catalog, 1_048_576).unwrap();
+    let mut owner = AtomRegistry::for_template_catalog(&catalog, 1_048_576).unwrap();
     let values = owner.read().assignment();
     let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     owner
@@ -577,7 +577,7 @@ fn occupied_projection_checks_nested_bounds() {
     ] {
         assert!(matches!(owner.split().1.insert_pattern_with(
             pattern, values.as_slice(), term_limits, limits(), SUCCESS,
-        ), Err(AssignedFailure::Interner(Failure::Catalog(crate::catalog::Error::Value(
+        ), Err(AssignedFailure::Registry(Failure::Catalog(crate::catalog::Error::Value(
             crate::ValueError::Limit { resource, .. }
         )))) if resource == expected));
         assert_eq!(owner.len(), 1);
@@ -593,7 +593,7 @@ fn before_frame<E>(
         append.insert_projected_with(
             predicate,
             values,
-            ProjectionSource::Pattern(pattern.terms()),
+            SlotSource::Pattern(pattern.terms()),
             (TermLimits::default(), limits()),
             None,
             before,
@@ -602,7 +602,7 @@ fn before_frame<E>(
 }
 
 fn projection_bytes() -> u128 {
-    size_of::<Projected<'_>>() as u128 + super::super::super::PREPARED_BYTES
+    size_of::<SlotQuery<'_>>() as u128 + super::super::super::PREPARED_BYTES
 }
 
 #[test]
@@ -611,7 +611,7 @@ fn validation_stop_keeps_the_live_projection_receipt() {
     let retained = fixture.owner.storage_bytes();
     assert!(matches!(
         before_frame(&mut fixture, || Err("before frame")),
-        Err(AssignedFailure::Interner(Failure::Stopped("before frame")))
+        Err(AssignedFailure::Registry(Failure::Stopped("before frame")))
     ));
     assert_eq!(
         fixture.owner.storage_peak_bytes(),
@@ -642,7 +642,7 @@ fn validation_unwind_keeps_the_live_projection_receipt() {
 #[test]
 fn occupied_projection_scratch_is_independent_of_arity() {
     for arity in [0, 1, 65, 257] {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let (_, mut append) = owner.split();
         let predicate = append
             .declare_predicate_with(&Predicate::new("wide", arity).unwrap(), limits(), SUCCESS)
@@ -710,7 +710,7 @@ fn occupied_projection_refuses_missing_scratch_byte() {
     };
     assert!(
         matches!(fixture.insert(TermLimits::default(), bounded, SUCCESS),
-        Err(AssignedFailure::Interner(Failure::Bytes { required: actual, limit }))
+        Err(AssignedFailure::Registry(Failure::Bytes { required: actual, limit }))
             if actual == required && limit == required - 1)
     );
     assert_eq!(fixture.owner.len(), 1);

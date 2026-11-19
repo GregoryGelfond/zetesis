@@ -32,13 +32,13 @@ fn storage_failure<E>(error: storage::Failure<E>) -> Failure<E> {
 
 /// Concrete immutable inputs, rather than a stateful caller iterator.
 #[derive(Clone, Copy)]
-pub(super) enum ProjectionSource<'a> {
+pub(super) enum SlotSource<'a> {
     Slots(&'a [usize]),
     Pattern(PatternTerms<'a>),
     Admitted(storage::Read<'a>, &'a [TermData]),
     Rows(&'a RowArguments<'a>),
 }
-impl<'a> ProjectionSource<'a> {
+impl<'a> SlotSource<'a> {
     pub(super) fn len(self) -> usize {
         match self {
             Self::Slots(slots) => slots.len(),
@@ -89,20 +89,20 @@ impl<'a> RowArguments<'a> {
 /// The producer authenticates the scope, prefix and selected slots before this
 /// becomes a Query. Insertion additionally checks its logical term limits.
 /// No Store read is retained from the mutable writer.
-pub(super) struct Projected<'a> {
+pub(super) struct SlotQuery<'a> {
     pub(super) predicate: storage::PredicateId,
     pub(super) values: &'a [Option<TermId>],
-    pub(super) arguments: ProjectionSource<'a>,
+    pub(super) arguments: SlotSource<'a>,
 }
 
-impl Projected<'_> {
+impl SlotQuery<'_> {
     pub(super) const HEADER_BYTES: u128 = size_of::<Self>() as u128;
     pub(super) const MAX_BYTES: u128 = Self::HEADER_BYTES + size_of::<RowArguments<'_>>() as u128;
 
     fn extra_bytes(&self) -> u128 {
         Self::HEADER_BYTES
             + match self.arguments {
-                ProjectionSource::Rows(_) => size_of::<RowArguments<'_>>() as u128,
+                SlotSource::Rows(_) => size_of::<RowArguments<'_>>() as u128,
                 _ => 0,
             }
     }
@@ -112,7 +112,7 @@ impl Projected<'_> {
     /// necessarily a raw constant-time ID load. No user callback, allocation or
     /// recoverable validation occurs during prepared row publication.
     fn argument(&self, column: usize) -> TermId {
-        if let ProjectionSource::Admitted(_, terms) = self.arguments {
+        if let SlotSource::Admitted(_, terms) = self.arguments {
             return match terms[column] {
                 TermData::Variable(slot) => self.values[slot].expect("validated bound slot"),
                 TermData::Constant(id) => id,
@@ -132,7 +132,7 @@ pub(super) enum Query<'a> {
     Atom(AtomRef<'a>),
     SignedAtom(AtomRef<'a>, crate::Sign),
     Key(AtomKey<'a>),
-    Projected(&'a Projected<'a>),
+    Slots(&'a SlotQuery<'a>),
 }
 
 impl<'a> Query<'a> {
@@ -144,7 +144,7 @@ impl<'a> Query<'a> {
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Identity, Failure<E>> {
         before().map_err(Failure::Stopped)?;
-        if let Self::Projected(projected) = self {
+        if let Self::Slots(projected) = self {
             return store
                 .prepare_atom_by_with(
                     projected.predicate,
@@ -203,7 +203,7 @@ impl<'a> Query<'a> {
 
     pub(super) fn extra_bytes(self) -> u128 {
         match self {
-            Self::Projected(projected) => projected.extra_bytes(),
+            Self::Slots(projected) => projected.extra_bytes(),
             Self::Atom(_) | Self::SignedAtom(_, _) | Self::Key(_) => 0,
         }
     }
@@ -216,7 +216,7 @@ impl<'a> Query<'a> {
             Self::Atom(atom) => atom.predicate(),
             Self::SignedAtom(atom, sign) => atom.predicate().with_sign(sign),
             Self::Key(key) => key.predicate(),
-            Self::Projected(projected) => {
+            Self::Slots(projected) => {
                 PredicateRef::new(storage::Read::from(store), projected.predicate)
                     .expect("validated assigned predicate")
             }
@@ -232,7 +232,7 @@ impl<'a> Query<'a> {
                 atom.values().at(column).expect("admitted argument")
             }
             Self::Key(key) => key.argument(column),
-            Self::Projected(projected) => {
+            Self::Slots(projected) => {
                 TermRef::new(store, projected.argument(column)).expect("validated projected prefix")
             }
         }
@@ -283,7 +283,7 @@ impl<'a> Query<'a> {
         before: impl FnMut() -> Result<(), E>,
     ) -> Result<AtomId, storage::Failure<E>> {
         match self {
-            Self::Projected(_) => unreachable!("projected queries retain their prepared identity"),
+            Self::Slots(_) => unreachable!("projected queries retain their prepared identity"),
             Self::Atom(atom) => store.import_atom_with(atom, limits, before),
             Self::SignedAtom(atom, sign) => store.import_row_with(
                 atom.predicate().with_sign(sign),
@@ -312,7 +312,7 @@ impl<'a> Query<'a> {
         store.publish_prepared_atom_with(
             prepared,
             |column| match self {
-                Self::Projected(projected) => projected.argument(column),
+                Self::Slots(projected) => projected.argument(column),
                 Self::Atom(atom) | Self::SignedAtom(atom, _) => {
                     atom.values()
                         .at(column)
@@ -337,15 +337,15 @@ impl<'a> Query<'a> {
 mod tests {
     use std::convert::Infallible;
 
-    use crate::atom_interner::{AtomInterner, Failure, Limits};
+    use crate::atom_registry::{AtomRegistry, Failure, Limits};
     use crate::{Atom, Predicate, Sign, Value};
 
-    fn fixture() -> (AtomInterner, Limits) {
+    fn fixture() -> (AtomRegistry, Limits) {
         let limits = Limits {
             max_atoms: 8,
             max_bytes: 1_048_576,
         };
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         for sign in [Sign::Negative, Sign::Positive] {
             let atom = Atom::new(
                 Predicate::with_sign("p", 1, sign).unwrap(),

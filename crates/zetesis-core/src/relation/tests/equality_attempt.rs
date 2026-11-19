@@ -63,11 +63,11 @@ fn scalar_and_structural_equalities_match_owned_queries_without_scratch() {
 
 #[test]
 fn canonical_and_foreign_terms_share_the_single_equality_resolver() {
-    use crate::atom_interner::{AtomInterner, Limits as AtomLimits};
+    use crate::atom_registry::{AtomRegistry, Limits as AtomLimits};
     use crate::relation::Catalog;
     let predicate = predicate(1);
     let atom_limits = AtomLimits::for_atoms(8, 1024 * 1024);
-    let mut owner = AtomInterner::default();
+    let mut owner = AtomRegistry::default();
     let declared = owner
         .declare_predicate_with(&predicate, atom_limits, || Ok::<_, ()>(()))
         .unwrap();

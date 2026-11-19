@@ -130,7 +130,7 @@ pub(crate) struct CompletedCatalog {
 /// An immutable relation view of one successfully completed support owner.
 /// Intermediate round snapshots deliberately have only the `Relations` type.
 pub(crate) struct CompletedSupport<'source> {
-    lookup_owner: Option<&'source zetesis_core::atom_interner::AtomInterner>,
+    lookup_owner: Option<&'source zetesis_core::atom_registry::AtomRegistry>,
     completion: &'source Completion,
     relations: Relations<'source>,
 }
@@ -173,7 +173,7 @@ pub(crate) struct StreamedSupport {
     /// a hybrid base's.
     closed: std::sync::Arc<ClosedSource>,
     rows: relations::StreamedRows,
-    lookup: zetesis_core::atom_interner::AtomInterner,
+    lookup: zetesis_core::atom_registry::AtomRegistry,
     completion: Completion,
 }
 
@@ -203,7 +203,7 @@ impl CompletedCatalog {
                 GroundingWork::new(limits, counters, location),
             )
             .map_err(|failure| failure.into_parts().0)?;
-        let lookup = zetesis_core::atom_interner::AtomInterner::for_closed_catalog(
+        let lookup = zetesis_core::atom_registry::AtomRegistry::for_closed_catalog(
             &closed.storage,
             max_bytes,
         )
@@ -325,7 +325,7 @@ impl<'source> CompletedSupport<'source> {
 /// Queries over exactly one completed support certificate. Only its completed
 /// snapshot constructs this workspace; growing relations cannot claim it.
 pub(crate) struct CompletedQueries<'source> {
-    lookup_owner: Option<&'source zetesis_core::atom_interner::AtomInterner>,
+    lookup_owner: Option<&'source zetesis_core::atom_registry::AtomRegistry>,
     completion: &'source Completion,
     support: Support<'source>,
 }

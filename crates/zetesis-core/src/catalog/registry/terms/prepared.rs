@@ -2,7 +2,7 @@
 
 use super::{
     AssignedFailure, AssignmentError, AssignmentSlice, AtomAppender, Failure, Limits, PatternRef,
-    PredicateLocations, Projected, ProjectionSource, ReadError, TermLimits, projected_predicate,
+    PredicateLocations, ReadError, SlotQuery, SlotSource, TermLimits, projected_predicate,
     projected_scope, storage,
 };
 use crate::template::catalog::{PatternData, TermData};
@@ -111,7 +111,7 @@ impl AtomAppender<'_> {
                 ReadError::ForeignCatalog,
             )));
         }
-        self.admit_entry(Projected::HEADER_BYTES, limits)?;
+        self.admit_entry(SlotQuery::HEADER_BYTES, limits)?;
         projected_scope(storage::Read::from(&*self.store), values, &mut before)?;
         for argument in &pattern.pattern.terms {
             before().map_err(Failure::Stopped)?;
@@ -136,10 +136,10 @@ impl AtomAppender<'_> {
                     .map_err(assigned_storage)?;
             }
         }
-        let projected = Projected {
+        let projected = SlotQuery {
             predicate: pattern.pattern.predicate,
             values: values.slots,
-            arguments: ProjectionSource::Admitted(pattern.source, &pattern.pattern.terms),
+            arguments: SlotSource::Admitted(pattern.source, &pattern.pattern.terms),
         };
         self.insert_projection_at(&projected, Some(pattern.locations), limits, before)
     }

@@ -3,7 +3,7 @@
 use super::*;
 
 fn publication_work(count: i32) -> usize {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let mut work = 0;
     for value in 0..count {
         insert(&mut owner, &atom(value));
@@ -34,8 +34,8 @@ fn successive_publications_have_linear_work() {
     assert!(large < 3 * small, "publication work: {small} -> {large}");
 }
 
-fn committed_rounds(count: i32) -> AtomInterner {
-    let mut owner = AtomInterner::new();
+fn committed_rounds(count: i32) -> AtomRegistry {
+    let mut owner = AtomRegistry::new();
     for value in 0..count {
         insert(&mut owner, &atom(value));
         owner
@@ -70,7 +70,7 @@ fn retained_snapshot_preserves_its_readable_prefix() {
     }
 }
 
-fn pending_growth() -> AtomInterner {
+fn pending_growth() -> AtomRegistry {
     // Four separately sealed rounds fill the initial directory capacities;
     // the fifth publication exercises their geometric growth boundary.
     let mut owner = committed_rounds(4);
@@ -173,7 +173,7 @@ fn refused_publication_growth_retries_the_same_suffix() {
 
 #[test]
 fn vocabulary_publication_needs_no_discovered_atom() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let mut terms = Vec::new();
     for value in 0..12 {
         let id = owner
@@ -215,7 +215,7 @@ fn frozen_publications_preserve_the_shared_vocabulary() {
     let base = vocabulary
         .freeze_vocabulary_with(0, || Ok::<_, Infallible>(()))
         .unwrap();
-    let mut owner = AtomInterner::with_vocabulary(base.clone(), usize::MAX).unwrap();
+    let mut owner = AtomRegistry::with_vocabulary(base.clone(), usize::MAX).unwrap();
     let bytes = owner.shared_vocabulary_bytes();
     for value in 0..12 {
         insert(&mut owner, &atom(value));
@@ -238,18 +238,18 @@ fn frozen_owner_admission_includes_its_metadata_at_the_exact_limit() {
     let base = vocabulary
         .freeze_vocabulary_with(0, || Ok::<_, Infallible>(()))
         .unwrap();
-    let measured = AtomInterner::with_vocabulary(base.clone(), usize::MAX).unwrap();
+    let measured = AtomRegistry::with_vocabulary(base.clone(), usize::MAX).unwrap();
     let required = usize::try_from(measured.storage_bytes()).unwrap();
     assert!(required as u128 > measured.store.current_bytes());
 
-    let exact = AtomInterner::with_vocabulary(base.clone(), required).unwrap();
+    let exact = AtomRegistry::with_vocabulary(base.clone(), required).unwrap();
     assert_eq!(exact.storage_bytes(), required as u128);
     assert!(storage::Read::from(&exact.snapshot).same_vocabulary(storage::Read::from(&base)));
     assert_eq!(exact.snapshot.term_count(), 1);
     assert!(exact.committed().is_empty());
 
     assert!(matches!(
-        AtomInterner::with_vocabulary(base, required - 1),
+        AtomRegistry::with_vocabulary(base, required - 1),
         Err(storage::Fault::Storage { required: observed, limit })
             if observed == required as u128 && limit == required - 1
     ));

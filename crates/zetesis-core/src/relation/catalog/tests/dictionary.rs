@@ -149,8 +149,8 @@ fn independent_tuple_writers_share_term_translation() {
         vec![],
         vec![],
     )]);
-    let mut left = AtomInterner::for_template_catalog(&catalog, 1 << 20).unwrap();
-    let mut right = AtomInterner::for_template_catalog(&catalog, 1 << 20).unwrap();
+    let mut left = AtomRegistry::for_template_catalog(&catalog, 1 << 20).unwrap();
+    let mut right = AtomRegistry::for_template_catalog(&catalog, 1 << 20).unwrap();
     let declared = left
         .declare_predicate_with(&Predicate::new("pair", 2).unwrap(), atom_limits(), || {
             Ok::<_, ()>(())

@@ -1,6 +1,6 @@
 //! A successful retry publishes the complete documented sorted-run structure.
 
-use zetesis_core::atom_interner::{AtomInterner, Limits as AtomLimits};
+use zetesis_core::atom_registry::{AtomRegistry, Limits as AtomLimits};
 use zetesis_core::catalog::AtomRef;
 use zetesis_core::relation::{
     Canonical, Catalog as Rows, CatalogFailure, Failure, Insertion, Limits, Lookup, Preparation,
@@ -12,7 +12,7 @@ use zetesis_test_support::programs::unary;
 // Each fixture has one explicit canonical authority; the measured operations
 // below cover only its metadata relation and ordered-run preparation.
 struct Catalog {
-    authority: AtomInterner,
+    authority: AtomRegistry,
     rows: Rows,
 }
 
@@ -22,7 +22,7 @@ fn atom_limits() -> AtomLimits {
 
 impl Catalog {
     fn new(predicate: &Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
-        let mut authority = AtomInterner::default();
+        let mut authority = AtomRegistry::default();
         let declared = authority
             .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
             .unwrap();

@@ -3,7 +3,7 @@
 use std::fmt;
 
 use super::{
-    AtomAppender, AtomEntry, AtomInterner, EntryPosition, Failure, Limits, Query, admit,
+    AtomAppender, AtomEntry, AtomRegistry, EntryPosition, Failure, Limits, Query, admit,
     population, storage, store_failure,
 };
 use crate::Model;
@@ -101,7 +101,7 @@ impl ClosedCatalog {
     }
 }
 
-impl AtomInterner {
+impl AtomRegistry {
     /// Consume the original writer into immutable indexed storage. All canonical
     /// rows survive, including rows never published into discovery. Discovery
     /// maps and order indexes are dropped, not committed or recopied solely to

@@ -8,7 +8,7 @@
 
 use super::{
     AssignedFailure, AssignmentError, AssignmentSlice, AtomAppender, Failure, Limits, PatternRef,
-    PredicateLocations, ProjectionSource, ReadError, TermLimits, storage,
+    PredicateLocations, ReadError, SlotSource, TermLimits, storage,
 };
 use crate::catalog::PredicateRef;
 
@@ -187,7 +187,7 @@ impl AtomAppender<'_> {
         self.insert_projected_with(
             facts.predicate,
             values,
-            ProjectionSource::Pattern(pattern.terms()),
+            SlotSource::Pattern(pattern.terms()),
             (term_limits, limits),
             Some(facts.locations),
             before,

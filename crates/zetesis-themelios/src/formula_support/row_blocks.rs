@@ -20,7 +20,7 @@ pub(crate) mod coordinator;
 use std::ops::Range;
 
 #[cfg(test)]
-use zetesis_core::atom_interner::TermLookup;
+use zetesis_core::atom_registry::TermLookup;
 #[cfg(test)]
 use zetesis_core::catalog::TermKey;
 

@@ -1,5 +1,5 @@
 use super::*;
-use crate::atom_interner::AtomInterner;
+use crate::atom_registry::AtomRegistry;
 use crate::catalog::TermAssignment;
 use crate::test_support::PERMIT;
 use crate::{
@@ -18,14 +18,14 @@ pub(super) fn limits() -> Limits {
 }
 
 struct Fixture {
-    owner: AtomInterner,
+    owner: AtomRegistry,
     components: TemplateComponents,
     values: TermAssignment,
 }
 
 impl Fixture {
     fn new() -> Self {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let mut append = owner.appender();
         let predicate = append
             .declare_predicate_with(
@@ -194,7 +194,7 @@ fn prepared_variables_keep_typed_frame_failures() {
                 len: 1
             }))
         ));
-        let foreign = AtomInterner::new();
+        let foreign = AtomRegistry::new();
         let foreign = foreign.read().assignment();
         assert!(matches!(
             append.insert_prepared_pattern_with(&prepared, foreign.as_slice(), limits(), PERMIT),
@@ -220,8 +220,8 @@ fn prepared_owner_is_stricter_than_shared_vocabulary() {
         vec![],
         vec![],
     )]);
-    let mut first = AtomInterner::for_template_catalog(&catalog, 1 << 22).unwrap();
-    let mut second = AtomInterner::for_template_catalog(&catalog, 1 << 22).unwrap();
+    let mut first = AtomRegistry::for_template_catalog(&catalog, 1 << 22).unwrap();
+    let mut second = AtomRegistry::for_template_catalog(&catalog, 1 << 22).unwrap();
     let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     let prepared = first
         .appender()
@@ -277,7 +277,7 @@ fn prepared_instances_recheck_variable_measures() {
             .unwrap();
         assert!(matches!(
             append.insert_prepared_pattern_with(&prepared, values.as_slice(), limits(), PERMIT),
-            Err(AssignedFailure::Interner(Failure::Catalog(
+            Err(AssignedFailure::Registry(Failure::Catalog(
                 crate::catalog::Error::Value(crate::ValueError::Limit {
                     resource: crate::ValueResource::Nodes,
                     observed: 2,
@@ -303,7 +303,7 @@ fn prepared_constants_obey_the_fixed_logical_limits() {
                 limits(),
                 PERMIT
             ),
-            Err(AssignedFailure::Interner(Failure::Catalog(
+            Err(AssignedFailure::Registry(Failure::Catalog(
                 crate::catalog::Error::Value(crate::ValueError::Limit {
                     resource: crate::ValueResource::Nodes,
                     observed: 1,
@@ -343,7 +343,7 @@ fn every_prepared_insertion_stop_withholds_discovery() {
             assert!(matches!(append.insert_prepared_pattern_with(&prepared, values.as_slice(), limits(), || {
                 if work == cut { return Err(cut); }
                 work += 1; Ok(())
-            }), Err(AssignedFailure::Interner(Failure::Stopped(actual))) if actual == cut));
+            }), Err(AssignedFailure::Registry(Failure::Stopped(actual))) if actual == cut));
             assert!(append.is_empty(), "cut {cut}");
             assert_eq!(append.insert_prepared_pattern_with(&prepared, values.as_slice(), limits(), PERMIT).unwrap(), 0);
             assert_eq!(append.get(0).unwrap(), expected(11));
@@ -359,12 +359,12 @@ fn prepared_occupied_storage_has_an_exact_boundary() {
         append.insert_prepared_pattern_with(&prepared, values.as_slice(), limits(), PERMIT).unwrap();
         append.restart_storage_peak();
         let retained = append.storage_bytes();
-        let required = retained + Projected::HEADER_BYTES + super::super::super::PREPARED_BYTES;
+        let required = retained + SlotQuery::HEADER_BYTES + super::super::super::PREPARED_BYTES;
         assert_eq!(append.insert_prepared_pattern_with(&prepared, values.as_slice(), Limits { max_bytes: required, ..limits() }, PERMIT).unwrap(), 0);
         assert_eq!(append.storage_peak_bytes(), required);
         assert_eq!(append.storage_bytes(), retained);
         assert!(matches!(append.insert_prepared_pattern_with(&prepared, values.as_slice(), Limits { max_bytes: required - 1, ..limits() }, PERMIT),
-            Err(AssignedFailure::Interner(Failure::Bytes { required: actual, limit })) if actual == required && limit == required - 1));
+            Err(AssignedFailure::Registry(Failure::Bytes { required: actual, limit })) if actual == required && limit == required - 1));
         assert_eq!(append.len(), 1);
     });
 }
@@ -469,7 +469,7 @@ fn every_preparation_stop_preserves_the_owner() {
                 if work == cut { return Err(cut); }
                 work += 1;
                 Ok(())
-            }), Err(AssignedFailure::Interner(Failure::Stopped(actual))) if actual == cut)
+            }), Err(AssignedFailure::Registry(Failure::Stopped(actual))) if actual == cut)
             );
             assert_eq!(work, cut);
             assert_eq!(append.storage_bytes(), bytes);
@@ -489,8 +489,8 @@ fn prepared_empty_patterns_authenticate_assignments() {
         vec![],
         vec![],
     )]);
-    let mut owner = AtomInterner::for_template_catalog(&catalog, 1 << 22).unwrap();
-    let foreign = AtomInterner::new();
+    let mut owner = AtomRegistry::for_template_catalog(&catalog, 1 << 22).unwrap();
+    let foreign = AtomRegistry::new();
     let values = foreign.read().assignment();
     let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     let prepared = owner

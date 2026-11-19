@@ -24,7 +24,7 @@ fn limits() -> Limits {
 fn atom(number: i32) -> Atom {
     Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(number)]).unwrap()
 }
-fn insert(owner: &mut AtomInterner, atom: &Atom) -> usize {
+fn insert(owner: &mut AtomRegistry, atom: &Atom) -> usize {
     owner
         .entry_atom_with(atom, limits(), || Ok::<(), Infallible>(()))
         .unwrap()
@@ -38,7 +38,7 @@ fn text_argument(atom: AtomRef<'_>) -> &str {
     text
 }
 
-fn assert_sequence(owner: &AtomInterner, ids: &[AtomId], expected: &[i32]) {
+fn assert_sequence(owner: &AtomRegistry, ids: &[AtomId], expected: &[i32]) {
     let actual: Vec<_> = ids
         .iter()
         .map(|&id| AtomRef::new(&owner.store, id).unwrap())
@@ -50,8 +50,8 @@ fn assert_sequence(owner: &AtomInterner, ids: &[AtomId], expected: &[i32]) {
     );
 }
 
-fn owner(values: &[i32]) -> AtomInterner {
-    let mut owner = AtomInterner::new();
+fn owner(values: &[i32]) -> AtomRegistry {
+    let mut owner = AtomRegistry::new();
     for &value in values {
         insert(&mut owner, &atom(value));
     }
@@ -60,7 +60,7 @@ fn owner(values: &[i32]) -> AtomInterner {
 
 // Discovery is exact: each position finds itself, and positions name distinct
 // atoms. Typed order is checked where it is sorted (ordering and typed_order).
-fn validate(owner: &AtomInterner) {
+fn validate(owner: &AtomRegistry) {
     assert_eq!(owner.discovery.len(), owner.len());
     for id in 0..owner.len() {
         assert_eq!(
@@ -81,7 +81,7 @@ fn validate(owner: &AtomInterner) {
 proptest! {
     #[test]
     fn append_ids_preserve_exact_typed_membership(values in prop::collection::vec(-100i32..100, 0..90)) {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let mut expected = Vec::new();
         for value in values {
             let atom = atom(value);
@@ -178,7 +178,7 @@ fn committed_rows_survive_pending_growth() {
         vec![Value::String("retained text".into())],
     )
     .unwrap();
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     insert(&mut owner, &text);
     owner
         .commit_with(limits(), || Ok::<(), Infallible>(()))
@@ -266,7 +266,7 @@ fn duplicate_at_population_limit_copies_no_payload() {
 
 #[test]
 fn refused_work_retains_actual_reserved_capacity() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let old = owner.storage_bytes();
     let atom = atom(1);
     let entry = owner
@@ -326,7 +326,7 @@ fn borrowed_keys_preserve_structural_signed_identity() {
         ValueLimits::default(),
     )
     .unwrap();
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let values = [
         nested,
         Value::String("same".into()),
@@ -415,7 +415,7 @@ fn occupied_entry_rechecks_a_changed_population_limit() {
     validate(&owner);
 }
 
-fn staged() -> AtomInterner {
+fn staged() -> AtomRegistry {
     let mut owner = owner(&[5, 1, 9]);
     owner
         .commit_with(limits(), || Ok::<(), Infallible>(()))
@@ -516,7 +516,7 @@ fn first_commit_transfers_the_pending_id_buffer() {
 fn refused_discovery_retries_one_existing_identity() {
     let first = Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
     let second = Atom::new(Predicate::new("b", 0).unwrap(), vec![]).unwrap();
-    let mut complete = AtomInterner::new();
+    let mut complete = AtomRegistry::new();
     let mut operations = 0;
     complete
         .entry_atom_with(&first, limits(), || {
@@ -533,7 +533,7 @@ fn refused_discovery_retries_one_existing_identity() {
 
     // On this fresh nullary input the last permit precedes the indivisible
     // discovery publication. Importing its complete canonical row has finished.
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let mut admitted = 0;
     let mut before = || {
         if admitted == operations - 1 {

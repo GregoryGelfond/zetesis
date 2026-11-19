@@ -63,7 +63,7 @@ and cost comparison, including setup, search, output and completion.
 
 # Appendable atom interning probe
 
-`atom_interning.rs` exercises the public `AtomInterner` independently of the
+`atom_interning.rs` exercises the public `AtomRegistry` independently of the
 immutable lookup probe above. It constructs each catalog in four equal append
 rounds, checks repeated membership through both owned-atom and borrowed-key
 doors, obtains canonical committed snapshots and commits each pending suffix.

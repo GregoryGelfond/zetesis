@@ -1,5 +1,5 @@
 use super::*;
-use crate::atom_interner::AtomInterner;
+use crate::atom_registry::AtomRegistry;
 use crate::catalog::{DeclaredPredicate, TermKey};
 use crate::test_support::PERMIT;
 use crate::{Atom, Predicate, TemplateTerm, Value, ValueLimits};
@@ -18,8 +18,8 @@ fn limits() -> Limits {
 fn owner(
     predicates: &[Predicate],
     terms: i32,
-) -> (AtomInterner, Vec<DeclaredPredicate>, Vec<TermKey>) {
-    let mut owner = AtomInterner::new();
+) -> (AtomRegistry, Vec<DeclaredPredicate>, Vec<TermKey>) {
+    let mut owner = AtomRegistry::new();
     let mut append = owner.appender();
     let declared = predicates
         .iter()

@@ -62,10 +62,10 @@ fn sequence(located: bool) -> (usize, Vec<usize>, Vec<Atom>) {
             assign(append, values, number);
             // Both arms share identical admitted coordinates, exact row lookup,
             // and publication. Only reuse of predicate positions differs.
-            let projected = Projected {
+            let projected = SlotQuery {
                 predicate: prepared.pattern.predicate,
                 values: values.as_slice().slots,
-                arguments: ProjectionSource::Admitted(prepared.source, &prepared.pattern.terms),
+                arguments: SlotSource::Admitted(prepared.source, &prepared.pattern.terms),
             };
             ids.push(
                 append
@@ -288,7 +288,7 @@ fn every_located_insertion_stop_preserves_the_prefix() {
         let (work, stopped) = warm_insertion(Some(cut));
         assert_eq!(work, cut);
         assert!(
-            matches!(stopped, Err(AssignedFailure::Interner(Failure::Stopped(at))) if at == cut)
+            matches!(stopped, Err(AssignedFailure::Registry(Failure::Stopped(at))) if at == cut)
         );
     }
     assert!(warm_insertion(Some(total)).1.is_ok());

@@ -12,7 +12,7 @@ fn limits() -> Limits {
 
 #[test]
 fn term_admission_does_not_discover_an_atom() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let (_, mut append) = owner.split();
     let key = append
         .import_term_with(
@@ -40,7 +40,7 @@ fn constructed_compounds_reuse_children_and_preserve_expanded_measures() {
         ValueLimits::default(),
     )
     .unwrap();
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let (_, mut append) = owner.split();
     let child = append
         .import_term_with((&source).into(), TermLimits::default(), limits(), SUCCESS)
@@ -74,7 +74,7 @@ fn constructed_compounds_reuse_children_and_preserve_expanded_measures() {
 
 #[test]
 fn assigned_atoms_use_the_same_discovery_identity_as_ingress() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let (_, mut append) = owner.split();
     let predicate = Predicate::new("p", 2).unwrap();
     let declared = append
@@ -114,9 +114,9 @@ fn assigned_atoms_use_the_same_discovery_identity_as_ingress() {
 
 #[test]
 fn assigned_constructor_rejects_foreign_frame_even_if_empty() {
-    let first = AtomInterner::new();
+    let first = AtomRegistry::new();
     let values = first.read().assignment();
-    let mut second = AtomInterner::new();
+    let mut second = AtomRegistry::new();
     let (_, mut append) = second.split();
     assert!(matches!(
         append.construct_term_with(
@@ -135,7 +135,7 @@ fn assigned_constructor_rejects_foreign_frame_even_if_empty() {
 
 #[test]
 fn repeated_children_obey_expanded_node_limit() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let (_, mut append) = owner.split();
     let key = append
         .import_term_with(
@@ -160,7 +160,7 @@ fn repeated_children_obey_expanded_node_limit() {
             limits(),
             SUCCESS
         ),
-        Err(AssignedFailure::Interner(Failure::Catalog(
+        Err(AssignedFailure::Registry(Failure::Catalog(
             super::super::super::Error::Value(crate::ValueError::Limit {
                 resource: crate::ValueResource::Nodes,
                 observed: 3,
@@ -187,8 +187,8 @@ fn compound() -> Value {
     )
     .unwrap()
 }
-fn imported(value: &Value) -> (AtomInterner, TermKey) {
-    let mut owner = AtomInterner::new();
+fn imported(value: &Value) -> (AtomRegistry, TermKey) {
+    let mut owner = AtomRegistry::new();
     let key = owner
         .split()
         .1
@@ -201,7 +201,7 @@ fn imported(value: &Value) -> (AtomInterner, TermKey) {
 fn frozen_lookup_matches_content_across_scopes() {
     let value = compound();
     let (owner, expected) = imported(&value);
-    let mut foreign = AtomInterner::new();
+    let mut foreign = AtomRegistry::new();
     let (_, mut append) = foreign.split();
     append
         .import_term_with(
@@ -387,7 +387,7 @@ fn frozen_lookup_bounds_temporary_ids_in_owner_scope() {
 #[test]
 fn assigned_atom_refusal_withholds_discovery() {
     fn fixture() -> (
-        AtomInterner,
+        AtomRegistry,
         DeclaredPredicate,
         crate::catalog::TermAssignment,
     ) {
@@ -436,7 +436,7 @@ fn assigned_atom_refusal_withholds_discovery() {
             },
         );
         assert!(
-            matches!(result, Err(AssignedFailure::Interner(Failure::Stopped(actual))) if actual == cut)
+            matches!(result, Err(AssignedFailure::Registry(Failure::Stopped(actual))) if actual == cut)
         );
         assert!(owner.is_empty());
         assert_eq!(
@@ -460,7 +460,7 @@ fn assigned_atom_refusal_withholds_discovery() {
 
 mod projected;
 
-fn constructor_query_owner() -> (AtomInterner, crate::catalog::TermAssignment, TermKey) {
+fn constructor_query_owner() -> (AtomRegistry, crate::catalog::TermAssignment, TermKey) {
     let (mut owner, first) = imported(&Value::Number(7));
     let (_, mut append) = owner.split();
     let second = append
@@ -626,7 +626,7 @@ fn appender_query_refusals_leave_the_owner_unchanged() {
             assert!(result.unwrap().is_some());
         } else {
             assert!(
-                matches!(result, Err(AssignedFailure::Interner(Failure::Stopped(at))) if at == cut)
+                matches!(result, Err(AssignedFailure::Registry(Failure::Stopped(at))) if at == cut)
             );
         }
         assert_eq!(visited, cut);
@@ -665,7 +665,7 @@ fn appender_lookup_charges_its_actual_temporary_peak() {
     };
     assert!(
         matches!(append.term_lookup().find_constructed_with(ValueNodeRef::Tuple { arity: 3 }, values.as_slice(), &[0,1,0], TermLimits::default(), limited(exact - 1), SUCCESS),
-        Err(AssignedFailure::Interner(Failure::Bytes { required, limit })) if required == exact && limit == exact - 1)
+        Err(AssignedFailure::Registry(Failure::Bytes { required, limit })) if required == exact && limit == exact - 1)
     );
     assert!(
         append

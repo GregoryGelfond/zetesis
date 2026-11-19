@@ -1,8 +1,8 @@
 //! Scoped generated-term admission through the existing canonical authority.
 
-use super::query::{Identity, Projected, ProjectionSource};
+use super::query::{Identity, SlotQuery, SlotSource};
 use super::{
-    AtomAppender, AtomInterner, CatalogRead, DeclaredPredicate, Failure, Limits,
+    AtomAppender, AtomRegistry, CatalogRead, DeclaredPredicate, Failure, Limits,
     PredicateLocations, Query, TermLimits, admit, fmt, population, storage, store_failure,
 };
 use crate::catalog::{
@@ -21,27 +21,27 @@ pub enum AssignedFailure<E> {
     /// An invalid slot, unbound variable, vocabulary or read prefix.
     Assignment(AssignmentError),
     /// Canonical/discovery storage or caller-work refusal.
-    Interner(Failure<E>),
+    Registry(Failure<E>),
 }
 impl<E: fmt::Display> fmt::Display for AssignedFailure<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Assignment(error) => error.fmt(f),
-            Self::Interner(error) => error.fmt(f),
+            Self::Registry(error) => error.fmt(f),
         }
     }
 }
 impl<E: std::error::Error + 'static> std::error::Error for AssignedFailure<E> {}
 impl<E> From<Failure<E>> for AssignedFailure<E> {
     fn from(error: Failure<E>) -> Self {
-        Self::Interner(error)
+        Self::Registry(error)
     }
 }
 impl<E> From<AssignmentFailure<E>> for AssignedFailure<E> {
     fn from(error: AssignmentFailure<E>) -> Self {
         match error {
             AssignmentFailure::Assignment(error) => Self::Assignment(error),
-            AssignmentFailure::Stopped(error) => Self::Interner(Failure::Stopped(error)),
+            AssignmentFailure::Stopped(error) => Self::Registry(Failure::Stopped(error)),
         }
     }
 }
@@ -56,7 +56,7 @@ pub struct TermLookup<'a> {
     metadata: u128,
 }
 
-impl AtomInterner {
+impl AtomRegistry {
     /// Borrow existing term indexes without creating a second identity authority.
     /// The owner cannot append while this capability or its read views are live.
     #[must_use]
@@ -179,7 +179,7 @@ impl AtomAppender<'_> {
     /// this receipt does not mutate the owner's current or peak counters.
     #[must_use]
     pub fn pattern_lookup_bytes(&self) -> u128 {
-        self.storage_bytes() + Projected::HEADER_BYTES
+        self.storage_bytes() + SlotQuery::HEADER_BYTES
     }
 
     /// Find a discovered pattern instance using only its referenced slots.
@@ -210,11 +210,11 @@ impl AtomAppender<'_> {
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<Option<usize>, AssignedFailure<E>> {
         let lookup = self.lookup();
-        lookup.admit(Projected::HEADER_BYTES, limits)?;
+        lookup.admit(SlotQuery::HEADER_BYTES, limits)?;
         let read = storage::Read::from(&*self.store);
         let predicate = projected_predicate(read, pattern, &mut before)?;
-        let arguments = ProjectionSource::Pattern(pattern.terms());
-        let projected = Projected {
+        let arguments = SlotSource::Pattern(pattern.terms());
+        let projected = SlotQuery {
             predicate,
             values: values.slots,
             arguments,
@@ -225,7 +225,7 @@ impl AtomAppender<'_> {
             projected_argument(read, values, arguments.at(column), &mut before)?;
         }
         lookup
-            .find_admitted(Query::Projected(&projected), before)
+            .find_admitted(Query::Slots(&projected), before)
             .map_err(Into::into)
     }
 
@@ -318,7 +318,7 @@ impl AtomAppender<'_> {
         self.insert_projected_with(
             predicate,
             values,
-            ProjectionSource::Slots(arguments),
+            SlotSource::Slots(arguments),
             (term_limits, limits),
             None,
             before,
@@ -356,7 +356,7 @@ impl AtomAppender<'_> {
         self.insert_projected_with(
             predicate,
             values,
-            ProjectionSource::Pattern(pattern.terms()),
+            SlotSource::Pattern(pattern.terms()),
             (term_limits, limits),
             None,
             before,
@@ -369,17 +369,17 @@ impl AtomAppender<'_> {
         &mut self,
         predicate: storage::PredicateId,
         values: AssignmentSlice<'a>,
-        arguments: ProjectionSource<'a>,
+        arguments: SlotSource<'a>,
         (term_limits, limits): (TermLimits, Limits),
         locations: Option<PredicateLocations>,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<usize, AssignedFailure<E>> {
-        let projected = Projected {
+        let projected = SlotQuery {
             predicate,
             values: values.slots,
             arguments,
         };
-        self.admit_entry(Projected::HEADER_BYTES, limits)?;
+        self.admit_entry(SlotQuery::HEADER_BYTES, limits)?;
         let read = storage::Read::from(&*self.store);
         projected_scope(read, values, &mut before)?;
         for column in 0..arguments.len() {
@@ -397,14 +397,14 @@ impl AtomAppender<'_> {
 
     fn insert_projection_at<E>(
         &mut self,
-        projected: &Projected<'_>,
+        projected: &SlotQuery<'_>,
         locations: Option<PredicateLocations>,
         limits: Limits,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<usize, AssignedFailure<E>> {
         // Shared borrows keep this completely validated projection unchanged
         // through exact preparation and row publication.
-        let query = Query::Projected(projected);
+        let query = Query::Slots(projected);
         let Identity::Local(prepared) = query.identity_with(self.store, &mut before)? else {
             unreachable!("validated projection has local canonical coordinates");
         };

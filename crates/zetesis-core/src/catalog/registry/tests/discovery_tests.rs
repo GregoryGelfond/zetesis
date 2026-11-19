@@ -4,8 +4,8 @@ use super::*;
 use crate::test_support::PERMIT;
 use crate::{PatternRef, TemplateTerm};
 
-fn text_owner(width: usize) -> AtomInterner {
-    let mut owner = AtomInterner::new();
+fn text_owner(width: usize) -> AtomRegistry {
+    let mut owner = AtomRegistry::new();
     for suffix in 0..9 {
         let atom = Atom::new(
             Predicate::new("p", 1).unwrap(),
@@ -110,8 +110,8 @@ fn shared_vocabulary_does_not_share_atom_positions() {
         .import_predicate_with((&Predicate::new("p", 1).unwrap()).into(), PERMIT)
         .unwrap();
     let vocabulary = source.freeze_vocabulary_with(0, PERMIT).unwrap();
-    let mut left = AtomInterner::with_vocabulary(vocabulary.clone(), usize::MAX).unwrap();
-    let mut right = AtomInterner::with_vocabulary(vocabulary, usize::MAX).unwrap();
+    let mut left = AtomRegistry::with_vocabulary(vocabulary.clone(), usize::MAX).unwrap();
+    let mut right = AtomRegistry::with_vocabulary(vocabulary, usize::MAX).unwrap();
     insert(&mut left, &atom(1));
     insert(&mut right, &atom(2));
     assert_eq!(left.pending[0], right.pending[0]);
@@ -156,7 +156,7 @@ fn foreign_canonical_queries_use_semantic_identity() {
 
 #[test]
 fn canonical_only_rows_are_not_discoveries() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     // Store admission is exactly the state allowed to survive an interrupted
     // interner publication. It does not publish either discovery index.
     let id = owner
@@ -181,7 +181,7 @@ fn canonical_only_rows_are_not_discoveries() {
 #[test]
 fn discovery_positions_do_not_follow_identity_order() {
     for order in [[0, 1, 2], [2, 1, 0], [2, 0, 1], [0, 2, 1]] {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         for value in 0..3 {
             owner
                 .store
@@ -241,7 +241,7 @@ fn derived_allowance_covers_distinct_signed_predicates() {
     // atom count by itself cannot bound arbitrary canonical payload.
     const CANONICAL_BYTES: usize = 64 * 1024;
     let limits = Limits::for_atoms(ATOMS, CANONICAL_BYTES);
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let mut expected = BTreeSet::new();
     for index in 0..ATOMS {
         let sign = if index % 2 == 0 {

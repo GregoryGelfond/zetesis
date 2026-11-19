@@ -7,7 +7,7 @@ use super::*;
 
 /// Work charged to intern one wide atom per value, in the given order.
 fn charged(values: impl Iterator<Item = i32>) -> u64 {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let mut steps = 0_u64;
     let limits = Limits {
         max_atoms: 1 << 20,
@@ -58,7 +58,7 @@ fn insertion_work_does_not_depend_on_arrival_order() {
 
 #[test]
 fn the_current_maximum_is_found_without_insertion() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     for value in 0..10 {
         insert(&mut owner, &atom(value));
     }
@@ -104,7 +104,7 @@ fn step() -> impl Strategy<Value = Step> {
 proptest! {
     #[test]
     fn interleaved_ordered_requests_return_the_typed_order(steps in prop::collection::vec(step(), 0..120)) {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let mut discovered: Vec<Atom> = Vec::new();
         let mut committed = 0;
         for step in steps {
@@ -136,12 +136,12 @@ proptest! {
 
 #[test]
 fn every_form_of_an_atom_finds_its_one_position() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let atoms: Vec<_> = (0..30).map(mixed).collect();
     for atom in &atoms {
         insert(&mut owner, atom);
     }
-    let mut foreign = AtomInterner::new();
+    let mut foreign = AtomRegistry::new();
     for atom in atoms.iter().rev() {
         insert(&mut foreign, atom);
     }
@@ -165,7 +165,7 @@ fn every_form_of_an_atom_finds_its_one_position() {
 #[test]
 fn an_atom_with_an_unknown_argument_is_absent() {
     let owner = {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         insert(&mut owner, &mixed(0));
         insert(&mut owner, &mixed(1));
         owner

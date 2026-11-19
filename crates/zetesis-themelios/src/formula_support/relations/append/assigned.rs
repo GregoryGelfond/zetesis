@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use crate::formula_support::GroundingWork;
 use zetesis_core::PatternRef;
-use zetesis_core::atom_interner::{PreparedFacts, PreparedPattern, PreparedRows, RowColumn};
+use zetesis_core::atom_registry::{PreparedFacts, PreparedPattern, PreparedRows, RowColumn};
 use zetesis_core::catalog::{AssignmentSlice, PredicateRef};
 use zetesis_core::relation::{Relation, Row};
 
 use super::{
     AtomRef, Counters, Failure, FormulaFailure, FormulaLimits, Memory, ProgramSite, SupportAppend,
-    atom_failure, atom_interner, failure, owner_limits, record_owner_peak, size_of,
+    atom_failure, atom_registry, failure, owner_limits, record_owner_peak, size_of,
 };
 
 /// A fact block prepared at the owner, and where support's pending
@@ -107,10 +107,10 @@ impl SupportAppend<'_> {
             .owner
             .find_pattern_with(pattern, values, checked, || counters.work(limits, location))
             .map_err(|error| match error {
-                atom_interner::AssignedFailure::Assignment(error) => {
+                atom_registry::AssignedFailure::Assignment(error) => {
                     crate::formula_binding::assignment(error, location)
                 }
-                atom_interner::AssignedFailure::Interner(error) => {
+                atom_registry::AssignedFailure::Registry(error) => {
                     atom_failure(error, limits, outer, location)
                 }
             })?;
@@ -591,16 +591,16 @@ fn source_term_limits() -> zetesis_core::catalog::Limits {
 }
 
 fn assigned_failure(
-    error: atom_interner::AssignedFailure<FormulaFailure>,
+    error: atom_registry::AssignedFailure<FormulaFailure>,
     limits: &FormulaLimits,
     outer: u128,
     location: ProgramSite,
 ) -> FormulaFailure {
     match error {
-        atom_interner::AssignedFailure::Assignment(error) => {
+        atom_registry::AssignedFailure::Assignment(error) => {
             crate::formula_binding::assignment(error, location)
         }
-        atom_interner::AssignedFailure::Interner(error) => {
+        atom_registry::AssignedFailure::Registry(error) => {
             atom_failure(error, limits, outer, location)
         }
     }

@@ -7,9 +7,9 @@
 //! [`crate::AtomCatalog::new`] separately preserves arbitrary occurrence order and
 //! duplicate positions, without retaining the supplied description addresses.
 //!
-//! This [`AtomInterner`] is the atom owner grounding uses today. Its positions
+//! This [`AtomRegistry`] is the atom owner grounding uses today. Its positions
 //! are discovery coordinates, not content order. It is distinct from the
-//! generation-freezing [`crate::intern::Interner`], which grounding does not yet
+//! generation-freezing [`crate::intern::ContentInterner`], which grounding does not yet
 //! call.
 
 mod closed;
@@ -77,9 +77,9 @@ impl Limits {
         Self {
             max_atoms,
             max_bytes: canonical_bytes as u128
-                + size_of::<AtomInterner>() as u128
+                + size_of::<AtomRegistry>() as u128
                 + PREPARED_BYTES
-                + query::Projected::MAX_BYTES
+                + query::SlotQuery::MAX_BYTES
                 + 3 * cells::<AtomId>(max_atoms)
                 + discovery::bound(max_atoms)
                 + 4 * cells::<usize>(max_atoms)
@@ -162,7 +162,7 @@ impl<E: std::error::Error + 'static> std::error::Error for Failure<E> {
 /// growth); commit moves only the pending suffix.
 /// Positions are local to this owner; equal atoms in unrelated owners need not
 /// have equal positions. There is no process-global interning or shared truth.
-pub struct AtomInterner {
+pub struct AtomRegistry {
     store: Store,
     snapshot: Snapshot,
     committed: Vec<AtomId>,
@@ -173,13 +173,13 @@ pub struct AtomInterner {
     discovery: Discovery,
 }
 
-impl Default for AtomInterner {
+impl Default for AtomRegistry {
     fn default() -> Self {
         Self::from_store(Store::new(usize::MAX))
     }
 }
 
-impl AtomInterner {
+impl AtomRegistry {
     fn from_store(store: Store) -> Self {
         let snapshot = store.empty_snapshot();
         Self {
@@ -1225,7 +1225,7 @@ fn get<'a>(
 }
 
 fn storage(committed: usize, pending: usize, discovery: u128) -> u128 {
-    (size_of::<AtomInterner>() - size_of::<Store>()) as u128
+    (size_of::<AtomRegistry>() - size_of::<Store>()) as u128
         + cells::<AtomId>(committed)
         + cells::<AtomId>(pending)
         + discovery

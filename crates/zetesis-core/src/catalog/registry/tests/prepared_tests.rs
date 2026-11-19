@@ -5,7 +5,7 @@ use crate::test_support::PERMIT;
 
 #[test]
 fn canonical_only_entry_retains_the_exact_row() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let identity = owner
         .store
         .import_atom(&atom(7), TermLimits::default())
@@ -90,7 +90,7 @@ fn prepared_entry_rechecks_population() {
 
 #[test]
 fn canonical_only_retry_creates_one_discovery() {
-    let mut measured = AtomInterner::new();
+    let mut measured = AtomRegistry::new();
     let identity = measured
         .store
         .import_atom(&atom(7), TermLimits::default())
@@ -107,7 +107,7 @@ fn canonical_only_retry_creates_one_discovery() {
         })
         .unwrap();
     for cutoff in 0..work {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let identity = owner
             .store
             .import_atom(&atom(7), TermLimits::default())
@@ -169,7 +169,7 @@ fn prepared_key_publishes_the_authenticated_tuple() {
 
 #[test]
 fn canonical_only_entry_rechecks_prepared_storage() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let identity = owner
         .store
         .import_atom(&atom(7), TermLimits::default())

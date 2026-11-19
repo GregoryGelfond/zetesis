@@ -137,7 +137,7 @@ fn foreign_lookup_work_is_independent_of_population() {
     let small = owner(&[2, 1, 3]);
     let large = owner(&(0..256).rev().collect::<Vec<_>>());
     let pattern = pattern();
-    let work = |owner: &AtomInterner, value: i32| {
+    let work = |owner: &AtomRegistry, value: i32| {
         let mut atom_work = 0;
         let found = owner
             .find_atom_with(&atom(value), limits(), || {
@@ -245,7 +245,7 @@ fn query_storage_admission_precedes_probing() {
 
 #[test]
 fn empty_queries_charge_signature_resolution() {
-    let owner = AtomInterner::new();
+    let owner = AtomRegistry::new();
     let atom = Atom::new(Predicate::new("empty", 0).unwrap(), vec![]).unwrap();
     let pattern = AtomPattern::new(atom.predicate().clone(), vec![]).unwrap();
     let mut atom_work = 0;
@@ -275,7 +275,7 @@ fn empty_queries_charge_signature_resolution() {
 
 #[test]
 fn monotone_and_inner_insertions_keep_typed_order() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let values = [5, 1, 9, 7, 11, 11, 0, 6, 12, 5];
     let mut discovered = Vec::new();
     for value in values {
@@ -311,7 +311,7 @@ fn empty_lookup_permits_canonical_signature_resolution() {
     let atom = Atom::new(Predicate::new("empty", 0).unwrap(), vec![]).unwrap();
     let catalog = AtomCatalog::new(vec![atom]).unwrap();
     let query = catalog.atoms().at(0).unwrap();
-    let owner = AtomInterner::new();
+    let owner = AtomRegistry::new();
     let cause = "signature stopped";
     let result = owner.find_atom_with(query, limits(), || Err(&cause));
     assert!(
@@ -325,7 +325,7 @@ fn empty_entry_permits_canonical_signature_resolution() {
     let atom = Atom::new(Predicate::new("empty", 0).unwrap(), vec![]).unwrap();
     let catalog = AtomCatalog::new(vec![atom]).unwrap();
     let query = catalog.atoms().at(0).unwrap();
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let cause = "signature stopped";
     let result = owner.entry_atom_with(query, limits(), || Err(&cause));
     assert!(
