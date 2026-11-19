@@ -12,9 +12,9 @@ use zetesis_theory_support::theories::theory;
 fn absent_filter_has_no_receipt() {
     for route in ROUTES {
         let mut search = route.search(&choices(1), Cancellation::default());
-        assert!(search.statistics().region_filter.is_none());
+        assert!(search.statistics().constraint_refutation.is_none());
         assert_eq!(route.collect(&mut search).len(), 2);
-        assert!(search.statistics().region_filter.is_none());
+        assert!(search.statistics().constraint_refutation.is_none());
     }
 }
 
@@ -25,14 +25,14 @@ fn filter_reads_original_narrowing_before_membership() {
         let mut search = route.search(&subject, Cancellation::default());
         search.enable_phase_timing();
         search
-            .set_region_filter(Filter::new(&subject, Condition::ForbidHeld(0)))
+            .set_constraint_refuter(Filter::new(&subject, Condition::ForbidHeld(0)))
             .unwrap();
         assert!(route.collect(&mut search).is_empty(), "{route:?}");
         let receipt = search.statistics();
         assert_eq!(receipt.candidates, 0);
         assert_eq!(receipt.search.decisions, 0);
         assert_eq!(receipt.countermodel_queries, 0);
-        let filtered = receipt.region_filter.unwrap();
+        let filtered = receipt.constraint_refutation.unwrap();
         assert_eq!(filtered.preparations, 1);
         assert_eq!(filtered.checks, 1);
         assert_eq!(filtered.refuted, 1);
@@ -51,10 +51,10 @@ fn partial_region_refutations_preserve_the_answer_family() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, Condition::ForbidPair(0, 1)))
+            .set_constraint_refuter(Filter::new(&subject, Condition::ForbidPair(0, 1)))
             .unwrap();
         assert_eq!(route.collect(&mut search), expected, "{route:?}");
-        assert!(search.statistics().region_filter.unwrap().refuted > 0);
+        assert!(search.statistics().constraint_refutation.unwrap().refuted > 0);
     }
 }
 
@@ -65,7 +65,7 @@ fn scalar_pulls_reuse_one_source_checker() {
         Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
     let filter = Filter::new(&subject, Condition::Pass);
     let mut search = Route::Scalar.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     let mut answers = BTreeSet::new();
     for answer in search.by_ref() {
         assert!(answers.insert(answer.unwrap().atoms().collect()));
@@ -73,7 +73,7 @@ fn scalar_pulls_reuse_one_source_checker() {
     }
     assert!(search.exhausted());
     assert_eq!(answers, expected);
-    let receipt = search.statistics().region_filter.unwrap();
+    let receipt = search.statistics().constraint_refutation.unwrap();
     assert_eq!(receipt.preparations, 1);
     assert!(receipt.checks > u64::try_from(answers.len()).unwrap());
     assert_eq!(filter.live.load(Ordering::SeqCst), 0);
@@ -84,7 +84,7 @@ fn scalar_exhaustion_reports_checker_teardown_failure() {
     let subject = choices(1);
     let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
     let mut search = Route::Scalar.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     let mut answers = BTreeSet::new();
     for _ in 0..2 {
         assert!(answers.insert(search.next().unwrap().unwrap().atoms().collect::<Vec<_>>()));
@@ -95,7 +95,14 @@ fn scalar_exhaustion_reports_checker_teardown_failure() {
         Some(Err(Incomplete::WorkerPanicked))
     ));
     assert_eq!(filter.live.load(Ordering::SeqCst), 0);
-    assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+    assert_eq!(
+        search
+            .statistics()
+            .constraint_refutation
+            .unwrap()
+            .preparations,
+        1
+    );
     assert!(!search.exhausted());
     assert!(search.next().is_none());
 }
@@ -105,7 +112,7 @@ fn scalar_stop_reports_checker_teardown_failure() {
     let subject = choices(1);
     let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
     let mut search = Route::Scalar.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     search.next().unwrap().unwrap();
     let receipt = search.statistics();
     assert!(matches!(search.stop(), Err(Incomplete::WorkerPanicked)));
@@ -120,7 +127,7 @@ fn scalar_drop_contains_checker_teardown_failure() {
     let subject = choices(1);
     let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
     let mut search = Route::Scalar.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     search.next().unwrap().unwrap();
     assert_eq!(filter.live.load(Ordering::SeqCst), 1);
     assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(search))).is_ok());
@@ -132,10 +139,13 @@ fn source_failure_precedes_checker_teardown_failure() {
     let subject = choices(1);
     let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: true });
     let mut search = Route::Scalar.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
-    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    search.set_constraint_refuter(filter.clone()).unwrap();
+    assert!(matches!(
+        search.next(),
+        Some(Err(Incomplete::ConstraintRefutation))
+    ));
     assert_eq!(filter.live.load(Ordering::SeqCst), 0);
-    let receipt = search.statistics().region_filter.unwrap();
+    let receipt = search.statistics().constraint_refutation.unwrap();
     assert_eq!(receipt.preparations, 1);
     assert_eq!(receipt.checks, 1);
     assert_eq!(receipt.failed, 1);
@@ -150,7 +160,7 @@ fn producer_checkers_are_reused_across_batches() {
         Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
     let filter = Filter::new(&subject, Condition::Pass);
     let mut search = Route::Producers.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     let mut answers = BTreeSet::new();
     let mut rounds = 0;
     while !search.exhausted() {
@@ -160,7 +170,7 @@ fn producer_checkers_are_reused_across_batches() {
         rounds += 1;
     }
     assert_eq!(answers, expected);
-    let receipt = search.statistics().region_filter.unwrap();
+    let receipt = search.statistics().constraint_refutation.unwrap();
     assert!(rounds > 4, "the four slots served several joined rounds");
     assert!((1..=4).contains(&receipt.preparations));
     assert!(receipt.checks > receipt.preparations);
@@ -175,7 +185,7 @@ fn retained_checkers_move_with_the_stream() {
     for route in [Route::Scalar, Route::Producers] {
         let filter = Filter::new(&subject, Condition::Pass);
         let mut search = route.search(&subject, Cancellation::default());
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         let first = search.next_batch(batch(1), residual).unwrap();
         assert_eq!(first.len(), 1);
         assert!(filter.live.load(Ordering::SeqCst) > 0);
@@ -194,7 +204,7 @@ fn retained_checkers_belong_to_their_enumeration() {
     for route in [Route::Scalar, Route::Producers] {
         let filter = Filter::new(&subject, Condition::Pass);
         let mut first = route.search(&subject, Cancellation::default());
-        first.set_region_filter(filter.clone()).unwrap();
+        first.set_constraint_refuter(filter.clone()).unwrap();
         assert_eq!(first.next_batch(batch(1), residual).unwrap().len(), 1);
         let live = filter.live.load(Ordering::SeqCst);
         assert!(live > 0);
@@ -203,7 +213,7 @@ fn retained_checkers_belong_to_their_enumeration() {
         // second stream authenticates its own checker even with a shared factory.
         let other = choices(3);
         let mut second = route.search(&other, Cancellation::default());
-        second.set_region_filter(filter.clone()).unwrap();
+        second.set_constraint_refuter(filter.clone()).unwrap();
         assert!(matches!(
             second.next_batch(batch(1), residual),
             Err(BatchError::Search(Incomplete::WrongTheory))
@@ -222,7 +232,7 @@ fn cancellation_releases_retained_checkers() {
         let cancellation = Cancellation::default();
         let filter = Filter::new(&subject, Condition::Pass);
         let mut search = route.search(&subject, cancellation.clone());
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         assert_eq!(search.next_batch(batch(1), residual).unwrap().len(), 1);
         assert!(filter.live.load(Ordering::SeqCst) > 0);
         let receipt = search.statistics();
@@ -247,7 +257,7 @@ fn coordinator_pulls_reuse_one_source_checker() {
         Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
     let filter = Filter::new(&subject, Condition::Pass);
     let mut search = Route::Coordinator.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     let mut answers = BTreeSet::new();
     for answer in search.by_ref() {
         assert!(answers.insert(answer.unwrap().atoms().collect()));
@@ -255,7 +265,7 @@ fn coordinator_pulls_reuse_one_source_checker() {
     }
     assert!(search.exhausted());
     assert_eq!(answers, expected);
-    let receipt = search.statistics().region_filter.unwrap();
+    let receipt = search.statistics().constraint_refutation.unwrap();
     assert_eq!(receipt.preparations, 1);
     assert!(receipt.checks > u64::try_from(answers.len()).unwrap());
     assert_eq!(filter.live.load(Ordering::SeqCst), 0);
@@ -268,7 +278,7 @@ fn coordinator_checkers_move_with_the_stream() {
         Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
     let filter = Filter::new(&subject, Condition::Pass);
     let mut search = Route::Coordinator.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     let first: Vec<usize> = search.next().unwrap().unwrap().atoms().collect();
     assert_eq!(filter.live.load(Ordering::SeqCst), 1);
     let mut answers = std::thread::spawn(move || Route::Coordinator.collect(&mut search))
@@ -284,13 +294,13 @@ fn coordinator_checkers_belong_to_their_enumeration() {
     let subject = choices(3);
     let filter = Filter::new(&subject, Condition::Pass);
     let mut first = Route::Coordinator.search(&subject, Cancellation::default());
-    first.set_region_filter(filter.clone()).unwrap();
+    first.set_constraint_refuter(filter.clone()).unwrap();
     assert!(first.next().unwrap().is_ok());
     assert_eq!(filter.live.load(Ordering::SeqCst), 1);
     // Equal coordinates do not confer the original theory's identity.
     let other = choices(3);
     let mut second = Route::Coordinator.search(&other, Cancellation::default());
-    second.set_region_filter(filter.clone()).unwrap();
+    second.set_constraint_refuter(filter.clone()).unwrap();
     assert!(matches!(second.next(), Some(Err(Incomplete::WrongTheory))));
     assert_eq!(filter.live.load(Ordering::SeqCst), 1);
     assert!(!second.exhausted());
@@ -304,7 +314,7 @@ fn cancellation_releases_the_coordinators_checker() {
     let cancellation = Cancellation::default();
     let filter = Filter::new(&subject, Condition::Pass);
     let mut search = Route::Coordinator.search(&subject, cancellation.clone());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     assert!(search.next().unwrap().is_ok());
     assert_eq!(filter.live.load(Ordering::SeqCst), 1);
     let receipt = search.statistics();
@@ -322,7 +332,7 @@ fn coordinator_exhaustion_reports_checker_teardown_failure() {
     let subject = choices(1);
     let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
     let mut search = Route::Coordinator.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     let mut answers = BTreeSet::new();
     for _ in 0..2 {
         assert!(answers.insert(search.next().unwrap().unwrap().atoms().collect::<Vec<_>>()));
@@ -335,7 +345,14 @@ fn coordinator_exhaustion_reports_checker_teardown_failure() {
         Some(Err(Incomplete::WorkerPanicked))
     ));
     assert_eq!(filter.live.load(Ordering::SeqCst), 0);
-    assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+    assert_eq!(
+        search
+            .statistics()
+            .constraint_refutation
+            .unwrap()
+            .preparations,
+        1
+    );
     assert!(!search.exhausted());
     assert!(search.next().is_none());
 }
@@ -345,7 +362,7 @@ fn coordinator_stop_reports_checker_teardown_failure() {
     let subject = choices(1);
     let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
     let mut search = Route::Coordinator.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     search.next().unwrap().unwrap();
     let receipt = search.statistics();
     assert!(matches!(search.stop(), Err(Incomplete::WorkerPanicked)));
@@ -361,7 +378,7 @@ fn coordinator_drop_contains_checker_teardown_failure() {
     let subject = choices(1);
     let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
     let mut search = Route::Coordinator.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     search.next().unwrap().unwrap();
     assert_eq!(filter.live.load(Ordering::SeqCst), 1);
     assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(search))).is_ok());
@@ -373,10 +390,13 @@ fn coordinator_source_failure_precedes_checker_teardown_failure() {
     let subject = choices(1);
     let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: true });
     let mut search = Route::Coordinator.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
-    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    search.set_constraint_refuter(filter.clone()).unwrap();
+    assert!(matches!(
+        search.next(),
+        Some(Err(Incomplete::ConstraintRefutation))
+    ));
     assert_eq!(filter.live.load(Ordering::SeqCst), 0);
-    let receipt = search.statistics().region_filter.unwrap();
+    let receipt = search.statistics().constraint_refutation.unwrap();
     assert_eq!(receipt.preparations, 1);
     assert_eq!(receipt.checks, 1);
     assert_eq!(receipt.failed, 1);
@@ -390,17 +410,25 @@ fn checker_retry_retains_source_preparation() {
     for route in [Route::Scalar, Route::Producers] {
         let filter = Filter::new(&subject, Condition::Pass);
         let mut search = route.search(&subject, Cancellation::default());
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         assert!(matches!(
             search.next_batch(batch(1), |_, _| Err::<Vec<_>, _>("retry")),
             Err(BatchError::Checker("retry"))
         ));
         assert!(filter.live.load(Ordering::SeqCst) > 0);
         assert_eq!(search.batch_statistics().pending, 1);
-        let prepared = search.statistics().region_filter.unwrap().preparations;
+        let prepared = search
+            .statistics()
+            .constraint_refutation
+            .unwrap()
+            .preparations;
         assert_eq!(search.next_batch(batch(1), residual).unwrap().len(), 1);
         assert_eq!(
-            search.statistics().region_filter.unwrap().preparations,
+            search
+                .statistics()
+                .constraint_refutation
+                .unwrap()
+                .preparations,
             prepared
         );
         search.stop().unwrap();
@@ -414,7 +442,7 @@ fn terminal_batch_misuse_releases_retained_checkers() {
     for route in [Route::Scalar, Route::Producers] {
         let filter = Filter::new(&subject, Condition::Pass);
         let mut search = route.search(&subject, Cancellation::default());
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         assert!(matches!(
             search.next_batch(batch(1), |_, _| Err::<Vec<_>, _>("retry")),
             Err(BatchError::Checker("retry"))
@@ -448,7 +476,7 @@ fn original_filter_never_excludes_reduct_countermodels() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, Condition::Require(0)))
+            .set_constraint_refuter(Filter::new(&subject, Condition::Require(0)))
             .unwrap();
         assert!(route.collect(&mut search).is_empty(), "{route:?}");
         let receipt = search.statistics();
@@ -469,13 +497,16 @@ fn failed_filter_preparation_never_establishes_exhaustion() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, Condition::FailPreparation))
+            .set_constraint_refuter(Filter::new(&subject, Condition::FailPreparation))
             .unwrap();
-        assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+        assert!(matches!(
+            search.next(),
+            Some(Err(Incomplete::ConstraintRefutation))
+        ));
         let _ = search.stop();
         assert!(!search.exhausted());
         assert!(search.next().is_none());
-        let filtered = search.statistics().region_filter.unwrap();
+        let filtered = search.statistics().constraint_refutation.unwrap();
         assert!(filtered.preparations > 0);
         assert_eq!(filtered.failed, filtered.preparations);
         assert_eq!(filtered.checks, 0);
@@ -489,12 +520,15 @@ fn failed_filter_preparation_is_timed() {
         let mut search = route.search(&subject, Cancellation::default());
         search.enable_phase_timing();
         search
-            .set_region_filter(Filter::new(&subject, Condition::FailPreparation))
+            .set_constraint_refuter(Filter::new(&subject, Condition::FailPreparation))
             .unwrap();
-        assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+        assert!(matches!(
+            search.next(),
+            Some(Err(Incomplete::ConstraintRefutation))
+        ));
         let _ = search.stop();
         let receipt = search.statistics();
-        let prepared = receipt.region_filter.unwrap().preparations;
+        let prepared = receipt.constraint_refutation.unwrap().preparations;
         assert!(prepared > 0);
         assert_eq!(
             receipt.phase_timings.unwrap().original_validation.calls,
@@ -510,13 +544,16 @@ fn failed_region_check_retains_its_attempt_receipt() {
         let mut search = route.search(&subject, Cancellation::default());
         search.enable_phase_timing();
         let filter = Filter::new(&subject, Condition::FailCheck);
-        search.set_region_filter(filter.clone()).unwrap();
-        assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+        search.set_constraint_refuter(filter.clone()).unwrap();
+        assert!(matches!(
+            search.next(),
+            Some(Err(Incomplete::ConstraintRefutation))
+        ));
         assert_eq!(filter.live.load(Ordering::SeqCst), 0);
         let _ = search.stop();
         assert!(!search.exhausted());
         let receipt = search.statistics();
-        let filtered = receipt.region_filter.unwrap();
+        let filtered = receipt.constraint_refutation.unwrap();
         assert_eq!(filtered.checks, 1);
         assert_eq!(filtered.failed, 1);
         assert_eq!(filtered.refuted, 0);
@@ -532,8 +569,8 @@ fn filter_configuration_requires_an_unstarted_stream() {
         let mut search = route.search(&subject, Cancellation::default());
         assert!(search.next().unwrap().is_ok());
         assert!(matches!(
-            search.set_region_filter(Filter::new(&subject, Condition::Pass)),
-            Err(Incomplete::LateRegionFilter),
+            search.set_constraint_refuter(Filter::new(&subject, Condition::Pass)),
+            Err(Incomplete::LateConstraintRefuter),
         ));
         search.stop().unwrap();
     }
@@ -545,11 +582,11 @@ fn a_configured_filter_cannot_be_replaced() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, Condition::Pass))
+            .set_constraint_refuter(Filter::new(&subject, Condition::Pass))
             .unwrap();
         assert!(matches!(
-            search.set_region_filter(Filter::new(&subject, Condition::Require(0))),
-            Err(Incomplete::RegionFilterAlreadySet),
+            search.set_constraint_refuter(Filter::new(&subject, Condition::Require(0))),
+            Err(Incomplete::ConstraintRefuterAlreadySet),
         ));
         assert_eq!(route.collect(&mut search).len(), 2);
     }
@@ -566,7 +603,7 @@ fn certificate_preparation_keeps_filter_installation_open() {
                 .unwrap()
         );
         search
-            .set_region_filter(Filter::new(&subject, Condition::Require(0)))
+            .set_constraint_refuter(Filter::new(&subject, Condition::Require(0)))
             .unwrap();
         assert_eq!(
             route.collect(&mut search),
@@ -582,7 +619,7 @@ fn explicit_stop_joins_borrowed_checkers_without_cancelling() {
         let cancellation = Cancellation::default();
         let filter = Filter::new(&subject, Condition::Pass);
         let mut search = route.search(&subject, cancellation.clone());
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         assert!(search.next().unwrap().is_ok());
         search.stop().unwrap();
         assert_eq!(filter.live.load(Ordering::SeqCst), 0);
@@ -590,7 +627,7 @@ fn explicit_stop_joins_borrowed_checkers_without_cancelling() {
         assert!(!search.exhausted());
         assert!(search.next().is_none());
         let joined = search.statistics();
-        assert!(joined.region_filter.unwrap().checks > 0);
+        assert!(joined.constraint_refutation.unwrap().checks > 0);
         assert_eq!(joined.stable_models, 1, "queued answers were not delivered");
         search.stop().unwrap();
         assert_eq!(search.statistics(), joined);
@@ -634,11 +671,11 @@ fn filter_subject_authentication_precedes_region_checks() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&other, Condition::Pass))
+            .set_constraint_refuter(Filter::new(&other, Condition::Pass))
             .unwrap();
         assert!(matches!(search.next(), Some(Err(Incomplete::WrongTheory))));
         let _ = search.stop();
-        assert_eq!(search.statistics().region_filter.unwrap().checks, 0);
+        assert_eq!(search.statistics().constraint_refutation.unwrap().checks, 0);
         assert!(!search.exhausted());
     }
 }
@@ -649,13 +686,13 @@ fn cancellation_inside_a_filter_stops_without_exhaustion() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, Condition::Cancel))
+            .set_constraint_refuter(Filter::new(&subject, Condition::Cancel))
             .unwrap();
         assert!(matches!(search.next(), Some(Err(Incomplete::Cancelled))));
         let _ = search.stop();
         assert!(!search.exhausted());
         assert_eq!(search.statistics().candidates, 0);
-        assert_eq!(search.statistics().region_filter.unwrap().checks, 1);
+        assert_eq!(search.statistics().constraint_refutation.unwrap().checks, 1);
     }
 }
 
@@ -665,12 +702,12 @@ fn core_refutation_never_prepares_an_external_checker() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, Condition::FailPreparation))
+            .set_constraint_refuter(Filter::new(&subject, Condition::FailPreparation))
             .unwrap();
         assert!(route.collect(&mut search).is_empty());
         assert_eq!(
-            search.statistics().region_filter.unwrap(),
-            crate::RegionFilterStatistics::default()
+            search.statistics().constraint_refutation.unwrap(),
+            crate::ConstraintRefutationStatistics::default()
         );
     }
 }
@@ -681,11 +718,18 @@ fn empty_final_pull_never_prepares_an_external_checker() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, Condition::Pass))
+            .set_constraint_refuter(Filter::new(&subject, Condition::Pass))
             .unwrap();
         assert!(search.next().unwrap().is_ok());
         assert!(search.next().is_none());
         assert!(search.exhausted());
-        assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+        assert_eq!(
+            search
+                .statistics()
+                .constraint_refutation
+                .unwrap()
+                .preparations,
+            1
+        );
     }
 }

@@ -656,12 +656,13 @@ struct RefuseChildren(Theory);
 
 struct RefuseChildrenWorker<'a>(&'a Theory);
 
-impl crate::region_filter::tests::injection::Source for RefuseChildren {
+impl crate::constraint_refutation::tests::injection::Source for RefuseChildren {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn crate::region_filter::tests::injection::Worker + '_>, Incomplete> {
+    ) -> Result<Box<dyn crate::constraint_refutation::tests::injection::Worker + '_>, Incomplete>
+    {
         cancellation.poll()?;
         if !theory.same_instance(&self.0) {
             return Err(Incomplete::WrongTheory);
@@ -670,7 +671,7 @@ impl crate::region_filter::tests::injection::Source for RefuseChildren {
     }
 }
 
-impl crate::region_filter::tests::injection::Worker for RefuseChildrenWorker<'_> {
+impl crate::constraint_refutation::tests::injection::Worker for RefuseChildrenWorker<'_> {
     fn check(
         &mut self,
         theory: &Theory,
@@ -698,8 +699,8 @@ fn an_allocation_stop_closes_and_settles_the_frontier() {
 fn allocation_stop_closes_and_settles_the_frontier(engagement: Engagement) {
     let (mut search, original) = search_engaging(2, 1, engagement);
     search
-        .set_filter(crate::region_filter::RegionFilter::new(
-            crate::region_filter::Source::Fixture(Arc::new(RefuseChildren(
+        .set_refuter(crate::constraint_refutation::ConstraintRefuter::new(
+            crate::constraint_refutation::Source::Fixture(Arc::new(RefuseChildren(
                 original.theory().clone(),
             ))),
         ))

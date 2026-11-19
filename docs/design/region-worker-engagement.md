@@ -86,7 +86,7 @@ enable made after the walk has begun is ignored for the whole walk, as a late en
 
 | Operation | `NotBegun` | `Unengaged` | `Engaged` |
 |---|---|---|---|
-| `set_filter` | installs | refuses, `LateRegionFilter` | refuses, `LateRegionFilter` |
+| `set_refuter` | installs | refuses, `LateConstraintRefuter` | refuses, `LateConstraintRefuter` |
 | `restrict`, `tighten` | synchronize the budget, then charge | charge the shared allowance | charge the shared allowance |
 | `permits_determined` | decides | refuses, `LateCertificate` | refuses, `LateCertificate` |
 | `propose` | begins the walk | runs the coordinator loop | runs the receive loop |
@@ -211,7 +211,7 @@ A worker reuses its workspaces across regions; the coordinator reuses them acros
 the scalar walk's retained filter is: the owner is a clone of the shared structure's `Arc`, and the dependent holds the
 coordinator's workspaces (narrowing scratch, reduct-membership state, certificate workspace, region-filter checker,
 retired knowledge), its report and its phase-timing baseline. The checker is prepared once, on the first region not
-refuted by original narrowing, and retained across pulls, so the `RegionFilter` retention contract holds. The cell's
+refuted by original narrowing, and retained across pulls, so the `ConstraintRefuter` retention contract holds. The cell's
 parts start empty, so creating it costs one small allocation, and nothing for a walk that engages at once. It is
 released at the walk's end in the coordinator phase, at engagement and by the teardown, always through the contained
 drop, so a checker whose teardown panics becomes `WorkerPanicked`, never exhaustion.
@@ -399,7 +399,7 @@ observation record.
   was stated per phase instead of per owned resource. Kept apart instead.
 - **The coordinator continuing as worker 0 after engagement.** It saves one spawn but gives the coordinator two roles at
   once, with a termination condition spanning both.
-- **Building the coordinator's checker per pull.** It breaks the `RegionFilter` retention contract and, on the hybrid
+- **Building the coordinator's checker per pull.** It breaks the `ConstraintRefuter` retention contract and, on the hybrid
   route, repeats a charged preparation per model.
 - **Holding the filter in its own `Arc`,** or **handing the coordinator's checker to worker 0.** The first keeps
   `Arc::get_mut` available, which nothing needs, at the cost of a second lifetime in the step; the second needs the

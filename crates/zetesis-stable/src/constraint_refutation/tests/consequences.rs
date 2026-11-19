@@ -1,6 +1,8 @@
 //! Original consequences compose with closure, never frozen membership.
 
-use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
+use crate::constraint_refutation::tests::injection::{
+    Source as InjectedSource, Worker as InjectedWorker,
+};
 use crate::streamed_constraints::ConstraintConsequence;
 use crate::subject::Pass;
 use zetesis_themelios::ProgramSite;
@@ -224,7 +226,7 @@ fn source_decisions_reenter_original_closure() {
         let filter = Filter::new(&subject, cascade);
         let mut search = route.search(&subject, Cancellation::default());
         search.enable_phase_timing();
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         assert_eq!(route.collect(&mut search), expected, "{route:?}");
         assert_eq!(
             filter.observations(),
@@ -251,7 +253,7 @@ fn source_decisions_reenter_original_closure() {
             (regions.regions, regions.leaves, regions.held, regions.cut),
             (1, 1, 2, 1)
         );
-        let source = receipt.region_filter.unwrap();
+        let source = receipt.constraint_refutation.unwrap();
         assert_eq!(
             (
                 source.preparations,
@@ -278,7 +280,7 @@ fn child_regions_begin_fresh_source_passes() {
     for route in ROUTES {
         let filter = Filter::new(&subject, require_first);
         let mut search = route.search(&subject, Cancellation::default());
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         assert_eq!(route.collect(&mut search), expected, "{route:?}");
         let observations = filter.observations();
         assert_eq!(observations.len(), 8);
@@ -318,7 +320,7 @@ fn source_consequences_never_enter_frozen_queries() {
     for route in ROUTES {
         let filter = Filter::new(&subject, require_first);
         let mut search = route.search(&subject, Cancellation::default());
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         assert!(route.collect(&mut search).is_empty(), "{route:?}");
         assert_eq!(
             filter.observations(),
@@ -362,7 +364,7 @@ fn out_of_range_consequences_are_typed_failures() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, out_of_range))
+            .set_constraint_refuter(Filter::new(&subject, out_of_range))
             .unwrap();
         assert_eq!(
             failure(route, &mut search),
@@ -372,7 +374,7 @@ fn out_of_range_consequences_are_typed_failures() {
         assert!(!search.exhausted());
         let receipt = search.statistics();
         assert_eq!(receipt.candidates, 0);
-        let source = receipt.region_filter.unwrap();
+        let source = receipt.constraint_refutation.unwrap();
         assert_eq!((source.checks, source.failed, source.refuted), (1, 1, 0));
         assert_eq!(receipt.regions.unwrap().counts.held, 0);
     }
@@ -416,7 +418,7 @@ fn decided_consequences_are_typed_failures() {
         for route in ROUTES {
             let filter = Filter::new(&subject, callback);
             let mut search = route.search(&subject, Cancellation::default());
-            search.set_region_filter(filter.clone()).unwrap();
+            search.set_constraint_refuter(filter.clone()).unwrap();
             assert_eq!(
                 failure(route, &mut search),
                 Incomplete::InvalidRegionConsequence
@@ -426,7 +428,7 @@ fn decided_consequences_are_typed_failures() {
             let receipt = search.statistics();
             assert_eq!(receipt.candidates, 0);
             assert_eq!(receipt.regions.unwrap().counts.held, 1);
-            let source = receipt.region_filter.unwrap();
+            let source = receipt.constraint_refutation.unwrap();
             assert_eq!((source.checks, source.failed, source.refuted), (2, 1, 0));
             assert_eq!(
                 filter.observations()[1],
@@ -459,7 +461,7 @@ fn cancellation_refuses_a_returned_consequence() {
         let filter = Filter::new(&subject, cancelled_force);
         let mut search = route.search(&subject, Cancellation::default());
         search.enable_phase_timing();
-        search.set_region_filter(filter.clone()).unwrap();
+        search.set_constraint_refuter(filter.clone()).unwrap();
         assert_eq!(failure(route, &mut search), Incomplete::Cancelled);
         let _ = search.stop();
         assert!(!search.exhausted());
@@ -467,7 +469,7 @@ fn cancellation_refuses_a_returned_consequence() {
         let receipt = search.statistics();
         assert_eq!(receipt.candidates, 0);
         assert_eq!(receipt.regions.unwrap().counts.held, 0);
-        let source = receipt.region_filter.unwrap();
+        let source = receipt.constraint_refutation.unwrap();
         assert_eq!((source.checks, source.failed), (1, 1));
         assert_eq!(receipt.phase_timings.unwrap().original_validation.calls, 1);
     }
@@ -484,7 +486,7 @@ fn failed_continuation(
             site: ProgramSite::program(),
         })
     } else {
-        Err(Incomplete::RegionFilter)
+        Err(Incomplete::ConstraintRefutation)
     }
 }
 
@@ -494,8 +496,11 @@ fn failed_continuation_retains_the_applied_prefix() {
     for route in ROUTES {
         let filter = Filter::new(&subject, failed_continuation);
         let mut search = route.search(&subject, Cancellation::default());
-        search.set_region_filter(filter.clone()).unwrap();
-        assert_eq!(failure(route, &mut search), Incomplete::RegionFilter);
+        search.set_constraint_refuter(filter.clone()).unwrap();
+        assert_eq!(
+            failure(route, &mut search),
+            Incomplete::ConstraintRefutation
+        );
         let _ = search.stop();
         assert!(!search.exhausted());
         assert_eq!(filter.live.load(Ordering::SeqCst), 0);
@@ -505,7 +510,7 @@ fn failed_continuation_retains_the_applied_prefix() {
         let regions = receipt.regions.unwrap().counts;
         assert_eq!(regions.held, 1);
         assert_eq!(regions.work, receipt.search.work);
-        let source = receipt.region_filter.unwrap();
+        let source = receipt.constraint_refutation.unwrap();
         assert_eq!((source.checks, source.failed), (2, 1));
     }
 }
@@ -534,7 +539,7 @@ fn refuted_continuation_preserves_the_attempt_receipt() {
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
-            .set_region_filter(Filter::new(&subject, refuted_continuation))
+            .set_constraint_refuter(Filter::new(&subject, refuted_continuation))
             .unwrap();
         assert!(route.collect(&mut search).is_empty());
         let receipt = search.statistics();
@@ -542,7 +547,7 @@ fn refuted_continuation_preserves_the_attempt_receipt() {
         assert_eq!(receipt.search.decisions, 0);
         let regions = receipt.regions.unwrap().counts;
         assert_eq!((regions.held, regions.refuted), (1, 1));
-        let source = receipt.region_filter.unwrap();
+        let source = receipt.constraint_refutation.unwrap();
         assert_eq!((source.checks, source.refuted, source.failed), (2, 1, 0));
     }
 }
@@ -552,7 +557,7 @@ fn refused_pass(
     _: Pass,
     _: &Cancellation,
 ) -> Result<ConstraintConsequence, Incomplete> {
-    Err(Incomplete::RegionFilter)
+    Err(Incomplete::ConstraintRefutation)
 }
 
 #[test]
@@ -563,15 +568,15 @@ fn source_publication_spends_one_search_permit() {
         // any source update, independent of this theory's indexing details.
         let mut probe = route.search(&subject, Cancellation::default());
         probe
-            .set_region_filter(Filter::new(&subject, refused_pass))
+            .set_constraint_refuter(Filter::new(&subject, refused_pass))
             .unwrap();
-        assert_eq!(failure(route, &mut probe), Incomplete::RegionFilter);
+        assert_eq!(failure(route, &mut probe), Incomplete::ConstraintRefutation);
         let _ = probe.stop();
         let before = probe.statistics().search.work;
         for permitted in [0, 1] {
             let filter = Filter::new(&subject, require_first);
             let mut search = limited(route, &subject, before + permitted);
-            search.set_region_filter(filter.clone()).unwrap();
+            search.set_constraint_refuter(filter.clone()).unwrap();
             assert_eq!(failure(route, &mut search), Incomplete::WorkLimit);
             let _ = search.stop();
             assert!(!search.exhausted());
@@ -583,7 +588,7 @@ fn source_publication_spends_one_search_permit() {
             assert_eq!(receipt.candidates, 0);
             assert_eq!(receipt.search.decisions, 0);
             assert_eq!(filter.observations().len(), 1);
-            let source = receipt.region_filter.unwrap();
+            let source = receipt.constraint_refutation.unwrap();
             assert_eq!((source.checks, source.failed), (1, 0));
         }
     }

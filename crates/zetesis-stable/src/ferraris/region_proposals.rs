@@ -118,7 +118,7 @@ const CONTROL_WAIT: Duration = Duration::from_millis(1);
 /// counts and timings still reach the merge after the join.
 #[derive(Default)]
 struct Workspace<'a> {
-    filter: Option<crate::region_filter::Worker<'a>>,
+    filter: Option<crate::constraint_refutation::Worker<'a>>,
     scratch: NarrowingScratch,
     /// The sharing state of the scratch's tier of learned rows.
     tier: Tier,
@@ -137,7 +137,7 @@ self_cell::self_cell! {
     /// existing infallible boxed-checker contract, not a universal OOM
     /// guarantee.
     struct Workers {
-        owner: Option<crate::region_filter::RegionFilter>,
+        owner: Option<crate::constraint_refutation::ConstraintRefuter>,
         #[not_covariant]
         dependent: Workspaces,
     }
@@ -228,7 +228,7 @@ impl RegionProposals {
         &mut self.statistics.counts
     }
 
-    pub(super) fn filter(&self) -> Option<&crate::region_filter::RegionFilter> {
+    pub(super) fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
         self.workers.borrow_owner().as_ref()
     }
 
@@ -288,7 +288,7 @@ impl RegionProposals {
 
     /// The caller permits installation only before traversal, when no
     /// producer has prepared a checker or retained a worklist.
-    pub(super) fn set_filter(&mut self, filter: crate::region_filter::RegionFilter) {
+    pub(super) fn set_refuter(&mut self, filter: crate::constraint_refutation::ConstraintRefuter) {
         self.workers = Workers::new(Some(filter), |_| Vec::new());
     }
 
@@ -534,7 +534,7 @@ struct Outcome {
 /// outcome.
 struct SlateFill<'a, 'filter> {
     theory: &'a Theory,
-    filter: Option<&'filter crate::region_filter::RegionFilter>,
+    filter: Option<&'filter crate::constraint_refutation::ConstraintRefuter>,
     parts: &'a regions::OriginalParts,
     narrower: &'a Narrower,
     restrictions: &'a Conditions<(Theory, Narrower)>,
@@ -966,11 +966,13 @@ impl<'filter> SlateFill<'_, 'filter> {
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
     ) -> Result<Step, Incomplete> {
-        let mut check = self.filter.map(|factory| crate::region_filter::Check {
-            filter: factory,
-            worker: &mut workspace.filter,
-            timings: &mut workspace.timings,
-        });
+        let mut check = self
+            .filter
+            .map(|factory| crate::constraint_refutation::Check {
+                filter: factory,
+                worker: &mut workspace.filter,
+                timings: &mut workspace.timings,
+            });
         let narrowing = regions::narrow(
             self.parts.reading(self.theory, self.narrower)?,
             self.restrictions,

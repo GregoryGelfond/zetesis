@@ -362,13 +362,13 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::RestrictionUniverse { .. } => "restriction_universe",
                 Incomplete::ClosedEnumerator => "closed_enumerator",
                 Incomplete::LateCertificate => "late_certificate",
-                Incomplete::RegionFilter => "region_filter",
+                Incomplete::ConstraintRefutation => "region_filter",
                 Incomplete::InvalidRegionConsequence => "invalid_region_consequence",
-                Incomplete::LateRegionFilter => "late_region_filter",
+                Incomplete::LateConstraintRefuter => "late_region_filter",
                 Incomplete::LateCandidateBounds => "late_candidate_bounds",
                 Incomplete::CandidateBoundPlan => "candidate_bound_plan",
                 Incomplete::CandidateBoundNotImproving => "candidate_bound_not_improving",
-                Incomplete::RegionFilterAlreadySet => "region_filter_already_set",
+                Incomplete::ConstraintRefuterAlreadySet => "region_filter_already_set",
                 Incomplete::LateLearnedStore => "late_learned_store",
                 Incomplete::LearnedStoreAlreadySet => "learned_store_already_set",
                 Incomplete::Certificate(_) => "certificate",
@@ -872,7 +872,7 @@ fn search_statistics(
     out.text(",\"candidate_regions\":")?;
     region_statistics(out, stats.regions.as_ref())?;
     out.text(",\"region_filter\":")?;
-    region_filter_statistics(out, stats.region_filter)?;
+    constraint_refutation_statistics(out, stats.constraint_refutation)?;
     out.text(",\"frozen_positive\":{\"attempts\":")?;
     out.text(&stats.reduct.frozen_positive_attempts.to_string())?;
     out.number_field("completed", stats.reduct.frozen_positive_completed)?;
@@ -913,9 +913,9 @@ fn search_statistics(
     out.text("}}}")
 }
 
-fn region_filter_statistics(
+fn constraint_refutation_statistics(
     out: &mut Buffer,
-    statistics: Option<zetesis_stable::RegionFilterStatistics>,
+    statistics: Option<zetesis_stable::ConstraintRefutationStatistics>,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");

@@ -41,12 +41,12 @@ fn singleton_filter_refutation_establishes_coverage() {
         let mut stream = search(route, &original, Limits::default(), Cancellation::default());
         enable(&mut stream);
         stream
-            .set_region_filter(Filter::new(&original, Condition::ForbidHeld(0)))
+            .set_constraint_refuter(Filter::new(&original, Condition::ForbidHeld(0)))
             .unwrap();
         assert!(stream.next().is_none());
         assert!(stream.exhausted());
         assert_eq!(stream.statistics().candidates, 0);
-        let stats = stream.statistics().region_filter.unwrap();
+        let stats = stream.statistics().constraint_refutation.unwrap();
         assert_eq!(stats.preparations, 1);
         assert_eq!(stats.refuted, 1);
         assert_eq!(stats.failed, 0);
@@ -58,19 +58,19 @@ fn singleton_filter_stops_leave_coverage_open() {
     let original = cycle(true);
     for route in ROUTES {
         for (condition, expected) in [
-            (Condition::FailPreparation, Incomplete::RegionFilter),
-            (Condition::FailCheck, Incomplete::RegionFilter),
+            (Condition::FailPreparation, Incomplete::ConstraintRefutation),
+            (Condition::FailCheck, Incomplete::ConstraintRefutation),
             (Condition::Cancel, Incomplete::Cancelled),
         ] {
             let mut stream = search(route, &original, Limits::default(), Cancellation::default());
             enable(&mut stream);
             stream
-                .set_region_filter(Filter::new(&original, condition))
+                .set_constraint_refuter(Filter::new(&original, condition))
                 .unwrap();
             assert!(matches!(stream.next(), Some(Err(found)) if found == expected));
             assert!(!stream.exhausted());
             assert_eq!(stream.statistics().candidates, 0);
-            let stats = stream.statistics().region_filter.unwrap();
+            let stats = stream.statistics().constraint_refutation.unwrap();
             assert_eq!(stats.preparations, 1);
             assert_eq!(stats.failed, 1);
             assert_eq!(stats.refuted, 0);

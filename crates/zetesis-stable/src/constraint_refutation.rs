@@ -90,7 +90,7 @@ impl Checker<'_> {
 /// Live parallel snapshots need not be coherent; joined snapshots are exact
 /// unless counter overflow explicitly marked the measurement incomplete.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RegionFilterStatistics {
+pub struct ConstraintRefutationStatistics {
     /// Checker preparations attempted, by every traversal worker including a
     /// parallel walk's coordinator, including refused preparations.
     pub preparations: u64,
@@ -104,10 +104,10 @@ pub struct RegionFilterStatistics {
     pub overflowed: bool,
 }
 
-/// The search's streamed-constraint region check: a refuting subject
-/// (`Algebra.refuting`, `StreamedRegions`), not a grounding scalar filter.
+/// The search's streamed-constraint region refuter: a refuting subject
+/// (`Algebra.refuting`, `StreamedRegions`), not a grounding scalar `Filter`.
 #[derive(Debug)]
-pub(crate) struct RegionFilter {
+pub(crate) struct ConstraintRefuter {
     factory: Source,
     preparations: AtomicU64,
     checks: AtomicU64,
@@ -116,7 +116,7 @@ pub(crate) struct RegionFilter {
     overflowed: AtomicBool,
 }
 
-impl RegionFilter {
+impl ConstraintRefuter {
     pub(crate) fn new(factory: Source) -> Self {
         Self {
             factory,
@@ -139,8 +139,8 @@ impl RegionFilter {
         }
     }
 
-    pub(crate) fn statistics(&self) -> RegionFilterStatistics {
-        RegionFilterStatistics {
+    pub(crate) fn statistics(&self) -> ConstraintRefutationStatistics {
+        ConstraintRefutationStatistics {
             preparations: self.preparations.load(Ordering::Relaxed),
             checks: self.checks.load(Ordering::Relaxed),
             refuted: self.refuted.load(Ordering::Relaxed),
@@ -191,7 +191,7 @@ impl RegionFilter {
 }
 
 pub(crate) struct Worker<'a> {
-    filter: &'a RegionFilter,
+    filter: &'a ConstraintRefuter,
     checker: Checker<'a>,
 }
 
@@ -249,7 +249,7 @@ impl Worker<'_> {
 /// One closure's callback state. The worker survives between closures; the pass
 /// marker does not. Neither preparation nor a source pass changes region truth.
 pub(crate) struct Check<'a, 'b> {
-    pub(crate) filter: &'a RegionFilter,
+    pub(crate) filter: &'a ConstraintRefuter,
     pub(crate) worker: &'b mut Option<Worker<'a>>,
     pub(crate) timings: &'b mut Option<SearchPhaseTimings>,
 }

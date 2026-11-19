@@ -267,7 +267,7 @@ fn filtered_core_exhaustion_proves_original_inconsistency() {
     let filter = outcome
         .countermodel_statistics()
         .unwrap()
-        .region_filter
+        .constraint_refutation
         .unwrap();
     assert!(filter.refuted > 0);
 }
@@ -399,7 +399,7 @@ fn refused_preparation_preserves_lazy_scored_answers() {
     let filter = outcome
         .countermodel_statistics()
         .unwrap()
-        .region_filter
+        .constraint_refutation
         .unwrap();
     assert!(filter.checks > 0);
 }

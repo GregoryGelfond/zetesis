@@ -2,7 +2,9 @@
 //! check's composition tests. The filters implement the crate's own seam, which
 //! no caller can implement.
 
-use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
+use crate::constraint_refutation::tests::injection::{
+    Source as InjectedSource, Worker as InjectedWorker,
+};
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -157,7 +159,7 @@ impl InjectedSource for Filter {
             return Err(Incomplete::WrongTheory);
         }
         if matches!(self.condition, Condition::FailPreparation) {
-            return Err(Incomplete::RegionFilter);
+            return Err(Incomplete::ConstraintRefutation);
         }
         self.live.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(Worker(self)))
@@ -179,7 +181,7 @@ impl InjectedWorker for Worker<'_> {
             Condition::Require(atom) => region.is_cut(atom),
             Condition::ForbidPair(left, right) => region.is_held(left) && region.is_held(right),
             Condition::FailCheck | Condition::PanicOnDrop { fail_check: true } => {
-                return Err(Incomplete::RegionFilter);
+                return Err(Incomplete::ConstraintRefutation);
             }
             Condition::Cancel => {
                 cancellation.cancel();

@@ -408,7 +408,7 @@ Their invariant is `core_answers = accepted + rejected + pending`. Core answers
 still buffered by the inner enumerator are excluded. Search statistics and
 device batch receipts describe the retained core. A device-checked core
 answer is counted as an original answer only after complete source acceptance.
-The `region_filter` counters record attempted preparations, region checks,
+The `region_filter` counters (`ConstraintRefutationStatistics`) record attempted preparations, region checks,
 refutations and failures. Those are not core-answer counts. Core membership
 statistics describe surviving proposals; `verified_models()` counts original-program
 answers. Cancellation or a deadline observed during source checking uses

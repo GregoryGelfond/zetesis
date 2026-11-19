@@ -15,7 +15,7 @@ pub(crate) mod routes;
 /// support and preparation counts are already included in their owner totals.
 pub(crate) fn assert_region_work_accounted(statistics: &zetesis_stable::Statistics) {
     assert_eq!(statistics.candidate_restrictions, 0);
-    assert!(statistics.region_filter.is_none());
+    assert!(statistics.constraint_refutation.is_none());
     let certificate = statistics.certified.map_or(0, |receipt| {
         receipt
             .construction_work

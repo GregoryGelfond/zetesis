@@ -210,7 +210,7 @@ struct Shared {
     /// What the walk reads of the original theory beyond the theory itself.
     parts: super::regions::OriginalParts,
     certificate: Option<Arc<Certification>>,
-    filter: Option<crate::region_filter::RegionFilter>,
+    filter: Option<crate::constraint_refutation::ConstraintRefuter>,
     restrictions: RwLock<Conditions<Arc<(Theory, Narrower)>>>,
     /// One deque per worker and the walk's termination record. All entry
     /// preparation and evaluation happens outside the deque locks.
@@ -776,15 +776,15 @@ impl ParallelRegions {
         })
     }
 
-    pub(crate) fn set_filter(
+    pub(crate) fn set_refuter(
         &mut self,
-        filter: crate::region_filter::RegionFilter,
+        filter: crate::constraint_refutation::ConstraintRefuter,
     ) -> Result<(), Incomplete> {
         if !matches!(self.record, WalkRecord::NotBegun) {
-            return Err(Incomplete::LateRegionFilter);
+            return Err(Incomplete::LateConstraintRefuter);
         }
         Arc::get_mut(&mut self.shared)
-            .ok_or(Incomplete::LateRegionFilter)?
+            .ok_or(Incomplete::LateConstraintRefuter)?
             .filter = Some(filter);
         Ok(())
     }
@@ -824,7 +824,7 @@ impl ParallelRegions {
         statistics
     }
 
-    pub(crate) fn filter(&self) -> Option<&crate::region_filter::RegionFilter> {
+    pub(crate) fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
         self.shared.filter.as_ref()
     }
 
@@ -1906,7 +1906,7 @@ struct Workspaces<'a> {
     tier: super::learned::Tier,
     membership: crate::reduct::State,
     certificate: certified::Workspace,
-    filter: Option<crate::region_filter::Worker<'a>>,
+    filter: Option<crate::constraint_refutation::Worker<'a>>,
     retired_knowledge: Option<CandidateKnowledge>,
 }
 
@@ -1965,7 +1965,7 @@ fn step<'a>(
     let mut check = shared
         .filter
         .as_ref()
-        .map(|filter| crate::region_filter::Check {
+        .map(|filter| crate::constraint_refutation::Check {
             filter,
             worker: &mut workspaces.filter,
             timings: &mut report.statistics.phase_timings,

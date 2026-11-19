@@ -2,7 +2,9 @@
 //! every route: each prepared checker serves its walk or producer, and checks
 //! run on the routes' own threads.
 
-use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
+use crate::constraint_refutation::tests::injection::{
+    Source as InjectedSource, Worker as InjectedWorker,
+};
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -140,7 +142,7 @@ fn producer_slates_check_the_streamed_constraints() {
             Cancellation::default(),
         )
         .unwrap();
-        search.set_region_filter(counting.clone()).unwrap();
+        search.set_constraint_refuter(counting.clone()).unwrap();
         let mut models = Vec::new();
         for _ in 0..8 {
             models.extend(
@@ -173,7 +175,7 @@ fn producer_slates_check_the_streamed_constraints() {
             subsets()
         );
         assert!(search.batch_statistics().checker_calls >= 3);
-        let statistics = search.statistics().region_filter.unwrap();
+        let statistics = search.statistics().constraint_refutation.unwrap();
         assert!(
             (1..=count as u64).contains(&statistics.preparations),
             "joined slates retain their checkers, at most one per producer"
@@ -205,7 +207,7 @@ fn positive_checks_use_a_checker_per_traversal() {
                 )
                 .unwrap()
         );
-        search.set_region_filter(counting.clone()).unwrap();
+        search.set_constraint_refuter(counting.clone()).unwrap();
         let models: Vec<_> = search.by_ref().map(Result::unwrap).collect();
         assert_eq!(models.len(), 1);
         assert!(search.exhausted());
@@ -214,7 +216,14 @@ fn positive_checks_use_a_checker_per_traversal() {
             0,
             "the positive consequence set bypasses the candidate traversal"
         );
-        assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+        assert_eq!(
+            search
+                .statistics()
+                .constraint_refutation
+                .unwrap()
+                .preparations,
+            1
+        );
     }
     assert_eq!(counting.checks.load(Ordering::Relaxed), 2);
     assert_eq!(counting.parallel_checks.load(Ordering::Relaxed), 0);
@@ -238,7 +247,7 @@ fn persistent_workers_check_the_streamed_constraints() {
             Cancellation::default(),
         )
         .unwrap();
-        search.set_region_filter(counting.clone()).unwrap();
+        search.set_constraint_refuter(counting.clone()).unwrap();
         let models: Vec<_> = search.by_ref().map(Result::unwrap).collect();
         assert_eq!(models.len(), 5);
         assert_eq!(
@@ -259,7 +268,11 @@ fn persistent_workers_check_the_streamed_constraints() {
                 .engagement,
             RegionWalkEngagement::Engaged { launched: 4, .. }
         ));
-        preparations += search.statistics().region_filter.unwrap().preparations;
+        preparations += search
+            .statistics()
+            .constraint_refutation
+            .unwrap()
+            .preparations;
     }
     assert!(preparations > 1);
     assert!(counting.checks.load(Ordering::Relaxed) > 0);
@@ -289,7 +302,7 @@ fn the_public_installer_checks_the_streamed_constraints() {
         .collect();
     assert_eq!(models, subsets());
     assert!(search.exhausted());
-    let statistics = search.statistics().region_filter.unwrap();
+    let statistics = search.statistics().constraint_refutation.unwrap();
     assert_eq!(statistics.preparations, 1);
     assert!(statistics.refuted > 0);
     assert!(constraints.take_failure().is_none());
@@ -316,7 +329,10 @@ fn constraints_of_another_program_stop_with_their_failure() {
     search
         .set_streamed_constraints(constraints.clone())
         .unwrap();
-    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    assert!(matches!(
+        search.next(),
+        Some(Err(Incomplete::ConstraintRefutation))
+    ));
     assert!(!search.exhausted());
     assert!(matches!(
         constraints.take_failure().map(|failure| failure.cause),
