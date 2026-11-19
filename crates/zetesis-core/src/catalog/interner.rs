@@ -6,6 +6,11 @@
 //! Canonical payload occurs once; ordered views and discovery maps hold only IDs.
 //! [`crate::AtomCatalog::new`] separately preserves arbitrary occurrence order and
 //! duplicate positions, without retaining the supplied description addresses.
+//!
+//! This [`AtomInterner`] is the atom owner grounding uses today. Its positions
+//! are discovery coordinates, not content order. It is distinct from the
+//! generation-freezing [`crate::intern::Interner`], which grounding does not yet
+//! call.
 
 mod closed;
 mod discovery;

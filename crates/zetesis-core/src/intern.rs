@@ -1,5 +1,9 @@
 //! The interner: one source of identity and order for interned content.
 //!
+//! This generic interner states `ContentOrderInterning.IdOrderEqCompare`. No
+//! grounding owner uses it yet: support atoms are still owned by
+//! [`crate::atom_interner::AtomInterner`] over the catalog's discovery IDs.
+//!
 //! Content is a string of `u32` words whose meaning belongs to the caller's
 //! [`ContentOrder`]: a term's constructor and argument identities, an atom's
 //! predicate and arguments, or a fact's tuple. The interner decides only
