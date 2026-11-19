@@ -558,17 +558,38 @@ impl<'a> Buffer<'a> {
     /// Charge `count` view operations. Control flags are read at every step;
     /// the deadline clock only when the step crosses a
     /// [`zetesis_algebra::POLL_INTERVAL`] boundary of the work count.
+    ///
+    /// Kept out of line so it is not inlined into `text`/`quoted`. The
+    /// accounting path is a leaf: the deadline call is a tail call to a
+    /// cold helper, so a step that does not cross a boundary does not
+    /// pay a stack frame.
+    #[inline(never)]
     fn step(&mut self, count: u128) -> Result<(), ViewError> {
         self.cancellation.poll().map_err(ViewError::Stopped)?;
         if zetesis_algebra::poll_due(self.work, u64::try_from(count).unwrap_or(u64::MAX)) {
-            self.observe_deadline()?;
+            return self.observe_and_account(count);
         }
+        self.account(count)
+    }
+
+    /// Observe the deadline at a work boundary, then apply the same
+    /// accounting as a step that does not cross one.
+    #[cold]
+    #[inline(never)]
+    fn observe_and_account(&mut self, count: u128) -> Result<(), ViewError> {
+        self.observe_deadline()?;
+        self.account(count)
+    }
+
+    #[inline(always)]
+    fn account(&mut self, count: u128) -> Result<(), ViewError> {
         let work = u128::from(self.work) + count;
         Meter::check_wide_receipt(work, 0, u128::from(self.limits.max_work))
             .map_err(|_| ViewError::Work)?;
         self.work = u64::try_from(work).expect("checked u64 work ceiling");
         Ok(())
     }
+
     /// The coarse deadline observation at a work boundary, out of line.
     #[cold]
     #[inline(never)]
