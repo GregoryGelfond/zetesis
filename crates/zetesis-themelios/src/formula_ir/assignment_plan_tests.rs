@@ -706,7 +706,7 @@ fn multiple_aggregates_require_conservative_eligibility() {
     }
     .prepare(
         &std::sync::Arc::new(raised.program().clone()),
-        metadata.project_selection().clone(),
+        metadata.project_directives().clone(),
     )
     .unwrap();
     assert_eq!(prepared.objectives.len(), 1);

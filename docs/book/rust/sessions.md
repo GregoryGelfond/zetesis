@@ -545,7 +545,7 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-world-v
 
 ### Projected enumeration
 
-`SessionBuilder::projected(ProjectionLimits::default())` requests one full
+`SessionBuilder::projected(ProjectiveLimits::default())` requests one full
 `AnswerSet` per key in the prepared source's explicit `#project` domain. The
 key is the answer's restriction to that fixed atom domain. Hidden atoms remain
 in the returned interpretation; `#show` remains a separate display operation.
@@ -553,7 +553,7 @@ Without this request the library enumerates full answer identities.
 
 The grounder completes the domain with the original source owner.
 `PreparedInput::projection()` exposes that immutable domain. A projected request
-without an explicit declaration returns `ProjectionError::MissingDeclaration`.
+without an explicit declaration returns `ProjectiveError::MissingDeclaration`.
 An explicit empty domain has one class if the selected family is nonempty.
 The source door uses finite formula admission; eager and hybrid owners both
 retain the complete projection domain.

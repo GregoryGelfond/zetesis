@@ -6,7 +6,7 @@ use super::{Kind, ObjectiveBoundError, ObjectiveBoundStatistics, ObjectivePlan};
 
 /// Refusal of optional projected objective preparation, never a logical result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ObjectiveProjectionErrorKind {
+pub enum ObjectiveReadSetErrorKind {
     /// The existing objective compiler's exact refusal.
     Existing(Kind),
     /// Projection-owned simultaneous capacity exceeded its inclusive allowance.
@@ -17,7 +17,7 @@ pub enum ObjectiveProjectionErrorKind {
         limit: u128,
     },
 }
-impl fmt::Display for ObjectiveProjectionErrorKind {
+impl fmt::Display for ObjectiveReadSetErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Existing(kind) => write!(f, "objective compiler {kind:?}"),
@@ -28,16 +28,16 @@ impl fmt::Display for ObjectiveProjectionErrorKind {
         }
     }
 }
-impl std::error::Error for ObjectiveProjectionErrorKind {}
+impl std::error::Error for ObjectiveReadSetErrorKind {}
 
 /// Evidence retained whether optional projected preparation succeeds or refuses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ObjectiveProjectionReceipt {
+pub struct ObjectiveReadSetReceipt {
     template: Option<usize>,
     statistics: ObjectiveBoundStatistics,
     projection_peak_bytes: u128,
 }
-impl ObjectiveProjectionReceipt {
+impl ObjectiveReadSetReceipt {
     /// Original objective template active at refusal; `None` on success.
     #[must_use]
     pub const fn template_index(self) -> Option<usize> {
@@ -62,20 +62,20 @@ impl ObjectiveProjectionReceipt {
 /// or consume the small typed outcome and receipt with [`Self::into_parts`].
 #[derive(Debug)]
 #[must_use]
-pub struct ObjectiveProjectionAttempt {
-    result: Result<ObjectivePlan, ObjectiveProjectionErrorKind>,
-    receipt: ObjectiveProjectionReceipt,
+pub struct ObjectiveReadSetAttempt {
+    result: Result<ObjectivePlan, ObjectiveReadSetErrorKind>,
+    receipt: ObjectiveReadSetReceipt,
 }
-impl ObjectiveProjectionAttempt {
+impl ObjectiveReadSetAttempt {
     pub(super) fn new(
-        result: Result<ObjectivePlan, ObjectiveProjectionErrorKind>,
+        result: Result<ObjectivePlan, ObjectiveReadSetErrorKind>,
         template: Option<usize>,
         statistics: ObjectiveBoundStatistics,
         projection_peak_bytes: u128,
     ) -> Self {
         Self {
             result,
-            receipt: ObjectiveProjectionReceipt {
+            receipt: ObjectiveReadSetReceipt {
                 template,
                 statistics,
                 projection_peak_bytes,
@@ -84,7 +84,7 @@ impl ObjectiveProjectionAttempt {
     }
     pub(super) fn refused(error: ObjectiveBoundError, projection_peak_bytes: u128) -> Self {
         Self::new(
-            Err(ObjectiveProjectionErrorKind::Existing(error.kind())),
+            Err(ObjectiveReadSetErrorKind::Existing(error.kind())),
             error.template_index(),
             error.statistics(),
             projection_peak_bytes,
@@ -92,15 +92,15 @@ impl ObjectiveProjectionAttempt {
     }
     /// Performed work and observed storage, available before consuming the plan.
     #[must_use]
-    pub const fn receipt(&self) -> ObjectiveProjectionReceipt {
+    pub const fn receipt(&self) -> ObjectiveReadSetReceipt {
         self.receipt
     }
     /// Full typed failure evidence, or `None` when a completed plan is available.
     #[must_use]
-    pub fn error(&self) -> Option<ObjectiveProjectionError> {
+    pub fn error(&self) -> Option<ObjectiveReadSetError> {
         match &self.result {
             Ok(_) => None,
-            Err(kind) => Some(ObjectiveProjectionError {
+            Err(kind) => Some(ObjectiveReadSetError {
                 kind: *kind,
                 receipt: self.receipt,
             }),
@@ -110,8 +110,8 @@ impl ObjectiveProjectionAttempt {
     pub fn into_parts(
         self,
     ) -> (
-        Result<ObjectivePlan, ObjectiveProjectionErrorKind>,
-        ObjectiveProjectionReceipt,
+        Result<ObjectivePlan, ObjectiveReadSetErrorKind>,
+        ObjectiveReadSetReceipt,
     ) {
         (self.result, self.receipt)
     }
@@ -119,14 +119,14 @@ impl ObjectiveProjectionAttempt {
 
 /// Retained work and actual capacity evidence from unsuccessful preparation.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct ObjectiveProjectionError {
-    kind: ObjectiveProjectionErrorKind,
-    receipt: ObjectiveProjectionReceipt,
+pub struct ObjectiveReadSetError {
+    kind: ObjectiveReadSetErrorKind,
+    receipt: ObjectiveReadSetReceipt,
 }
-impl ObjectiveProjectionError {
+impl ObjectiveReadSetError {
     /// Structured refusal; callers may retain ordinary exact scoring.
     #[must_use]
-    pub const fn kind(&self) -> &ObjectiveProjectionErrorKind {
+    pub const fn kind(&self) -> &ObjectiveReadSetErrorKind {
         &self.kind
     }
     /// Original objective template, when one was being visited.
@@ -146,7 +146,7 @@ impl ObjectiveProjectionError {
         self.receipt.projection_peak_bytes()
     }
 }
-impl fmt::Debug for ObjectiveProjectionError {
+impl fmt::Debug for ObjectiveReadSetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ObjectiveProjectionError")
             .field("kind", &self.kind)
@@ -159,12 +159,12 @@ impl fmt::Debug for ObjectiveProjectionError {
             .finish()
     }
 }
-impl fmt::Display for ObjectiveProjectionError {
+impl fmt::Display for ObjectiveReadSetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} (template {:?})", self.kind, self.template_index())
     }
 }
-impl std::error::Error for ObjectiveProjectionError {
+impl std::error::Error for ObjectiveReadSetError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.kind)
     }

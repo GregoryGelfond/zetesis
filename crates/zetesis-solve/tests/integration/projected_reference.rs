@@ -13,7 +13,7 @@ use zetesis_clingo_support as oracle;
 use zetesis_clingo_support::REPORT_BYTES;
 use zetesis_core::Model;
 use zetesis_solve::{
-    AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectionLimits,
+    AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectiveLimits,
     Session, SolveConfig,
 };
 use zetesis_themelios::{
@@ -260,13 +260,13 @@ fn check(case: &Case) {
 fn check_native(case: &Case, selected: &Family, expected: &Family) {
     let owner = formula(case.source);
     assert_eq!(owner.source().expect("source input").text(), case.source);
-    assert!(owner.projection().is_explicit());
+    assert!(owner.projective_domain().is_explicit());
     // Explicit fixture export feeds the bounded renderer used by the external
     // oracle comparison. This fixed-domain model makes no answer-set claim.
     let domain = model_symbols(
         &Model::new(
             owner
-                .projection()
+                .projective_domain()
                 .atoms()
                 .iter()
                 .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap()),
@@ -300,7 +300,7 @@ fn check_native(case: &Case, selected: &Family, expected: &Family) {
         Cancellation::default(),
     )
     .selection(selection)
-    .projected(ProjectionLimits::default())
+    .projected(ProjectiveLimits::default())
     .start()
     .unwrap();
     let mut native = Family::new();
@@ -332,7 +332,7 @@ fn check_native(case: &Case, selected: &Family, expected: &Family) {
     if case.costs.is_some() {
         assert!(outcome.optimum_proved());
     }
-    let projection = outcome.projection().unwrap();
+    let projection = outcome.projective_statistics().unwrap();
     assert!(projection.complete);
     assert_eq!(projection.representatives, expected.len());
     assert_eq!(

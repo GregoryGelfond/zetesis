@@ -9,12 +9,12 @@ use zetesis_core::catalog::{AtomRef, Atoms};
 /// Source declarations for explicit projected enumeration. This is not a
 /// completed projection domain and does not alter ordinary full-family APIs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ProjectSelection {
+pub struct ProjectDirectives {
     pub(crate) explicit: bool,
     signatures: SignatureSet,
     pub(crate) conditional_atoms: bool,
 }
-impl ProjectSelection {
+impl ProjectDirectives {
     /// Whether any `#project` directive was authored, including an empty domain.
     #[must_use]
     pub fn is_explicit(&self) -> bool {
@@ -47,8 +47,8 @@ impl Builder {
         self.explicit = true;
         self.conditional_atoms = true;
     }
-    pub(super) fn finish(self, vocabulary: Option<Arc<MetadataVocabulary>>) -> ProjectSelection {
-        ProjectSelection {
+    pub(super) fn finish(self, vocabulary: Option<Arc<MetadataVocabulary>>) -> ProjectDirectives {
+        ProjectDirectives {
             explicit: self.explicit,
             signatures: SignatureSet::publish(vocabulary, self.signatures),
             conditional_atoms: self.conditional_atoms,
@@ -60,11 +60,11 @@ impl Builder {
 /// Conditional declarations are grounded once; conditions are not reevaluated
 /// against individual answers. A projected result remains a full answer set.
 #[derive(Clone, Debug, Default)]
-pub struct PreparedProjection {
+pub struct ProjectiveDomain {
     pub(crate) explicit: bool,
     pub(crate) atoms: AtomCatalog,
 }
-impl PreparedProjection {
+impl ProjectiveDomain {
     /// Whether source directives explicitly requested this domain.
     #[must_use]
     pub fn is_explicit(&self) -> bool {
@@ -83,9 +83,9 @@ impl PreparedProjection {
     }
 }
 
-impl PartialEq for PreparedProjection {
+impl PartialEq for ProjectiveDomain {
     fn eq(&self, other: &Self) -> bool {
         self.explicit == other.explicit && self.atoms() == other.atoms()
     }
 }
-impl Eq for PreparedProjection {}
+impl Eq for ProjectiveDomain {}

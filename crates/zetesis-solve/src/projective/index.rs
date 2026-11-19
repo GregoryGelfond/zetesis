@@ -15,7 +15,7 @@ use std::hash::{DefaultHasher, Hasher};
 use std::num::NonZeroUsize;
 use zetesis_algebra::{Meter, MeterCountError, words::Words};
 
-use super::{ProjectionError, ProjectionResource, Work, bytes};
+use super::{ProjectiveError, ProjectiveResource, Work, bytes};
 
 type Slot = Option<NonZeroUsize>;
 
@@ -45,12 +45,12 @@ impl History {
         &self.keys[start..start + self.width]
     }
 
-    fn retained(&self, base: u128) -> Result<u128, ProjectionError> {
+    fn retained(&self, base: u128) -> Result<u128, ProjectiveError> {
         base.checked_add(bytes::<u64>(self.keys.capacity())?)
             .and_then(|sum| {
                 sum.checked_add(self.slots.capacity() as u128 * size_of::<Slot>() as u128)
             })
-            .ok_or(ProjectionError::Overflow)
+            .ok_or(ProjectiveError::Overflow)
     }
 
     /// Duplicate lookup precedes entry admission, including the empty key.
@@ -59,7 +59,7 @@ impl History {
         key: &[u64],
         base: u128,
         work: &mut Work<'_>,
-    ) -> Result<bool, ProjectionError> {
+    ) -> Result<bool, ProjectiveError> {
         assert_eq!(key.len(), self.width, "fixed projection domain");
         work.charge(1)?;
         if self.width == 0 && self.entries != 0 {
@@ -72,9 +72,9 @@ impl History {
         let count =
             Meter::check_count(self.entries, 1, work.limits.max_keys).map_err(
                 |error| match error {
-                    MeterCountError::Overflow => ProjectionError::Overflow,
-                    MeterCountError::Limit { observed, limit } => ProjectionError::Limit {
-                        resource: ProjectionResource::Keys,
+                    MeterCountError::Overflow => ProjectiveError::Overflow,
+                    MeterCountError::Limit { observed, limit } => ProjectiveError::Limit {
+                        resource: ProjectiveResource::Keys,
                         observed: observed as u128,
                         limit: limit as u128,
                     },
@@ -86,7 +86,7 @@ impl History {
         }
         let words = count
             .checked_mul(self.width)
-            .ok_or(ProjectionError::Overflow)?;
+            .ok_or(ProjectiveError::Overflow)?;
         self.reserve_keys(words, base, work)?;
         self.reserve_slots(count, base, work)?;
         let slot = empty_slot(&self.slots, hash, work)?;
@@ -103,7 +103,7 @@ impl History {
         Ok(true)
     }
 
-    fn append(&mut self, key: &[u64], work: &mut Work<'_>) -> Result<(), ProjectionError> {
+    fn append(&mut self, key: &[u64], work: &mut Work<'_>) -> Result<(), ProjectiveError> {
         for word in key {
             work.charge(1)?;
             self.keys.storage_mut().push(*word);
@@ -116,7 +116,7 @@ impl History {
         key: &[u64],
         hash: u64,
         work: &mut Work<'_>,
-    ) -> Result<bool, ProjectionError> {
+    ) -> Result<bool, ProjectiveError> {
         let mut slot = first_slot(hash, self.slots.len())?;
         loop {
             work.charge(1)?;
@@ -135,7 +135,7 @@ impl History {
         required: usize,
         base: u128,
         work: &mut Work<'_>,
-    ) -> Result<(), ProjectionError> {
+    ) -> Result<(), ProjectiveError> {
         if required <= self.keys.capacity() {
             return Ok(());
         }
@@ -144,12 +144,12 @@ impl History {
         work.admit_bytes(
             retained
                 .checked_add(bytes::<u64>(capacity)?)
-                .ok_or(ProjectionError::Overflow)?,
+                .ok_or(ProjectiveError::Overflow)?,
         )?;
         let mut replacement = Vec::new();
         replacement
             .try_reserve_exact(capacity)
-            .map_err(|_| ProjectionError::Allocation)?;
+            .map_err(|_| ProjectiveError::Allocation)?;
         work.observe(retained, bytes::<u64>(replacement.capacity())?)?;
         for word in &self.keys {
             work.charge(1)?;
@@ -164,8 +164,8 @@ impl History {
         count: usize,
         base: u128,
         work: &mut Work<'_>,
-    ) -> Result<(), ProjectionError> {
-        let required = count.checked_mul(2).ok_or(ProjectionError::Overflow)?;
+    ) -> Result<(), ProjectiveError> {
+        let required = count.checked_mul(2).ok_or(ProjectiveError::Overflow)?;
         if required <= self.slots.len() {
             return Ok(());
         }
@@ -174,12 +174,12 @@ impl History {
         work.admit_bytes(
             retained
                 .checked_add(bytes::<Slot>(capacity)?)
-                .ok_or(ProjectionError::Overflow)?,
+                .ok_or(ProjectiveError::Overflow)?,
         )?;
         let mut replacement = Vec::new();
         replacement
             .try_reserve_exact(capacity)
-            .map_err(|_| ProjectionError::Allocation)?;
+            .map_err(|_| ProjectiveError::Allocation)?;
         work.observe(retained, bytes::<Slot>(replacement.capacity())?)?;
         for _ in 0..capacity {
             work.charge(1)?;
@@ -195,14 +195,14 @@ impl History {
     }
 }
 
-fn capacity(required: usize) -> Result<usize, ProjectionError> {
+fn capacity(required: usize) -> Result<usize, ProjectiveError> {
     required
         .max(4)
         .checked_next_power_of_two()
-        .ok_or(ProjectionError::Overflow)
+        .ok_or(ProjectiveError::Overflow)
 }
 
-fn hash(key: &[u64], work: &mut Work<'_>) -> Result<u64, ProjectionError> {
+fn hash(key: &[u64], work: &mut Work<'_>) -> Result<u64, ProjectiveError> {
     // This standard-library hasher is deterministic within the build. Neither
     // its algorithm nor its result is a persistent identity or public format.
     let mut hasher = DefaultHasher::new();
@@ -213,12 +213,12 @@ fn hash(key: &[u64], work: &mut Work<'_>) -> Result<u64, ProjectionError> {
     Ok(hasher.finish())
 }
 
-fn first_slot(hash: u64, length: usize) -> Result<usize, ProjectionError> {
-    let mask = u64::try_from(length - 1).map_err(|_| ProjectionError::Overflow)?;
-    usize::try_from(hash & mask).map_err(|_| ProjectionError::Overflow)
+fn first_slot(hash: u64, length: usize) -> Result<usize, ProjectiveError> {
+    let mask = u64::try_from(length - 1).map_err(|_| ProjectiveError::Overflow)?;
+    usize::try_from(hash & mask).map_err(|_| ProjectiveError::Overflow)
 }
 
-fn empty_slot(slots: &[Slot], hash: u64, work: &mut Work<'_>) -> Result<usize, ProjectionError> {
+fn empty_slot(slots: &[Slot], hash: u64, work: &mut Work<'_>) -> Result<usize, ProjectiveError> {
     let mut slot = first_slot(hash, slots.len())?;
     loop {
         work.charge(1)?;
@@ -229,7 +229,7 @@ fn empty_slot(slots: &[Slot], hash: u64, work: &mut Work<'_>) -> Result<usize, P
     }
 }
 
-fn equal(left: &[u64], right: &[u64], work: &mut Work<'_>) -> Result<bool, ProjectionError> {
+fn equal(left: &[u64], right: &[u64], work: &mut Work<'_>) -> Result<bool, ProjectiveError> {
     for (left, right) in left.iter().zip(right) {
         work.charge(1)?;
         if left != right {

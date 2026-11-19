@@ -2,7 +2,7 @@
 
 use crate::{Grounder, Oracle, SolveError};
 use std::{error::Error, num::NonZeroUsize};
-use zetesis_themelios::objective_bound::{ObjectiveBoundError, ObjectiveProjectionError};
+use zetesis_themelios::objective_bound::{ObjectiveBoundError, ObjectiveReadSetError};
 
 /// How a hybrid base divides its eligible integrity constraints: the templates
 /// it streams and checks during search, and those it grounded in its core
@@ -158,7 +158,7 @@ pub enum ExecutionObservation<'a> {
     ObjectiveUnavailable(ObjectiveBoundError),
     /// Authenticated objective projection declined; its performed work remains
     /// charged and detailed scoring uses the remaining objective allowance.
-    ObjectiveProjectionUnavailable(ObjectiveProjectionError),
+    ObjectiveReadSetUnavailable(ObjectiveReadSetError),
     /// Required-choice strengthening declined; the exact objective plan remains usable.
     ChoiceObjectiveBoundUnavailable(ObjectiveBoundError),
     /// Optional objective-bound construction was refused; exact search remains.

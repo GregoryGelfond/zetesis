@@ -287,7 +287,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::TimeLimitRange { .. } => "time_limit_range",
         RunError::DeadlineTimer(_) => "deadline_timer",
         RunError::Observation(_) => "observation",
-        RunError::Projection(_) => "answer_projection",
+        RunError::AnswerProjection(_) => "answer_projection",
         RunError::JsonRecord(_) => "json_record",
         RunError::ObservationOutputLimit { .. } => "observation_output_limit",
         RunError::MixedStandardInput => "mixed_standard_input",
@@ -721,7 +721,7 @@ fn optional_number(out: &mut Buffer, value: Option<u128>) -> Result<(), RunError
 
 fn write_projection(
     out: &mut Buffer,
-    projection: Option<&zetesis_solve::ProjectionStatistics>,
+    projection: Option<&zetesis_solve::ProjectiveStatistics>,
 ) -> Result<(), RunError> {
     let Some(projection) = projection else {
         return out.text("null");
@@ -766,7 +766,7 @@ fn write_optimization(
 
 // Borrow the retained semantic evidence; publication does not manufacture it.
 struct SummaryView<'a> {
-    projection: Option<&'a zetesis_solve::ProjectionStatistics>,
+    projection: Option<&'a zetesis_solve::ProjectiveStatistics>,
     completion: Option<Completion>,
     optimum_proved: bool,
     published_models: usize,
@@ -791,7 +791,7 @@ impl<'a> SummaryView<'a> {
             Ok(progress) => {
                 let semantic = progress.semantic();
                 Self {
-                    projection: semantic.and_then(crate::SemanticOutcome::projection),
+                    projection: semantic.and_then(crate::SemanticOutcome::projective_statistics),
                     completion: semantic.and_then(crate::SemanticOutcome::completion),
                     optimum_proved: semantic.is_some_and(crate::SemanticOutcome::optimum_proved),
                     published_models: progress.publication.models,
@@ -816,7 +816,7 @@ impl<'a> SummaryView<'a> {
                 Self {
                     projection: failure
                         .semantic()
-                        .and_then(crate::SemanticOutcome::projection),
+                        .and_then(crate::SemanticOutcome::projective_statistics),
                     completion: partial.and_then(|p| p.completion),
                     optimum_proved: failure
                         .semantic()

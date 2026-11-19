@@ -6,12 +6,12 @@ mod index;
 
 use zetesis_algebra::{Cancellation, Meter, MeterBytes, MeterWorkError, Stop, words::Words};
 use zetesis_core::Model;
-use zetesis_themelios::PreparedProjection;
+use zetesis_themelios::ProjectiveDomain;
 
 /// Independent ceilings for distinct projected answer identities.
 /// These do not replace candidate exclusion, membership or objective budgets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ProjectionLimits {
+pub struct ProjectiveLimits {
     /// Maximum distinct projection keys; duplicate answers require no new key.
     pub max_keys: usize,
     /// History header, index capacity and packed key words, including conservative
@@ -25,7 +25,7 @@ pub struct ProjectionLimits {
     pub max_work: u64,
 }
 
-impl Default for ProjectionLimits {
+impl Default for ProjectiveLimits {
     fn default() -> Self {
         Self {
             max_keys: 1_000_000,
@@ -37,7 +37,7 @@ impl Default for ProjectionLimits {
 
 /// A projected-enumeration limit, independent of original answer identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ProjectionResource {
+pub enum ProjectiveResource {
     /// Distinct completed keys.
     Keys,
     /// Named history and construction capacity.
@@ -46,15 +46,15 @@ pub enum ProjectionResource {
     Work,
 }
 
-/// Projection failed without publishing a partial or unexamined key.
+/// Answer projection failed without publishing a partial or unexamined key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ProjectionError {
+pub enum ProjectiveError {
     /// A projected door requires completed source projection declarations.
     MissingDeclaration,
     /// An inclusive projection ceiling was exceeded.
     Limit {
         /// Resource whose admission failed.
-        resource: ProjectionResource,
+        resource: ProjectiveResource,
         /// Required amount, before publication.
         observed: u128,
         /// Inclusive configured ceiling.
@@ -68,7 +68,7 @@ pub enum ProjectionError {
     Control(Stop),
 }
 
-impl fmt::Display for ProjectionError {
+impl fmt::Display for ProjectiveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MissingDeclaration => {
@@ -89,11 +89,11 @@ impl fmt::Display for ProjectionError {
     }
 }
 
-impl std::error::Error for ProjectionError {}
+impl std::error::Error for ProjectiveError {}
 
 /// Evidence from projected enumeration, separate from full-model search counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ProjectionStatistics {
+pub struct ProjectiveStatistics {
     /// Distinct keys retained and returned as full answer-set representatives.
     pub representatives: usize,
     /// Fully keyed answers equal to a previously returned representative.
@@ -111,21 +111,21 @@ pub struct ProjectionStatistics {
     pub complete: bool,
 }
 
-pub(crate) struct Projection<'a> {
-    domain: &'a PreparedProjection,
-    limits: ProjectionLimits,
+pub(crate) struct ProjectiveHistory<'a> {
+    domain: &'a ProjectiveDomain,
+    limits: ProjectiveLimits,
     history: index::History,
     current: Words<u64>,
-    stats: ProjectionStatistics,
+    stats: ProjectiveStatistics,
 }
 
-impl<'a> Projection<'a> {
+impl<'a> ProjectiveHistory<'a> {
     pub(crate) fn new(
-        domain: &'a PreparedProjection,
-        limits: ProjectionLimits,
-    ) -> Result<Self, ProjectionError> {
+        domain: &'a ProjectiveDomain,
+        limits: ProjectiveLimits,
+    ) -> Result<Self, ProjectiveError> {
         if !domain.is_explicit() {
-            return Err(ProjectionError::MissingDeclaration);
+            return Err(ProjectiveError::MissingDeclaration);
         }
         let words = domain.atoms().len().div_ceil(64);
         let mut result = Self {
@@ -133,7 +133,7 @@ impl<'a> Projection<'a> {
             limits,
             history: index::History::new(words),
             current: Words::new(Vec::new()),
-            stats: ProjectionStatistics::default(),
+            stats: ProjectiveStatistics::default(),
         };
         check_bytes(
             result.base_bytes() + bytes::<u64>(words)?,
@@ -143,15 +143,15 @@ impl<'a> Projection<'a> {
             .current
             .storage_mut()
             .try_reserve_exact(words)
-            .map_err(|_| ProjectionError::Allocation)?;
+            .map_err(|_| ProjectiveError::Allocation)?;
         result.stats.retained_bytes = result.base_bytes();
         MeterBytes::observe_peak(
             result.stats.retained_bytes,
             limits.max_bytes as u128,
             &mut result.stats.peak_bytes,
         )
-        .map_err(|_| ProjectionError::Limit {
-            resource: ProjectionResource::Bytes,
+        .map_err(|_| ProjectiveError::Limit {
+            resource: ProjectiveResource::Bytes,
             observed: result.stats.retained_bytes,
             limit: limits.max_bytes as u128,
         })?;
@@ -159,7 +159,7 @@ impl<'a> Projection<'a> {
         Ok(result)
     }
 
-    pub(crate) fn statistics(&self) -> ProjectionStatistics {
+    pub(crate) fn statistics(&self) -> ProjectiveStatistics {
         self.stats
     }
 
@@ -174,7 +174,7 @@ impl<'a> Projection<'a> {
         &mut self,
         model: &Model,
         cancellation: &Cancellation,
-    ) -> Result<bool, ProjectionError> {
+    ) -> Result<bool, ProjectiveError> {
         let base = self.base_bytes();
         let mut work = Work {
             limits: self.limits,
@@ -199,7 +199,7 @@ impl<'a> Projection<'a> {
                 .stats
                 .duplicates
                 .checked_add(1)
-                .ok_or(ProjectionError::Overflow)?;
+                .ok_or(ProjectiveError::Overflow)?;
         }
         Ok(inserted)
     }
@@ -211,14 +211,14 @@ impl<'a> Projection<'a> {
 }
 
 struct Work<'a> {
-    limits: ProjectionLimits,
-    stats: &'a mut ProjectionStatistics,
+    limits: ProjectiveLimits,
+    stats: &'a mut ProjectiveStatistics,
     cancellation: &'a Cancellation,
 }
 
 impl Work<'_> {
-    fn charge(&mut self, amount: u64) -> Result<(), ProjectionError> {
-        self.cancellation.poll().map_err(ProjectionError::Control)?;
+    fn charge(&mut self, amount: u64) -> Result<(), ProjectiveError> {
+        self.cancellation.poll().map_err(ProjectiveError::Control)?;
         Meter::charge_receipt(
             &mut self.stats.work,
             u128::from(amount),
@@ -227,51 +227,51 @@ impl Work<'_> {
         .map_err(|error| match error {
             // Every u64 carry is refused before the shared receipt can change.
             MeterWorkError::Limit { observed, .. } if observed > u128::from(u64::MAX) => {
-                ProjectionError::Overflow
+                ProjectiveError::Overflow
             }
-            MeterWorkError::Limit { observed, limit } => ProjectionError::Limit {
-                resource: ProjectionResource::Work,
+            MeterWorkError::Limit { observed, limit } => ProjectiveError::Limit {
+                resource: ProjectiveResource::Work,
                 observed,
                 limit,
             },
-            MeterWorkError::Overflow => ProjectionError::Overflow,
+            MeterWorkError::Overflow => ProjectiveError::Overflow,
         })
     }
 
-    fn admit_bytes(&self, required: u128) -> Result<(), ProjectionError> {
+    fn admit_bytes(&self, required: u128) -> Result<(), ProjectiveError> {
         check_bytes(required, self.limits.max_bytes as u128)
     }
 
     /// Observe actual retained capacity plus a currently allocated replacement.
     /// A refused proposal calls `admit_bytes` alone. Allocator slack is observed
     /// before refusal; failed temporary construction drops that replacement.
-    fn observe(&mut self, retained: u128, temporary: u128) -> Result<(), ProjectionError> {
+    fn observe(&mut self, retained: u128, temporary: u128) -> Result<(), ProjectiveError> {
         self.stats.retained_bytes = retained;
         let live = retained
             .checked_add(temporary)
-            .ok_or(ProjectionError::Overflow)?;
+            .ok_or(ProjectiveError::Overflow)?;
         MeterBytes::observe_peak(
             live,
             self.limits.max_bytes as u128,
             &mut self.stats.peak_bytes,
         )
-        .map_err(|_| ProjectionError::Limit {
-            resource: ProjectionResource::Bytes,
+        .map_err(|_| ProjectiveError::Limit {
+            resource: ProjectiveResource::Bytes,
             observed: live,
             limit: self.limits.max_bytes as u128,
         })
     }
 }
 
-fn bytes<T>(count: usize) -> Result<u128, ProjectionError> {
+fn bytes<T>(count: usize) -> Result<u128, ProjectiveError> {
     (count as u128)
         .checked_mul(size_of::<T>() as u128)
-        .ok_or(ProjectionError::Overflow)
+        .ok_or(ProjectiveError::Overflow)
 }
 
-fn check_bytes(observed: u128, limit: u128) -> Result<(), ProjectionError> {
-    MeterBytes::check(observed, limit).map_err(|_| ProjectionError::Limit {
-        resource: ProjectionResource::Bytes,
+fn check_bytes(observed: u128, limit: u128) -> Result<(), ProjectiveError> {
+    MeterBytes::check(observed, limit).map_err(|_| ProjectiveError::Limit {
+        resource: ProjectiveResource::Bytes,
         observed,
         limit,
     })

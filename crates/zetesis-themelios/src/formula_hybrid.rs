@@ -181,7 +181,7 @@ impl HybridFormula {
 
     /// Complete original projection domain, independent of candidate truth.
     #[must_use]
-    pub fn projection(&self) -> &crate::PreparedProjection {
+    pub fn projective_domain(&self) -> &crate::ProjectiveDomain {
         &self.0.core.0.compiled.projection
     }
 

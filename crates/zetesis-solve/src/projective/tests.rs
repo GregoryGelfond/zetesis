@@ -1,8 +1,8 @@
-use super::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics, Work};
+use super::{ProjectiveError, ProjectiveLimits, ProjectiveResource, ProjectiveStatistics, Work};
 use zetesis_algebra::{Cancellation, Stop};
 
-fn statistics(work: u64) -> ProjectionStatistics {
-    ProjectionStatistics {
+fn statistics(work: u64) -> ProjectiveStatistics {
+    ProjectiveStatistics {
         representatives: 3,
         duplicates: 7,
         work,
@@ -13,15 +13,15 @@ fn statistics(work: u64) -> ProjectionStatistics {
 }
 
 fn charge(
-    stats: &mut ProjectionStatistics,
+    stats: &mut ProjectiveStatistics,
     amount: u64,
     limit: u64,
     cancellation: &Cancellation,
-) -> Result<(), ProjectionError> {
+) -> Result<(), ProjectiveError> {
     Work {
-        limits: ProjectionLimits {
+        limits: ProjectiveLimits {
             max_work: limit,
-            ..ProjectionLimits::default()
+            ..ProjectiveLimits::default()
         },
         stats,
         cancellation,
@@ -38,7 +38,7 @@ fn native_counter_overflow_precedes_work_refusal() {
             let mut stats = before;
             assert_eq!(
                 charge(&mut stats, amount, limit, &cancellation),
-                Err(ProjectionError::Overflow)
+                Err(ProjectiveError::Overflow)
             );
             assert_eq!(stats, before);
         }
@@ -54,7 +54,7 @@ fn cancellation_precedes_zero_charge_and_overflow() {
         let mut stats = before;
         assert_eq!(
             charge(&mut stats, amount, 0, &cancellation),
-            Err(ProjectionError::Control(Stop::Cancelled))
+            Err(ProjectiveError::Control(Stop::Cancelled))
         );
         assert_eq!(stats, before);
     }
@@ -71,8 +71,8 @@ fn complete_work_batches_preserve_other_receipts() {
     let mut stats = before;
     assert_eq!(
         charge(&mut stats, 3, u64::MAX - 1, &cancellation),
-        Err(ProjectionError::Limit {
-            resource: ProjectionResource::Work,
+        Err(ProjectiveError::Limit {
+            resource: ProjectiveResource::Work,
             observed: u128::from(u64::MAX),
             limit: u128::from(u64::MAX - 1),
         })
@@ -87,8 +87,8 @@ fn zero_work_rechecks_the_current_ceiling() {
     let mut stats = before;
     assert_eq!(
         charge(&mut stats, 0, 4, &cancellation),
-        Err(ProjectionError::Limit {
-            resource: ProjectionResource::Work,
+        Err(ProjectiveError::Limit {
+            resource: ProjectiveResource::Work,
             observed: 5,
             limit: 4,
         })
@@ -99,16 +99,16 @@ fn zero_work_rechecks_the_current_ceiling() {
 }
 
 fn observe(
-    stats: &mut ProjectionStatistics,
+    stats: &mut ProjectiveStatistics,
     retained: u128,
     temporary: u128,
     limit: usize,
     cancellation: &Cancellation,
-) -> Result<(), ProjectionError> {
+) -> Result<(), ProjectiveError> {
     Work {
-        limits: ProjectionLimits {
+        limits: ProjectiveLimits {
             max_bytes: limit,
-            ..ProjectionLimits::default()
+            ..ProjectiveLimits::default()
         },
         stats,
         cancellation,
@@ -124,11 +124,11 @@ fn live_overflow_keeps_the_actual_retained_capacity() {
     let mut stats = before;
     assert_eq!(
         observe(&mut stats, u128::MAX, 1, 0, &cancellation),
-        Err(ProjectionError::Overflow)
+        Err(ProjectiveError::Overflow)
     );
     assert_eq!(
         stats,
-        ProjectionStatistics {
+        ProjectiveStatistics {
             retained_bytes: u128::MAX,
             ..before
         }
@@ -143,15 +143,15 @@ fn refused_observation_publishes_its_capacity_receipt() {
     let mut stats = before;
     assert_eq!(
         observe(&mut stats, 16, 9, 20, &cancellation),
-        Err(ProjectionError::Limit {
-            resource: ProjectionResource::Bytes,
+        Err(ProjectiveError::Limit {
+            resource: ProjectiveResource::Bytes,
             observed: 25,
             limit: 20,
         })
     );
     assert_eq!(
         stats,
-        ProjectionStatistics {
+        ProjectiveStatistics {
             retained_bytes: 16,
             peak_bytes: 25,
             ..before
@@ -173,7 +173,7 @@ fn smaller_observations_preserve_the_historical_peak() {
         );
         assert_eq!(
             stats,
-            ProjectionStatistics {
+            ProjectiveStatistics {
                 retained_bytes: retained,
                 ..before
             }
@@ -192,17 +192,17 @@ fn requested_capacity_neither_polls_nor_observes_storage() {
         (20, Ok(())),
         (
             21,
-            Err(ProjectionError::Limit {
-                resource: ProjectionResource::Bytes,
+            Err(ProjectiveError::Limit {
+                resource: ProjectiveResource::Bytes,
                 observed: 21,
                 limit: 20,
             }),
         ),
     ] {
         let result = Work {
-            limits: ProjectionLimits {
+            limits: ProjectiveLimits {
                 max_bytes: 20,
-                ..ProjectionLimits::default()
+                ..ProjectiveLimits::default()
             },
             stats: &mut stats,
             cancellation: &cancellation,

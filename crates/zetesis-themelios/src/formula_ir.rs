@@ -60,7 +60,7 @@ pub(crate) struct Prepared {
     /// reader that never sees facts, [`Self::rules_without_facts`].
     items: crate::formula_facts::Items,
     pub projection: Vec<RuleIr>,
-    pub project_selection: crate::ProjectSelection,
+    pub project_directives: crate::ProjectDirectives,
     pub objectives: Vec<ObjectiveIr>,
     pub objective_declarations: Vec<ProgramSite>,
     /// Extrema tuple carriers selected for an optional numeric-weight precision
@@ -569,7 +569,7 @@ impl PreparationContext<'_> {
     pub(crate) fn prepare(
         self,
         source: &std::sync::Arc<SourceProgram>,
-        project_selection: crate::ProjectSelection,
+        project_directives: crate::ProjectDirectives,
     ) -> Result<Prepared, FormulaFailure> {
         let Self {
             options,
@@ -660,7 +660,7 @@ impl PreparationContext<'_> {
             analyzed,
             items: parts.items,
             projection: parts.projection,
-            project_selection,
+            project_directives,
             objectives: parts.objectives,
             objective_declarations: parts.objective_declarations,
             objective_extrema,

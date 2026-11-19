@@ -337,7 +337,7 @@ fn prepare_into(
     }
     .prepare(
         &std::sync::Arc::new(raised),
-        metadata.project_selection().clone(),
+        metadata.project_directives().clone(),
     )
     .unwrap();
     (prepared, location)

@@ -38,12 +38,12 @@ impl<'a> ObjectiveSource<'a> {
 
 mod attempt;
 pub use attempt::{
-    ObjectiveProjectionAttempt, ObjectiveProjectionError, ObjectiveProjectionErrorKind,
-    ObjectiveProjectionReceipt,
+    ObjectiveReadSetAttempt, ObjectiveReadSetError, ObjectiveReadSetErrorKind,
+    ObjectiveReadSetReceipt,
 };
 
-fn existing(error: ObjectiveBoundError) -> ObjectiveProjectionErrorKind {
-    ObjectiveProjectionErrorKind::Existing(error.kind())
+fn existing(error: ObjectiveBoundError) -> ObjectiveReadSetErrorKind {
+    ObjectiveReadSetErrorKind::Existing(error.kind())
 }
 
 /// This owner covers the two vector headers and its own fields. The borrowed
@@ -63,31 +63,31 @@ impl Storage {
             live: 0,
         }
     }
-    fn bytes(error: MeterBytesError) -> ObjectiveProjectionErrorKind {
+    fn bytes(error: MeterBytesError) -> ObjectiveReadSetErrorKind {
         match error {
-            MeterBytesError::Limit { observed, limit } => ObjectiveProjectionErrorKind::Bytes {
+            MeterBytesError::Limit { observed, limit } => ObjectiveReadSetErrorKind::Bytes {
                 required: observed,
                 limit,
             },
-            MeterBytesError::Allocation => ObjectiveProjectionErrorKind::Existing(Kind::Allocation),
-            MeterBytesError::Overflow => ObjectiveProjectionErrorKind::Existing(Kind::Overflow),
+            MeterBytesError::Allocation => ObjectiveReadSetErrorKind::Existing(Kind::Allocation),
+            MeterBytesError::Overflow => ObjectiveReadSetErrorKind::Existing(Kind::Overflow),
         }
     }
-    fn observe(&mut self, total: u128) -> Result<(), ObjectiveProjectionErrorKind> {
+    fn observe(&mut self, total: u128) -> Result<(), ObjectiveReadSetErrorKind> {
         self.live = total;
         MeterBytes::observe_peak(total, self.limit, &mut self.peak).map_err(Self::bytes)
     }
-    fn add(&self, bytes: u128) -> Result<u128, ObjectiveProjectionErrorKind> {
+    fn add(&self, bytes: u128) -> Result<u128, ObjectiveReadSetErrorKind> {
         self.live
             .checked_add(bytes)
-            .ok_or(ObjectiveProjectionErrorKind::Existing(Kind::Overflow))
+            .ok_or(ObjectiveReadSetErrorKind::Existing(Kind::Overflow))
     }
     fn reserve<T: Copy>(
         &mut self,
         values: &mut Vec<T>,
         ceiling: usize,
         work: &mut Work<'_>,
-    ) -> Result<(), ObjectiveProjectionErrorKind> {
+    ) -> Result<(), ObjectiveReadSetErrorKind> {
         if values.len() < values.capacity() {
             return Ok(());
         }
@@ -114,26 +114,26 @@ impl Storage {
         }
         self.release(std::mem::replace(values, replacement))
     }
-    fn release<T>(&mut self, values: Vec<T>) -> Result<(), ObjectiveProjectionErrorKind> {
+    fn release<T>(&mut self, values: Vec<T>) -> Result<(), ObjectiveReadSetErrorKind> {
         let bytes =
             size_of::<Vec<T>>() as u128 + values.capacity() as u128 * size_of::<T>() as u128;
         drop(values);
         self.live = self
             .live
             .checked_sub(bytes)
-            .ok_or(ObjectiveProjectionErrorKind::Existing(Kind::Overflow))?;
+            .ok_or(ObjectiveReadSetErrorKind::Existing(Kind::Overflow))?;
         Ok(())
     }
-    fn vector_header<T>(&mut self) -> Result<(), ObjectiveProjectionErrorKind> {
+    fn vector_header<T>(&mut self) -> Result<(), ObjectiveReadSetErrorKind> {
         let total = self.add(size_of::<Vec<T>>() as u128)?;
         self.observe(total)
     }
-    fn record_index_peak(&mut self, peak: u128) -> Result<(), ObjectiveProjectionErrorKind> {
+    fn record_index_peak(&mut self, peak: u128) -> Result<(), ObjectiveReadSetErrorKind> {
         let total = self.add(peak)?;
         self.peak = self.peak.max(total);
         Ok(())
     }
-    fn index_peak(&mut self, peak: u128) -> Result<(), ObjectiveProjectionErrorKind> {
+    fn index_peak(&mut self, peak: u128) -> Result<(), ObjectiveReadSetErrorKind> {
         let total = self.add(peak)?;
         MeterBytes::observe_peak(total, self.limit, &mut self.peak).map_err(Self::bytes)
     }
@@ -144,11 +144,11 @@ pub(super) fn compile<'a>(
     limits: ObjectivePlanLimits,
     max_projection_bytes: u128,
     cancellation: &'a Cancellation,
-) -> ObjectiveProjectionAttempt {
+) -> ObjectiveReadSetAttempt {
     let mut work = Work::new(limits, cancellation);
     // Preserve ordinary preparation's first control observation before storage.
     if let Err(error) = work.tick() {
-        return ObjectiveProjectionAttempt::refused(error, 0);
+        return ObjectiveReadSetAttempt::refused(error, 0);
     }
     let mut storage = Storage::new(max_projection_bytes);
     let prepared = storage
@@ -159,7 +159,7 @@ pub(super) fn compile<'a>(
         Err(kind) => {
             // Every projection helper borrows these same owners. Capture once,
             // after its typed refusal, without polling or admission again.
-            return ObjectiveProjectionAttempt::new(
+            return ObjectiveReadSetAttempt::new(
                 Err(kind),
                 work.template,
                 work.statistics(),
@@ -178,9 +178,9 @@ pub(super) fn compile<'a>(
     match result {
         Ok(plan) => {
             let statistics = plan.statistics();
-            ObjectiveProjectionAttempt::new(Ok(plan), None, statistics, storage.peak)
+            ObjectiveReadSetAttempt::new(Ok(plan), None, statistics, storage.peak)
         }
-        Err(error) => ObjectiveProjectionAttempt::refused(error, storage.peak),
+        Err(error) => ObjectiveReadSetAttempt::refused(error, storage.peak),
     }
 }
 
@@ -188,7 +188,7 @@ fn prepare<'a>(
     source: ObjectiveSource<'a>,
     storage: &mut Storage,
     work: &mut Work<'_>,
-) -> Result<(AtomIndex<'a>, FormulaNodes, usize), ObjectiveProjectionErrorKind> {
+) -> Result<(AtomIndex<'a>, FormulaNodes, usize), ObjectiveReadSetErrorKind> {
     let atoms = source.compiled.atoms.atoms();
     if atoms.len() != source.compiled.theory.atom_count() {
         return Err(existing(work.error(Kind::AtomCatalog)));
@@ -217,7 +217,7 @@ fn prepare<'a>(
     let remaining = storage
         .limit
         .checked_sub(storage.live)
-        .ok_or(ObjectiveProjectionErrorKind::Existing(Kind::Overflow))?;
+        .ok_or(ObjectiveReadSetErrorKind::Existing(Kind::Overflow))?;
     let prepared =
         AtomIndex::from_catalog_selection_with(atoms, &positions, remaining, || work.tick());
     let index = match prepared {
@@ -265,7 +265,7 @@ fn read_set<'a>(
     objectives: &'a ObjectiveProgram,
     storage: &mut Storage,
     work: &mut Work<'_>,
-) -> Result<Vec<PredicateRef<'a>>, ObjectiveProjectionErrorKind> {
+) -> Result<Vec<PredicateRef<'a>>, ObjectiveReadSetErrorKind> {
     let mut signatures = Vec::new();
     storage.vector_header::<PredicateRef<'_>>()?;
     for (index, template) in objectives.templates().iter().enumerate() {
@@ -298,7 +298,7 @@ fn insert<'a>(
     predicate: PredicateRef<'a>,
     storage: &mut Storage,
     work: &mut Work<'_>,
-) -> Result<(), ObjectiveProjectionErrorKind> {
+) -> Result<(), ObjectiveReadSetErrorKind> {
     let Err(position) = locate(signatures, predicate, work).map_err(existing)? else {
         return Ok(());
     };

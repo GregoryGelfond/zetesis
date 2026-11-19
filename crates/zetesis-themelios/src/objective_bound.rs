@@ -10,13 +10,13 @@
 mod bound;
 mod choices;
 mod join;
-mod projected;
+mod read_set;
 mod score;
 #[cfg(test)]
 mod tests;
-pub use projected::{
-    ObjectiveProjectionAttempt, ObjectiveProjectionError, ObjectiveProjectionErrorKind,
-    ObjectiveProjectionReceipt, ObjectiveSource,
+pub use read_set::{
+    ObjectiveReadSetAttempt, ObjectiveReadSetError, ObjectiveReadSetErrorKind,
+    ObjectiveReadSetReceipt, ObjectiveSource,
 };
 pub use score::{ObjectiveScore, ObjectiveScoreError, ObjectiveScoreErrorKind};
 
@@ -34,7 +34,7 @@ use zetesis_objective::{ObjectiveProgram, PlanIdentity, Score};
 #[derive(Clone, Copy, Debug)]
 pub struct ObjectivePlanLimits {
     /// Supplied original semantic atoms for [`ObjectivePlan::new`], or selected
-    /// objective-readable atoms for [`ObjectivePlan::new_projected`]. Also bounds the requested lengths of
+    /// objective-readable atoms for [`ObjectivePlan::new_read_set`]. Also bounds the requested lengths of
     /// two integer lookup orders and one reusable merge-scratch vector. Each
     /// reservation is fallible; allocator slack and atom payload are not a
     /// process memory ceiling.
@@ -97,7 +97,7 @@ impl Default for ObjectiveBoundLimits {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ObjectiveBoundResource {
     /// Semantic atom count under the selected constructor: the whole supplied
-    /// catalog for `new`, or objective-readable rows for `new_projected`.
+    /// catalog for `new`, or objective-readable rows for `new_read_set`.
     Atoms,
     /// Complete join rows.
     Bindings,
@@ -297,13 +297,13 @@ impl ObjectivePlan {
     /// The returned attempt retains a receipt on success and refusal. Its small
     /// typed outcome contains a completed plan, an existing compiler refusal or
     /// a projection byte refusal. No partially prepared plan is published.
-    pub fn new_projected(
+    pub fn new_read_set(
         source: ObjectiveSource<'_>,
         limits: ObjectivePlanLimits,
         max_projection_bytes: u128,
         cancellation: &Cancellation,
-    ) -> ObjectiveProjectionAttempt {
-        projected::compile(source, limits, max_projection_bytes, cancellation)
+    ) -> ObjectiveReadSetAttempt {
+        read_set::compile(source, limits, max_projection_bytes, cancellation)
     }
     /// Original theory instance, unchanged by planning.
     #[must_use]

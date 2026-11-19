@@ -16,24 +16,24 @@ use crate::formula_source_activity::{Activity, Context, SourceEligibility};
 use crate::formula_support::{
     CompletedQueries, Computation, Counters, Join, Publication, SourceAtom, SourceSelection,
 };
-use crate::{FormulaFailure, FormulaLimits, FormulaResource, PreparedProjection};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProjectiveDomain};
 
 /// None denotes no explicit directive; an empty selection is an explicit empty
 /// domain. Nonempty selections already have semantic atom order at this boundary.
-pub(crate) struct PendingProjection {
+pub(crate) struct PendingProjectiveDomain {
     atoms: Option<SourceSelection>,
 }
 
-impl PendingProjection {
+impl PendingProjectiveDomain {
     pub(crate) fn publish(
         self,
         publication: &mut Publication<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
-    ) -> Result<PreparedProjection, FormulaFailure> {
+    ) -> Result<ProjectiveDomain, FormulaFailure> {
         let Some(selection) = self.atoms else {
-            return Ok(PreparedProjection::default());
+            return Ok(ProjectiveDomain::default());
         };
         // An explicit empty projection retains no unrelated source payload and
         // keeps the existing zero-capable projection byte contract.
@@ -51,7 +51,7 @@ impl PendingProjection {
                 location,
             )?;
         }
-        Ok(PreparedProjection {
+        Ok(ProjectiveDomain {
             explicit: true,
             atoms,
         })
@@ -66,9 +66,9 @@ pub(super) fn prepare<'source>(
     budget: &mut Budget,
     counters: &mut Counters,
     location: ProgramSite,
-) -> Result<PendingProjection, FormulaFailure> {
-    if !prepared.project_selection.is_explicit() {
-        return Ok(PendingProjection { atoms: None });
+) -> Result<PendingProjectiveDomain, FormulaFailure> {
+    if !prepared.project_directives.is_explicit() {
+        return Ok(PendingProjectiveDomain { atoms: None });
     }
     let mut context = Context {
         computation,
@@ -85,7 +85,7 @@ pub(super) fn prepare<'source>(
         &mut context,
     )?;
     let mut domain = SourceSelection::new(context.computation, limits, context.counters, location)?;
-    for predicate in prepared.project_selection.signatures().iter() {
+    for predicate in prepared.project_directives.signatures().iter() {
         signature(predicate, completed, &mut domain, &mut context)?;
     }
     for declaration in &prepared.projection {
@@ -103,7 +103,7 @@ pub(super) fn prepare<'source>(
         context.counters,
         context.location,
     )?;
-    Ok(PendingProjection { atoms: Some(atoms) })
+    Ok(PendingProjectiveDomain { atoms: Some(atoms) })
 }
 
 fn instances<'source>(

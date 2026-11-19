@@ -25,7 +25,7 @@ fn admit(name: &str) -> AdmittedFormula {
     .unwrap()
 }
 fn projected(input: &AdmittedFormula, atoms: usize) -> ObjectivePlan {
-    ObjectivePlan::new_projected(
+    ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits {
             max_atoms: atoms,
@@ -168,7 +168,7 @@ fn projected_bounds_preserve_every_cost_and_tie() {
 #[test]
 fn selected_atom_limit_refuses_before_prefix_creation() {
     let input = admit("sparse");
-    let error = ObjectivePlan::new_projected(
+    let error = ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits {
             max_atoms: 1,
@@ -181,7 +181,7 @@ fn selected_atom_limit_refuses_before_prefix_creation() {
     .unwrap();
     assert_eq!(
         error.kind(),
-        &ObjectiveProjectionErrorKind::Existing(Kind::Limit(Resource::Atoms))
+        &ObjectiveReadSetErrorKind::Existing(Kind::Limit(Resource::Atoms))
     );
     assert_eq!(error.statistics().nodes, 0);
     assert!(error.statistics().work > 1);
@@ -192,7 +192,7 @@ fn cancellation_precedes_projection_allocation() {
     let input = admit("sparse");
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let error = ObjectivePlan::new_projected(
+    let error = ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits::default(),
         0,
@@ -202,7 +202,7 @@ fn cancellation_precedes_projection_allocation() {
     .unwrap();
     assert_eq!(
         error.kind(),
-        &ObjectiveProjectionErrorKind::Existing(Kind::Control(Stop::Cancelled))
+        &ObjectiveReadSetErrorKind::Existing(Kind::Control(Stop::Cancelled))
     );
     assert_eq!(error.statistics(), ObjectiveBoundStatistics::default());
     assert_eq!(error.projection_peak_bytes(), 0);
@@ -216,7 +216,7 @@ fn each_work_cutoff_retains_its_performed_prefix() {
         .work;
     let mut previous = 0;
     for max_work in 0..complete {
-        let error = ObjectivePlan::new_projected(
+        let error = ObjectivePlan::new_read_set(
             input.objective_source(),
             ObjectivePlanLimits {
                 max_work,
@@ -229,13 +229,13 @@ fn each_work_cutoff_retains_its_performed_prefix() {
         .unwrap();
         assert_eq!(
             error.kind(),
-            &ObjectiveProjectionErrorKind::Existing(Kind::Limit(Resource::Work))
+            &ObjectiveReadSetErrorKind::Existing(Kind::Limit(Resource::Work))
         );
         assert!(error.statistics().work <= max_work);
         assert!(error.statistics().work >= previous);
         previous = error.statistics().work;
     }
-    ObjectivePlan::new_projected(
+    ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits {
             max_work: complete,
@@ -260,7 +260,7 @@ fn projection_byte_refusal_distinguishes_requested_storage() {
     prepare(input.objective_source(), &mut storage, &mut work).unwrap();
     let peak = storage.peak;
     assert!(peak > size_of::<Storage>() as u128);
-    ObjectivePlan::new_projected(
+    ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits::default(),
         peak,
@@ -269,7 +269,7 @@ fn projection_byte_refusal_distinguishes_requested_storage() {
     .into_parts()
     .0
     .unwrap();
-    let error = ObjectivePlan::new_projected(
+    let error = ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits::default(),
         peak - 1,
@@ -278,7 +278,7 @@ fn projection_byte_refusal_distinguishes_requested_storage() {
     .error()
     .unwrap();
     assert!(
-        matches!(error.kind(), ObjectiveProjectionErrorKind::Bytes { required, limit } if *required >= peak && *limit == peak - 1)
+        matches!(error.kind(), ObjectiveReadSetErrorKind::Bytes { required, limit } if *required >= peak && *limit == peak - 1)
     );
     assert!(error.projection_peak_bytes() <= peak);
     assert!(error.statistics().work > 0);
@@ -315,7 +315,7 @@ fn streamed_owner_mints_the_same_coordinate_authority() {
     .ground_hybrid()
     .unwrap();
     let core = hybrid.core();
-    let plan = ObjectivePlan::new_projected(
+    let plan = ObjectivePlan::new_read_set(
         core.objective_source(),
         ObjectivePlanLimits::default(),
         u128::MAX,
@@ -349,7 +349,7 @@ fn index_control_refusal_survives_a_smaller_byte_allowance() {
     let bytes = size_of::<Storage>() as u128
         + size_of::<Vec<PredicateRef<'_>>>() as u128
         + size_of::<Vec<usize>>() as u128;
-    let byte_error = ObjectivePlan::new_projected(
+    let byte_error = ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits::default(),
         bytes,
@@ -359,11 +359,11 @@ fn index_control_refusal_survives_a_smaller_byte_allowance() {
     .unwrap();
     assert!(matches!(
         byte_error.kind(),
-        ObjectiveProjectionErrorKind::Bytes { .. }
+        ObjectiveReadSetErrorKind::Bytes { .. }
     ));
     assert!(byte_error.projection_peak_bytes() > bytes);
     let limit = byte_error.statistics().work - 1;
-    let stopped = ObjectivePlan::new_projected(
+    let stopped = ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits {
             max_work: limit,
@@ -376,7 +376,7 @@ fn index_control_refusal_survives_a_smaller_byte_allowance() {
     .unwrap();
     assert_eq!(
         stopped.kind(),
-        &ObjectiveProjectionErrorKind::Existing(Kind::Limit(Resource::Work))
+        &ObjectiveReadSetErrorKind::Existing(Kind::Limit(Resource::Work))
     );
     assert_eq!(stopped.statistics().work, limit);
     assert_eq!(
@@ -447,7 +447,7 @@ fn bundle_owner_preserves_shared_source_coordinates() {
         FormulaLimits::default(),
     )
     .unwrap();
-    let plan = ObjectivePlan::new_projected(
+    let plan = ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits::default(),
         u128::MAX,
@@ -476,7 +476,7 @@ fn bundle_owner_preserves_shared_source_coordinates() {
 #[test]
 fn successful_attempt_receipt_matches_completed_plan() {
     let input = admit("sparse");
-    let attempt = ObjectivePlan::new_projected(
+    let attempt = ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits::default(),
         u128::MAX,
@@ -495,7 +495,7 @@ fn successful_attempt_receipt_matches_completed_plan() {
 #[test]
 fn refused_attempt_parts_retain_the_full_diagnostic() {
     let input = admit("sparse");
-    let attempt = ObjectivePlan::new_projected(
+    let attempt = ObjectivePlan::new_read_set(
         input.objective_source(),
         ObjectivePlanLimits::default(),
         0,
@@ -513,7 +513,7 @@ fn refused_attempt_parts_retain_the_full_diagnostic() {
     assert_eq!(receipt.statistics().work, 1);
     assert!(matches!(
         diagnostic.kind(),
-        ObjectiveProjectionErrorKind::Bytes { limit: 0, .. }
+        ObjectiveReadSetErrorKind::Bytes { limit: 0, .. }
     ));
     assert_eq!(
         std::error::Error::source(&diagnostic).unwrap().to_string(),

@@ -1,26 +1,26 @@
 use zetesis_algebra::{Cancellation, Stop};
 
 use super::{History, Slot, first_slot, hash};
-use crate::projection::{
-    ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics, Work,
+use crate::projective::{
+    ProjectiveError, ProjectiveLimits, ProjectiveResource, ProjectiveStatistics, Work,
 };
 
 const BASE: u128 = size_of::<History>() as u128;
 
-fn statistics() -> ProjectionStatistics {
-    ProjectionStatistics {
+fn statistics() -> ProjectiveStatistics {
+    ProjectiveStatistics {
         retained_bytes: BASE,
         peak_bytes: BASE,
-        ..ProjectionStatistics::default()
+        ..ProjectiveStatistics::default()
     }
 }
 
 fn insert(
     history: &mut History,
     key: &[u64],
-    limits: ProjectionLimits,
-    stats: &mut ProjectionStatistics,
-) -> Result<bool, ProjectionError> {
+    limits: ProjectiveLimits,
+    stats: &mut ProjectiveStatistics,
+) -> Result<bool, ProjectiveError> {
     history.insert(
         key,
         BASE,
@@ -32,11 +32,11 @@ fn insert(
     )
 }
 
-fn seeded() -> (History, ProjectionStatistics) {
+fn seeded() -> (History, ProjectiveStatistics) {
     let mut history = History::new(2);
     let mut stats = statistics();
     for key in [[7, 0], [7, u64::MAX]] {
-        assert!(insert(&mut history, &key, ProjectionLimits::default(), &mut stats).unwrap());
+        assert!(insert(&mut history, &key, ProjectiveLimits::default(), &mut stats).unwrap());
     }
     (history, stats)
 }
@@ -45,7 +45,7 @@ fn contains(history: &History, key: &[u64]) -> bool {
     let mut stats = statistics();
     let cancellation = Cancellation::default();
     let mut work = Work {
-        limits: ProjectionLimits::default(),
+        limits: ProjectiveLimits::default(),
         stats: &mut stats,
         cancellation: &cancellation,
     };
@@ -65,7 +65,7 @@ fn colliding_slots_preserve_complete_key_equality() {
     // assuming a particular algorithm or persisting hashes as identities.
     for last in 0..128 {
         let mut work = Work {
-            limits: ProjectionLimits::default(),
+            limits: ProjectiveLimits::default(),
             stats: &mut stats,
             cancellation: &cancellation,
         };
@@ -80,13 +80,13 @@ fn colliding_slots_preserve_complete_key_equality() {
     }
     assert_eq!(colliding.len(), 8);
     for key in colliding.iter().rev() {
-        assert!(insert(&mut history, key, ProjectionLimits::default(), &mut stats).unwrap());
+        assert!(insert(&mut history, key, ProjectiveLimits::default(), &mut stats).unwrap());
     }
     assert_eq!(history.slots.len(), 16);
     assert!((0..8).all(|offset| history.slots[(first + offset) & 15].is_some()));
-    let full = ProjectionLimits {
+    let full = ProjectiveLimits {
         max_keys: 8,
-        ..ProjectionLimits::default()
+        ..ProjectiveLimits::default()
     };
     let storage = (
         history.keys.as_ptr(),
@@ -119,7 +119,7 @@ fn every_failed_growth_prefix_preserves_keys_and_retries() {
         insert(
             &mut complete,
             &[7, 9],
-            ProjectionLimits::default(),
+            ProjectiveLimits::default(),
             &mut stats
         )
         .unwrap()
@@ -135,16 +135,16 @@ fn every_failed_growth_prefix_preserves_keys_and_retries() {
         let result = insert(
             &mut history,
             &[7, 9],
-            ProjectionLimits {
+            ProjectiveLimits {
                 max_work,
-                ..ProjectionLimits::default()
+                ..ProjectiveLimits::default()
             },
             &mut stats,
         );
         assert!(matches!(
             result,
-            Err(ProjectionError::Limit {
-                resource: ProjectionResource::Work,
+            Err(ProjectiveError::Limit {
+                resource: ProjectiveResource::Work,
                 ..
             })
         ));
@@ -161,7 +161,7 @@ fn every_failed_growth_prefix_preserves_keys_and_retries() {
             insert(
                 &mut history,
                 &[7, 9],
-                ProjectionLimits::default(),
+                ProjectiveLimits::default(),
                 &mut stats
             )
             .unwrap()
@@ -175,9 +175,9 @@ fn every_failed_growth_prefix_preserves_keys_and_retries() {
         insert(
             &mut history,
             &[7, 9],
-            ProjectionLimits {
+            ProjectiveLimits {
                 max_work: inclusive,
-                ..ProjectionLimits::default()
+                ..ProjectiveLimits::default()
             },
             &mut stats
         )
@@ -193,15 +193,15 @@ fn refused_byte_proposals_do_not_invent_capacity_peaks() {
     let peak = stats.peak_bytes;
     let keys = history.keys.clone();
     let slots = history.slots.clone();
-    let limits = ProjectionLimits {
+    let limits = ProjectiveLimits {
         max_bytes: usize::try_from(retained).unwrap(),
-        ..ProjectionLimits::default()
+        ..ProjectiveLimits::default()
     };
     for _ in 0..2 {
         assert!(matches!(
             insert(&mut history, &[7, 9], limits, &mut stats),
-            Err(ProjectionError::Limit {
-                resource: ProjectionResource::Bytes,
+            Err(ProjectiveError::Limit {
+                resource: ProjectiveResource::Bytes,
                 ..
             })
         ));
@@ -214,7 +214,7 @@ fn refused_byte_proposals_do_not_invent_capacity_peaks() {
         insert(
             &mut history,
             &[7, 9],
-            ProjectionLimits::default(),
+            ProjectiveLimits::default(),
             &mut stats
         )
         .unwrap()
@@ -233,7 +233,7 @@ fn growth_receipts_cover_actual_replacement_capacities() {
             insert(
                 &mut history,
                 &[value, 1, u64::MAX],
-                ProjectionLimits::default(),
+                ProjectiveLimits::default(),
                 &mut stats
             )
             .unwrap()
@@ -266,10 +266,10 @@ fn growth_receipts_cover_actual_replacement_capacities() {
 fn zero_width_keys_need_no_word_or_index_allocation() {
     let mut history = History::new(0);
     let mut stats = statistics();
-    let limits = ProjectionLimits {
+    let limits = ProjectiveLimits {
         max_keys: 1,
         max_bytes: usize::try_from(BASE).unwrap(),
-        ..ProjectionLimits::default()
+        ..ProjectiveLimits::default()
     };
     assert!(insert(&mut history, &[], limits, &mut stats).unwrap());
     assert!(!insert(&mut history, &[], limits, &mut stats).unwrap());
@@ -286,16 +286,16 @@ fn cancellation_precedes_duplicate_lookup_and_work_refusal() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut work = Work {
-        limits: ProjectionLimits {
+        limits: ProjectiveLimits {
             max_work: 0,
-            ..ProjectionLimits::default()
+            ..ProjectiveLimits::default()
         },
         stats: &mut stats,
         cancellation: &cancellation,
     };
     assert_eq!(
         history.insert(&[7, 0], BASE, &mut work),
-        Err(ProjectionError::Control(Stop::Cancelled))
+        Err(ProjectiveError::Control(Stop::Cancelled))
     );
     assert_eq!(history.entries, 2);
     assert_eq!(stats.work, old_work);
@@ -309,15 +309,15 @@ fn new_key_count_refuses_before_storage_admission() {
         insert(
             &mut history,
             &[0],
-            ProjectionLimits {
+            ProjectiveLimits {
                 max_keys: 0,
                 max_bytes: 0,
-                ..ProjectionLimits::default()
+                ..ProjectiveLimits::default()
             },
             &mut stats,
         ),
-        Err(ProjectionError::Limit {
-            resource: ProjectionResource::Keys,
+        Err(ProjectiveError::Limit {
+            resource: ProjectiveResource::Keys,
             observed: 1,
             limit: 0,
         })

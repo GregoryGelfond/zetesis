@@ -23,7 +23,7 @@ mod nodes;
 mod pairwise_exclusions;
 mod grouped_exclusions;
 mod producer;
-mod projection;
+mod projective;
 mod rejected;
 pub(crate) use rejected::validate_atom_keys;
 mod retained;
@@ -260,7 +260,7 @@ fn ground_with_schedule(
 /// hybrid construction retains them with the unmaterialized constraint templates.
 struct Instantiation {
     expansion: crate::ExpansionUsage,
-    projection: crate::PreparedProjection,
+    projection: crate::ProjectiveDomain,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<ProgramSite>>,
@@ -452,7 +452,7 @@ pub(crate) fn complete_support_with_executor<'source>(
 /// Completed support may grow canonical terms during emission. Only owned
 /// selections and the same cumulative account cross into publication.
 struct PendingEmission {
-    projection: projection::PendingProjection,
+    projection: projective::PendingProjectiveDomain,
     objectives: objectives::PendingProgram,
     emission: Emission<formula_support::SourceSelection>,
     warnings: Warnings,
@@ -580,7 +580,7 @@ fn emit<'source>(
             execution.executor(),
         )
     })?;
-    let projection = projection::prepare(
+    let projection = projective::prepare(
         prepared,
         queries,
         computation,
@@ -643,7 +643,7 @@ struct PublishedEmission {
     streamed: Option<formula_support::StreamedSupport>,
     /// The open catalog, returned only to a retained schedule.
     catalog: Option<formula_support::CompletedCatalog>,
-    projection: crate::PreparedProjection,
+    projection: crate::ProjectiveDomain,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<ProgramSite>>,

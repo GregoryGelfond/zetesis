@@ -38,7 +38,7 @@ fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
     assert_eq!(left.theory().roots(), right.theory().roots());
     assert_eq!(left.formula_origins(), right.formula_origins());
     assert_eq!(left.metadata(), right.metadata());
-    assert_eq!(left.projection(), right.projection());
+    assert_eq!(left.projective_domain(), right.projective_domain());
     assert_eq!(left.warnings(), right.warnings());
 }
 

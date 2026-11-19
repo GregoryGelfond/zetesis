@@ -2055,7 +2055,7 @@ and withholding partial certificates. These requests fit u128, and a refused
 charge reports the exact wide `Stop` for work.
 The projection `Work` in `zetesis-solve` retains its explicit poll before
 admission and preserves its native u64 overflow priority: a refused demand
-above `u64::MAX` maps to `ProjectionError::Overflow`, while other refusals
+above `u64::MAX` maps to `ProjectiveError::Overflow`, while other refusals
 retain the exact work-limit payload. Every u64 carry exceeds every u64 ceiling,
 so this mapping occurs before any receipt can change. Each caller retains one
 work counter and its other statistics; no stored meter or duplicate account is
@@ -4813,7 +4813,7 @@ compact prefix entry to truth at its stored original atom coordinate. It does
 not identify that coordinate with the compact formula-node position.
 
 The Rust
-[`ObjectivePlan::new_projected`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound.rs)
+[`ObjectivePlan::new_read_set`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound.rs)
 receives an authenticated `ObjectiveSource` from one admitted source owner. Its
 selector must collect all positive-pattern and closed-condition signed predicates
 and arities, scan that owner's complete catalog, and retain increasing original

@@ -326,7 +326,7 @@ fn eligible(
     if source.analysis_basis != AnalysisBasis::NormalizedProgram
         || !source.objectives.is_empty()
         || !source.objective_declarations.is_empty()
-        || source.project_selection.is_explicit()
+        || source.project_directives.is_explicit()
         || !source.projection.is_empty()
     {
         return Ok(false);
