@@ -20,7 +20,7 @@
 
 use zetesis_algebra::{Failure, Quota};
 
-use crate::regions::{Closure, Count, Meter, Narrower, Step, bit};
+use crate::regions::{Count, Meter, Narrower, NarrowingClosure, Step, bit};
 use zetesis_algebra::Stop;
 
 use super::State;
@@ -36,7 +36,7 @@ impl State {
     }
 }
 
-impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingClosure<'_, W, C> {
     /// Called only for original subjects after all mandatory propagation drains.
     /// Thus every sure/never term has updated the processed sums.
     pub(in crate::regions) fn threshold_residual<Q: Quota + ?Sized>(

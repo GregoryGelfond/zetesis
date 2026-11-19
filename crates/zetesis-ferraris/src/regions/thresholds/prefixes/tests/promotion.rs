@@ -1,7 +1,7 @@
 //! Residual notifications do not change mandatory transport order.
 //! Both pending schedules must reach the same closed facts and split score.
 
-use crate::regions::{Closure, Context, Meter, NarrowingStatistics, Step, Width};
+use crate::regions::{Context, Meter, NarrowingClosure, NarrowingStatistics, Step, Width};
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingScratch,
     Node, NodeView, Region, Theory,
@@ -139,7 +139,7 @@ fn finish_pending(
     let Width::Compact16(known) = &mut knowledge.width else {
         panic!("the small prefix fixture uses compact counters");
     };
-    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut scratch.common,
         learning: &mut scratch.learning,

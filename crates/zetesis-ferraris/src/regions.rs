@@ -1630,7 +1630,7 @@ impl Narrower {
             scratch.common.match_dirty = true;
             scratch.learning.decided.clear();
         }
-        let mut closure = Closure {
+        let mut closure = NarrowingClosure {
             known: known.borrow(),
             lists: &mut scratch.common,
             learning: C::borrow_learning(&mut scratch.learning),
@@ -2034,8 +2034,10 @@ impl CommonScratch {
 }
 
 /// One narrowing's closure: a region's knowledge and the walker's
-/// worklists, borrowed together for the call.
-struct Closure<'a, W, C: ReadingClass = AnswerSetsSought> {
+/// worklists, borrowed together for the call. This is region narrowing
+/// (`Bounds.lean`), distinct from grounding's possible-support fixed point
+/// (`Least`, `ComponentClosure`).
+struct NarrowingClosure<'a, W, C: ReadingClass = AnswerSetsSought> {
     known: KnownMut<'a, W>,
     lists: &'a mut CommonScratch,
     learning: C::Learning<'a>,
@@ -2151,7 +2153,7 @@ impl<C: Count> Known<C> {
 // The closure's small accessors carry inline hints: hot in the narrowing,
 // left out of line by the compiler, and measured to pay on the candidate
 // generation's retired instructions.
-impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
+impl<W: Count, C: ReadingClass> NarrowingClosure<'_, W, C> {
     /// A node learns to hold; it is revisited if that is new.
     // Hot in the narrowing's closure; the hint measured to pay.
     #[inline]

@@ -61,7 +61,7 @@ fn residual_checks_wait_for_witness_events() {
     // which consumer runs first without changing the already closed knowledge.
     scratch.common.queue_residual(0);
     scratch.common.witnesses.queue_dirty(chain);
-    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut scratch.common,
         learning: &mut scratch.learning,

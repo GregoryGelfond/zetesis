@@ -1,6 +1,6 @@
 //! Residual arithmetic preserves compatible models and consumes only closed sums.
 
-use crate::regions::{Closure, Meter, NarrowingStatistics, Step, Width};
+use crate::regions::{Meter, NarrowingClosure, NarrowingStatistics, Step, Width};
 use crate::test_support::{Allowance, close};
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
@@ -102,7 +102,7 @@ fn completed_residue_reuses_its_last_interval_check() {
     // equal gcd operands need no Euclidean remainder step. Rechecking that
     // final progression would exhaust this allowance rather than refute.
     let mut work = Meter::local(10);
-    let closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut crate::regions::CommonScratch::default(),
         learning: &mut crate::regions::LearningScratch::default(),
@@ -175,7 +175,7 @@ fn gcd_one_does_not_claim_attainability() {
     known.thresholds[0].lower = 18;
     known.thresholds[0].upper = Some(19);
     assert!(matches!(
-        Closure::<_, zetesis_algebra::AnswerSetsSought> {
+        NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
             lists: &mut crate::regions::CommonScratch::default(),
             learning: &mut crate::regions::LearningScratch::default(),
@@ -412,7 +412,7 @@ fn closed_refutation_work(theory: &Theory, region: &mut Region) -> u64 {
         panic!("the small residual fixture uses compact counters");
     };
     let mut work = Meter::local(u64::MAX);
-    let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut crate::regions::CommonScratch::default(),
         learning: &mut crate::regions::LearningScratch::default(),

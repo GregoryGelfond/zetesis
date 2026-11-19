@@ -1,7 +1,7 @@
 //! The compact evidence reproduces the former two-count transitions, including
 //! pending operand events, contradictory roots and every short work prefix.
 
-use super::{Closure, Knowledge, Meter, Narrower, NarrowingScratch, Step, Stop, bit};
+use super::{Knowledge, Meter, Narrower, NarrowingClosure, NarrowingScratch, Step, Stop, bit};
 use crate::regions::tests::{compact, compact_mut};
 
 /// The previous representation, computed independently from processed events.
@@ -21,7 +21,7 @@ impl Counts {
 
     fn unit<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
         self,
-        closure: &mut Closure<'_, u16>,
+        closure: &mut NarrowingClosure<'_, u16>,
         index: &Narrower,
         work: &mut Meter<'_, Q>,
     ) -> Result<Step, Stop> {
@@ -41,7 +41,7 @@ impl Counts {
     /// replacement count or witness and uses the former ordered unit scan.
     fn changed<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
         &mut self,
-        closure: &mut Closure<'_, u16>,
+        closure: &mut NarrowingClosure<'_, u16>,
         index: &Narrower,
         value: bool,
         work: &mut Meter<'_, Q>,
@@ -77,7 +77,7 @@ impl Counts {
 
     fn teach<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
         self,
-        closure: &mut Closure<'_, u16>,
+        closure: &mut NarrowingClosure<'_, u16>,
         index: &Narrower,
         work: &mut Meter<'_, Q>,
     ) -> Result<Step, Stop> {
@@ -103,7 +103,7 @@ impl Counts {
     }
 
     fn force<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
-        closure: &mut Closure<'_, u16>,
+        closure: &mut NarrowingClosure<'_, u16>,
         index: &Narrower,
         value: bool,
         work: &mut Meter<'_, Q>,
@@ -229,15 +229,16 @@ fn processed_events_preserve_two_count_transitions() {
                             (Meter::local(limit), Meter::local(limit));
                         let mut counts = Counts::new(values);
                         counts.agrees(&actual, disjunction);
-                        let actual_result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
-                            known: compact_mut(&mut actual),
-                            lists: &mut actual_scratch.common,
-                            learning: &mut actual_scratch.learning,
-                        }
-                        .operand_changed(&index, 0, value == 3, &mut actual_work)
-                        .map_err(zetesis_algebra::Failure::into_stop);
+                        let actual_result =
+                            NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
+                                known: compact_mut(&mut actual),
+                                lists: &mut actual_scratch.common,
+                                learning: &mut actual_scratch.learning,
+                            }
+                            .operand_changed(&index, 0, value == 3, &mut actual_work)
+                            .map_err(zetesis_algebra::Failure::into_stop);
                         let expected_result = counts.changed(
-                            &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
+                            &mut NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                                 known: compact_mut(&mut expected),
                                 lists: &mut expected_scratch.common,
                                 learning: &mut expected_scratch.learning,
@@ -281,7 +282,7 @@ fn downward_teaching_preserves_two_count_transitions() {
                     let (mut actual_work, mut expected_work) =
                         (Meter::local(limit), Meter::local(limit));
                     let counts = Counts::new(values);
-                    let actual_result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+                    let actual_result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                         known: compact_mut(&mut actual),
                         lists: &mut actual_scratch.common,
                         learning: &mut actual_scratch.learning,
@@ -289,7 +290,7 @@ fn downward_teaching_preserves_two_count_transitions() {
                     .teach_chain(&index, 0, &mut actual_work)
                     .map_err(zetesis_algebra::Failure::into_stop);
                     let expected_result = counts.teach(
-                        &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
+                        &mut NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                             known: compact_mut(&mut expected),
                             lists: &mut expected_scratch.common,
                             learning: &mut expected_scratch.learning,

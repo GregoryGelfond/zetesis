@@ -263,7 +263,7 @@ fn ordinal_parents_keep_their_discovery_order() {
 
 #[test]
 fn native_requirement_authentication_collects_no_cone_result() {
-    use crate::regions::{Closure, Meter, Step, Width, witnesses};
+    use crate::regions::{Meter, NarrowingClosure, Step, Width, witnesses};
 
     for disjunction in [false, true] {
         let (theory, _) = connected(disjunction);
@@ -289,7 +289,7 @@ fn native_requirement_authentication_collects_no_cone_result() {
             .common
             .prepare_thresholds(index.thresholds.rows.len())
             .unwrap();
-        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+        let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,

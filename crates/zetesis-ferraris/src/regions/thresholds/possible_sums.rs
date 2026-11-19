@@ -22,7 +22,7 @@
 
 use zetesis_algebra::{Failure, Quota};
 
-use crate::regions::{Closure, Count, Meter, Narrower, Step, bit};
+use crate::regions::{Count, Meter, Narrower, NarrowingClosure, Step, bit};
 use zetesis_algebra::{Stop, words::Words};
 
 use super::{Row, State};
@@ -97,7 +97,7 @@ impl<Q: Quota + ?Sized> Allowance<'_, '_, Q> {
     }
 }
 
-impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingClosure<'_, W, C> {
     /// Called only when the preceding residual check left all queues drained.
     /// No deductions are published by this operation.
     pub(in crate::regions) fn threshold_possible_sums<Q: Quota + ?Sized>(

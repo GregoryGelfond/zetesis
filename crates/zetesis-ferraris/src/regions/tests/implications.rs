@@ -5,7 +5,7 @@ use zetesis_algebra::Stop;
 
 use crate::{AdmissionLimits, FormulaParts, Knowledge, Narrower, Node, Theory};
 
-use super::super::{Closure, Context, Meter, NarrowingScratch, Step};
+use super::super::{Context, Meter, NarrowingClosure, NarrowingScratch, Step};
 use super::{compact_mut, counters::same_knowledge};
 
 fn implication(consequent: usize) -> Theory {
@@ -114,7 +114,7 @@ fn compare_transition(
     let mut actual = knowledge::<zetesis_algebra::AnswerSetsSought>(index, values);
     let mut lists = NarrowingScratch::default();
     lists.common.prepare(2);
-    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut actual),
         lists: &mut lists.common,
         learning: &mut lists.learning,
@@ -206,7 +206,7 @@ fn implication_parent_keeps_two_charged_visits() {
             lists.common.nodes.push((2, true));
             let mut quota = SinglePermits::new(limit, failure);
             let mut work = Meter::reserved(&mut quota);
-            let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+            let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: compact_mut(&mut actual),
                 lists: &mut lists.common,
                 learning: &mut lists.learning,
@@ -255,7 +255,7 @@ fn implication_events_preserve_frozen_boundaries() {
             let mut lists = NarrowingScratch::default();
             lists.common.prepare(2);
             let mut work = Meter::local(2);
-            let result = Closure::<_, zetesis_algebra::Countermodels> {
+            let result = NarrowingClosure::<_, zetesis_algebra::Countermodels> {
                 known: compact_mut(&mut actual),
                 lists: &mut lists.common,
                 learning: (),

@@ -18,7 +18,7 @@ use std::ops::Range;
 
 use zetesis_algebra::{Stop, words::Words};
 
-use super::{Closure, Count, Meter, Narrower, Step, push, reserve};
+use super::{Count, Meter, Narrower, NarrowingClosure, Step, push, reserve};
 use crate::regions::{flag_words, witnesses};
 
 type Signature = (usize, usize, usize, usize);
@@ -249,7 +249,7 @@ impl Equality {
     }
 }
 
-impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingClosure<'_, W, C> {
     /// Exact class membership was established once against this admitted owner.
     /// A masked node never contributes a requirement to the common operation;
     /// every target still receives its own original-truth gate.

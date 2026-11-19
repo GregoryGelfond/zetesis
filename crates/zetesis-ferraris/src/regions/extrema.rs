@@ -21,7 +21,7 @@ use zetesis_algebra::Stop;
 
 use crate::{ExtremumCutRule, NodeView, Theory};
 
-use super::{Adjacency, Chain, ChainOperands, Closure, Count, Meter, Narrower, Step};
+use super::{Adjacency, Chain, ChainOperands, Count, Meter, Narrower, NarrowingClosure, Step};
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Extrema {
@@ -307,7 +307,7 @@ impl Extrema {
     }
 }
 
-impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingClosure<'_, W, C> {
     pub(super) fn seed_extrema<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,

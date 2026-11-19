@@ -37,7 +37,7 @@ use std::ops::ControlFlow;
 
 use zetesis_algebra::{Stop, words::Words};
 
-use super::{Chain, Closure, Count, Meter, Narrower, Step, chain_position, flag_words};
+use super::{Chain, Count, Meter, Narrower, NarrowingClosure, Step, chain_position, flag_words};
 
 const EXPAND: u8 = 1;
 const DIRTY: u8 = 2;
@@ -455,7 +455,7 @@ fn push(values: &mut Vec<usize>, value: usize) -> Result<(), Stop> {
     Ok(())
 }
 
-impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingClosure<'_, W, C> {
     /// Select a change that can still inform a shared ancestor or establish
     /// an expanded unit consequence. Counts describe processed events, so callers
     /// first account for a changed operand. Truth bits may precede their events:

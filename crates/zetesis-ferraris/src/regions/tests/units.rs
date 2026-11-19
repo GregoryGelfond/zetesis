@@ -9,7 +9,7 @@ use crate::{
     Region, RegionLimits, Theory,
 };
 
-use super::super::{Closure, Context, Meter, Step, Width, bit, counters::Count};
+use super::super::{Context, Meter, NarrowingClosure, Step, Width, bit, counters::Count};
 use super::{
     compact_mut,
     counters::{native, same_knowledge},
@@ -47,7 +47,7 @@ fn chain(disjunction: bool) -> Theory {
 
 /// The previous unit loop, retained only at this small dispatch boundary.
 fn scan<C: Count, Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
-    closure: &mut Closure<'_, C>,
+    closure: &mut NarrowingClosure<'_, C>,
     index: &Narrower,
     work: &mut Meter<'_, Q>,
 ) -> Result<Step, Stop> {
@@ -72,7 +72,7 @@ fn scan<C: Count, Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
 
 /// The complete downward scan before processed totals omitted it.
 fn scan_operands<C: Count, Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
-    closure: &mut Closure<'_, C>,
+    closure: &mut NarrowingClosure<'_, C>,
     index: &Narrower,
     work: &mut Meter<'_, Q>,
 ) -> Result<Step, Stop> {
@@ -145,7 +145,7 @@ fn attempt(
     teaching: Teaching,
 ) -> Attempt {
     fn call<C: Count, Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
-        closure: &mut Closure<'_, C>,
+        closure: &mut NarrowingClosure<'_, C>,
         index: &Narrower,
         scanning: bool,
         work: &mut Meter<'_, Q>,
@@ -176,7 +176,7 @@ fn attempt(
     let mut work = Meter::local(limit);
     let result = match &mut knowledge.width {
         Width::Compact16(known) => call(
-            &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
+            &mut NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: known.borrow(),
                 lists: &mut scratch.common,
                 learning: &mut scratch.learning,
@@ -187,7 +187,7 @@ fn attempt(
             teaching,
         ),
         Width::Compact32(known) => call(
-            &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
+            &mut NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: known.borrow(),
                 lists: &mut scratch.common,
                 learning: &mut scratch.learning,
@@ -198,7 +198,7 @@ fn attempt(
             teaching,
         ),
         Width::Native(known) => call(
-            &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
+            &mut NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: known.borrow(),
                 lists: &mut scratch.common,
                 learning: &mut scratch.learning,
@@ -368,7 +368,7 @@ fn the_last_opposite_event_still_refutes_the_chain() {
         let opposite = if disjunction { 2 } else { 4 };
         let (mut knowledge, mut scratch) =
             state(&index, [opposite, opposite, opposite, opposite - 1]);
-        let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+        let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact_mut(&mut knowledge),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -417,7 +417,7 @@ fn an_absorbing_operand_still_refutes_an_opposite_root() {
         known.sure[0] ^= 1 << 7;
         known.never[0] ^= 1 << 7;
         let mut work = Meter::local(0);
-        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+        let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
             known,
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -498,7 +498,7 @@ fn processed_roots_keep_the_node_and_parent_permits() {
                 let mut expected = knowledge.clone();
                 let mut quota = SinglePermits::new(limit, stop);
                 let mut work = Meter::reserved(&mut quota);
-                let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+                let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                     known: compact_mut(&mut knowledge),
                     lists: &mut scratch.common,
                     learning: &mut scratch.learning,
@@ -553,7 +553,7 @@ fn a_processed_false_body_still_removes_support() {
             .expect("the implication is a producer");
     let subject = Context::from(OriginalSubject::new(&theory, Some(&producers)));
     let (mut knowledge, mut scratch) = processed_body(&index, index.knowledge());
-    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
         lists: &mut scratch.common,
         learning: &mut scratch.learning,
@@ -604,7 +604,7 @@ fn a_frozen_false_root_remains_a_constant() {
     known.unknown.decrement(0);
     known.unknown.decrement(1);
     let mut work = Meter::local(2);
-    let result = Closure::<_, Countermodels> {
+    let result = NarrowingClosure::<_, Countermodels> {
         known: compact_mut(&mut knowledge),
         lists: &mut scratch.common,
         learning: (),
@@ -640,7 +640,7 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
                 let mut expected = knowledge.clone();
                 let mut quota = SinglePermits::new(limit, stop);
                 let mut work = Meter::reserved(&mut quota);
-                let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+                let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                     known: compact_mut(&mut knowledge),
                     lists: &mut scratch.common,
                     learning: &mut scratch.learning,

@@ -23,7 +23,7 @@
 
 use zetesis_algebra::{Failure, Quota};
 
-use crate::regions::{Chain, Closure, Count, Meter, Narrower, Step};
+use crate::regions::{Chain, Count, Meter, Narrower, NarrowingClosure, Step};
 use crate::{NodeView, Theory};
 use zetesis_algebra::Stop;
 
@@ -218,7 +218,7 @@ fn aliases(
     Ok(result)
 }
 
-impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingClosure<'_, W, C> {
     pub(in crate::regions) fn threshold_capacity<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,

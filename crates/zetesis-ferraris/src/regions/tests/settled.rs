@@ -8,7 +8,7 @@ use crate::{
     Node, OperandSpan, OriginalSubject, Region, RegionLimits, Theory,
 };
 
-use super::super::{Closure, Context, Known, Meter, Step, Width, bit, counters::Count};
+use super::super::{Context, Known, Meter, NarrowingClosure, Step, Width, bit, counters::Count};
 use super::{compact_mut, counters};
 
 fn theory(disjunction: bool, other_parent: bool) -> Theory {
@@ -185,7 +185,7 @@ fn a_pending_witness_does_not_retire_the_counter() {
         scratch.common.prepare(4);
         scratch.common.nodes.push((1, disjunction));
         let mut work = Meter::local(2);
-        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+        let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact_mut(&mut knowledge),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -223,7 +223,7 @@ fn retired_parents_keep_their_read_permit() {
                     scratch.common.prepare(4);
                     let mut quota = SinglePermits::new(limit, stop);
                     let mut work = Meter::reserved(&mut quota);
-                    let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+                    let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
                         known: compact_mut(&mut knowledge),
                         lists: &mut scratch.common,
                         learning: &mut scratch.learning,
@@ -263,7 +263,7 @@ fn a_first_witness_still_refutes_an_opposite_root() {
         let mut scratch = NarrowingScratch::default();
         scratch.common.prepare(4);
         let mut work = Meter::local(2);
-        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+        let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact_mut(&mut knowledge),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -301,7 +301,7 @@ fn a_retired_chain_does_not_hide_another_parent() {
         let mut scratch = NarrowingScratch::default();
         scratch.common.prepare(4);
         let mut work = Meter::local(3);
-        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+        let result = NarrowingClosure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact_mut(&mut knowledge),
             lists: &mut scratch.common,
             learning: &mut scratch.learning,
@@ -334,7 +334,7 @@ fn a_frozen_falsum_parent_never_collects_a_witness() {
         let mut scratch = NarrowingScratch::default();
         scratch.common.prepare(4);
         let mut work = Meter::local(2);
-        let result = Closure::<_, Countermodels> {
+        let result = NarrowingClosure::<_, Countermodels> {
             known: compact_mut(&mut knowledge),
             lists: &mut scratch.common,
             learning: (),
