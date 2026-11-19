@@ -9,16 +9,16 @@
 use super::components::{Pattern, Predicate};
 use crate::FormulaFailure;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
-use crate::formula_ir::{AggregateKey, ExistentialProjection, HeadIr, LiteralIr, RuleIr};
+use crate::formula_ir::{AggregateKey, AnonymousWitnesses, HeadIr, LiteralIr, RuleIr};
 
 /// One atom occurrence, by its compiled coordinate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Occurrence {
     /// An atom pattern of either sign: a body atom, a structural occurrence,
     /// an aggregate element's atom key, a conditional literal's atom, or a
-    /// projection's witness atom.
+    /// anonymous's witness atom.
     Atom(Pattern),
-    /// The predicate an argument projection reads.
+    /// The predicate an argument anonymous reads.
     Projected(Predicate),
 }
 
@@ -63,7 +63,7 @@ pub(super) fn frame(
             match literal {
                 LiteralIr::Atom(_, atom) => visitor.occurrence(Occurrence::Atom(*atom))?,
                 LiteralIr::PatternAtom(atom) => visitor.occurrence(Occurrence::Atom(atom.atom))?,
-                LiteralIr::ProjectedAtom(_, value) => projection(value, visitor, &mut pending)?,
+                LiteralIr::AnonymousAtom(_, value) => anonymous(value, visitor, &mut pending)?,
                 LiteralIr::Conditional(value) => {
                     pending.push(&value.condition);
                     match &value.consequent {
@@ -74,8 +74,8 @@ pub(super) fn frame(
                                     ConsequentOperand::Atom(atom) => {
                                         visitor.occurrence(Occurrence::Atom(*atom))?;
                                     }
-                                    ConsequentOperand::Projection(value) => {
-                                        projection(value, visitor, &mut pending)?;
+                                    ConsequentOperand::Anonymous(value) => {
+                                        anonymous(value, visitor, &mut pending)?;
                                     }
                                 }
                             }
@@ -112,16 +112,16 @@ pub(super) fn frame(
     Ok(())
 }
 
-fn projection<'ir>(
-    value: &'ir ExistentialProjection,
+fn anonymous<'ir>(
+    value: &'ir AnonymousWitnesses,
     visitor: &mut impl Visitor,
     pending: &mut Vec<&'ir [LiteralIr]>,
 ) -> Result<(), FormulaFailure> {
     match value {
-        ExistentialProjection::Arguments { predicate, .. } => {
+        AnonymousWitnesses::Arguments { predicate, .. } => {
             visitor.occurrence(Occurrence::Projected(*predicate))?;
         }
-        ExistentialProjection::Witnesses { atom, bindings, .. } => {
+        AnonymousWitnesses::Witnesses { atom, bindings, .. } => {
             visitor.occurrence(Occurrence::Atom(*atom))?;
             pending.push(bindings);
         }

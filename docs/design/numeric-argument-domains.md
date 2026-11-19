@@ -184,8 +184,8 @@ One case for every construct of the prepared IR that binds a slot or puts a valu
 | Construct | Transfer | Widens |
 |---|---|---|
 | `Atom(None, pattern)`, positive | Each variable position meets its slot's domain with the argument's value. A constant position filters rows only. | — |
-| `Atom` or `ProjectedAtom` under `not` or `not not` | Dropped: it binds nothing, and dropping a condition only enlarges the possible values. | — |
-| `ProjectedAtom(None, projection)` | As `Atom` for the arguments it binds; witness slots are local. | — |
+| `Atom` or `AnonymousAtom` under `not` or `not not` | Dropped: it binds nothing, and dropping a condition only enlarges the possible values. | — |
+| `AnonymousAtom(None, projection)` | As `Atom` for the arguments it binds; witness slots are local. | — |
 | `PatternAtom` | A slot bound inside a function term is ⊤ (`Unknown`, `Mixed`, `Unbounded`). | that slot |
 | `Bind`, arithmetic | Interval: the `Range` transfer over the operands' domains, for operators whose laws are proved (Lean). A declined transfer or an unproved operator gives `Integer` and `Unbounded`: a defined result is an i32, and an undefined one produces no head or refuses the program. Finite component: `Unknown`; arithmetic image sets have no consumer in this slice. | the target slot |
 | `Bind`, copy `Y = X` / constant / constructor `Y = f(X)` | X's whole value / a point, or `Mixed` with the symbol in the set / ⊤. | the target slot, for a constructor |

@@ -1280,7 +1280,7 @@ pub(crate) fn eligible(rule: &RuleIr) -> bool {
         && rule.body.iter().all(|literal| {
             !matches!(
                 literal,
-                LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_)
+                LiteralIr::AnonymousAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_)
             )
         })
 }
@@ -1393,7 +1393,7 @@ fn literal_atom(
         | LiteralIr::HeadGuard(_)
         | LiteralIr::Bind { .. }
         | LiteralIr::Range { .. } => None,
-        LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
+        LiteralIr::AnonymousAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
             unreachable!("only admitted ordinary constraints are streamed")
         }
     }

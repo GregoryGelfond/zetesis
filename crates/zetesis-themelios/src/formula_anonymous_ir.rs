@@ -1,4 +1,4 @@
-//! Anonymous default-negated arguments are existential projection positions.
+//! Lower anonymous variables in default-negated literals to witness descriptions.
 //!
 //! Computed values and finite range rows precede witness matching. Repeated
 //! anonymous-subtree inspection can be quadratic in source depth; every visited
@@ -10,12 +10,12 @@ use themelios_program::term::{Term, Variable};
 use zetesis_core::ValueNodeRef;
 
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, ExistentialProjection, LiteralIr, Operation, Variables};
+use crate::formula_ir::{AnonymousWitnesses, Compiler, LiteralIr, Operation, Variables};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode, push, reserve};
 use crate::{ExpansionResource, FormulaFailure, FormulaResource};
 
 impl Compiler<'_> {
-    pub(super) fn projected_atom(
+    pub(super) fn anonymous_atom(
         &mut self,
         atom: &Atom,
         negation: DefaultNegation,
@@ -34,7 +34,7 @@ impl Compiler<'_> {
         };
         let mut anonymous = false;
         for term in arguments {
-            anonymous |= self.projection_anonymous(term)?;
+            anonymous |= self.contains_anonymous(term)?;
         }
         if !anonymous {
             return Ok(None);
@@ -51,8 +51,8 @@ impl Compiler<'_> {
         for (position, term) in arguments.iter().enumerate() {
             let term = if matches!(term, Term::Variable(Variable::Anonymous)) {
                 None
-            } else if self.projection_anonymous(term)? {
-                let nodes = self.projection_pattern(term, variables, bindings)?;
+            } else if self.contains_anonymous(term)? {
+                let nodes = self.anonymous_pattern(term, variables, bindings)?;
                 push(
                     &mut patterns,
                     ArgumentPattern { position, nodes },
@@ -61,7 +61,7 @@ impl Compiler<'_> {
                 )?;
                 None
             } else {
-                Some(self.projection_value(term, variables, bindings)?)
+                Some(self.anonymous_value(term, variables, bindings)?)
             };
             terms.push(term);
         }
@@ -75,17 +75,17 @@ impl Compiler<'_> {
             terms.len(),
             crate::coherence::core_sign(atom.sign),
         )?;
-        let projection = if patterns.is_empty() {
-            ExistentialProjection::Arguments { predicate, terms }
+        let witnesses = if patterns.is_empty() {
+            AnonymousWitnesses::Arguments { predicate, terms }
         } else {
-            self.projection_witnesses(predicate, terms, patterns, variables)?
+            self.anonymous_witnesses(predicate, terms, patterns, variables)?
         };
-        Ok(Some(LiteralIr::ProjectedAtom(negation, projection)))
+        Ok(Some(LiteralIr::AnonymousAtom(negation, witnesses)))
     }
 
     /// Evaluate data before enumerating witnesses. In a conditional, each range
-    /// row remains a source alternative outside existential witness projection.
-    fn projection_value(
+    /// row remains a source alternative outside the anonymous witnesses.
+    fn anonymous_value(
         &mut self,
         term: &Term,
         variables: &mut Variables,
@@ -109,7 +109,7 @@ impl Compiler<'_> {
     /// Shapes share the structural matcher's flat preorder vocabulary. Only
     /// constructor descendants can be wildcards: an anonymous arithmetic input
     /// remains an unbound input, never a relation to invert.
-    fn projection_pattern(
+    fn anonymous_pattern(
         &mut self,
         term: &Term,
         variables: &mut Variables,
@@ -125,7 +125,7 @@ impl Compiler<'_> {
                 .charge(ExpansionResource::Values, 1, self.location)?;
             let node = if matches!(term, Term::Variable(Variable::Anonymous)) {
                 PatternNode::Wildcard
-            } else if self.projection_anonymous(term)? {
+            } else if self.contains_anonymous(term)? {
                 if let Term::Tuple(children) = term {
                     reserve(&mut pending, children.len(), self.budget, self.location)?;
                     pending.extend(children.iter().rev());
@@ -144,13 +144,13 @@ impl Compiler<'_> {
                     pending.extend(children.iter().rev());
                     node
                 } else {
-                    match self.projection_value(term, variables, bindings)? {
+                    match self.anonymous_value(term, variables, bindings)? {
                         CoreTerm::Constant(value) => PatternNode::Constant(value),
                         CoreTerm::Variable(slot) => PatternNode::Slot(slot),
                     }
                 }
             } else {
-                match self.projection_value(term, variables, bindings)? {
+                match self.anonymous_value(term, variables, bindings)? {
                     CoreTerm::Constant(value) => PatternNode::Constant(value),
                     CoreTerm::Variable(slot) => PatternNode::Slot(slot),
                 }
@@ -160,7 +160,7 @@ impl Compiler<'_> {
         Ok(nodes)
     }
 
-    fn projection_anonymous(&mut self, term: &Term) -> Result<bool, FormulaFailure> {
+    fn contains_anonymous(&mut self, term: &Term) -> Result<bool, FormulaFailure> {
         for node in term.subterms() {
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
@@ -171,13 +171,13 @@ impl Compiler<'_> {
         Ok(false)
     }
 
-    fn projection_witnesses(
+    fn anonymous_witnesses(
         &mut self,
         predicate: Predicate,
         terms: Vec<Option<CoreTerm>>,
         arguments: Vec<ArgumentPattern>,
         variables: &Variables,
-    ) -> Result<ExistentialProjection, FormulaFailure> {
+    ) -> Result<AnonymousWitnesses, FormulaFailure> {
         let inputs = variables.count;
         let mut count = inputs;
         let mut captured = Vec::new();
@@ -205,7 +205,7 @@ impl Compiler<'_> {
             self.budget,
             self.location,
         )?;
-        Ok(ExistentialProjection::Witnesses {
+        Ok(AnonymousWitnesses::Witnesses {
             atom,
             bindings,
             variables: count,

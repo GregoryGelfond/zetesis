@@ -330,7 +330,7 @@ pub(super) enum ComparisonParts {
 pub(crate) enum LiteralIr {
     Atom(DefaultNegation, AtomPattern),
     PatternAtom(crate::formula_pattern::PatternAtom),
-    ProjectedAtom(DefaultNegation, ExistentialProjection),
+    AnonymousAtom(DefaultNegation, AnonymousWitnesses),
     Compare(Comparison),
     /// Equality between a captured positive subterm and its source expression:
     /// the comparison `captured = value`, captured on the left. This is
@@ -355,10 +355,10 @@ pub(crate) enum LiteralIr {
         binder: bool,
     },
 }
-/// Complete existential witnesses, with a flat relational fast path: a
-/// body atom whose local variables are projected out, as `exists y. p(x, y)`.
-/// Not head projection (`Lifted.Project`) or a source `#project` domain.
-pub(crate) enum ExistentialProjection {
+/// Anonymous-variable witnesses for one source literal. Grounding expands them
+/// to a disjunction of possible atoms (then applies the literal's negation).
+/// This is literal lowering, not `Lifted.Project` head emission or `#project`.
+pub(crate) enum AnonymousWitnesses {
     Arguments {
         predicate: Predicate,
         terms: Vec<Option<CoreTerm>>,
@@ -372,7 +372,7 @@ pub(crate) enum ExistentialProjection {
         inputs: usize,
     },
 }
-impl ExistentialProjection {
+impl AnonymousWitnesses {
     pub(crate) fn predicate<'a>(
         &self,
         view: zetesis_core::TemplateComponentsRef<'a>,
@@ -447,7 +447,7 @@ pub(crate) fn decided(literal: &LiteralIr) -> bool {
         | LiteralIr::Range { .. } => true,
         LiteralIr::Atom(..)
         | LiteralIr::PatternAtom(_)
-        | LiteralIr::ProjectedAtom(..)
+        | LiteralIr::AnonymousAtom(..)
         | LiteralIr::HeadGuard(_)
         | LiteralIr::Conditional(_)
         | LiteralIr::Aggregate(_) => false,

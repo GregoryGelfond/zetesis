@@ -715,7 +715,7 @@ impl Decisions {
             decision.is_none()
                 && !matches!(
                     literal,
-                    LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) | LiteralIr::ProjectedAtom(..)
+                    LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) | LiteralIr::AnonymousAtom(..)
                 )
         });
         Ok(Self {

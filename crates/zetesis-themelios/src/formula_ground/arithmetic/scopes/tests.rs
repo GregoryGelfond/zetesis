@@ -285,9 +285,9 @@ fn conditionals_and_nested_witness_projection_never_cache_by_first_binding() {
                     } else {
                         matches!(
                             literal,
-                            LiteralIr::ProjectedAtom(
+                            LiteralIr::AnonymousAtom(
                                 _,
-                                super::super::ExistentialProjection::Witnesses { .. }
+                                super::super::AnonymousWitnesses::Witnesses { .. }
                             )
                         )
                     }),
@@ -322,9 +322,9 @@ fn flat_anonymous_projection_is_absent_only_from_nested_scope_scanning() {
             let objective = &program.objectives[0];
             assert!(matches!(
                 objective.condition.literals(),
-                [LiteralIr::ProjectedAtom(
+                [LiteralIr::AnonymousAtom(
                     _,
-                    super::super::ExistentialProjection::Arguments { .. }
+                    super::super::AnonymousWitnesses::Arguments { .. }
                 )]
             ));
             let limits = FormulaLimits::default();

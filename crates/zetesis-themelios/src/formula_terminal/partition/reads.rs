@@ -10,7 +10,7 @@ use super::{
 };
 use crate::FormulaFailure;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
-use crate::formula_ir::{AggregateKey, ExistentialProjection, HeadIr, LiteralIr, RuleIr};
+use crate::formula_ir::{AggregateKey, AnonymousWitnesses, HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::components::Pattern;
 
 pub(super) fn selected(
@@ -75,8 +75,8 @@ pub(super) fn rule(
     Ok(false)
 }
 
-fn projection<'ir>(
-    value: &'ir ExistentialProjection,
+fn anonymous<'ir>(
+    value: &'ir AnonymousWitnesses,
     defined: &Defined<'_>,
     pending: &mut Scratch<&'ir [LiteralIr]>,
     context: &mut Context<'_, '_>,
@@ -90,7 +90,7 @@ fn projection<'ir>(
     if selected(predicate, defined, context)? {
         return Ok(true);
     }
-    if let ExistentialProjection::Witnesses { bindings, .. } = value {
+    if let AnonymousWitnesses::Witnesses { bindings, .. } = value {
         pending.push(bindings.as_slice(), context)?;
     }
     Ok(false)
@@ -105,7 +105,7 @@ fn literal_reads<'ir>(
     match literal {
         LiteralIr::Atom(_, atom) => pattern(*atom, defined, context),
         LiteralIr::PatternAtom(atom) => pattern(atom.atom, defined, context),
-        LiteralIr::ProjectedAtom(_, value) => projection(value, defined, pending, context),
+        LiteralIr::AnonymousAtom(_, value) => anonymous(value, defined, pending, context),
         LiteralIr::Conditional(value) => {
             pending.push(value.condition.as_slice(), context)?;
             match &value.consequent {
@@ -115,8 +115,8 @@ fn literal_reads<'ir>(
                         pending.push(alternative.bindings.as_slice(), context)?;
                         let found = match &alternative.operand {
                             ConsequentOperand::Atom(atom) => pattern(*atom, defined, context)?,
-                            ConsequentOperand::Projection(value) => {
-                                projection(value, defined, pending, context)?
+                            ConsequentOperand::Anonymous(value) => {
+                                anonymous(value, defined, pending, context)?
                             }
                         };
                         if found {

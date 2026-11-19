@@ -65,7 +65,7 @@ use crate::formula::{Compiled, ceiling};
 use crate::formula_assignment::{Contributions, Kind, Numeric, Reduced, Sides};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, ExistentialProjection, HeadElementKey,
+    AggregateGuard, AggregateIr, AggregateKey, AnonymousWitnesses, ChoiceIr, HeadElementKey,
     HeadIr, HeadLiteral, HeadMeasure, HeadOperand, LiteralIr, RuleIr,
 };
 use crate::formula_support::{self, Buffer, Computation, Counters, Join, Support, TermTable};
@@ -1989,10 +1989,10 @@ impl<'source> Builder<'_, '_, 'source> {
                     location,
                 )?;
                 result = self.and(result, conditional, location)?;
-            } else if let LiteralIr::ProjectedAtom(negation, _) = literal {
-                let mut projected = self.project(
+            } else if let LiteralIr::AnonymousAtom(negation, _) = literal {
+                let mut projected = self.anonymous_formula(
                     source_literal.map(|literal| {
-                        let LiteralIr::ProjectedAtom(_, value) = literal else {
+                        let LiteralIr::AnonymousAtom(_, value) = literal else {
                             unreachable!("selected projection")
                         };
                         value
@@ -2010,32 +2010,32 @@ impl<'source> Builder<'_, '_, 'source> {
         }
         Ok(result)
     }
-    pub(super) fn project(
+    pub(super) fn anonymous_formula(
         &mut self,
-        projection: Ir<'_, 'source, ExistentialProjection>,
+        witnesses: Ir<'_, 'source, AnonymousWitnesses>,
         assignment: &Binding,
         support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
-        match projection.get() {
-            ExistentialProjection::Arguments { predicate, terms } => {
+        match witnesses.get() {
+            AnonymousWitnesses::Arguments { predicate, terms } => {
                 let predicate = self.computation.static_predicate(
                     *predicate,
                     self.limits,
                     self.counters,
                     location,
                 )?;
-                self.project_arguments(predicate, terms, assignment, support, location)
+                self.anonymous_arguments(predicate, terms, assignment, support, location)
             }
-            ExistentialProjection::Witnesses {
+            AnonymousWitnesses::Witnesses {
                 atom,
                 bindings: _,
                 variables,
                 inputs,
             } => {
                 let mut rows = Join::local(
-                    projection.map(|projection| {
-                        let ExistentialProjection::Witnesses { bindings, .. } = projection else {
+                    witnesses.map(|witnesses| {
+                        let AnonymousWitnesses::Witnesses { bindings, .. } = witnesses else {
                             unreachable!("witness projection")
                         };
                         bindings.as_slice()
@@ -2069,7 +2069,7 @@ impl<'source> Builder<'_, '_, 'source> {
         }
     }
 
-    fn project_arguments(
+    fn anonymous_arguments(
         &mut self,
         predicate: zetesis_core::catalog::PredicateRef<'_>,
         terms: &[Option<components::Term>],
