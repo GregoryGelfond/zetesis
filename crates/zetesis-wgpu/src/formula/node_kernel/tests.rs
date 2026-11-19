@@ -1,6 +1,6 @@
 //! The assembled production sources retain the independently checked interface.
 
-use super::GateProjection;
+use super::BinaryNodeKernel;
 use crate::kernel::Kernel;
 use crate::{GpuKernelOptions, GpuWorkgroupSize};
 use std::borrow::Cow;
@@ -8,7 +8,7 @@ use std::borrow::Cow;
 #[test]
 fn default_shader_remains_the_borrowed_baseline() {
     assert!(
-        matches!(GateProjection::Enumerated.shader().unwrap(), Cow::Borrowed(source)
+        matches!(BinaryNodeKernel::Enumerated.shader().unwrap(), Cow::Borrowed(source)
         if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../words.wgsl"), include_str!("../../formula_graph/truth.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl"), include_str!("../../reduction.wgsl")))
     );
 }
@@ -26,7 +26,7 @@ fn bitwise_transfer_preserves_the_shader_scaffold() {
     );
     let (prefix, transfer) = baseline.split_once("fn gate(").unwrap();
     let suffix = &transfer[transfer.find("fn finish(").unwrap()..];
-    let assembled = GateProjection::Bitwise.shader().unwrap();
+    let assembled = BinaryNodeKernel::Bitwise.shader().unwrap();
     let replacement = assembled
         .strip_prefix(prefix)
         .unwrap()
@@ -38,8 +38,8 @@ fn bitwise_transfer_preserves_the_shader_scaffold() {
 #[test]
 fn projection_variants_preserve_the_device_interface() {
     let mut interfaces = Vec::new();
-    for projection in GateProjection::ALL {
-        let source = projection.shader().unwrap();
+    for node_kernel in BinaryNodeKernel::ALL {
+        let source = node_kernel.shader().unwrap();
         let module = naga::front::wgsl::parse_str(&source).expect("WGSL parses");
         let info = naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
@@ -87,7 +87,7 @@ fn projection_variants_preserve_the_device_interface() {
 
 #[test]
 fn optional_instructions_require_granted_features() {
-    for projection in GateProjection::ALL {
+    for node_kernel in BinaryNodeKernel::ALL {
         for features in [
             wgpu::Features::empty(),
             wgpu::Features::SUBGROUP,
@@ -95,7 +95,7 @@ fn optional_instructions_require_granted_features() {
             wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64,
         ] {
             let source = Kernel::Formula(GpuKernelOptions::default())
-                .source(projection.shader().unwrap(), features)
+                .source(node_kernel.shader().unwrap(), features)
                 .unwrap();
             let module = naga::front::wgsl::parse_str(&source)
                 .unwrap_or_else(|error| panic!("{}", error.emit_to_string(&source)));
@@ -145,7 +145,7 @@ fn portable_selection_ignores_optional_device_features() {
     });
     let source = kernel
         .source(
-            GateProjection::Enumerated.shader().unwrap(),
+            BinaryNodeKernel::Enumerated.shader().unwrap(),
             wgpu::Features::all(),
         )
         .unwrap();
@@ -154,7 +154,7 @@ fn portable_selection_ignores_optional_device_features() {
 
 #[test]
 fn formula_source_owns_only_projection_or_feature_assembly() {
-    for projection in GateProjection::ALL {
+    for node_kernel in BinaryNodeKernel::ALL {
         for optional_features in [false, true] {
             let kernel = Kernel::Formula(GpuKernelOptions {
                 optional_features,
@@ -167,13 +167,13 @@ fn formula_source_owns_only_projection_or_feature_assembly() {
                 wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64,
             ] {
                 let source = kernel
-                    .source(projection.shader().unwrap(), granted)
+                    .source(node_kernel.shader().unwrap(), granted)
                     .unwrap();
                 assert_eq!(
                     matches!(source, Cow::Owned(_)),
-                    projection == GateProjection::Bitwise
+                    node_kernel == BinaryNodeKernel::Bitwise
                         || (optional_features && !granted.is_empty()),
-                    "{projection:?}, {optional_features}, {granted:?}"
+                    "{node_kernel:?}, {optional_features}, {granted:?}"
                 );
             }
         }

@@ -103,7 +103,7 @@ pub enum ExecutionObservation<'a> {
         adapter: zetesis_wgpu::AdapterMetadata<'a>,
         /// Exact gate evaluator compiled into this executor. This records the
         /// selected implementation, not a device submission or completed check.
-        projection: zetesis_wgpu::GateProjection,
+        node_kernel: zetesis_wgpu::BinaryNodeKernel,
         /// Requested materialization policy.
         grounder: Grounder,
         /// Configured candidate batch size: a fixed ceiling, or the adaptive

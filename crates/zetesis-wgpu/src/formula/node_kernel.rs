@@ -11,8 +11,10 @@ use std::borrow::Cow;
 /// satisfying completions without claiming exact projection of racing aliased observations.
 /// Both policies retain the frozen query, work bounds and result protocol.
 /// Selecting an alternative establishes no physical qualification or speedup.
+///
+/// The exact three-position laws are proved in `proofs/Zetesis/GateProjection.lean`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum GateProjection {
+pub enum BinaryNodeKernel {
     /// Enumerate all eight Boolean relation rows; the existing default shader.
     #[default]
     Enumerated,
@@ -24,7 +26,7 @@ pub enum GateProjection {
 #[cfg(test)]
 mod tests;
 
-impl GateProjection {
+impl BinaryNodeKernel {
     /// Both implementations, with the existing baseline first.
     pub const ALL: [Self; 2] = [Self::Enumerated, Self::Bitwise];
 

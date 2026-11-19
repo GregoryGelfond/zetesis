@@ -1,13 +1,13 @@
 //! Finite transition evidence for the explicit alternative; no device execution.
 
 use super::gate_transfer::{Aliases, Operation, bitwise, domains, fits, holds, reference};
-use zetesis_wgpu::GateProjection;
+use zetesis_wgpu::BinaryNodeKernel;
 
 #[test]
 fn default_projection_is_enumerated() {
-    assert_eq!(GateProjection::default(), GateProjection::Enumerated);
+    assert_eq!(BinaryNodeKernel::default(), BinaryNodeKernel::Enumerated);
     assert_eq!(
-        GateProjection::ALL.map(GateProjection::label),
+        BinaryNodeKernel::ALL.map(BinaryNodeKernel::label),
         ["enumerated", "bitwise"]
     );
 }

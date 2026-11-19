@@ -248,7 +248,7 @@ alongside the callback. See [domain observation](source.md#optional-numeric-anal
 Replace `zetesis_wgpu::{GpuOracle, GpuTightOracle, GpuFormulaOracle}::new_metal`
 with `new_selected(options, GpuSelection { api: GpuApi::Metal })`.
 For `GpuFormulaOracle::new_metal_with_projection`, use
-`new_selected_with_projection` with the same selection and projection.
+`new_selected_with_node_kernel` with the same selection and node kernel.
 `zetesis_core::catalog::CatalogRead::constructor_of_predicate` is removed.
 
 The former `zetesis-cpu` closure helpers `CONSTRAINT_HEAD` and `InstanceAtomIter`
