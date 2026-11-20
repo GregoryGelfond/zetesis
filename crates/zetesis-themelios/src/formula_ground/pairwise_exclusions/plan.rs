@@ -53,10 +53,11 @@ impl Plan {
                 )?;
             }
         }
-        sort::by(
+        // Vertices of one node are identical until deduplicated.
+        sort::by_key(
             vertices.slice_mut(),
             GroundingWork::new(builder.limits, builder.counters, rule.location),
-            |left, right, _| Ok(left.node.cmp(&right.node)),
+            |vertex| vertex.node,
         )?;
         let mut distinct = 0;
         for read in 0..vertices.len() {
@@ -195,10 +196,10 @@ impl Plan {
                 rule.location,
             )?;
         }
-        sort::by(
+        sort::by_key(
             members.slice_mut(),
             GroundingWork::new(builder.limits, builder.counters, rule.location),
-            |left, right, _| Ok(left.cmp(right)),
+            |&member| member,
         )?;
         Ok(members)
     }

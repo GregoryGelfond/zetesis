@@ -1,8 +1,8 @@
 //! Deferred local coordinates for a finite source-identity batch.
 //!
 //! Push authenticates and appends one occurrence without searching or growing
-//! an inverse. Finish consumes the private batch, sorts IDs using the existing
-//! metered constant-scratch heapsort, compacts duplicates, and only then builds
+//! an inverse. Finish consumes the private batch, sorts IDs in place with the
+//! metered unstable sort, compacts duplicates, and only then builds
 //! the ordinary selection's inverse. No partially sorted/indexed selection is
 //! observable. Published local coordinates follow increasing source IDs; their
 //! order has no semantic role. Ordinary `SourceSelection` insertion is unchanged.
@@ -13,8 +13,9 @@
 
 use super::{Computation, Counters, SourceAtom, SourceSelection, owner_failure};
 use crate::formula::ceiling;
-use crate::formula_support::{Context, GroundingWork, reserve, sort};
+use crate::formula_support::{Context, GroundingWork, Support, reserve, sort};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
+use zetesis_core::PatternRef;
 
 pub(crate) struct SourceBatch(SourceSelection);
 
@@ -48,6 +49,40 @@ impl SourceBatch {
         Ok(())
     }
 
+    /// Push every completed-support row of `pattern`'s predicate.
+    ///
+    /// The caller vouches that the predicate's support is its exact extension:
+    /// a saturated component's certain predicates, whose completed support is
+    /// their least model. Those rows are then exactly the heads one more
+    /// application of the component's rules would derive over them, so the
+    /// rows are read once instead of joining the rule bodies again. Each row
+    /// costs one charged identity lookup and one charged push.
+    pub(crate) fn push_supported(
+        &mut self,
+        pattern: PatternRef<'_>,
+        support: &Support<'_>,
+        computation: &mut Computation<'_, '_>,
+        work: GroundingWork<'_>,
+    ) -> Result<(), FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let Some(rows) = support.resolve(pattern, limits, counters, location)? else {
+            return Ok(());
+        };
+        for position in 0..rows.row_count() {
+            counters.work(limits, location)?;
+            let row = rows
+                .row(position)
+                .expect("a position below the row count is a row");
+            let atom = computation.atom_ref(row.atom(), limits, counters, location)?;
+            self.push(&atom, computation, limits, counters, location)?;
+        }
+        Ok(())
+    }
+
     /// Publish only after complete sorting, compaction and inverse construction.
     /// Any refusal consumes and drops this private batch with its spent receipts.
     pub(crate) fn finish(
@@ -62,10 +97,10 @@ impl SourceBatch {
         if !self.0.scope.same(&computation.source_scope(location)?) {
             return Err(owner_failure(location));
         }
-        sort::by(
+        sort::by_key(
             &mut self.0.positions,
             GroundingWork::new(limits, counters, location),
-            |left, right, _| Ok(left.cmp(right)),
+            |&position| position,
         )?;
         let mut distinct = 0;
         for read in 0..self.0.positions.len() {
@@ -116,10 +151,10 @@ impl SourceBatch {
         if !self.0.scope.same(&selection.scope) {
             return Err(owner_failure(location));
         }
-        sort::by(
+        sort::by_key(
             &mut self.0.positions,
             GroundingWork::new(limits, counters, location),
-            |left, right, _| Ok(left.cmp(right)),
+            |&position| position,
         )?;
         // Visit already selected atoms, and compact the absent distinct ones.
         let mut absent = 0;

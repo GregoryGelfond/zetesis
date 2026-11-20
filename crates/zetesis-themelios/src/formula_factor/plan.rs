@@ -419,16 +419,16 @@ fn expression_scope(
     Ok(true)
 }
 
-/// Integer metadata uses the same checked sorting permits as typed views.
-fn sort<T: Ord>(
+/// Integer metadata is sorted by its own order, one permit per comparison.
+fn sort<T: Ord + Copy>(
     values: &mut [T],
     builder: &mut Builder<'_, '_, '_>,
     rule: &RuleIr,
 ) -> Result<(), FormulaFailure> {
-    crate::formula_support::sort::by(
+    crate::formula_support::sort::by_key(
         values,
         crate::formula_support::GroundingWork::new(builder.limits, builder.counters, rule.location),
-        |left, right, _| Ok(left.cmp(right)),
+        |&value| value,
     )
 }
 

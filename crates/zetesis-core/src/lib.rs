@@ -32,7 +32,7 @@ pub mod retention;
 pub mod table;
 mod identity;
 mod atom_lookup;
-mod checked_sort;
+pub mod checked_sort;
 mod word_mix;
 #[cfg(test)]
 mod test_support;

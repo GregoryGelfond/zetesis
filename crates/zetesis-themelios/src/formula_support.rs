@@ -4307,6 +4307,14 @@ pub(super) fn compare(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
+    if let Relation::Eq | Relation::Neq = relation {
+        // ASP term order is structural: it equates two terms exactly when they
+        // are the same typed value. Equality therefore needs no order, and two
+        // terms of one canonical scope decide it by identity alone, without
+        // walking either payload.
+        let equal = left.equals_ref_with(right, || counters.work(limits, location))?;
+        return Ok(equal == matches!(relation, Relation::Eq));
+    }
     let order = left.compare_terms_with(right, || counters.work(limits, location))?;
     Ok(relation_holds(relation, order))
 }

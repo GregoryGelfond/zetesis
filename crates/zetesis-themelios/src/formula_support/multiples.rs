@@ -529,9 +529,7 @@ impl Prepared<'_> {
             }
         }
         let location = context.work.location;
-        sort::by(selected.slice_mut(), context.work, |left, right, _| {
-            Ok(left.cmp(right))
-        })?;
+        sort::by_key(selected.slice_mut(), context.work, |&value| value)?;
         Ok(Some(selected.embedded(location)?))
     }
 }
