@@ -2,8 +2,8 @@
 
 use super::{
     Batch, Buffer, Completion, Computation, Context, Counters, FormulaFailure, FormulaLimits,
-    GroundingWork, Occurrence, Purpose, Row, StorageLease, Support, WitnessPlan, WitnessRow, owner,
-    restore,
+    GroundingWork, PackedCoords, Purpose, Row, StorageLease, Support, WitnessPlan, WitnessRow,
+    owner, restore,
 };
 use crate::grounding_observer::Event;
 
@@ -58,7 +58,7 @@ impl<'plan, 'source: 'plan> Replay<'plan, 'source> {
         }
         Ok(Rows {
             replay: self,
-            suffixes: batch.suffixes.slice(),
+            suffixes: &batch.suffixes,
             completions: batch.completions.slice().iter(),
             start: 0,
         })
@@ -80,7 +80,7 @@ impl<'plan, 'source: 'plan> Replay<'plan, 'source> {
         }
         Ok(Rows {
             replay: self,
-            suffixes: family.suffixes.slice(),
+            suffixes: &family.suffixes,
             completions: family.completions.slice().iter(),
             start: 0,
         })
@@ -89,7 +89,7 @@ impl<'plan, 'source: 'plan> Replay<'plan, 'source> {
 
 pub(crate) struct Rows<'batch, 'plan, 'source> {
     replay: &'batch mut Replay<'plan, 'source>,
-    suffixes: &'batch [Occurrence],
+    suffixes: &'batch PackedCoords,
     completions: std::slice::Iter<'batch, Completion>,
     start: usize,
 }

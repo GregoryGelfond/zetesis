@@ -119,3 +119,18 @@ fn reservation_picks_packed_widths_and_declines_when_the_budget_is_tight() {
     assert!(admit_reservation(10, 3, u32::MAX as usize + 1, 0, 0, 0, 10_000).is_none());
     assert!(admit_reservation(1_000_000, 8, 10, 0, 0, 0, 20).is_none());
 }
+
+#[test]
+fn a_packed_occurrence_is_narrower_than_two_usizes() {
+    assert_eq!(super::coord_bytes(CoordWidth::U16), size_of::<u32>());
+    assert_eq!(super::coord_bytes(CoordWidth::U32), size_of::<u64>());
+    assert!(size_of::<u32>() < size_of::<(usize, usize)>());
+    assert!(size_of::<u64>() < size_of::<(usize, usize)>());
+}
+
+#[test]
+fn width_for_index_overflows_above_u32() {
+    use crate::test_support::location;
+    assert!(super::width_for_index(u32::MAX as usize, location()).is_ok());
+    assert!(super::width_for_index(u32::MAX as usize + 1, location()).is_err());
+}

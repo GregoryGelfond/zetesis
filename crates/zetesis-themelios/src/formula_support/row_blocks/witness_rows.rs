@@ -19,6 +19,7 @@ use std::ops::Range;
 use zetesis_core::atom_registry::TermLookup;
 use zetesis_core::relation::Row;
 
+pub(super) use super::prime::{PackedCoords, width_for_index};
 use super::{
     Binding, Buffer, Computation, Context, Counters, GroundingWork, HeadIr, Ir, Join, JoinPlan,
     Probe, StorageLease, Support, cursor_rows::Descriptor, delta, relations,
@@ -35,6 +36,7 @@ pub(crate) struct WitnessPlan<'plan, 'source> {
     purpose: Purpose,
     relations: &'source relations::Relations<'source>,
     sources: Buffer<Resolution<'source>>,
+    coord_width: super::prime::CoordWidth,
     _lease: StorageLease,
 }
 
@@ -131,11 +133,19 @@ impl<'plan, 'source: 'plan> WitnessPlan<'plan, 'source> {
                 location,
             )?;
         }
+        let mut max_index = base.rows.iter().copied().max().unwrap_or(0);
+        for source in sources.slice() {
+            if let Some(rows) = source.rows() {
+                max_index = max_index.max(rows.row_count().saturating_sub(1));
+            }
+        }
+        let coord_width = width_for_index(max_index, location)?;
         Ok(Self {
             base,
             purpose,
             relations,
             sources,
+            coord_width,
             _lease: lease,
         })
     }
@@ -161,18 +171,14 @@ impl<'plan, 'source: 'plan> WitnessPlan<'plan, 'source> {
     }
 
     pub(crate) fn max_row_index(&self) -> usize {
-        self.base.rows.iter().copied().max().unwrap_or(0)
+        let mut max_index = self.base.rows.iter().copied().max().unwrap_or(0);
+        for source in self.sources.slice() {
+            if let Some(rows) = source.rows() {
+                max_index = max_index.max(rows.row_count().saturating_sub(1));
+            }
+        }
+        max_index
     }
-}
-
-/// A coordinate copied only from an actually matched source row. The local
-/// position restores the row; its independent original-source index checks the
-/// restored occurrence before the core projection accepts it. This is not a
-/// dictionary ID, posting cursor or fabricated atom identity.
-#[derive(Clone, Copy)]
-struct Occurrence {
-    position: usize,
-    source_index: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -187,7 +193,7 @@ struct Completion {
 pub(crate) struct Batch<'plan, 'source> {
     plan: &'plan WitnessPlan<'plan, 'source>,
     completions: Buffer<Completion>,
-    suffixes: Buffer<Occurrence>,
+    suffixes: PackedCoords,
     _lease: StorageLease,
 }
 
@@ -201,13 +207,13 @@ impl<'plan, 'source> Batch<'plan, 'source> {
         let location = plan.location();
         let mut lease = computation.lease();
         let header =
-            size_of::<Self>() - size_of::<Buffer<Completion>>() - size_of::<Buffer<Occurrence>>();
+            size_of::<Self>() - size_of::<Buffer<Completion>>() - size_of::<PackedCoords>();
         lease.observe(header, location)?;
         computation.storage_observed(&lease, 0, header, limits, counters, location)?;
         Ok(Self {
             plan,
             completions: Buffer::new(computation, limits, counters, location)?,
-            suffixes: Buffer::new(computation, limits, counters, location)?,
+            suffixes: PackedCoords::new(plan.coord_width, computation, limits, counters, location)?,
             _lease: lease,
         })
     }
@@ -224,6 +230,9 @@ impl<'plan, 'source> Batch<'plan, 'source> {
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<(), FormulaFailure> {
+        if self.suffixes.width() != self.plan.coord_width {
+            return Err(owner(self.plan.location()));
+        }
         stage(
             self.plan.base.plan.patterns.len(),
             &mut self.completions,
@@ -238,7 +247,7 @@ impl<'plan, 'source> Batch<'plan, 'source> {
 fn stage(
     width: usize,
     completions: &mut Buffer<Completion>,
-    suffixes: &mut Buffer<Occurrence>,
+    suffixes: &mut PackedCoords,
     row: &WitnessRow<'_, '_>,
     context: Context<'_, &Computation<'_, '_>>,
 ) -> Result<(), FormulaFailure> {
@@ -268,10 +277,8 @@ fn stage(
     for source in &row.rows[row.unchanged..] {
         counters.charge_work(2, limits, location)?;
         suffixes.push(
-            Occurrence {
-                position: source.position(),
-                source_index: source.source_index(),
-            },
+            source.position(),
+            source.source_index(),
             computation,
             limits,
             counters,
@@ -468,7 +475,7 @@ pub(super) fn publish<'batch, 'plan: 'batch, 'source: 'plan>(
 fn restore<'source>(
     rows: &mut Buffer<Row<'source, 'source>>,
     prepared: &WitnessPlan<'_, 'source>,
-    suffixes: &[Occurrence],
+    suffixes: &PackedCoords,
     start: usize,
     completion: Completion,
     context: Context<'_, &Computation<'_, '_>>,
@@ -490,22 +497,21 @@ fn restore<'source>(
         counters.work(limits, location)?;
         rows.pop();
     }
-    let suffix = suffixes
-        .get(start..completion.suffix_end)
-        .ok_or_else(|| owner(location))?;
-    for occurrence in suffix {
+    if completion.suffix_end > suffixes.len() || start > completion.suffix_end {
+        return Err(owner(location));
+    }
+    for index in start..completion.suffix_end {
         counters.charge_work(2, limits, location)?;
+        let (position, source_index) = suffixes.get(index).ok_or_else(|| owner(location))?;
         let source = prepared
             .sources
             .slice()
             .get(rows.len())
             .and_then(|resolution| resolution.rows())
             .ok_or_else(|| owner(location))?;
-        let row = source
-            .row(occurrence.position)
-            .ok_or_else(|| owner(location))?;
+        let row = source.row(position).ok_or_else(|| owner(location))?;
         counters.work(limits, location)?;
-        if row.source_index() != occurrence.source_index {
+        if row.source_index() != source_index {
             return Err(owner(location));
         }
         rows.push(row, computation, limits, counters, location)?;

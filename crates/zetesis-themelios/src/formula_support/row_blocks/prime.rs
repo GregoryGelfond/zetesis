@@ -13,6 +13,9 @@ use themelios_program::program::DefaultNegation;
 
 pub(in crate::formula_support) use crate::formula_support::parallel_executor::PRIME_GROUPS;
 
+mod transport;
+pub(super) use transport::{PackedCoords, width_for_index};
+
 /// Role of one body literal on the A′ path.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum LiteralRole {

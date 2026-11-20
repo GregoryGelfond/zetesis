@@ -11,7 +11,7 @@ use zetesis_core::TemplateTerm;
 
 use super::{
     Buffer, Completion, Computation, Context, Counters, Descriptor, FormulaFailure, FormulaLimits,
-    GroundingWork, Join, JoinPlan, Occurrence, StorageLease, Support, WitnessPlan, WitnessRow,
+    GroundingWork, Join, JoinPlan, PackedCoords, StorageLease, Support, WitnessPlan, WitnessRow,
     owner, relations, stage,
 };
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
@@ -23,7 +23,7 @@ pub(crate) struct Recording<'source> {
     patterns: *const (),
     width: usize,
     completions: Buffer<Completion>,
-    suffixes: Buffer<Occurrence>,
+    suffixes: PackedCoords,
     lease: StorageLease,
 }
 
@@ -34,7 +34,7 @@ pub(crate) struct Family<'plan, 'source> {
     pub(super) plan: order::Plan<'plan>,
     pub(super) relations: &'source relations::Relations<'source>,
     pub(super) completions: Buffer<Completion>,
-    pub(super) suffixes: Buffer<Occurrence>,
+    pub(super) suffixes: PackedCoords,
     lease: StorageLease,
 }
 
@@ -79,7 +79,7 @@ impl<'source> Recording<'source> {
         }
         let mut lease = computation.lease();
         let header =
-            size_of::<Self>() - size_of::<Buffer<Completion>>() - size_of::<Buffer<Occurrence>>();
+            size_of::<Self>() - size_of::<Buffer<Completion>>() - size_of::<PackedCoords>();
         lease.observe(header, location)?;
         computation.storage_observed(&lease, 0, header, limits, counters, location)?;
         Ok(Some(Self {
@@ -88,7 +88,13 @@ impl<'source> Recording<'source> {
             patterns: cursor.plan.patterns.as_ptr().cast(),
             width: cursor.plan.patterns.len(),
             completions: Buffer::new(computation, limits, counters, location)?,
-            suffixes: Buffer::new(computation, limits, counters, location)?,
+            suffixes: PackedCoords::new(
+                crate::formula_support::row_blocks::prime::CoordWidth::U32,
+                computation,
+                limits,
+                counters,
+                location,
+            )?,
             lease,
         }))
     }
@@ -190,7 +196,7 @@ fn completed_plan<'plan>(
 
 impl<'plan, 'source: 'plan> Family<'plan, 'source> {
     fn header() -> usize {
-        size_of::<Self>() - size_of::<Buffer<Completion>>() - size_of::<Buffer<Occurrence>>()
+        size_of::<Self>() - size_of::<Buffer<Completion>>() - size_of::<PackedCoords>()
     }
 
     /// The caller has reserved the complete enclosing cell before this transfer.

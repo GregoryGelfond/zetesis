@@ -483,7 +483,7 @@ fn staged_occurrences_are_authenticated_before_the_first_head_is_published() {
             )
         })
         .unwrap();
-    batch.suffixes.slice_mut()[0].source_index = usize::MAX;
+    batch.suffixes.poison_source_index(0);
     counters
         .absorb(u128::from(account.work), &limits, rule.location)
         .unwrap();
