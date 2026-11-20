@@ -74,6 +74,17 @@ pub struct SmallPolicy {
     /// atoms (0: any): below it the general narrowing's own subtree is small
     /// and cheaper than one search over the whole encoding.
     pub learn_from: usize,
+    /// The learned search declines a theory whose at-most-one atoms are at
+    /// least this percentage of its atoms (0: never).
+    pub matching: usize,
+    /// The learned search starts only after this many regions were offered
+    /// to it, so a run the general narrowing settles quickly builds no
+    /// encoding (0: from the first).
+    pub learn_after: usize,
+    /// The learned search declines a theory with more than this many formula
+    /// nodes per atom (0: any): its clausal encoding would restate, at
+    /// several times the size, arithmetic the algebra already reads natively.
+    pub density: usize,
 }
 
 /// No enumeration reads more than `2^22` completions.
@@ -119,6 +130,9 @@ impl SmallPolicy {
                 "probe" => policy.probe = parsed,
                 "gate" => policy.gate = parsed,
                 "from" => policy.learn_from = parsed,
+                "matching" => policy.matching = parsed,
+                "after" => policy.learn_after = parsed,
+                "density" => policy.density = parsed,
                 _ => {}
             }
         }
@@ -202,6 +216,15 @@ pub struct SmallStatistics {
     pub probed_nanos: u64,
     /// Clausal encodings built.
     pub encodings: u64,
+    /// Atoms of the theory last read.
+    pub atoms: u64,
+    /// Of those, the atoms an at-most-one root reads.
+    pub amo_atoms: u64,
+    /// Formula nodes of the theory last read.
+    pub nodes: u64,
+    /// Regions the theory's shape (matching or density) kept from the
+    /// learned search.
+    pub shape_declined: u64,
 }
 
 /// A walker's specialized-narrowing state: its policy, the clausal reading of
@@ -230,6 +253,8 @@ pub(crate) struct SmallScratch {
     yield_score: u32,
     /// Regions the yield gate skipped since its last read.
     skipped: u32,
+    /// Regions offered to the learned search so far.
+    offered: u64,
     /// Completions recently found to pass, as held-atom words.
     models: Vec<Vec<u64>>,
     /// The counts so far.
@@ -239,7 +264,7 @@ pub(crate) struct SmallScratch {
 impl Drop for SmallScratch {
     fn drop(&mut self) {
         let s = &self.statistics;
-        if (s.enumerated > 0 || s.learned > 0 || s.cached > 0)
+        if (s.enumerated > 0 || s.learned > 0 || s.cached > 0 || s.shape_declined > 0)
             && std::env::var_os("ZETESIS_SMALL_STATS").is_some()
         {
             eprintln!("zetesis-small-regions {s:?}");
@@ -269,6 +294,56 @@ struct Shape {
     /// (body or none, other ordinary heads, choice).
     support: Option<Support>,
     has_cuts: bool,
+    /// Atoms read by an at-most-one root: `a ∧ b → ⊥`, or a unit-weight
+    /// threshold of two over atoms implying `⊥`.
+    amo_atoms: usize,
+}
+
+/// The atoms an at-most-one root reads. Exactly-one choices crossed with
+/// at-most-one constraints (pigeonhole, permutation and matching shapes) are
+/// where resolution needs exponentially many steps and counting does not.
+fn amo_atoms(
+    roots: &[usize],
+    kinds: &[Kind],
+    spans: &[(u32, u32)],
+    operands: &[usize],
+    weights: &[u64],
+    bounds: &[i128],
+    atoms: usize,
+) -> usize {
+    let row = |node: usize| {
+        let (start, end) = spans[node];
+        (start as usize, end as usize)
+    };
+    let mut marked = vec![false; atoms];
+    for &root in roots {
+        let (start, end) = row(root);
+        if kinds[root] != Kind::Implies
+            || end - start != 2
+            || kinds[operands[start + 1]] != Kind::False
+        {
+            continue;
+        }
+        let body = operands[start];
+        let (from, to) = row(body);
+        let children = &operands[from..to];
+        let unit = match kinds[body] {
+            Kind::And => children.len() == 2,
+            Kind::Threshold => bounds[body] == 2 && weights[from..to].iter().all(|&w| w == 1),
+            _ => false,
+        };
+        if !unit {
+            continue;
+        }
+        if children.iter().all(|&c| matches!(kinds[c], Kind::Atom(_))) {
+            for &c in children {
+                if let Kind::Atom(atom) = kinds[c] {
+                    marked[atom as usize] = true;
+                }
+            }
+        }
+    }
+    marked.iter().filter(|&&m| m).count()
 }
 
 #[derive(Debug)]
@@ -431,6 +506,15 @@ impl Shape {
         let (parents_offsets, parents) = csr(count, &parent_edges);
         let (atom_nodes_offsets, atom_nodes) = csr(atoms, &atom_edges);
         let support = producers.map(|producers| Support::read(producers, atoms, count));
+        let amo_atoms = amo_atoms(
+            theory.roots(),
+            &kinds,
+            &spans,
+            &operands,
+            &weights,
+            &bounds,
+            atoms,
+        );
         Some(Self {
             theory: theory.clone(),
             atoms,
@@ -446,6 +530,7 @@ impl Shape {
             roots: theory.roots().to_vec(),
             support,
             has_cuts,
+            amo_atoms,
         })
     }
 
@@ -463,9 +548,7 @@ impl Shape {
 impl SmallScratch {
     /// The policy, read once.
     pub(crate) fn policy(&mut self) -> SmallPolicy {
-        *self
-            .policy
-            .get_or_insert_with(SmallPolicy::environment)
+        *self.policy.get_or_insert_with(SmallPolicy::environment)
     }
 
     pub(crate) fn active(&mut self) -> bool {
@@ -550,7 +633,25 @@ impl SmallScratch {
             policy.learn_up_to
         };
         if open <= learn_up_to && open >= policy.learn_from {
-            if self.shape(theory, producers).is_none() {
+            self.offered += 1;
+            if self.offered <= u64::try_from(policy.learn_after).unwrap_or(u64::MAX) {
+                return Ok(SmallNarrowing::Declined);
+            }
+            let Some(shape) = self.shape(theory, producers) else {
+                return Ok(SmallNarrowing::Declined);
+            };
+            let (atoms, amo, nodes) = (shape.atoms, shape.amo_atoms, shape.kinds.len());
+            self.statistics.atoms = u64::try_from(atoms).unwrap_or(u64::MAX);
+            self.statistics.amo_atoms = u64::try_from(amo).unwrap_or(u64::MAX);
+            self.statistics.nodes = u64::try_from(nodes).unwrap_or(u64::MAX);
+            if policy.matching > 0
+                && amo.saturating_mul(100) >= policy.matching.saturating_mul(atoms)
+            {
+                self.statistics.shape_declined += 1;
+                return Ok(SmallNarrowing::Declined);
+            }
+            if policy.density > 0 && nodes > policy.density.saturating_mul(atoms.max(1)) {
+                self.statistics.shape_declined += 1;
                 return Ok(SmallNarrowing::Declined);
             }
             if !self.gate_admits(policy.gate) {
@@ -1261,10 +1362,42 @@ struct Pb {
 }
 
 /// Conflict-learning search over the necessary conditions of one theory.
+/// Clauses stored contiguously: one literal arena and each clause's span.
+/// A clause per allocation costs more than its literals on large encodings.
+#[derive(Debug, Default)]
+struct Arena {
+    lits: Vec<u32>,
+    spans: Vec<(u32, u32)>,
+}
+
+impl Arena {
+    fn len(&self) -> usize {
+        self.spans.len()
+    }
+
+    fn push(&mut self, clause: impl AsRef<[u32]>) -> u32 {
+        let clause = clause.as_ref();
+        let index = idx(self.spans.len());
+        self.spans.push((idx(self.lits.len()), idx(clause.len())));
+        self.lits.extend_from_slice(clause);
+        index
+    }
+
+    fn get(&self, index: usize) -> &[u32] {
+        let (start, len) = self.spans[index];
+        &self.lits[start as usize..(start + len) as usize]
+    }
+
+    fn get_mut(&mut self, index: usize) -> &mut [u32] {
+        let (start, len) = self.spans[index];
+        &mut self.lits[start as usize..(start + len) as usize]
+    }
+}
+
 #[derive(Debug)]
 struct Solver {
     vars: usize,
-    clauses: Vec<Vec<u32>>,
+    clauses: Arena,
     /// Which clauses were learned (only those are ever dropped).
     is_learned: Vec<bool>,
     watches: Vec<Vec<u32>>,
@@ -1303,7 +1436,7 @@ impl Solver {
         let vars = shape.atoms;
         let mut solver = Self {
             vars,
-            clauses: Vec::new(),
+            clauses: Arena::default(),
             is_learned: Vec::new(),
             watches: vec![Vec::new(); vars * 2],
             pbs: Vec::new(),
@@ -1389,7 +1522,7 @@ impl Solver {
                 _ => self.fresh(false),
             })
             .collect();
-        let mut clauses: Vec<Vec<u32>> = Vec::new();
+        let mut clauses = Arena::default();
         let mut pbs = Vec::new();
         for node in 0..nodes {
             let v = node_var[node];
@@ -1397,7 +1530,9 @@ impl Solver {
             let row: Vec<u32> = shape.row(node).iter().map(|&c| node_var[c]).collect();
             match shape.kinds[node] {
                 Kind::Atom(_) | Kind::Cut => {}
-                Kind::False => clauses.push(vec![neg(pos)]),
+                Kind::False => {
+                    clauses.push([neg(pos)]);
+                }
                 Kind::Implies => {
                     let (x, y) = (lit(row[0], false), lit(row[1], false));
                     clauses.push(vec![neg(pos), neg(x), y]);
@@ -1445,14 +1580,18 @@ impl Solver {
         for (offset, pb) in pbs.into_iter().enumerate() {
             self.add_pb(idx(first_pb + offset), pb);
         }
-        for mut clause in clauses {
+        let mut clause = Vec::new();
+        for index in 0..clauses.len() {
+            clause.clear();
+            clause.extend_from_slice(clauses.get(index));
             clause.sort_unstable();
             clause.dedup();
             if clause.windows(2).any(|w| w[0] == neg(w[1])) {
                 continue; // tautology
             }
-            self.add_original(clause);
+            self.add_original(&clause);
         }
+        drop(clauses);
         if self.inconsistent {
             return;
         }
@@ -1476,7 +1615,7 @@ impl Solver {
         support: &Support,
         atoms: usize,
         node_var: &[u32],
-        clauses: &mut Vec<Vec<u32>>,
+        clauses: &mut Arena,
     ) {
         for atom in 0..atoms {
             let (s, e) = (
@@ -1568,7 +1707,7 @@ impl Solver {
         }
     }
 
-    fn add_original(&mut self, clause: Vec<u32>) {
+    fn add_original(&mut self, clause: &[u32]) {
         if self.inconsistent {
             return;
         }
@@ -1580,10 +1719,9 @@ impl Solver {
                 _ => {}
             },
             _ => {
-                let index = idx(self.clauses.len());
+                let index = self.clauses.push(clause);
                 self.watches[neg(clause[0]) as usize].push(index);
                 self.watches[neg(clause[1]) as usize].push(index);
-                self.clauses.push(clause);
                 self.is_learned.push(false);
             }
         }
@@ -1625,7 +1763,7 @@ impl Solver {
             let mut conflict = None;
             while i < watchers.len() {
                 let ci = watchers[i] as usize;
-                let clause = &mut self.clauses[ci];
+                let clause = self.clauses.get_mut(ci);
                 if clause[0] == false_lit {
                     clause.swap(0, 1);
                 }
@@ -1657,7 +1795,7 @@ impl Solver {
                     self.assign(first, Reason::Clause(idx(ci)));
                     i += 1;
                 } else {
-                    conflict = Some(self.clauses[ci].clone());
+                    conflict = Some(self.clauses.get(ci).to_vec());
                     break;
                 }
             }
@@ -1782,7 +1920,7 @@ impl Solver {
     /// The reason clause of `v` (implied literal first, the rest false).
     fn reason_lits(&self, v: usize) -> Vec<u32> {
         match self.reason[v] {
-            Reason::Clause(ci) => self.clauses[ci as usize].clone(),
+            Reason::Clause(ci) => self.clauses.get(ci as usize).to_vec(),
             Reason::None => Vec::new(),
             Reason::Pb(index) => self.pb_reason(index, v),
         }
@@ -1971,11 +2109,10 @@ impl Solver {
                 if learned.len() == 1 {
                     self.assign(learned[0], Reason::None);
                 } else {
-                    let index = idx(self.clauses.len());
+                    let index = self.clauses.push(&learned);
                     self.watches[neg(learned[0]) as usize].push(index);
                     self.watches[neg(learned[1]) as usize].push(index);
                     let asserting = learned[0];
-                    self.clauses.push(learned);
                     self.is_learned.push(true);
                     self.counts.learned += 1;
                     self.assign(asserting, Reason::Clause(index));
@@ -2086,10 +2223,9 @@ impl Solver {
                     }
                     let mut clause = vec![other];
                     clause.extend(core.iter().map(|&k| neg(k)));
-                    let index = idx(self.clauses.len());
+                    let index = self.clauses.push(&clause);
                     self.watches[neg(clause[0]) as usize].push(index);
                     self.watches[neg(clause[1]) as usize].push(index);
-                    self.clauses.push(clause);
                     self.is_learned.push(true);
                     self.counts.learned += 1;
                     self.assign(other, Reason::Clause(index));
@@ -2219,18 +2355,21 @@ impl Solver {
             if dropped >= learned / 2 {
                 break;
             }
-            if self.is_learned[ci] && self.clauses[ci].len() > 2 && !locked.contains(&idx(ci)) {
+            if self.is_learned[ci] && self.clauses.get(ci).len() > 2 && !locked.contains(&idx(ci)) {
                 *kept = false;
                 dropped += 1;
             }
         }
         let mut remap = vec![u32::MAX; self.clauses.len()];
-        let mut kept = Vec::with_capacity(self.clauses.len() - dropped);
-        let mut kept_learned = Vec::with_capacity(self.clauses.len() - dropped);
-        for (ci, clause) in std::mem::take(&mut self.clauses).into_iter().enumerate() {
-            if keep[ci] {
-                remap[ci] = idx(kept.len());
-                kept.push(clause);
+        let old = std::mem::take(&mut self.clauses);
+        let mut kept = Arena {
+            lits: Vec::with_capacity(old.lits.len()),
+            spans: Vec::with_capacity(old.len() - dropped),
+        };
+        let mut kept_learned = Vec::with_capacity(old.len() - dropped);
+        for (ci, &keep) in keep.iter().enumerate() {
+            if keep {
+                remap[ci] = kept.push(old.get(ci));
                 kept_learned.push(self.is_learned[ci]);
             }
         }
