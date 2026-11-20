@@ -1,13 +1,17 @@
-//! Exact consequence scan under a complete signed acyclic source certificate.
+//! Exact consequence scan under a complete signed stratified source
+//! certificate: recursive only through certain components.
 //! The activity cells and canonical source identities are the same ones used
 //! by source eligibility; only this stronger certificate permits exact output.
 
 use super::{Activity, Context, SourceEligibility};
 use crate::formula_facts::{FactBlock, Item};
-use crate::formula_ir::HeadIr;
-use crate::formula_support::{AcyclicPlan, Join, SourceAtom, SourceSelection, StorageLease};
+use crate::formula_ir::{HeadIr, LiteralIr};
+use crate::formula_support::{
+    AcyclicPlan, Join, SourceAtom, SourceBatch, SourceSelection, StorageLease,
+};
 use crate::grounding_observer::Profile;
 use crate::{FormulaFailure, FormulaResource, GroundingPhase};
+use themelios_program::program::DefaultNegation;
 
 pub(crate) struct Exact {
     pub(crate) atoms: SourceSelection,
@@ -66,36 +70,144 @@ pub(crate) fn evaluate_acyclic(
     let mut result = SourceEligibility::new(context)?;
     result.exact = true;
     let mut consistent = true;
-    for &(_, position) in plan.items() {
-        match source.items().get(position) {
-            Item::Rule(index, rule) => {
-                context.location = rule.location;
-                consistent &= profile.phase(
-                    GroundingPhase::RuleInstantiation,
-                    Some(rule.location),
-                    || result.rule_exact((index, rule), support, context),
-                )?;
+    // Heads of the current saturated rank, published together when the
+    // rank ends: no rule of a closed rank reads activity, and every later
+    // rank starts after the publication.
+    let mut closed: Option<(usize, SourceBatch)> = None;
+    // Where the current rank's items begin in the plan.
+    let mut rank_start = 0;
+    for (at, &(rank, position)) in plan.items().iter().enumerate() {
+        if let Some((pending, _)) = &closed
+            && *pending != rank
+        {
+            let (_, batch) = closed.take().expect("checked pending rank");
+            result.publish_required(batch, context)?;
+        }
+        if at == 0 || plan.items()[at - 1].0 != rank {
+            rank_start = at;
+        }
+        let item = source.items().get(position);
+        context.location = match item {
+            Item::Rule(_, rule) => rule.location,
+            Item::Facts(block) => block.location(),
+        };
+        // A saturated rank's heads, fact rows included, are published
+        // together when the rank ends, exactly as its fact rules' heads were.
+        let batch = if plan.closed(rank) {
+            if closed.is_none() {
+                closed = Some((
+                    rank,
+                    SourceSelection::batch(
+                        context.computation,
+                        context.limits,
+                        context.counters,
+                        context.location,
+                    )?,
+                ));
             }
+            closed.as_mut().map(|(_, batch)| batch)
+        } else {
+            None
+        };
+        match item {
+            Item::Rule(index, rule) => match batch {
+                Some(batch) => {
+                    let earlier = &plan.items()[rank_start..at];
+                    profile.phase(
+                        GroundingPhase::RuleInstantiation,
+                        Some(rule.location),
+                        || rule_saturated((index, rule), batch, earlier, source, support, context),
+                    )?;
+                }
+                None => {
+                    consistent &= profile.phase(
+                        GroundingPhase::RuleInstantiation,
+                        Some(rule.location),
+                        || result.rule_exact((index, rule), support, context),
+                    )?;
+                }
+            },
             Item::Facts(block) => {
-                context.location = block.location();
                 profile.phase(
                     GroundingPhase::RuleInstantiation,
                     Some(block.location()),
-                    || result.facts_exact(block, context),
+                    || result.facts_exact(block, batch, context),
                 )?;
             }
         }
+    }
+    if let Some((_, batch)) = closed {
+        result.publish_required(batch, context)?;
     }
     consistent &= profile.phase(GroundingPhase::Coherence, None, || result.coherent(context))?;
     result.into_exact(consistent, context)
 }
 
 impl SourceEligibility {
+    /// Publish the heads of one completed saturated rank `Required`.
+    /// Already selected atoms are raised in place; new atoms take the next
+    /// local coordinates, so the activity table grows by exactly that range.
+    /// A refusal aborts the whole exact evaluation.
+    fn publish_required(
+        &mut self,
+        batch: SourceBatch,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let Self {
+            atoms,
+            activity,
+            lease,
+            ..
+        } = self;
+        debug_assert_eq!(activity.len(), atoms.len());
+        let before = activity.len();
+        batch.merge_into(
+            atoms,
+            (FormulaResource::Atoms, context.limits.theory.max_atoms),
+            crate::formula_support::Context::new(
+                &*context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            ),
+            |local, counters| {
+                counters.work(context.limits, context.location)?;
+                if let Some(cell) = activity.get_mut(local) {
+                    *cell = Activity::Required;
+                }
+                Ok(())
+            },
+        )?;
+        let additional = atoms.len() - before;
+        crate::formula_support::reserve(
+            activity,
+            additional,
+            lease,
+            Self::header_bytes(),
+            crate::formula_support::Context::new(
+                &*context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            ),
+        )?;
+        context
+            .counters
+            .charge_work(additional as u128 + 1, context.limits, context.location)?;
+        activity.resize(atoms.len(), Activity::Required);
+        Ok(())
+    }
+
     /// Stage each fact row `Required`: a body-free rule's one passing binding
-    /// has that activity, since the fold over no literal starts from it.
+    /// has that activity, since the fold over no literal starts from it. In a
+    /// saturated rank (`closed` holds its pending heads), each row joins the
+    /// rank's batch instead, as a fact rule's head does, and is published
+    /// `Required` with the rank: one sorted merge rather than one ordered
+    /// insertion per row.
     fn facts_exact(
         &mut self,
         block: FactBlock<'_>,
+        mut closed: Option<&mut SourceBatch>,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
         let mut head = crate::formula_support::facts::FactHead::new(
@@ -108,7 +220,16 @@ impl SourceEligibility {
         for row in block.rows() {
             context.location = row.location();
             let atom = head.atom(row, context.computation, context.limits, context.counters)?;
-            self.stage_exact(&atom, Activity::Required, context)?;
+            match closed.as_deref_mut() {
+                Some(batch) => batch.push(
+                    &atom,
+                    context.computation,
+                    context.limits,
+                    context.counters,
+                    context.location,
+                )?,
+                None => self.stage_exact(&atom, Activity::Required, context)?,
+            }
         }
         Ok(())
     }
@@ -121,6 +242,7 @@ impl SourceEligibility {
     /// its head, which no other row derives, lies outside the completed
     /// support and is not named here. The join has read the row's head
     /// arguments by then, so a fatal failure among them still refuses.
+    /// Rules of a saturated component take [`rule_saturated`] instead.
     fn rule_exact(
         &mut self,
         (index, rule): (usize, &crate::formula_ir::RuleIr),
@@ -128,6 +250,9 @@ impl SourceEligibility {
         context: &mut Context<'_, '_, '_>,
     ) -> Result<bool, FormulaFailure> {
         let mut consistent = true;
+        if self.bind_exact_rows(rule, support, context, &mut consistent)? {
+            return Ok(consistent);
+        }
         let mut join = Join::rule(
             rule,
             support,
@@ -180,6 +305,67 @@ impl SourceEligibility {
             }
         }
         Ok(consistent)
+    }
+
+    /// Enumerate an admitted Bind body and stage the same exact activity
+    /// the Join loop would record for each retained row.
+    fn bind_exact_rows(
+        &mut self,
+        rule: &crate::formula_ir::RuleIr,
+        support: &crate::formula_support::Support<'_>,
+        context: &mut Context<'_, '_, '_>,
+        consistent: &mut bool,
+    ) -> Result<bool, FormulaFailure> {
+        let Some((template, width)) = crate::formula_ground::algebra_rows::compile(
+            rule,
+            context.computation,
+            context.limits,
+            context.counters,
+            support,
+        )?
+        else {
+            return Ok(false);
+        };
+        let bindings = crate::formula_ground::algebra_rows::enumerate(
+            &template,
+            context.limits,
+            context.counters,
+            rule.location,
+        )?;
+        let mut assignment = crate::formula_binding::Binding::new(
+            context.computation,
+            context.limits,
+            context.counters,
+            rule.location,
+        )?;
+        assignment.extend_scope(
+            rule.variables,
+            context.computation,
+            context.limits,
+            context.counters,
+            rule.location,
+        )?;
+        let mut buffer = vec![0i32; width];
+        for row in bindings.row_range() {
+            bindings.row_into(row, &mut buffer);
+            crate::formula_ground::algebra_rows::bind_row(
+                context.computation,
+                context.limits,
+                context.counters,
+                &mut assignment,
+                &buffer,
+                rule.location,
+            )?;
+            let body = self.fold_activity(&rule.body, &assignment, true, context)?;
+            match &rule.head {
+                HeadIr::Normal(Some(head)) => {
+                    self.retain(*head, &assignment, body, 0, context)?;
+                }
+                HeadIr::Normal(None) => *consistent &= body != Activity::Required,
+                _ => unreachable!("complete normal source certificate"),
+            }
+        }
+        Ok(true)
     }
 
     fn coherent(&self, context: &mut Context<'_, '_, '_>) -> Result<bool, FormulaFailure> {
@@ -248,6 +434,118 @@ impl SourceEligibility {
             selected,
             consistent,
             lease,
+        })
+    }
+}
+
+/// Stage the heads of a rule of a saturated component into its rank's batch.
+///
+/// In a saturated component every body row the join would offer is a
+/// completed-support row whose decided negations hold, and its body is
+/// `Required` without a fold: completed support restricted to certain
+/// predicates is their least model. That is what lets such a component be
+/// recursive: a fold would read same-component atoms before their producers
+/// are staged. The heads those rows derive are then exactly the completed
+/// support of the head predicate, which already holds the least fixpoint, so
+/// they are read from it rather than derived again by rejoining every body
+/// over it. A predicate is read once per rank, at its first rule; facts of the
+/// rank are staged with their blocks as before, and the batch's merge drops
+/// the repeats. Support completion must have decided every default negation
+/// of such a rule; otherwise the plan and the support disagree and the
+/// evaluation refuses rather than publish. A saturated component has no
+/// constraint, so no instance can be violated.
+fn rule_saturated(
+    (index, rule): (usize, &crate::formula_ir::RuleIr),
+    batch: &mut SourceBatch,
+    earlier: &[(usize, usize)],
+    source: &crate::formula_ir::Prepared,
+    support: &crate::formula_support::Support<'_>,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<(), FormulaFailure> {
+    saturation_agrees(index, rule, support, context)?;
+    let HeadIr::Normal(Some(head)) = &rule.head else {
+        unreachable!("a closed component has a head")
+    };
+    let pattern = context.computation.static_pattern(
+        *head,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
+    for &(_, position) in earlier {
+        context.work()?;
+        let Item::Rule(_, other) = source.items().get(position) else {
+            continue;
+        };
+        let HeadIr::Normal(Some(other)) = &other.head else {
+            continue;
+        };
+        let other = context.computation.static_pattern(
+            *other,
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+        let (limits, counters, location) =
+            (context.limits, &mut *context.counters, context.location);
+        if other
+            .predicate()
+            .equals_ref_with(pattern.predicate(), || counters.work(limits, location))?
+        {
+            return Ok(());
+        }
+    }
+    batch.push_supported(
+        pattern,
+        support,
+        context.computation,
+        crate::formula_support::GroundingWork::new(
+            context.limits,
+            context.counters,
+            context.location,
+        ),
+    )
+}
+
+/// Refuse a saturated rule whose default negations support completion did not
+/// all decide, or whose assignment elements it did not all require: the plan
+/// and the support would then disagree about the rule's certainty.
+fn saturation_agrees(
+    index: usize,
+    rule: &crate::formula_ir::RuleIr,
+    support: &crate::formula_support::Support<'_>,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<(), FormulaFailure> {
+    let mut negated = 0_usize;
+    let mut required = true;
+    for literal in &rule.body {
+        match literal {
+            LiteralIr::Atom(negation, _) if *negation != DefaultNegation::None => negated += 1,
+            LiteralIr::Aggregate(aggregate) => {
+                for (position, element) in aggregate.elements.iter().enumerate() {
+                    context.work()?;
+                    required &= crate::formula_support::certain::Certainty::requires(
+                        support.certainty(),
+                        aggregate.id,
+                        position,
+                        element,
+                    );
+                }
+            }
+            _ => {}
+        }
+        context.work()?;
+    }
+    let decided = negated == 0
+        || support
+            .certainty()
+            .is_some_and(|certainty| certainty.decided(index).count() == negated);
+    if decided && required {
+        Ok(())
+    } else {
+        Err(FormulaFailure::SupportRelation {
+            error: zetesis_core::relation::Failure::Owner,
+            location: rule.location,
         })
     }
 }

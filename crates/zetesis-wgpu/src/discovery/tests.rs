@@ -155,7 +155,7 @@ fn explicit_formula_adapter(source: GpuDeviceSource<'_>) -> crate::GpuInfo {
     };
     let oracle = crate::GpuFormulaOracle::from_source_with_kernel(source, options).unwrap();
     assert_eq!(oracle.compiled_profile().kernel_options(), options);
-    assert_eq!(oracle.projection(), crate::GateProjection::default());
+    assert_eq!(oracle.node_kernel(), crate::BinaryNodeKernel::default());
     assert_eq!(
         oracle.context().compute_timing(),
         if oracle

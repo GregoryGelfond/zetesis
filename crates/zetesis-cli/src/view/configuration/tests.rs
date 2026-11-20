@@ -89,7 +89,7 @@ mod device {
             (
                 ExecutionObservation::DeviceFormula {
                     adapter: adapter(&name),
-                    projection: zetesis_wgpu::GateProjection::Enumerated,
+                    node_kernel: zetesis_wgpu::BinaryNodeKernel::Enumerated,
                     grounder: Grounder::Auto,
                     batch_size: NonZeroUsize::new(32).unwrap(),
                     completion_workers: NonZeroUsize::new(2).unwrap(),
@@ -130,7 +130,7 @@ mod device {
         let promoted = state
             .observe(&ExecutionObservation::DeviceFormula {
                 adapter: adapter("promoted adapter"),
-                projection: zetesis_wgpu::GateProjection::Enumerated,
+                node_kernel: zetesis_wgpu::BinaryNodeKernel::Enumerated,
                 grounder: Grounder::Auto,
                 batch_size: NonZeroUsize::new(32).unwrap(),
                 completion_workers: NonZeroUsize::new(2).unwrap(),

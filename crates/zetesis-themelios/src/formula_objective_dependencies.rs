@@ -72,8 +72,8 @@ impl<'source> Context<'_, 'source> {
         match literal {
             LiteralIr::Atom(_, atom) => self.signature(*atom).map(Some),
             LiteralIr::PatternAtom(pattern) => self.signature(pattern.atom).map(Some),
-            LiteralIr::ProjectedAtom(_, projection) => {
-                let predicate = projection.predicate(
+            LiteralIr::AnonymousAtom(_, witnesses) => {
+                let predicate = witnesses.predicate(
                     self.components,
                     self.limits,
                     self.counters,

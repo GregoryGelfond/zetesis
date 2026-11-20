@@ -149,7 +149,7 @@ fn pulls_during_timer_setup_are_retained() {
     let run = slot
         .open_with(Some(Instant::now()), |at| {
             slot.cancel();
-            DeadlineOwner::arm(at)
+            Ok(DeadlineOwner::arm(at))
         })
         .unwrap();
     assert_eq!(run.cancellation().poll(), Err(Stop::Cancelled));

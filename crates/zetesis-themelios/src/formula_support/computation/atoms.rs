@@ -1,14 +1,14 @@
 //! Assigned source atoms carry identity without claiming any membership.
 
 use zetesis_core::PatternRef;
-use zetesis_core::atom_interner::{PreparedPattern, PreparedRows, RowColumn};
-use zetesis_core::catalog::AtomRef;
+use zetesis_core::atom_registry::{PreparedPattern, PreparedRows, RowColumn};
+use zetesis_core::catalog::{AtomRef, PredicateRef};
 use zetesis_core::relation::{Relation, Row};
 
 use super::{Computation, Counters, FormulaFailure, FormulaLimits, ProgramSite, Terms};
 use crate::formula_binding::Binding;
 use crate::formula_support::GroundingWork;
-use crate::formula_support::relations::{SourceAtom, SourceScope};
+use crate::formula_support::relations::{FactRows, SourceAtom, SourceScope};
 
 impl Computation<'_, '_> {
     pub(crate) fn signed(
@@ -68,6 +68,94 @@ impl Computation<'_, '_> {
             return Err(owner_failure(location));
         };
         append.assigned(
+            pattern,
+            binding.slots(),
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// Whether `pattern`'s heads enter the open head block of fact rules.
+    pub(crate) fn in_head_block(&self, pattern: PatternRef<'_>) -> bool {
+        match &self.terms {
+            Terms::Append(append) => append.in_head_block(pattern),
+            Terms::Frozen(_) | Terms::Borrowed(_) => false,
+        }
+    }
+
+    /// [`Self::atom`] for a head of the open head block.
+    pub(crate) fn head_block_atom(
+        &mut self,
+        pattern: PatternRef<'_>,
+        binding: &Binding<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.head_block_assigned(
+            pattern,
+            binding.slots(),
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// Authenticate a fact block's predicate and reserve its rows.
+    pub(crate) fn prepare_facts(
+        &mut self,
+        predicate: PredicateRef<'_>,
+        rows: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<FactRows, FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.prepare_facts(
+            predicate,
+            rows,
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// End a prepared fact block, giving back room its found rows left.
+    pub(crate) fn finish_facts(
+        &mut self,
+        rows: FactRows,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.finish_facts(
+            rows,
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// [`Self::atom`] for one row of a prepared fact block.
+    pub(crate) fn fact_atom(
+        &mut self,
+        facts: &FactRows,
+        pattern: PatternRef<'_>,
+        binding: &Binding<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.fact_assigned(
+            facts,
             pattern,
             binding.slots(),
             self.support.workspace_bytes(),
@@ -147,6 +235,59 @@ impl Computation<'_, '_> {
             self.support.workspace_bytes(),
             GroundingWork::new(limits, counters, location),
         )
+    }
+
+    /// Record a fact row's atom for later phases (support's first round).
+    pub(crate) fn record_fact(
+        &mut self,
+        atom: &SourceAtom,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.record_fact(atom, limits, counters, location)
+    }
+
+    /// The fact rows support completion recorded, in item order, when this
+    /// computation appends to the very catalog its support was read from;
+    /// otherwise none.
+    pub(crate) fn recorded_fact_rows(&self) -> &[usize] {
+        match &self.terms {
+            Terms::Append(append) if append.belongs_to(self.support.relations()) => {
+                self.support.fact_rows()
+            }
+            _ => &[],
+        }
+    }
+
+    /// The head atom support completion recorded for the fact rule `index`,
+    /// when this computation appends to the very catalog its support was read
+    /// from and the rule's head was admitted in a head block. One unit.
+    pub(crate) fn recorded_head(
+        &self,
+        index: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<SourceAtom>, FormulaFailure> {
+        let Terms::Append(append) = &self.terms else {
+            return Ok(None);
+        };
+        let rows = self.support.head_rows();
+        if rows.is_empty() || !append.belongs_to(self.support.relations()) {
+            return Ok(None);
+        }
+        counters.work(limits, location)?;
+        Ok(rows
+            .binary_search_by_key(&index, |&(rule, _)| rule)
+            .ok()
+            .map(|found| SourceAtom {
+                scope: append.source_scope(),
+                position: rows[found].1,
+            }))
     }
 
     /// Producer heads explicitly select discovered identities into support.

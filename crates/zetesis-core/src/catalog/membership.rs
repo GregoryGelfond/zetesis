@@ -59,6 +59,11 @@ impl<'a> CatalogRead<'a> {
         super::TermRead::from(self).selected_term(term)
     }
 
+    /// The term an identity inside this prefix names; `None` outside it.
+    pub(crate) fn resolved_term(self, id: storage::TermId) -> Option<super::TermRef<'a>> {
+        super::TermRead::from(self).resolve(id)
+    }
+
     pub(crate) fn selected_predicate(
         self,
         predicate: PredicateRef<'_>,

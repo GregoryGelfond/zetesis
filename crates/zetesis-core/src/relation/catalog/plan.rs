@@ -1,33 +1,29 @@
-//! A one-tuple transaction containing only equality IDs and tentative AVL nodes.
+//! A one-tuple transaction containing only equality IDs and new values.
 //!
-//! Later values inspect the latest tentative patch before the published tree.
-//! No row, dictionary representative or tree link changes before final admission.
-//! With a new values and height h, retained patches use O(a h) cells. Their linear
-//! reverse lookup can cost O(a² h²) metadata probes; each probe is charged. This
-//! depends on this tuple's width, never on shifting the historical dictionary.
+//! A new value is staged with its content hash; a later column of the same
+//! tuple that repeats it reuses its tentative ID. No row, dictionary
+//! representative or content chain changes before final admission.
+//! The staged state depends on this tuple's width, never on the historical
+//! dictionary.
 
-use std::cmp::Ordering;
-
-use crate::{
-    catalog::{AtomRef, Atoms, TermRef, storage::TermId},
-    ordered_index::{Directions, Index, Link, Node, Planned, Step, position, spine::RightSpine},
-};
+use crate::catalog::{AtomRef, Atoms, storage::TermId};
 
 use super::super::{
-    Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling, dictionary::Probe,
+    Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling,
+    dictionary::{Content, Probe},
 };
 
 pub(super) struct Added {
     pub cell: Cell,
     pub term: TermId,
+    /// The value's semantic content hash.
+    pub hash: u64,
 }
 
 #[derive(Default)]
 pub(super) struct Plan {
     pub ids: Vec<u32>,
     pub added: Vec<Added>,
-    pub patches: Vec<Step>,
-    pub root: Link,
     pub encoding_bytes: u128,
 }
 
@@ -41,16 +37,12 @@ pub(super) enum Admission {
 
 impl Plan {
     pub(super) fn capacity_bytes(&self) -> usize {
-        super::vector_bytes(&self.ids)
-            + super::vector_bytes(&self.added)
-            + super::vector_bytes(&self.patches)
+        super::vector_bytes(&self.ids) + super::vector_bytes(&self.added)
     }
 
     pub(super) fn clear(&mut self) {
         self.ids.clear();
         self.added.clear();
-        self.patches.clear();
-        self.root = None;
         self.encoding_bytes = 0;
     }
 
@@ -70,116 +62,6 @@ impl Plan {
         }
         Ok(None)
     }
-
-    fn node(&self, nodes: &[Node], id: usize, work: &mut Work) -> Result<Node, Failure> {
-        for patch in self.patches.iter().rev() {
-            work.tick(1)?;
-            if patch.id == id {
-                return Ok(patch.node);
-            }
-        }
-        work.tick(1)?;
-        nodes.get(id).copied().ok_or(Failure::Dictionary)
-    }
-
-    fn value<'a>(
-        &self,
-        dictionary: &[Cell],
-        atoms: Atoms<'a>,
-        atom: AtomRef<'a>,
-        id: usize,
-    ) -> Result<TermRef<'a>, Failure> {
-        let cell = if let Some(cell) = dictionary.get(id) {
-            return atoms
-                .at(cell.row)
-                .and_then(|atom| atom.values().get(cell.column))
-                .ok_or(Failure::Dictionary);
-        } else {
-            self.added
-                .get(id - dictionary.len())
-                .map(|added| &added.cell)
-                .ok_or(Failure::Dictionary)?
-        };
-        atom.values().get(cell.column).ok_or(Failure::Dictionary)
-    }
-
-    fn locate(
-        &self,
-        index: &Index,
-        dictionary: &[Cell],
-        atoms: Atoms<'_>,
-        atom: AtomRef<'_>,
-        value: TermRef<'_>,
-        work: &mut Work,
-    ) -> Result<(Option<usize>, Directions), Failure> {
-        let mut route = Directions::default();
-        let mut cursor = self.root;
-        while let Some(link) = cursor {
-            work.tick(1)?;
-            let id = position(link);
-            let order = work.compare(value, self.value(dictionary, atoms, atom, id)?)?;
-            if order.is_eq() {
-                return Ok((Some(id), route));
-            }
-            let right = order == Ordering::Greater;
-            route.push(right).ok_or(Failure::Dictionary)?;
-            cursor = self.node(&index.nodes, id, work)?.children[usize::from(right)];
-        }
-        Ok((None, route))
-    }
-
-    fn extend(
-        &mut self,
-        index: &mut Index,
-        id: usize,
-        route: &Directions,
-        work: &mut Work,
-    ) -> Result<(), Failure> {
-        index.path.clear();
-        let mut cursor = self.root;
-        for offset in 0..route.len() {
-            work.tick(1)?;
-            let right = route.get(offset).ok_or(Failure::Dictionary)?;
-            let previous = position(cursor.ok_or(Failure::Dictionary)?);
-            let node = self.node(&index.nodes, previous, work)?;
-            push(
-                index,
-                Step {
-                    id: previous,
-                    node,
-                    right,
-                    changed: false,
-                },
-                work,
-            )?;
-            cursor = node.children[usize::from(right)];
-        }
-        if cursor.is_some() {
-            return Err(Failure::Dictionary);
-        }
-        push(
-            index,
-            Step {
-                id,
-                node: Node::default(),
-                right: false,
-                changed: true,
-            },
-            work,
-        )?;
-        let root = index.plan_from(self.root, id, &mut || work.tick(1))?;
-        work.tick(index.path.len() as u128)?;
-        let changed = index.path.iter().filter(|step| step.changed).count();
-        work.grow(&mut self.patches, changed)?;
-        for step in &index.path {
-            work.tick(1)?;
-            if step.changed {
-                self.patches.push(*step);
-            }
-        }
-        self.root = root;
-        Ok(())
-    }
 }
 
 pub(super) fn values(
@@ -196,15 +78,18 @@ pub(super) fn values(
     let DictionaryIndex::Append(index) = index else {
         return Err(Failure::Dictionary);
     };
-    plan.root = index.order.root;
+    if index.terms {
+        return terms(index, atoms, atom, encoding_bytes, plan, work);
+    }
     plan.encoding_bytes = encoding_bytes;
     work.grow(&mut plan.ids, atom.values().len())?;
     work.grow(&mut plan.added, atom.values().len())?;
     for (column, value) in atom.values().iter().enumerate() {
         work.tick(1)?;
+        let bytes = value.canonical_bytes_with(|| work.tick(1))?;
         plan.encoding_bytes = plan
             .encoding_bytes
-            .checked_add(value.canonical_bytes_with(|| work.tick(1))? as u128)
+            .checked_add(bytes as u128)
             .ok_or(Failure::Overflow)?;
         let (term, found) = match index
             .identities
@@ -220,10 +105,6 @@ pub(super) fn values(
         let id = if let Some(id) = found {
             id
         } else {
-            let (found, route) = plan.locate(&index.order, dictionary, atoms, atom, value, work)?;
-            if found.is_some() {
-                return Err(Failure::Dictionary);
-            }
             let id = dictionary
                 .len()
                 .checked_add(plan.added.len())
@@ -233,14 +114,16 @@ pub(super) fn values(
                 id as u128 + 1,
                 (work.limits.max_values as u128).min(u128::from(u32::MAX) + 1),
             )?;
-            plan.extend(&mut index.order, id, &route, work)?;
-            work.tick(1)?;
+            // A new value is chained under its content hash, which reads
+            // every payload word once.
+            work.tick(1 + Content::hash_work(value.expanded_nodes(), bytes))?;
             plan.added.push(Added {
                 cell: Cell {
                     row: atoms.len(),
                     column,
                 },
                 term,
+                hash: Content::hash(value),
             });
             id
         };
@@ -251,78 +134,72 @@ pub(super) fn values(
     Ok(())
 }
 
-/// Both routes come from this owner's actual checked tuple comparisons.
-#[derive(Clone, Copy)]
-pub(super) enum RowPath<'a> {
-    Recorded(&'a Directions),
-    BeyondLast(usize),
-}
-
-pub(super) fn row(
-    index: &mut Index,
-    id: usize,
-    route: RowPath<'_>,
-    retained: Option<RightSpine>,
+/// An interned owner's IDs are the values' own term identities: a value new
+/// to this owner is staged once for its presence entry, with no content hash,
+/// representative or renumbering.
+fn terms(
+    index: &super::super::dictionary::Append,
+    atoms: Atoms<'_>,
+    atom: AtomRef<'_>,
+    encoding_bytes: u128,
+    plan: &mut Plan,
     work: &mut Work,
-) -> Result<Planned, Failure> {
-    let reuse = match (&route, retained) {
-        (RowPath::BeyondLast(last), Some(spine)) => {
-            work.tick(1)?;
-            spine.matches(index, index.root, *last)
-        }
-        _ => false,
-    };
-    if !reuse {
-        index.path.clear();
-    }
-    let mut cursor = if reuse { None } else { index.root };
-    let mut offset = 0;
-    while let Some(link) = cursor {
-        work.tick(1)?;
-        let right = match &route {
-            RowPath::Recorded(directions) => directions.get(offset).ok_or(Failure::Dictionary)?,
-            RowPath::BeyondLast(_) => true,
-        };
-        let previous = position(link);
-        let node = index.nodes[previous];
-        push(
-            index,
-            Step {
-                id: previous,
-                node,
-                right,
-                changed: false,
-            },
-            work,
-        )?;
-        cursor = node.children[usize::from(right)];
-        offset += 1;
-    }
-    match route {
-        RowPath::Recorded(directions) if offset != directions.len() => {
-            return Err(Failure::Dictionary);
-        }
-        RowPath::BeyondLast(last) => {
-            debug_assert_eq!(index.path.last().map(|step| step.id), Some(last));
-        }
-        RowPath::Recorded(_) => {}
-    }
-    push(
-        index,
-        Step {
-            id,
-            node: Node::default(),
-            right: false,
-            changed: true,
-        },
-        work,
-    )?;
-    index.plan_changes_from(index.root, id, &mut || work.tick(1))
+) -> Result<(), Failure> {
+    identities(index, atoms, atom, plan, work)?;
+    encoding(atom, encoding_bytes, plan, work)
 }
 
-fn push(index: &mut Index, step: Step, work: &mut Work) -> Result<(), Failure> {
-    work.grow(&mut index.path, 1)?;
-    work.tick(1)?;
-    index.path.push(step);
+/// The term identities of an interned owner's tuple, staging each value new
+/// to the owner once. Encoding bytes are left to [`encoding`], which only a
+/// tuple that will be published needs.
+pub(super) fn identities(
+    index: &super::super::dictionary::Append,
+    atoms: Atoms<'_>,
+    atom: AtomRef<'_>,
+    plan: &mut Plan,
+    work: &mut Work,
+) -> Result<(), Failure> {
+    work.grow(&mut plan.ids, atom.values().len())?;
+    work.grow(&mut plan.added, atom.values().len())?;
+    for (column, value) in atom.values().iter().enumerate() {
+        work.tick(1)?;
+        let (term, found) = match index
+            .identities
+            .probe_with(atoms.read(), value, &mut || work.tick(1))?
+        {
+            Probe::Local { term, equality } => (term, equality.is_some()),
+            Probe::Unavailable(error) => return Err(Failure::Read(error)),
+        };
+        if !found && plan.staged(term, 0, work)?.is_none() {
+            plan.added.push(Added {
+                cell: Cell {
+                    row: atoms.len(),
+                    column,
+                },
+                term,
+                hash: 0,
+            });
+        }
+        plan.ids.push(term.word());
+    }
+    Ok(())
+}
+
+/// The owner's referenced encoding bytes once this tuple is published.
+pub(super) fn encoding(
+    atom: AtomRef<'_>,
+    encoding_bytes: u128,
+    plan: &mut Plan,
+    work: &mut Work,
+) -> Result<(), Failure> {
+    plan.encoding_bytes = encoding_bytes;
+    for value in atom.values() {
+        work.tick(1)?;
+        let bytes = value.canonical_bytes_with(|| work.tick(1))?;
+        plan.encoding_bytes = plan
+            .encoding_bytes
+            .checked_add(bytes as u128)
+            .ok_or(Failure::Overflow)?;
+    }
     Ok(())
 }

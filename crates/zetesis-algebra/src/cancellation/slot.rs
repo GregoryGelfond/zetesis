@@ -52,12 +52,13 @@ impl CancellationSlot {
     /// # Errors
     /// Returns [`CancellationSlotError::GenerationExhausted`] after all
     /// `2^62 - 1` generations have been used, without altering the current
-    /// run, or [`CancellationSlotError::Deadline`] if its timer cannot start.
+    /// run. [`CancellationSlotError::Deadline`] remains for compatibility:
+    /// arming a deadline starts no thread and does not fail.
     pub fn open(
         &self,
         deadline: Option<Instant>,
     ) -> Result<CancellationRun, CancellationSlotError> {
-        self.open_with(deadline, DeadlineOwner::arm)
+        self.open_with(deadline, |at| Ok(DeadlineOwner::arm(at)))
     }
 
     fn open_with(

@@ -63,6 +63,7 @@ fn a_recorder_retains_separate_phase_attempts() {
             phase,
             GroundingOutcome::Completed,
             &GroundingWork::default(),
+            None,
         );
     }
     let timings = recorder.snapshot();
@@ -92,6 +93,7 @@ fn poisoned_grounding_bookkeeping_stays_unavailable_without_stopping_work() {
         phase,
         GroundingOutcome::Completed,
         &GroundingWork::default(),
+        None,
     );
     assert!(recorder.snapshot().get(phase).is_some());
     let failure = std::panic::catch_unwind(|| {
@@ -107,6 +109,7 @@ fn poisoned_grounding_bookkeeping_stays_unavailable_without_stopping_work() {
         phase,
         GroundingOutcome::Failed,
         &GroundingWork::default(),
+        None,
     );
     let snapshot = recorder.snapshot();
     for phase in GroundingPhase::ALL {
@@ -137,4 +140,53 @@ fn domain_aggregation_preserves_unavailable_work() {
     assert_eq!(measurement.work.domain_rejected_rows, None);
     assert_eq!(measurement.count(GroundingOutcome::Completed), Some(1));
     assert_eq!(measurement.count(GroundingOutcome::Failed), Some(1));
+}
+
+#[test]
+fn operators_fold_into_the_phase_that_contains_them() {
+    use zetesis_themelios::{GroundingOperator, OperatorObserver};
+    let recorder = Recorder::default();
+    let operators = Operators::new();
+    let phase = GroundingPhase::SupportCompletion;
+    let attempt = Attempt::start(phase);
+    for operator in GroundingOperator::ALL {
+        operators.operator_enter(operator);
+        operators.operator_exit(operator);
+    }
+    operators.operator_enter(GroundingOperator::SupportJoin);
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    operators.operator_exit(GroundingOperator::SupportJoin);
+    recorder.exit(
+        attempt,
+        phase,
+        GroundingOutcome::Completed,
+        &GroundingWork::default(),
+        Some(&operators),
+    );
+    let timings = recorder.snapshot();
+    let join = timings.operator(GroundingOperator::SupportJoin).unwrap();
+    assert!(join >= std::time::Duration::from_millis(2));
+    assert!(join <= timings.get(phase).unwrap().elapsed.unwrap());
+    // The attempt's totals were moved into the recorder, not kept for the next phase.
+    let attempt = Attempt::start(GroundingPhase::RuleInstantiation);
+    recorder.exit(
+        attempt,
+        GroundingPhase::RuleInstantiation,
+        GroundingOutcome::Completed,
+        &GroundingWork::default(),
+        Some(&operators),
+    );
+    assert_eq!(
+        recorder.snapshot().operator(GroundingOperator::SupportJoin),
+        Some(join)
+    );
+}
+
+#[test]
+#[should_panic(expected = "must not nest")]
+fn operators_do_not_nest() {
+    use zetesis_themelios::{GroundingOperator, OperatorObserver};
+    let operators = Operators::new();
+    operators.operator_enter(GroundingOperator::SupportJoin);
+    operators.operator_enter(GroundingOperator::SupportDedup);
 }

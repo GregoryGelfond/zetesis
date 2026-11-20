@@ -3,8 +3,15 @@
 use std::cmp::Ordering;
 
 /// Both buffers have the same initialized length. The comparator owns permits
-/// for reads/comparisons; this primitive permits each output write. On refusal
+/// for reads/comparisons; this primitive permits each output write, including
+/// the final copy back into `values` after an odd number of passes. On refusal
 /// neither buffer promises a complete order. Successful output is in `values`.
+///
+/// # Errors
+/// Returns the first refusal of `before` or of `compare`.
+///
+/// # Panics
+/// Panics if the two buffers differ in length.
 /// Each pass merges adjacent sorted runs of `width` cells and doubles that
 /// width; the final pass covers the whole finite occurrence extent. Equal keys
 /// retain their input order because the left run wins an equal comparison.
@@ -18,45 +25,60 @@ use std::cmp::Ordering;
 /// pass. An input in no order pays one comparison more for each merge of
 /// longer runs, fewer than half its cells in all. Runs of one cell are merged
 /// directly: the merge's one comparison is the test.
-pub(crate) fn sort<E, F: FnMut() -> Result<(), E>>(
-    values: &mut Vec<usize>,
-    scratch: &mut Vec<usize>,
+pub fn sort<E, F: FnMut() -> Result<(), E>>(
+    values: &mut [usize],
+    scratch: &mut [usize],
     mut compare: impl FnMut(&[usize], usize, usize, &mut F) -> Result<Ordering, E>,
     before: &mut F,
 ) -> Result<(), E> {
     let count = values.len();
+    assert_eq!(scratch.len(), count, "a sort's scratch matches its values");
     let mut width = 1;
+    // Passes alternate between the two buffers; `flipped` marks the ordered
+    // cells as being in `scratch`.
+    let mut flipped = false;
     while width < count {
+        let (source, target) = if flipped {
+            (&*scratch, &mut *values)
+        } else {
+            (&*values, &mut *scratch)
+        };
         let mut start = 0;
         while start < count {
             let middle = start.saturating_add(width).min(count);
             let end = middle.saturating_add(width).min(count);
             let ordered =
-                width > 1 && middle < end && !compare(values, middle - 1, middle, before)?.is_gt();
+                width > 1 && middle < end && !compare(source, middle - 1, middle, before)?.is_gt();
             let (mut left, mut right) = (start, middle);
-            for output in &mut scratch[start..end] {
+            for output in &mut target[start..end] {
                 let take_left = if right == end {
                     true
                 } else if left == middle {
                     false
                 } else {
-                    ordered || !compare(values, left, right, before)?.is_gt()
+                    ordered || !compare(source, left, right, before)?.is_gt()
                 };
                 before()?;
                 *output = if take_left {
-                    let value = values[left];
+                    let value = source[left];
                     left += 1;
                     value
                 } else {
-                    let value = values[right];
+                    let value = source[right];
                     right += 1;
                     value
                 };
             }
             start = end;
         }
-        std::mem::swap(values, scratch);
+        flipped = !flipped;
         width = width.saturating_mul(2);
+    }
+    if flipped {
+        for (value, &ordered) in values.iter_mut().zip(scratch.iter()) {
+            before()?;
+            *value = ordered;
+        }
     }
     Ok(())
 }

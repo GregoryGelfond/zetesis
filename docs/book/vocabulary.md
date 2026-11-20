@@ -40,7 +40,7 @@ representations. A representation name does not confer a semantic property.
 | This solver's run and the reference solver | `native` and `reference` in the series view; clingo is the tool filling the reference's role | None |
 | A requested solver configuration | a validation `profile`, a request for a `SolveConfig` | None |
 | An ongoing solve | `zetesis_solve::Session` owns search and membership execution | Membership and coverage laws describe its semantic obligations |
-| Cooperative cancellation and a deadline | `zetesis_algebra::Cancellation` carries shared cancellation and an optional absolute deadline | Stopped coverage remains distinct from exhaustion |
+| Cooperative cancellation and a deadline | `zetesis_algebra::Cancellation` carries shared cancellation and an optional absolute deadline. The inlined `CancellationPoll::poll` reads flags only; the clock is read, and expiry latched, at coarse boundaries: owned `Cancellation` polls (account refills, the region walk), a local `Meter`'s `POLL_INTERVAL` boundaries and ceiling, settlement, and an explicit `CancellationPoll::poll_deadline` | Stopped coverage remains distinct from exhaustion |
 | A workgroup size: the invocations cooperating on one device candidate, also every candidate-local loop's stride; and the sizing that selects one size per retained graph from its level widths, each level's node count | `zetesis_wgpu::GpuWorkgroupSize` and `GpuWorkgroupSizing` (`Fitted` or `Fixed`) in `GpuKernelOptions::workgroup_sizing`; the batch statistics' `workgroup_size`; the solver's `gpu_workgroup_size` and its JSON key | None; a physical schedule that preserves original truth |
 | Device discovery: listing a requested API's adapters with their reported identities, creating no device; and a device source, where a GPU primitive obtains its device — its own adapter selection, the same selection over an adapter enumeration begun earlier, or an existing context. Adapter enumeration is distinct from answer-set enumeration | `zetesis_wgpu::discover_adapters`; `GpuDiscovery` (an adapter enumeration begun on a background thread); `GpuDeviceSource` (`Selected`, `Discovered`, `Context`) and the solve-path primitives' `from_source`; `ExecutionResources::discovering` | None; adapter selection is outside the semantic laws |
 | A candidate's inner preparation: the units its query root cuts, and the parity rows and count bounds of its countermodel class, probed from the closed root before its walk | `zetesis_ferraris::FrozenPreparation` and `FrozenPreparationStatistics`; `ReductStatistics::inner_preparation` (`InnerPreparationStatistics`), the receipts' `preparation` object under `reduct_query_regions` | `Algebra.countermodelSubjects`, its rows entering as `RowOf (Countermodels T M)` proofs |
@@ -67,3 +67,64 @@ checked. **Membership** decides one candidate against the original program's
 reduct. **Enumeration** combines membership with complete candidate coverage.
 **Publication** delivers a selected view to a consumer. These operations compose,
 but none can substitute for another's evidence.
+
+## Grounding: semantic names and concrete realizations
+
+The following names are relations and laws, not claims of a mechanically proved
+Rust refinement. `Lifted` uses abstract bindings; it does not require a
+materialized substitution table. The Rust execution algebra is a smaller shared
+layer. Grounding does not have a second implementation of a Rust `Bind` API:
+there is no such API. See [the composition](architecture/alignment.md#positive-inference-is-a-composition-with-a-fixed-point)
+and [correspondence obligations](lean/correspondence.md).
+
+All Rust paths below are relative to `crates/`; Lean paths are relative to
+`proofs/Zetesis/`. One Rust cursor can realize several operations in a fused
+pass. A representation's name alone establishes no coverage or membership law.
+
+| Lean primitive or law | Rust realization | Relationship and boundary |
+| --- | --- | --- |
+| `Lifted.Bind` | `zetesis-themelios/src/formula_support.rs` (`Join`); probes in `zetesis-themelios/src/formula_support/queries.rs` and `zetesis-themelios/src/formula_support/order.rs` | Positive witnesses bound by one cursor, fused with scalar checks; no shared Rust relational-combinator API. |
+| `Lifted.Filter` (`Template.filter`) | `zetesis-core/src/template.rs` (`Filter`, the template's substituted equality/inequality checks); `zetesis-themelios/src/formula_support/filters.rs`, `zetesis-themelios/src/formula_support/scalar_selection/`; comparisons lowered in `zetesis-themelios/src/formula_ir.rs` | Scalar comparisons evaluated on bindings within that cursor; not a region-refuting subject or an output selection. |
+| `Lifted.Gate` / `Enabled` | `zetesis-ferraris/src/reduct.rs`; `zetesis-themelios/src/formula_ground.rs`, `zetesis-themelios/src/formula_support/certain.rs` | Ordinary grounding retains candidate-dependent gates in formulas; a frozen reduct evaluates them later. Decided negations over completed certain predicates can be checked during grounding. |
+| `Lifted.Project` / `RuleTransform` | `zetesis-themelios/src/formula_ground.rs` (head emission) | Consumers form heads from completed bindings; distinct bindings may produce the same atom. Factored rules emit heads the same way, but the factoring itself is the `RuleFactorization` rewrite. Not the source `#project` directive. |
+| `Union` / `Inter` (`Core.lean`) | `zetesis-themelios/src/formula_support/relations/append.rs`, `zetesis-themelios/src/formula_support/relations/publication.rs`; `zetesis-core/src/catalog/`, `zetesis-core/src/relation/` | Atom identity, pending-round ordering and publication implement set-valued support; occurrence/provenance order is a separate obligation. |
+| `Least`, `ComponentClosure` | `zetesis-themelios/src/formula_support.rs` (`complete_with_executor`, `advance_round`), `zetesis-themelios/src/formula_support/producers/` | Component-scheduled possible-support fixed point; not region narrowing or answer-set membership. |
+| `DeltaJoins`, `DeltaRounds` | `zetesis-themelios/src/formula_support/delta.rs`, `zetesis-themelios/src/formula_support/producers/` | First-new-occurrence partitions over immutable round snapshots; rich producers retain their full-scan obligations. |
+| `JoinFrames` | `zetesis-themelios/src/formula_support.rs` (`Join` prefix and undo state), `zetesis-themelios/src/formula_support/component_plan.rs`, `zetesis-themelios/src/formula_support/row_blocks/component_rows.rs` | Reuses storage but replaces bindings/truth for each scan; mathematical frame laws do not prove machine bounds or scheduling. |
+| `ParallelGrounding` | `zetesis-themelios/src/formula_support/row_blocks/coordinator.rs`, `zetesis-themelios/src/formula_support/row_blocks/component_rows.rs`, `zetesis-themelios/src/formula_factor/parallel.rs` | Stages independent head-row blocks and replays in source order; ordered publication and accounting remain concrete obligations. |
+| `ColumnRelations`, `CompactColumns`, `TableBindings` | `zetesis-core/src/relation/`, `zetesis-core/src/table/`; `zetesis-themelios/src/formula_support/relations.rs`, `zetesis-themelios/src/formula_support/queries.rs` | Shared typed columns and exact finite-table selection; themelios adds demand-driven postings and completion evidence. |
+| `ContentOrderInterning.IdOrderEqCompare` | `zetesis-core/src/intern.rs`, `intern/sort.rs` | Generic generation-freezing interner; this is not yet the live grounding owner. The latter is `catalog::registry::AtomRegistry`, backed by the catalog. Catalog discovery IDs do not acquire ASP order by being integers. |
+| None (source lowering) | `zetesis-themelios/src/formula_anonymous_ir.rs` (`AnonymousWitnesses`), `zetesis-themelios/src/formula_conditional_unpool.rs` | Gringo-style anonymous-variable lowering, expanded to a negated witness disjunction `not (w1 ∨ … ∨ wn)` with no auxiliary rules, and conditional-literal pool unpooling. Neither is `Lifted.Project`, and the witness disjunction goes beyond `Template.gateFalse`, which takes atom lists. |
+| `RuleFactorization` | `zetesis-themelios/src/formula_factor/plan.rs`, `zetesis-themelios/src/formula_factor.rs` | Existential body factorization; source independence and complete support are separate compiler obligations. |
+| `StreamedRegions`, `StreamedConstraints` | `zetesis-themelios/src/formula_hybrid/`, `zetesis-themelios/src/formula_fixed_constraints.rs`; `zetesis-stable/src/constraint_refutation.rs` (`ConstraintRefuter`, a refuting subject: `Algebra.refuting`) | Streamed source checks refute regions or check completed answers; they do not replace reduct membership. |
+| `Algebra.joint`, `Inside`, `Subject` | `zetesis-ferraris/src/regions.rs` (`Narrower`); `zetesis-algebra/src/region.rs` | Joint region narrowing is different from the growing support set's `Least`; neither is a relational join. |
+
+### Shared Rust execution primitives used by grounding
+
+| Shared primitive (`zetesis_algebra`) | Grounding consumer / use |
+| --- | --- |
+| `Cancellation`, `Stop`, `poll_due`, `POLL_INTERVAL` | themelios `expansion.rs`, `formula_support/storage.rs`, and core catalog operations: cooperative stop propagation, never false or empty-result evidence. |
+| `Meter`, `MeterBytes`, `MeterWorkError` | themelios `formula_support.rs` and `formula_support/storage.rs`; core `relation.rs`, `table/accounting.rs`, `catalog/storage/budget.rs`, and `atom_lookup/selected.rs`: bounded work and retained storage. |
+| `words::Words` | themelios `formula_support/relations/append.rs` supported-atom marks; core `table` and `relation`: packed row selection. |
+| `words::union_shifted` and related packed operations | themelios `formula_assignment/sums/packed.rs`: possible assignment sums, not an answer-count fold. |
+| `threads::Pool` | themelios `formula_support/parallel_executor.rs`: counted grounding workers, wrapped by the executor. |
+| `region::Region` | themelios streamed constraint preparation and source checks: held/cut/open atoms. |
+| `reduction::{Any, Reduction}` | themelios `formula_support/row_blocks/objective_rows.rs`: Boolean combination of numeric eligibility. |
+| `reduction::sets::{intersection, union, ordered_union}` | No grounding caller. These pure occurrence cursors do not provide the grounder's fallible, charged ordering/publication protocol. |
+
+### Public names outside the algebra
+
+`zetesis_core::{Filter, FilterRef, Filters}` are the equality/inequality part of
+`Template.filter` (`Lifted.lean`); the grounder's scalar comparisons realize the
+rest of `Lifted.Filter`. `zetesis_core::table::DomainSupport` is finite-table
+domain support (`FiniteTables.lean`), not `Lifted.Project`.
+`zetesis_themelios::{ProjectDirectives, ProjectiveDomain}` and
+`zetesis_solve::Projective*` describe source `#project` answer projection,
+clingo's projective enumeration (`ProjectedAnswers.lean`), not head projection.
+`zetesis_wgpu::BinaryNodeKernel` selects how a GPU formula node computes its
+exact supports (`GateProjection.lean`). `zetesis_core::intern::ContentInterner`
+and `zetesis_core::atom_registry::AtomRegistry` are distinct public APIs; the
+former is not yet wired into grounding, and the single-interner migration has
+not happened. Reserved algebra names (`Bind`, `Filter`, `Gate`, `Project`,
+`Region`, `Narrower`, `Closed`, `Walk`, `Reduction`, `Meter`, `Pool`, …) name
+only their realizations above.

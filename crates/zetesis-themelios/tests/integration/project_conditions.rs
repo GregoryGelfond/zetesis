@@ -3,14 +3,14 @@
 use zetesis_reference_support::formula;
 
 fn domain(source: &str) -> usize {
-    formula(source).projection().atoms().len()
+    formula(source).projective_domain().atoms().len()
 }
 
 #[test]
 fn domain_order_applies_the_complete_permutation() {
     let input = formula(r"d(1..3).p(0..2).#project p((X+1)\3):d(X).");
     let values: Vec<_> = input
-        .projection()
+        .projective_domain()
         .atoms()
         .iter()
         .map(|atom| atom.values().at(0).unwrap())

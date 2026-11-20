@@ -18,10 +18,19 @@ use product::Product;
 /// One fully checked family, in alternative order and last-argument-fastest
 /// product order. The enclosing compilation refuses a failed transfer rather
 /// than publishing its accepted prefix.
-#[derive(Debug)]
+///
+/// A buffer reused across statements keeps its vectors: [`facts_into`] moves
+/// the last statement's products to `spare` and refills them in place, so a
+/// run of plain facts compiles without allocating a product, its columns or
+/// their segments per statement. The spare shells hold no value, and a shell
+/// keeps only a small column's capacity, so a large pool's storage is not
+/// retained past its statement.
+#[derive(Debug, Default)]
 pub(crate) struct Facts {
     products: Vec<Product>,
     rows: usize,
+    spare: Vec<Product>,
+    sizes: Vec<(u128, u128)>,
 }
 
 impl Facts {
@@ -83,31 +92,59 @@ pub(crate) fn fact_atom(statement: &Statement) -> Option<&Atom> {
     Some(atom.get())
 }
 
+#[cfg(test)]
 pub(crate) fn facts(
     carrier: &WithProvenance<Statement>,
     budget: &mut Budget,
     location: ProgramSite,
 ) -> Result<Option<Facts>, ExpansionFailure> {
+    let mut facts = Facts::default();
+    Ok(facts_into(carrier, budget, location, &mut facts)?.then_some(facts))
+}
+
+/// Check `carrier`'s fact family into `facts`, replacing what it held; false,
+/// with `facts` emptied, when the statement is no fact producer. Charges,
+/// checks and refusals are those of a fresh family: only the vectors' storage
+/// is reused.
+pub(crate) fn facts_into(
+    carrier: &WithProvenance<Statement>,
+    budget: &mut Budget,
+    location: ProgramSite,
+    facts: &mut Facts,
+) -> Result<bool, ExpansionFailure> {
+    facts.rows = 0;
+    for mut product in facts.products.drain(..).rev() {
+        product.recycle();
+        facts.spare.push(product);
+    }
+    facts.spare.truncate(RETAINED_PRODUCTS);
     let Some(atom) = fact_atom(carrier.get()) else {
-        return Ok(None);
-    };
-    let mut facts = Facts {
-        products: Vec::new(),
-        rows: 0,
+        return Ok(false);
     };
     let mut logical_bytes = 0;
     for arguments in atom.alternatives() {
-        if let Some(product) =
-            Product::prepare(atom, arguments, &mut logical_bytes, budget, location)?
-        {
+        let mut product = facts.spare.pop().unwrap_or_default();
+        if product.prepare(
+            atom,
+            arguments,
+            &mut facts.sizes,
+            &mut logical_bytes,
+            budget,
+            location,
+        )? {
             reserve(&mut facts.products, 1, budget, location)?;
             // The cumulative Templates charge already fits a usize ceiling.
             facts.rows += product.len();
             facts.products.push(product);
+        } else {
+            facts.spare.push(product);
         }
     }
-    Ok(Some(facts))
+    Ok(true)
 }
+
+/// The product shells a buffer keeps between statements, as for columns.
+const RETAINED_PRODUCTS: usize = 8;
 
 /// Preserve the allocator's typed failure independently of logical expansion
 /// limits. Source carriers and spare capacity are not new logical values.
@@ -123,7 +160,22 @@ fn reserve<T>(
         .map_err(|error| ExpansionFailure::Allocation { error, location })
 }
 
+/// Room for exactly `additional` more cells in a buffer that may be reused,
+/// with the allocator's typed failure; capacity already there is kept.
+fn reserve_exact<T>(
+    values: &mut Vec<T>,
+    additional: usize,
+    budget: &Budget,
+    location: ProgramSite,
+) -> Result<(), ExpansionFailure> {
+    budget.poll(location)?;
+    values
+        .try_reserve_exact(additional)
+        .map_err(|error| ExpansionFailure::Allocation { error, location })
+}
+
 /// Known one-shot payloads do not acquire unnecessary geometric spare cells.
+#[cfg(test)]
 fn reserved<T>(
     count: usize,
     budget: &Budget,

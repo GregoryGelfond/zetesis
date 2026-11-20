@@ -61,9 +61,9 @@ total; stops and failures are reported on stderr. It conflicts with `--answers`,
 Whole nonnegative seconds, or a whole number with `s`, `m` or `h`, are accepted;
 zero requests an immediate stop and
 omission imposes no deadline. Controlled source preparation, grounding and search
-poll the same `Cancellation` used by library consumers; a timer thread marks the
-deadline and each poll reads that mark beside the cancellation flag, without
-reading the clock at each poll. A deadline before search exhaustion leaves
+poll the same `Cancellation` used by library consumers; each thread reads the
+clock at its first poll and then once every 64 polls, and latches an expired
+deadline for every other thread. No thread is started for the deadline. A deadline before search exhaustion leaves
 coverage incomplete. A later deadline
 during publication preserves the already established search coverage. Either
 stop returns exit 3; the deadline is not a hard process timeout for source I/O,
@@ -166,7 +166,13 @@ tree and for the reduct queries. The former `--search` option, which also
 offered a clause search, has been removed.
 
 `--threads auto|N` (`--workers` in existing scripts) defaults to the host's
-available parallelism, or one when availability is unknown. It sets the closure
+available parallelism, or one when availability is unknown. It is a hard cap:
+at most N solver threads run at once, the main thread included, across
+grounding, search, completion and deadlines; each stage's threads are joined
+before the next starts. Grounding runs on the main thread plus a pool of N-1;
+search runs N-1 region walkers beside the coordinating main thread, and the
+scalar walk below three threads. A GPU backend may add its device-discovery
+thread and the driver's own threads. It sets the closure
 route's pool and the region walkers. Native CPU region
 workers decide the leaves they reach. Device region workers produce unchecked
 leaves in bounded rounds; all producers join before device membership checking

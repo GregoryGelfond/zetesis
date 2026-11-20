@@ -28,7 +28,7 @@ use zetesis_core::{TemplateTerm, Value, ValueNodeRef};
 
 use super::{
     Buffer, Computation, Context, GroundingWork, Join, PositivePattern, Probe, Support, components,
-    delta, order, projections,
+    delta, expression_memos, order,
     relations::{RelationRows, Relations},
     sort,
 };
@@ -102,7 +102,7 @@ impl<'source> Prepared<'source> {
                 else {
                     return Ok(None);
                 };
-                let Some(bounds) = projections::positive_bounds(source, column, &mut context)?
+                let Some(bounds) = expression_memos::positive_bounds(source, column, &mut context)?
                 else {
                     return Ok(None);
                 };
@@ -239,8 +239,11 @@ impl<'a, 'source> Join<'a, 'source> {
         // A borrowed map was certified by the same-rule round owner. Its
         // scalar proof is independent of this plan and pivot; the target and
         // divisor checks above still belong to every individual plan.
-        if matches!(self.projections, projections::Projections::Local(_)) {
-            let total = self.projections.total_body(
+        if matches!(
+            self.expression_memos,
+            expression_memos::ExpressionMemos::Local(_)
+        ) {
+            let total = self.expression_memos.total_body(
                 rule,
                 self.support,
                 &mut self.evaluation,
@@ -526,9 +529,7 @@ impl Prepared<'_> {
             }
         }
         let location = context.work.location;
-        sort::by(selected.slice_mut(), context.work, |left, right, _| {
-            Ok(left.cmp(right))
-        })?;
+        sort::by_key(selected.slice_mut(), context.work, |&value| value)?;
         Ok(Some(selected.embedded(location)?))
     }
 }

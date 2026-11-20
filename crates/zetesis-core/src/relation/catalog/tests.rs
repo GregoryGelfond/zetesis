@@ -1,4 +1,4 @@
-use crate::atom_interner::{AtomInterner, Limits as AtomLimits};
+use crate::atom_registry::{AtomRegistry, Limits as AtomLimits};
 use crate::catalog::{AtomRef, Atoms, PredicateRef, ReadError, TermRef};
 use proptest::prelude::*;
 
@@ -7,7 +7,8 @@ use crate::relation::{Failure, Limits, Relation, Resource, Storage};
 use crate::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 
 mod dictionary;
-mod spine;
+mod interned;
+mod rows;
 
 fn atom(left: i32, right: i32) -> Atom {
     Atom::new(
@@ -20,7 +21,7 @@ fn atom(left: i32, right: i32) -> Atom {
 // Owned descriptions enter only this fixture's shared authority. Every tested
 // relation operation uses canonical references and reports metadata costs alone.
 struct Fixture {
-    authority: AtomInterner,
+    authority: AtomRegistry,
     rows: Catalog,
 }
 
@@ -30,11 +31,21 @@ fn atom_limits() -> AtomLimits {
 
 impl Fixture {
     fn new(predicate: &Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
-        let mut authority = AtomInterner::default();
+        let mut authority = AtomRegistry::default();
         let declared = authority
             .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
             .unwrap();
         let rows = Catalog::new(authority.read(), declared, limits)?;
+        Ok(Self { authority, rows })
+    }
+
+    /// The same owner with the interner's term identities as equality IDs.
+    fn interned(predicate: &Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
+        let mut authority = AtomRegistry::default();
+        let declared = authority
+            .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
+            .unwrap();
+        let rows = Catalog::interned(authority.read(), declared, limits)?;
         Ok(Self { authority, rows })
     }
 
@@ -1128,7 +1139,7 @@ fn independent_atom_scopes_cannot_exchange_rows() {
 
 #[test]
 fn predicate_declaration_requires_a_covering_prefix() {
-    let mut authority = AtomInterner::default();
+    let mut authority = AtomRegistry::default();
     let (committed, mut appender) = authority.split();
     let predicate = Predicate::with_sign("later", 0, Sign::Negative).unwrap();
     let declared = appender
@@ -1142,7 +1153,7 @@ fn predicate_declaration_requires_a_covering_prefix() {
 
 #[test]
 fn appended_membership_requires_a_covering_prefix() {
-    let mut authority = AtomInterner::default();
+    let mut authority = AtomRegistry::default();
     let predicate = Predicate::new("pair", 2).unwrap();
     let declared = authority
         .declare_predicate_with(&predicate, atom_limits(), || Ok::<_, ()>(()))
@@ -1196,7 +1207,7 @@ fn canonical_insertion_does_not_recheck_predicate() {
     let occupied = catalog.rows.insert(canonical, Limits::default()).unwrap();
     assert_eq!(lookup.row, Some(occupied.row));
     assert!(!occupied.inserted);
-    // Both paths admit the operation, bind the rows, and search the same AVL.
+    // Both paths admit the operation, bind the rows, and probe the same row hash.
     // Only public lookup must compare the query's canonical predicate after
     // binding; insertion already established it through Membership::member.
     assert_eq!(
@@ -1370,13 +1381,13 @@ fn row_work(values: impl Iterator<Item = i32>) -> u128 {
 }
 
 #[test]
-fn rows_beyond_the_last_skip_the_typed_search() {
+fn row_work_does_not_depend_on_insertion_order() {
     const COUNT: i32 = 1 << 12;
     let ascending = row_work(0..COUNT);
     let scrambled = row_work((0..COUNT).map(|index| index.wrapping_mul(7919) % COUNT));
-    // Dictionary and value work remain for every row; the search does not.
+    // No row is placed by comparison; only shared hash chains differ.
     assert!(
-        ascending * 10 <= scrambled * 6,
+        ascending.abs_diff(scrambled) * 1000 <= ascending,
         "ascending {ascending}, scrambled {scrambled}"
     );
 }
@@ -1411,4 +1422,46 @@ fn a_closed_catalog_refuses_another_writers_rows() {
         catalog.rows.atoms(closed.read()),
         Err(Failure::Read(ReadError::ForeignCatalog))
     ));
+}
+
+/// Work charged to insert `count` rows whose first column ascends and whose
+/// second column is a new value in scrambled order.
+fn new_value_work(count: i32) -> u128 {
+    let predicate = Predicate::new("v", 2).unwrap();
+    let limits = Limits {
+        max_rows: 1 << 18,
+        max_columns: 2,
+        max_values: 1 << 19,
+        max_bytes: 1 << 30,
+        max_work: u64::MAX,
+    };
+    let mut fixture = Fixture::new(&predicate, limits).unwrap();
+    let mut work = 0;
+    for index in 0..count {
+        let scrambled = index.wrapping_mul(7919) % count;
+        let row = Atom::new(
+            predicate.clone(),
+            vec![Value::Number(index), Value::Number(count + scrambled)],
+        )
+        .unwrap();
+        work += fixture
+            .insert(&row, limits)
+            .unwrap()
+            .storage
+            .construction_work;
+    }
+    work
+}
+
+#[test]
+fn new_values_take_no_ordered_search() {
+    // The canonical inverse decides a new value; no value-order search or
+    // rebalancing is charged, so the work per row does not grow with the
+    // catalog (it did by ~log2 n with the per-insert value tree).
+    let small = new_value_work(1 << 12);
+    let large = new_value_work(1 << 14);
+    assert!(
+        large * 100 <= small * 4 * 105,
+        "small {small}, large {large}"
+    );
 }

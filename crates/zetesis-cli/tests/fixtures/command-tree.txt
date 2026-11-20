@@ -50,7 +50,7 @@ command zetesis | An answer-set solver
     arg time_limit long=Some("time-limit") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Limits")
       index=None action=Set num_args=Some(1) value_names=Some(["DURATION"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
       help "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h"
-      long "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.\n\nZero requests an immediate stop. No deadline is imposed when omitted. A timer thread marks the deadline and checked work boundaries observe the mark as they observe cancellation, without reading the clock. Blocking source I/O, frontend operations and a running GPU kernel cannot be preempted. Library callers supply their own Cancellation instead of this process option."
+      long "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.\n\nZero requests an immediate stop. No deadline is imposed when omitted. Checked work boundaries observe the deadline as they observe cancellation, reading the clock once every 64 polls on each thread; no thread is started for it. Blocking source I/O, frontend operations and a running GPU kernel cannot be preempted. Library callers supply their own Cancellation instead of this process option."
     arg memory long=Some("memory") short=None aliases=Some(["memory-budget"]) values=[] defaults=["<host>"] hidden=false short_help_hidden=true heading=Some("Limits")
       index=None action=Set num_args=Some(1) value_names=Some(["SIZE"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
       help "Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB"
@@ -62,7 +62,27 @@ command zetesis | An answer-set solver
     arg workers long=Some("threads") short=None aliases=Some(["workers"]) values=[] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Execution")
       index=None action=Set num_args=Some(1) value_names=Some(["auto|N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=[]
       help "Host threads; auto uses available parallelism, falling back to one"
-      long "Host threads; auto uses available parallelism, falling back to one.\n\nThe shared policy assigns worker and scratch capacity within the memory allowance. Parallel answer order can vary; the answer-set family does not."
+      long "Host threads; auto uses available parallelism, falling back to one.\n\nA hard cap: at most this many solver threads run at once, the main thread included, across grounding, search and completion. A GPU backend may add its device-discovery thread and the driver's threads.\n\nThe shared policy assigns worker and scratch capacity within the memory allowance. Parallel answer order can vary; the answer-set family does not."
+    arg disable_learning long=Some("disable-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(0) value_names=Some(["DISABLE_LEARNING"]) delimiter=None terminator=None parser=HiddenDisable flags=[] conflicts=[]
+      help "Disable every learned-row source. Answers are unchanged; only pruning is lost. Measurement use"
+      long ""
+    arg learning_conflict_core long=Some("learning-conflict-core") short=None aliases=None values=["full", "minimized"] defaults=["full"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(1) value_names=Some(["LEARNING_CONFLICT_CORE"]) delimiter=None terminator=None parser=ConflictCore flags=[] conflicts=[]
+      help "How a refuted region's decided literals are reduced to a core. Measurement use; the default records a full decided-literal core"
+      long ""
+    arg disable_conflict_learning long=Some("disable-conflict-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(0) value_names=Some(["DISABLE_CONFLICT_LEARNING"]) delimiter=None terminator=None parser=HiddenDisable flags=[] conflicts=[]
+      help "Disable the refuted-region conflict source. Measurement use"
+      long ""
+    arg disable_bound_learning long=Some("disable-bound-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(0) value_names=Some(["DISABLE_BOUND_LEARNING"]) delimiter=None terminator=None parser=HiddenDisable flags=[] conflicts=[]
+      help "Disable the objective-bound source. Measurement use"
+      long ""
+    arg no_learning_attempt_scaling long=Some("no-learning-attempt-scaling") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(0) value_names=Some(["NO_LEARNING_ATTEMPT_SCALING"]) delimiter=None terminator=None parser=HiddenDisable flags=[] conflicts=[]
+      help "Keep attempt caps at the default 256 even when the memory allowance would raise them. Tier and store row caps still follow the allowance. Measurement use"
+      long ""
     arg help long=Some("help") short=Some('h') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
       index=None action=HelpShort num_args=Some(0) value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show everyday solving options"
@@ -371,7 +391,7 @@ command zetesis | An answer-set solver
     arg time_limit long=Some("time-limit") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Limits")
       index=None action=Set num_args=Some(1) value_names=Some(["DURATION"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
       help "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h"
-      long "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.\n\nZero requests an immediate stop. No deadline is imposed when omitted. A timer thread marks the deadline and checked work boundaries observe the mark as they observe cancellation, without reading the clock. Blocking source I/O, frontend operations and a running GPU kernel cannot be preempted. Library callers supply their own Cancellation instead of this process option."
+      long "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.\n\nZero requests an immediate stop. No deadline is imposed when omitted. Checked work boundaries observe the deadline as they observe cancellation, reading the clock once every 64 polls on each thread; no thread is started for it. Blocking source I/O, frontend operations and a running GPU kernel cannot be preempted. Library callers supply their own Cancellation instead of this process option."
     arg memory long=Some("memory") short=None aliases=Some(["memory-budget"]) values=[] defaults=["<host>"] hidden=false short_help_hidden=true heading=Some("Limits")
       index=None action=Set num_args=Some(1) value_names=Some(["SIZE"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
       help "Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB"
@@ -383,7 +403,27 @@ command zetesis | An answer-set solver
     arg workers long=Some("threads") short=None aliases=Some(["workers"]) values=[] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Execution")
       index=None action=Set num_args=Some(1) value_names=Some(["auto|N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=[]
       help "Host threads; auto uses available parallelism, falling back to one"
-      long "Host threads; auto uses available parallelism, falling back to one.\n\nThe shared policy assigns worker and scratch capacity within the memory allowance. Parallel answer order can vary; the answer-set family does not."
+      long "Host threads; auto uses available parallelism, falling back to one.\n\nA hard cap: at most this many solver threads run at once, the main thread included, across grounding, search and completion. A GPU backend may add its device-discovery thread and the driver's threads.\n\nThe shared policy assigns worker and scratch capacity within the memory allowance. Parallel answer order can vary; the answer-set family does not."
+    arg disable_learning long=Some("disable-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(0) value_names=Some(["DISABLE_LEARNING"]) delimiter=None terminator=None parser=HiddenDisable flags=[] conflicts=[]
+      help "Disable every learned-row source. Answers are unchanged; only pruning is lost. Measurement use"
+      long ""
+    arg learning_conflict_core long=Some("learning-conflict-core") short=None aliases=None values=["full", "minimized"] defaults=["full"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(1) value_names=Some(["LEARNING_CONFLICT_CORE"]) delimiter=None terminator=None parser=ConflictCore flags=[] conflicts=[]
+      help "How a refuted region's decided literals are reduced to a core. Measurement use; the default records a full decided-literal core"
+      long ""
+    arg disable_conflict_learning long=Some("disable-conflict-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(0) value_names=Some(["DISABLE_CONFLICT_LEARNING"]) delimiter=None terminator=None parser=HiddenDisable flags=[] conflicts=[]
+      help "Disable the refuted-region conflict source. Measurement use"
+      long ""
+    arg disable_bound_learning long=Some("disable-bound-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(0) value_names=Some(["DISABLE_BOUND_LEARNING"]) delimiter=None terminator=None parser=HiddenDisable flags=[] conflicts=[]
+      help "Disable the objective-bound source. Measurement use"
+      long ""
+    arg no_learning_attempt_scaling long=Some("no-learning-attempt-scaling") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(0) value_names=Some(["NO_LEARNING_ATTEMPT_SCALING"]) delimiter=None terminator=None parser=HiddenDisable flags=[] conflicts=[]
+      help "Keep attempt caps at the default 256 even when the memory allowance would raise them. Tier and store row caps still follow the allowance. Measurement use"
+      long ""
     arg help long=Some("help") short=Some('h') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
       index=None action=HelpShort num_args=Some(0) value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show everyday solving options"

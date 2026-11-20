@@ -2,11 +2,14 @@
 //! every route: each prepared checker serves its walk or producer, and checks
 //! run on the routes' own threads.
 
-use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
+use crate::constraint_refutation::tests::injection::{
+    Source as InjectedSource, Worker as InjectedWorker,
+};
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use zetesis_algebra::region::Region;
 use zetesis_ferraris::Theory;
@@ -29,20 +32,55 @@ struct Counting {
     constraints: StreamedConstraints,
     caller: std::thread::ThreadId,
     checks: AtomicUsize,
+    caller_checks: AtomicUsize,
     parallel_checks: AtomicUsize,
+    hold_caller: bool,
 }
+
+/// How long a held caller waits for another thread's check before the test
+/// reports that no other producer took work, rather than hanging.
+const HOLD_LIMIT: Duration = Duration::from_secs(30);
 
 impl Counting {
     fn new(owner: &HybridFormula) -> Arc<Self> {
+        Arc::new(Self::unheld(owner))
+    }
+
+    /// Counting that holds the calling thread at its second check until
+    /// another thread has checked a region. The caller's first check splits
+    /// the root and publishes a sibling, which an idle producer takes, so the
+    /// hold only removes the schedule in which the caller drains the whole
+    /// search before any other producer is scheduled.
+    fn holding_caller(owner: &HybridFormula) -> Arc<Self> {
         Arc::new(Self {
+            hold_caller: true,
+            ..Self::unheld(owner)
+        })
+    }
+
+    fn unheld(owner: &HybridFormula) -> Self {
+        Self {
             constraints: StreamedConstraints::new(
                 owner.core().clone(),
                 ConstraintAllowance::new(ConstraintCheckLimits::default()),
             ),
             caller: std::thread::current().id(),
             checks: AtomicUsize::new(0),
+            caller_checks: AtomicUsize::new(0),
             parallel_checks: AtomicUsize::new(0),
-        })
+            hold_caller: false,
+        }
+    }
+
+    fn hold(&self) {
+        let started = Instant::now();
+        while self.parallel_checks.load(Ordering::Acquire) == 0 {
+            assert!(
+                started.elapsed() < HOLD_LIMIT,
+                "no producer other than the caller checked a region"
+            );
+            std::thread::yield_now();
+        }
     }
 }
 
@@ -72,10 +110,15 @@ impl InjectedWorker for CountingWorker<'_> {
         cancellation: &Cancellation,
     ) -> Result<RegionFeasibility, Incomplete> {
         self.counting.checks.fetch_add(1, Ordering::Relaxed);
-        if std::thread::current().id() != self.counting.caller {
+        if std::thread::current().id() == self.counting.caller {
+            let earlier = self.counting.caller_checks.fetch_add(1, Ordering::Relaxed);
+            if self.counting.hold_caller && earlier > 0 {
+                self.counting.hold();
+            }
+        } else {
             self.counting
                 .parallel_checks
-                .fetch_add(1, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Release);
         }
         self.inner.check(theory, region, cancellation)
     }
@@ -91,7 +134,7 @@ fn producer_slates_check_the_streamed_constraints() {
     assert_eq!(owner.streamed_templates(), 1);
     assert_eq!(owner.streamed_instances(), 6);
     for count in [2, 4] {
-        let counting = Counting::new(&owner);
+        let counting = Counting::holding_caller(&owner);
         let mut search = StableModels::with_region_producers(
             owner.core_theory(),
             NonZeroUsize::new(count).unwrap(),
@@ -99,7 +142,7 @@ fn producer_slates_check_the_streamed_constraints() {
             Cancellation::default(),
         )
         .unwrap();
-        search.set_region_filter(counting.clone()).unwrap();
+        search.set_constraint_refuter(counting.clone()).unwrap();
         let mut models = Vec::new();
         for _ in 0..8 {
             models.extend(
@@ -132,7 +175,7 @@ fn producer_slates_check_the_streamed_constraints() {
             subsets()
         );
         assert!(search.batch_statistics().checker_calls >= 3);
-        let statistics = search.statistics().region_filter.unwrap();
+        let statistics = search.statistics().constraint_refutation.unwrap();
         assert!(
             (1..=count as u64).contains(&statistics.preparations),
             "joined slates retain their checkers, at most one per producer"
@@ -164,7 +207,7 @@ fn positive_checks_use_a_checker_per_traversal() {
                 )
                 .unwrap()
         );
-        search.set_region_filter(counting.clone()).unwrap();
+        search.set_constraint_refuter(counting.clone()).unwrap();
         let models: Vec<_> = search.by_ref().map(Result::unwrap).collect();
         assert_eq!(models.len(), 1);
         assert!(search.exhausted());
@@ -173,7 +216,14 @@ fn positive_checks_use_a_checker_per_traversal() {
             0,
             "the positive consequence set bypasses the candidate traversal"
         );
-        assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+        assert_eq!(
+            search
+                .statistics()
+                .constraint_refutation
+                .unwrap()
+                .preparations,
+            1
+        );
     }
     assert_eq!(counting.checks.load(Ordering::Relaxed), 2);
     assert_eq!(counting.parallel_checks.load(Ordering::Relaxed), 0);
@@ -197,7 +247,7 @@ fn persistent_workers_check_the_streamed_constraints() {
             Cancellation::default(),
         )
         .unwrap();
-        search.set_region_filter(counting.clone()).unwrap();
+        search.set_constraint_refuter(counting.clone()).unwrap();
         let models: Vec<_> = search.by_ref().map(Result::unwrap).collect();
         assert_eq!(models.len(), 5);
         assert_eq!(
@@ -218,7 +268,11 @@ fn persistent_workers_check_the_streamed_constraints() {
                 .engagement,
             RegionWalkEngagement::Engaged { launched: 4, .. }
         ));
-        preparations += search.statistics().region_filter.unwrap().preparations;
+        preparations += search
+            .statistics()
+            .constraint_refutation
+            .unwrap()
+            .preparations;
     }
     assert!(preparations > 1);
     assert!(counting.checks.load(Ordering::Relaxed) > 0);
@@ -248,7 +302,7 @@ fn the_public_installer_checks_the_streamed_constraints() {
         .collect();
     assert_eq!(models, subsets());
     assert!(search.exhausted());
-    let statistics = search.statistics().region_filter.unwrap();
+    let statistics = search.statistics().constraint_refutation.unwrap();
     assert_eq!(statistics.preparations, 1);
     assert!(statistics.refuted > 0);
     assert!(constraints.take_failure().is_none());
@@ -275,7 +329,10 @@ fn constraints_of_another_program_stop_with_their_failure() {
     search
         .set_streamed_constraints(constraints.clone())
         .unwrap();
-    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    assert!(matches!(
+        search.next(),
+        Some(Err(Incomplete::ConstraintRefutation))
+    ));
     assert!(!search.exhausted());
     assert!(matches!(
         constraints.take_failure().map(|failure| failure.cause),

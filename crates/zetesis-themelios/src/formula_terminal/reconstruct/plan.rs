@@ -9,7 +9,7 @@ use std::ops::Range;
 use themelios_program::program::DefaultNegation;
 use zetesis_core::catalog::PredicateRef;
 use zetesis_core::{
-    Model, PatternRef, TemplateComponentsRef, TemplateTerm, atom_interner::AtomInterner,
+    Model, PatternRef, TemplateComponentsRef, TemplateTerm, atom_registry::AtomRegistry,
 };
 
 use super::{ReconstructionError, Work, join};
@@ -62,7 +62,7 @@ impl<'a> Plan<'a> {
     pub(super) fn new(
         items: &Items,
         components: TemplateComponentsRef<'a>,
-        writer: &AtomInterner,
+        writer: &AtomRegistry,
         work: &mut Work<'_>,
     ) -> Result<Self, ReconstructionError> {
         let rules = items.rules();
@@ -212,7 +212,7 @@ impl<'a> Plan<'a> {
     pub(super) fn derive(
         &self,
         model: &Model,
-        writer: &mut AtomInterner,
+        writer: &mut AtomRegistry,
         work: &mut Work<'_>,
     ) -> Result<(), ReconstructionError> {
         for step in &self.steps {

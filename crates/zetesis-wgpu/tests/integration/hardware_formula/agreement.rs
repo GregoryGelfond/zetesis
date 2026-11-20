@@ -109,7 +109,7 @@ fn candidates(theory: &Theory) -> Vec<Interpretation> {
     ]
 }
 
-pub(super) fn qualify(context: &zetesis_wgpu::GpuContext, projection: GateProjection) {
+pub(super) fn qualify(context: &zetesis_wgpu::GpuContext, node_kernel: BinaryNodeKernel) {
     for (windows, fitted) in COVERINGS {
         let theory = covering(windows);
         let inputs = candidates(&theory);
@@ -126,7 +126,7 @@ pub(super) fn qualify(context: &zetesis_wgpu::GpuContext, projection: GateProjec
                     ..GpuKernelOptions::default()
                 };
                 let profile =
-                    GpuFormulaProfile::from_context_with_kernel(context, projection, options)
+                    GpuFormulaProfile::from_context_with_kernel(context, node_kernel, options)
                         .unwrap();
                 let mut oracle = GpuFormulaOracle::from_profile(&profile).unwrap();
                 let verdicts: Vec<_> = oracle

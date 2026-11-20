@@ -54,9 +54,9 @@ fn caller_refusals_bound_sorted_dictionary_work() {
 
 #[test]
 fn caller_refusals_bound_append_dictionary_work() {
-    use crate::atom_interner::{AtomInterner, Limits as AtomLimits};
+    use crate::atom_registry::{AtomRegistry, Limits as AtomLimits};
     let predicate = predicate(1);
-    let mut authority = AtomInterner::default();
+    let mut authority = AtomRegistry::default();
     let atom_limits = AtomLimits::for_atoms(32, 1024 * 1024);
     let declared = authority
         .declare_predicate_with(&predicate, atom_limits, || Ok::<_, ()>(()))

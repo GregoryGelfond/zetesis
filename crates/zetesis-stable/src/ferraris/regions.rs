@@ -30,10 +30,11 @@ use zetesis_algebra::{
     walk::{self, Counting, Visit, Walk},
 };
 use zetesis_ferraris::{
-    ChoiceHeads, ClosedQuery, FrozenPreparation, FrozenPreparationLimits, FrozenSubject,
-    GeneratorOrder, GeneratorOrderError, Interpretation, LearningLimits, LearningOwner, Narrower,
-    NarrowingAttempt, NarrowingScratch, OriginalSubject, PreparationError, PreparationLimits,
-    Producers, RegionLimits, RootPreparation, SupportExplanationStatistics, Theory,
+    BoundLearningStatistics, ChoiceHeads, ClosedQuery, ConflictLearningStatistics,
+    FrozenPreparation, FrozenPreparationLimits, FrozenSubject, GeneratorOrder, GeneratorOrderError,
+    Interpretation, LearningLimits, LearningOccupancy, LearningOwner, Narrower, NarrowingAttempt,
+    NarrowingScratch, OriginalSubject, PreparationError, PreparationLimits, Producers,
+    RegionLimits, RootPreparation, SupportExplanationStatistics, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions, CountermodelKnowledge};
@@ -97,6 +98,13 @@ pub struct RegionCounts {
     /// The byte peak is the largest single worker ledger/capture footprint, not
     /// the sum across workers or total process memory.
     pub support_explanations: SupportExplanationStatistics,
+    /// Refuted-region conflict capture; a statistic, not a receipt field.
+    pub conflict_explanations: ConflictLearningStatistics,
+    /// Objective-bound capture; a statistic, not a receipt field.
+    pub bound_explanations: BoundLearningStatistics,
+    /// Worker-ledger occupancy of the two learning classes; a statistic,
+    /// not a receipt field.
+    pub learning_occupancy: LearningOccupancy,
     // Private attribution travels with the existing receipt. Public arithmetic
     // observations are projected by the original-region statistics owner.
     pub(crate) arithmetic: arithmetic_counts::ArithmeticCounts,
@@ -109,94 +117,42 @@ impl RegionCounts {
     /// A sum beyond its counter's width is the counter refusal, with these
     /// counts unchanged.
     pub fn add(&mut self, other: Self) -> Result<(), Incomplete> {
+        let overflow = Incomplete::CounterOverflow;
         let sum = Self {
-            regions: self
-                .regions
-                .checked_add(other.regions)
-                .ok_or(Incomplete::CounterOverflow)?,
-            refuted: self
-                .refuted
-                .checked_add(other.refuted)
-                .ok_or(Incomplete::CounterOverflow)?,
-            leaves: self
-                .leaves
-                .checked_add(other.leaves)
-                .ok_or(Incomplete::CounterOverflow)?,
-            propagations: self
-                .propagations
-                .checked_add(other.propagations)
-                .ok_or(Incomplete::CounterOverflow)?,
-            held: self
-                .held
-                .checked_add(other.held)
-                .ok_or(Incomplete::CounterOverflow)?,
-            cut: self
-                .cut
-                .checked_add(other.cut)
-                .ok_or(Incomplete::CounterOverflow)?,
-            work: self
-                .work
-                .checked_add(other.work)
-                .ok_or(Incomplete::CounterOverflow)?,
-            support_work: self
-                .support_work
-                .checked_add(other.support_work)
-                .ok_or(Incomplete::CounterOverflow)?,
-            founded_work: self
-                .founded_work
-                .checked_add(other.founded_work)
-                .ok_or(Incomplete::CounterOverflow)?,
-            support_explanations: SupportExplanationStatistics {
-                attempts: self
-                    .support_explanations
-                    .attempts
-                    .checked_add(other.support_explanations.attempts)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                certified: self
-                    .support_explanations
-                    .certified
-                    .checked_add(other.support_explanations.certified)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                matched: self
-                    .support_explanations
-                    .matched
-                    .checked_add(other.support_explanations.matched)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                cut: self
-                    .support_explanations
-                    .cut
-                    .checked_add(other.support_explanations.cut)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                forced: self
-                    .support_explanations
-                    .forced
-                    .checked_add(other.support_explanations.forced)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                refuted: self
-                    .support_explanations
-                    .refuted
-                    .checked_add(other.support_explanations.refuted)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                declined: self
-                    .support_explanations
-                    .declined
-                    .checked_add(other.support_explanations.declined)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                work: self
-                    .support_explanations
-                    .work
-                    .checked_add(other.support_explanations.work)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                peak_bytes: self
-                    .support_explanations
-                    .peak_bytes
-                    .max(other.support_explanations.peak_bytes),
-            },
+            regions: self.regions.checked_add(other.regions).ok_or(overflow)?,
+            refuted: self.refuted.checked_add(other.refuted).ok_or(overflow)?,
+            leaves: self.leaves.checked_add(other.leaves).ok_or(overflow)?,
+            propagations: add_count(self.propagations, other.propagations)?,
+            held: add_count(self.held, other.held)?,
+            cut: add_count(self.cut, other.cut)?,
+            work: add_count(self.work, other.work)?,
+            support_work: add_count(self.support_work, other.support_work)?,
+            founded_work: add_count(self.founded_work, other.founded_work)?,
+            support_explanations: self
+                .support_explanations
+                .checked_add(other.support_explanations)
+                .ok_or(overflow)?,
+            conflict_explanations: self
+                .conflict_explanations
+                .checked_add(other.conflict_explanations)
+                .ok_or(overflow)?,
+            bound_explanations: self
+                .bound_explanations
+                .checked_add(other.bound_explanations)
+                .ok_or(overflow)?,
+            learning_occupancy: self
+                .learning_occupancy
+                .checked_add(other.learning_occupancy)
+                .ok_or(overflow)?,
             arithmetic: self.arithmetic.checked_add(other.arithmetic)?,
         };
         *self = sum;
         Ok(())
     }
+}
+
+fn add_count(left: u64, right: u64) -> Result<u64, Incomplete> {
+    left.checked_add(right).ok_or(Incomplete::CounterOverflow)
 }
 
 // Keep the public solver receipt name while the generic frontier owns its fields.
@@ -409,7 +365,7 @@ impl RegionWalkEngagement {
     }
 }
 
-type Checker<'a> = Option<crate::region_filter::Worker<'a>>;
+type Checker<'a> = Option<crate::constraint_refutation::Worker<'a>>;
 
 self_cell::self_cell! {
     /// The original-source factory owns the preparation borrowed by this
@@ -417,16 +373,16 @@ self_cell::self_cell! {
     /// owner relative to its checker. No checker is shared with another stream,
     /// source or frozen-reduct query. The cell is allocated only when a filter
     /// is installed; its small allocation follows the boxed-checker contract.
-    struct RetainedFilter {
-        owner: crate::region_filter::Filter,
+    struct RetainedRefuter {
+        owner: crate::constraint_refutation::ConstraintRefuter,
         #[not_covariant]
         dependent: Checker,
     }
 }
 
-impl std::fmt::Debug for RetainedFilter {
+impl std::fmt::Debug for RetainedRefuter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RetainedFilter")
+        f.debug_struct("RetainedRefuter")
             .field("factory", self.borrow_owner())
             .finish_non_exhaustive()
     }
@@ -447,7 +403,7 @@ pub(crate) struct RegionSearch {
     /// The tier's sharing state.
     tier: Tier,
     statistics: RegionSearchStatistics,
-    filter: Option<RetainedFilter>,
+    filter: Option<RetainedRefuter>,
     native_byte_limit: u64,
 }
 
@@ -462,6 +418,7 @@ pub(crate) struct OriginalParts {
     generator_order: Option<GeneratorOrder>,
     arithmetic: Option<subjects::PreparedArithmetic>,
     learning: LearningOwner,
+    bound_learning: LearningOwner,
     learned: Option<Arc<LearnedStore>>,
 }
 
@@ -481,6 +438,7 @@ pub(super) struct CandidateReading<'a> {
     pub(super) original: OriginalSubject<'a>,
     pub(super) narrower: &'a Narrower,
     pub(super) arithmetic: Option<&'a subjects::PreparedArithmetic>,
+    pub(super) bound_learning: Option<&'a LearningOwner>,
 }
 
 /// Which way a walk boundary moves a tier's rows.
@@ -492,8 +450,9 @@ enum Sharing {
 
 impl OriginalParts {
     /// The walk's subject over `theory`, the theory these parts came from:
-    /// the carrier of the rows the walk learns. Restrictions, the bound and
-    /// filters are read by other subjects, which never carry rows.
+    /// the carrier of the theory-class rows the walk learns. Restrictions
+    /// and filters never carry rows. The bound subject carries bound-class
+    /// rows under `bound_learning`.
     pub(crate) fn subject(&self, theory: &Theory) -> Result<OriginalSubject<'_>, Incomplete> {
         if !self.learning.owns(theory)
             || self
@@ -521,6 +480,7 @@ impl OriginalParts {
             original: self.subject(theory)?,
             narrower,
             arithmetic: self.arithmetic.as_ref(),
+            bound_learning: Some(&self.bound_learning),
         })
     }
 
@@ -598,22 +558,45 @@ impl OriginalParts {
         };
         let mut quota = BudgetQuota { budget };
         let mut meter = Meter::reserved(&mut quota);
-        let attempt = {
+        let (theory_attempt, bound_attempt) = {
             let mut rows = store.lock();
             match sharing {
-                Sharing::Seed => scratch.seed_learning(&self.learning, &mut rows, &mut meter),
-                Sharing::Deliver => scratch.deliver_learning(&self.learning, &mut rows, &mut meter),
+                Sharing::Seed => (
+                    scratch.seed_learning(&self.learning, &mut rows, &mut meter),
+                    scratch.seed_bound_learning(&self.bound_learning, &mut rows, &mut meter),
+                ),
+                Sharing::Deliver => (
+                    scratch.deliver_learning(&self.learning, &mut rows, &mut meter),
+                    scratch.deliver_bound_learning(&self.bound_learning, &mut rows, &mut meter),
+                ),
             }
         };
+        let work = theory_attempt
+            .work
+            .checked_add(bound_attempt.work)
+            .ok_or(Incomplete::CounterOverflow)?;
         counts.add(RegionCounts {
-            work: attempt.work,
+            work,
             support_explanations: SupportExplanationStatistics {
-                work: attempt.work,
+                work: theory_attempt.work,
+                peak_bytes: scratch.learning_peak_bytes(),
                 ..SupportExplanationStatistics::default()
+            },
+            learning_occupancy: {
+                let mut occupancy = LearningOccupancy::default();
+                occupancy.theory_rows = scratch.learned_rows() as u64;
+                occupancy.bound_rows = scratch.bound_rows() as u64;
+                occupancy.evicted = scratch.learned_evictions() + scratch.bound_evictions();
+                occupancy.peak_bytes = scratch.learning_peak_bytes();
+                occupancy
             },
             ..RegionCounts::default()
         })?;
-        attempt.result.map_err(meter_failure)
+        let result = match (theory_attempt.result, bound_attempt.result) {
+            (Err(error), _) => Err(error),
+            (Ok(()), result) => result,
+        };
+        result.map_err(meter_failure)
     }
 }
 
@@ -801,6 +784,7 @@ fn open_recording(
             generator_order,
             arithmetic,
             learning: LearningOwner::theory(theory, learning),
+            bound_learning: LearningOwner::bound(theory, learning),
             learned: None,
         },
         root,
@@ -834,7 +818,11 @@ impl RegionSearch {
             statistics,
             parts,
             traversal: Walk::with_state(root, Counting::Never, CandidateKnowledge::default())
-                .with_held_first(),
+                .with_held_first()
+                .with_recomputation(
+                    super::region_frontier::KEPT_KNOWLEDGE,
+                    CandidateKnowledge::shed,
+                ),
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
             tier: Tier::default(),
@@ -857,14 +845,14 @@ impl RegionSearch {
         self.parts.set_learned_store(store);
     }
 
-    pub(super) fn filter(&self) -> Option<&crate::region_filter::Filter> {
-        self.filter.as_ref().map(RetainedFilter::borrow_owner)
+    pub(super) fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
+        self.filter.as_ref().map(RetainedRefuter::borrow_owner)
     }
 
     /// The caller allows installation only before traversal and never replaces
     /// an installed factory, so no checker can outlive its source identity.
-    pub(super) fn set_filter(&mut self, filter: crate::region_filter::Filter) {
-        self.filter = Some(RetainedFilter::new(filter, |_| None));
+    pub(super) fn set_refuter(&mut self, filter: crate::constraint_refutation::ConstraintRefuter) {
+        self.filter = Some(RetainedRefuter::new(filter, |_| None));
     }
 
     /// Release the retained checker on completion, failure or explicit stop.
@@ -950,7 +938,7 @@ impl RegionSearch {
     ) -> Result<bool, Incomplete> {
         permits(
             &self.restrictions,
-            self.filter.as_ref().map(RetainedFilter::borrow_owner),
+            self.filter.as_ref().map(RetainedRefuter::borrow_owner),
             candidate,
             &mut self.scratch,
             budget,
@@ -1015,7 +1003,7 @@ impl RegionSearch {
         let (formulas, narrower) = index.subject(theory)?;
         parts.seed_tier(tier, scratch, budget, &mut statistics.counts)?;
         let before = traversal.statistics();
-        let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
+        let mut advance = |mut check: Option<crate::constraint_refutation::Check<'_, '_>>| {
             let mut context = (&mut *budget, &mut statistics.counts);
             traversal.next_with_copy(
                 &mut context,
@@ -1041,7 +1029,7 @@ impl RegionSearch {
         };
         let visit = if let Some(filter) = filter {
             filter.with_dependent_mut(|filter, worker| {
-                advance(Some(crate::region_filter::Check {
+                advance(Some(crate::constraint_refutation::Check {
                     filter,
                     worker,
                     timings,
@@ -1101,7 +1089,7 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
-    filter: Option<&mut crate::region_filter::Check<'_, '_>>,
+    filter: Option<&mut crate::constraint_refutation::Check<'_, '_>>,
 ) -> Result<Narrowing, Incomplete> {
     let original = reading.original;
     let narrower = reading.narrower;
@@ -1125,7 +1113,15 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                     }
                 }),
         )
-        .chain(restrictions.bound.iter().map(CandidateSubject::Bound))
+        .chain(
+            restrictions
+                .bound
+                .iter()
+                .map(|bound| CandidateSubject::Bound {
+                    bound,
+                    learning: reading.bound_learning,
+                }),
+        )
     };
     let mut late = subjects::late(&reading, filter);
     let result = joint(eager, &mut late, region, knowledge, scratch, budget, counts)?;
@@ -1200,7 +1196,7 @@ fn prefer_split<Q: Quota, R>(
 /// restriction owners and their accounted narrowing primitive are reused.
 pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
     restrictions: &Conditions<R>,
-    filter: Option<&crate::region_filter::Filter>,
+    filter: Option<&crate::constraint_refutation::ConstraintRefuter>,
     candidate: &Interpretation,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_>,

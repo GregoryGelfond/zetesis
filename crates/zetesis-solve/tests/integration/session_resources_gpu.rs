@@ -15,7 +15,7 @@ use zetesis_solve::{
 };
 use zetesis_test_support::programs::signed as atom;
 use zetesis_wgpu::{
-    AdapterBackend, AdapterCategory, GateProjection, GpuContext, GpuError, GpuErrorKind,
+    AdapterBackend, AdapterCategory, BinaryNodeKernel, GpuContext, GpuError, GpuErrorKind,
     GpuFormulaProfile, GpuOptions, GpuRelationExecutor, GpuSelection, RelationGpuLimits,
 };
 
@@ -126,7 +126,7 @@ struct Routes {
     proposal_workers: Option<NonZeroUsize>,
     cpu_formula: usize,
     observed_backend: Option<AdapterBackend>,
-    observed_projection: Option<GateProjection>,
+    observed_node_kernel: Option<BinaryNodeKernel>,
 }
 
 impl ExecutionObserver for Routes {
@@ -144,11 +144,11 @@ impl ExecutionObserver for Routes {
             }
             ExecutionObservation::DeviceFormula {
                 adapter,
-                projection,
+                node_kernel,
                 ..
             } => {
                 self.device_formula += 1;
-                self.observed_projection = Some(projection);
+                self.observed_node_kernel = Some(node_kernel);
                 Some(adapter)
             }
             ExecutionObservation::CpuFormula { .. } => {
@@ -444,9 +444,9 @@ fn resource_variants(device: GpuApi) -> [ExecutionResources; 2] {
 
 fn independent_profile_sessions(device: GpuApi) {
     let context = device.context();
-    for projection in GateProjection::ALL {
+    for node_kernel in BinaryNodeKernel::ALL {
         let profile =
-            GpuFormulaProfile::from_context_with_projection(&context, projection).unwrap();
+            GpuFormulaProfile::from_context_with_node_kernel(&context, node_kernel).unwrap();
         let resources = ExecutionResources::with_formula_profile(&profile);
         let retained = resources.clone();
         assert!(retained.formula_profile().unwrap().same_instance(&profile));
@@ -478,7 +478,7 @@ fn independent_profile_sessions(device: GpuApi) {
         assert_eq!(stopped.outcome.formula_execution().unwrap().gpu_batches, 0);
         // Setup observations identify the actual compiled evaluator even when
         // a candidate limit prevents the first dispatch.
-        assert_eq!(stopped.routes.observed_projection, Some(projection));
+        assert_eq!(stopped.routes.observed_node_kernel, Some(node_kernel));
         independent_formulas(&retained, device);
     }
 }

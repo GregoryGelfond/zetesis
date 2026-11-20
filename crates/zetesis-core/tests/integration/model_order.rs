@@ -98,6 +98,47 @@ proptest! {
     }
 }
 
+/// An atom of one of four predicates (two names, arities zero to two, both
+/// signs), with arguments drawn from every term kind.
+fn wide_atom(predicate: u8, first: (u8, i16), second: (u8, i16)) -> Atom {
+    let term = |(kind, number): (u8, i16)| atom(kind, number, false).values()[0].clone();
+    let (name, arity, sign) = match predicate % 4 {
+        0 => ("p", 1, Sign::Positive),
+        1 => ("p", 2, Sign::Positive),
+        2 => ("q", 2, Sign::Negative),
+        _ => ("r", 0, Sign::Positive),
+    };
+    let arguments = [term(first), term(second)]
+        .into_iter()
+        .take(arity)
+        .collect();
+    Atom::new(Predicate::with_sign(name, arity, sign).unwrap(), arguments).unwrap()
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+    // Groups of several hundred occurrences take the radix route; the rest
+    // the merge route. Either way the order is the typed atom order, with
+    // repeats coalesced to their least position.
+    #[test]
+    fn rank_keyed_preparation_agrees_with_the_typed_atom_order(
+        descriptions in prop::collection::vec(
+            (0_u8..4, (0_u8..5, -40_i16..40), (0_u8..5, -3_i16..3)),
+            1..700,
+        ),
+    ) {
+        let atoms: Vec<_> = descriptions.into_iter()
+            .map(|(predicate, first, second)| wide_atom(predicate, first, second)).collect();
+        let catalog = AtomCatalog::new(atoms.clone()).unwrap();
+        let order = prepare(&catalog);
+        let model = select(&order, 0..atoms.len());
+        let mut expected: Vec<usize> = (0..atoms.len()).collect();
+        expected.sort_by(|&left, &right| atoms[left].cmp(&atoms[right]).then(left.cmp(&right)));
+        expected.dedup_by(|right, left| atoms[*right] == atoms[*left]);
+        prop_assert_eq!(model.positions(), &expected[..]);
+    }
+}
+
 fn distinct(count: i16) -> AtomCatalog {
     AtomCatalog::new((0..count).map(|number| atom(0, number, false)).collect()).unwrap()
 }

@@ -7,6 +7,10 @@ use super::{
     Selected,
 };
 
+mod keys;
+
+use keys::semantic_order;
+
 const VECTOR_BYTES: u128 = size_of::<Vec<usize>>() as u128;
 const MARK_BITS: usize = usize::BITS as usize;
 
@@ -18,12 +22,16 @@ const MARK_BITS: usize = usize::BITS as usize;
 /// borrows its catalog, not a writer or another atom authority. A selected [`Model`]
 /// shares that catalog and can outlive this preparation.
 ///
-/// Preparation uses O(n log n) checked semantic comparisons and retains two
-/// n-cell integer buffers: each occurrence's rank, and the occurrences in
-/// semantic order (equal ranks by ascending position). A catalog already in
-/// semantic order costs fewer comparisons than it has occurrences, and one
-/// made of a few ordered stretches about one more for each occurrence of
-/// the stretches that must be merged (`checked_sort`). Selection marks the m
+/// Preparation compares content only between the u distinct terms and the p
+/// distinct predicates the occurrences use, O(u log u + p log p) checked
+/// comparisons, and then orders the n occurrences by those integer ranks
+/// alone: a counting sort groups them by predicate, and each group is ordered
+/// by its argument columns, last column first, with a stable radix sort over
+/// the column's ranks (a merge sort for a small group), O(n·k) integer steps
+/// for arity k. It retains two n-cell integer buffers: each occurrence's
+/// rank, and the occurrences in semantic order (equal ranks by ascending
+/// position); the term and predicate rank tables, the group boundaries and
+/// one group's argument columns are released before it returns. Selection marks the m
 /// supplied positions in an n-bit mask, then either walks the semantic order
 /// once (O(n) integer steps) or sorts the marked positions (O(m log m) integer
 /// comparisons), whichever the counts make cheaper; both publish the same model
@@ -70,70 +78,15 @@ impl<'catalog> ModelOrder<'catalog> {
             semantic: Vec::new(),
             preparation_peak_bytes: 0,
         };
-        let mut scratch = Vec::new();
         let base = size_of::<Self>() as u128 + VECTOR_BYTES;
         let mut account = Account::new(max_bytes, base);
         let result = (|| {
             let mut checked = || before().map_err(ModelFailure::Stopped);
             checked()?;
             account.admit(base)?;
-            let count = catalog.atoms().len();
-            reserve(&mut order.ranks, count, base, &mut account, &mut checked)?;
-            reserve(
-                &mut scratch,
-                count,
-                base + cells(order.ranks.capacity()),
-                &mut account,
-                &mut checked,
-            )?;
-            for position in 0..count {
-                checked()?;
-                order.ranks.push(position);
-                checked()?;
-                scratch.push(0);
-            }
-            let atoms = catalog.atoms();
-            crate::checked_sort::sort(
-                &mut order.ranks,
-                &mut scratch,
-                |values, left, right, permit| {
-                    permit()?;
-                    let left = atoms
-                        .at(values[left])
-                        .expect("prepared occurrence is in the catalog");
-                    permit()?;
-                    let right = atoms
-                        .at(values[right])
-                        .expect("prepared occurrence is in the catalog");
-                    left.compare_ref_with(right, permit)
-                },
-                &mut checked,
-            )?;
-            let mut previous = None;
-            let mut rank = 0;
-            for &position in &order.ranks {
-                checked()?;
-                let atom = atoms
-                    .at(position)
-                    .expect("sorted occurrence remains in the catalog");
-                if let Some(previous) = previous {
-                    checked()?;
-                    let previous = atoms
-                        .at(previous)
-                        .expect("previous occurrence remains in the catalog");
-                    if !atom.equals_ref_with(previous, &mut checked)? {
-                        // There are at most count groups, so the last rank is < count.
-                        rank += 1;
-                    }
-                }
-                checked()?;
-                scratch[position] = rank;
-                previous = Some(position);
-            }
-            checked()?;
-            // The sorted positions are the semantic order; the scratch holds ranks.
-            std::mem::swap(&mut order.ranks, &mut scratch);
-            order.semantic = scratch;
+            let (semantic, ranks) = semantic_order(catalog, base, &mut account, &mut checked)?;
+            order.semantic = semantic;
+            order.ranks = ranks;
             Ok(())
         })();
         result.map_err(|failure| ModelPublicationFailure {
@@ -326,7 +279,7 @@ impl<'catalog> ModelOrder<'catalog> {
     fn sort_marked<E>(
         &self,
         selected: &mut Vec<usize>,
-        scratch: &mut Vec<usize>,
+        scratch: &mut [usize],
         checked: &mut impl FnMut() -> Result<(), ModelFailure<E>>,
     ) -> Result<(), ModelFailure<E>> {
         crate::checked_sort::sort(
@@ -381,7 +334,11 @@ const fn walks(marked: usize, count: usize) -> bool {
 }
 
 fn cells(capacity: usize) -> u128 {
-    capacity as u128 * size_of::<usize>() as u128
+    bytes::<usize>(capacity)
+}
+
+fn bytes<T>(capacity: usize) -> u128 {
+    capacity as u128 * size_of::<T>() as u128
 }
 
 struct Account {
@@ -423,8 +380,8 @@ impl Account {
 /// during copying preserves the original buffer; actual replacement capacity is
 /// recorded before any later callback can refuse. All byte arithmetic uses u128
 /// over a fixed number of usize capacities, so it cannot overflow.
-fn reserve<E>(
-    buffer: &mut Vec<usize>,
+fn reserve<T: Copy, E>(
+    buffer: &mut Vec<T>,
     needed: usize,
     other: u128,
     account: &mut Account,
@@ -434,13 +391,13 @@ fn reserve<E>(
         return Ok(());
     }
     let requested = needed.max(buffer.capacity().saturating_mul(2));
-    let overlap = other + cells(buffer.capacity()) + VECTOR_BYTES;
-    account.admit(overlap + cells(requested))?;
+    let overlap = other + bytes::<T>(buffer.capacity()) + VECTOR_BYTES;
+    account.admit(overlap + bytes::<T>(requested))?;
     before()?;
     let mut replacement = Vec::new();
     account.observe(overlap)?;
     let result = replacement.try_reserve_exact(requested);
-    account.observe(overlap + cells(replacement.capacity()))?;
+    account.observe(overlap + bytes::<T>(replacement.capacity()))?;
     result.map_err(|_| ModelFailure::Model(ModelError::Allocation))?;
     for &position in buffer.iter() {
         before()?;

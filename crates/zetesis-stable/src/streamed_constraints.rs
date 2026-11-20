@@ -35,7 +35,7 @@ use crate::{Incomplete, RegionFeasibility, subject::Pass};
 ///
 /// Each check charges `allowance`, which every checker of this value shares,
 /// including a caller's final full-model checks. A check that stops records its
-/// typed failure here and reports [`Incomplete::RegionFilter`]; read the first
+/// typed failure here and reports [`Incomplete::ConstraintRefutation`]; read the first
 /// recorded failure with [`StreamedConstraints::take_failure`]. A failure never
 /// means a refutation or exhaustion.
 pub struct StreamedConstraints {
@@ -75,7 +75,7 @@ impl StreamedConstraints {
 
     fn stopped(&self, failure: ConstraintCheckFailure) -> Incomplete {
         self.record_failure(failure);
-        Incomplete::RegionFilter
+        Incomplete::ConstraintRefutation
     }
 }
 

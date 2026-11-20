@@ -33,7 +33,7 @@ struct Case {
     files: Vec<matrix::BundleFile>,
 }
 
-/// Load 1..=95 explicitly sealed workloads from a bounded JSON manifest.
+/// Load 1..=117 explicitly sealed workloads from a bounded JSON manifest.
 ///
 /// Schema version 1 has `root` and `cases`; each case has `entry`, the existing
 /// typed `contract`, and `files`. Each file has `path`, lowercase `sha256` and
@@ -104,7 +104,7 @@ fn load_inner(
         || manifest.cases.len() > super::MAX_CASES
     {
         return Err(Error::Configuration(
-            "external workload manifest requires schema 1 and 1..=95 cases",
+            "external workload manifest requires schema 1 and 1..=117 cases",
         ));
     }
     let parent = seal.canonical().parent().ok_or(Error::Configuration(

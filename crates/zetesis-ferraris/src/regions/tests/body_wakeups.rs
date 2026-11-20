@@ -8,7 +8,7 @@ use crate::{
     Narrowing, NarrowingScratch, Node, OriginalSubject, Producers, Region, RegionLimits, Theory,
 };
 
-use super::super::{Closure, Context, Meter, Step};
+use super::super::{Context, Meter, NarrowingState, Step};
 
 fn prepare(theory: &Theory) -> (Narrower, Producers) {
     let producers =
@@ -124,7 +124,7 @@ fn a_false_body_event_owns_its_support_wakeup() {
     let mut knowledge = index.knowledge();
     let mut lists = NarrowingScratch::default();
     lists.common.prepare(3);
-    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: super::compact_mut(&mut knowledge),
         lists: &mut lists.common,
         learning: &mut lists.learning,

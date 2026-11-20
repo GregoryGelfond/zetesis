@@ -16,19 +16,19 @@ use zetesis_ferraris::{
 };
 use zetesis_theory_support::theories::theory;
 use zetesis_wgpu::{
-    FormulaCheck, FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle,
+    BinaryNodeKernel, FormulaCheck, FormulaLimits, FormulaVerdict, GpuErrorKind, GpuFormulaOracle,
     GpuFormulaProfile, GpuKernelOptions, GpuOptions, GpuPropagation, GpuSelection,
     GpuWorkgroupSize, GpuWorkgroupSizing, ResidualReason,
 };
 
-fn oracle(backend: GpuApi, projection: GateProjection) -> GpuFormulaOracle {
-    let oracle = GpuFormulaOracle::new_selected_with_projection(
+fn oracle(backend: GpuApi, node_kernel: BinaryNodeKernel) -> GpuFormulaOracle {
+    let oracle = GpuFormulaOracle::new_selected_with_node_kernel(
         GpuOptions::default(),
         GpuSelection { api: backend },
-        projection,
+        node_kernel,
     )
     .unwrap();
-    assert_eq!(oracle.projection(), projection);
+    assert_eq!(oracle.node_kernel(), node_kernel);
     assert_eq!(
         oracle.compiled_profile().kernel_options(),
         GpuKernelOptions::default()
@@ -242,24 +242,24 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
 #[test]
 #[ignore = "requires Metal: formula queries preserve exact frozen semantics and residency"]
 fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
-    for projection in GateProjection::ALL {
-        qualify_frozen_queries(GpuApi::Metal, projection);
+    for node_kernel in BinaryNodeKernel::ALL {
+        qualify_frozen_queries(GpuApi::Metal, node_kernel);
     }
 }
 
 #[test]
 #[ignore = "requires Metal: an overlapped formula query matches the sequential query"]
 fn metal_formula_overlapped_query_matches_sequential_query() {
-    for projection in GateProjection::ALL {
-        qualify_overlapped(GpuApi::Metal, projection);
+    for node_kernel in BinaryNodeKernel::ALL {
+        qualify_overlapped(GpuApi::Metal, node_kernel);
     }
 }
 
 #[test]
 #[ignore = "requires Vulkan: an overlapped formula query matches the sequential query"]
 fn vulkan_formula_overlapped_query_matches_sequential_query() {
-    for projection in GateProjection::ALL {
-        qualify_overlapped(GpuApi::Vulkan, projection);
+    for node_kernel in BinaryNodeKernel::ALL {
+        qualify_overlapped(GpuApi::Vulkan, node_kernel);
     }
 }
 
@@ -267,9 +267,9 @@ fn vulkan_formula_overlapped_query_matches_sequential_query() {
 /// overlapping queries in prefix order, give the verdicts a synchronous query
 /// gives on a second oracle of the same projection. Each overlapping query's
 /// production returns its offset, so the comparison isolates the schedule.
-fn qualify_overlapped(backend: GpuApi, projection: GateProjection) {
-    let mut synchronous = oracle(backend, projection);
-    let mut overlapped = oracle(backend, projection);
+fn qualify_overlapped(backend: GpuApi, node_kernel: BinaryNodeKernel) {
+    let mut synchronous = oracle(backend, node_kernel);
+    let mut overlapped = oracle(backend, node_kernel);
     let control = Cancellation::default();
     let mut compared = 0;
     for theory in frozen_theories() {
@@ -304,7 +304,7 @@ fn qualify_overlapped(backend: GpuApi, projection: GateProjection) {
     }
     println!(
         "formula overlapped queries projection={} candidates={compared}",
-        projection.label()
+        node_kernel.label()
     );
 }
 
@@ -389,11 +389,11 @@ fn frozen_theories() -> Vec<Theory> {
     theories
 }
 
-fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
-    let mut oracle = oracle(backend, projection);
+fn qualify_frozen_queries(backend: GpuApi, node_kernel: BinaryNodeKernel) {
+    let mut oracle = oracle(backend, node_kernel);
     println!(
         "formula projection={} adapter={}",
-        projection.label(),
+        node_kernel.label(),
         oracle.info().name()
     );
     let mut totals = (0, 0);
@@ -434,7 +434,7 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
     assert!(totals.0 > 0 && totals.1 > 0);
     println!("completed refutations={} residuals={}", totals.0, totals.1);
     qualify_root_propagation(&mut oracle);
-    if projection == GateProjection::default() {
+    if node_kernel == BinaryNodeKernel::default() {
         source::qualify(&oracle);
     }
     qualify_kernel_options(&mut oracle);
@@ -464,7 +464,7 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
                 };
                 let profile = GpuFormulaProfile::from_context_with_kernel(
                     &context,
-                    oracle.projection(),
+                    oracle.node_kernel(),
                     options,
                 )
                 .unwrap();
@@ -514,7 +514,7 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
             }
         }
     }
-    agreement::qualify(&context, oracle.projection());
+    agreement::qualify(&context, oracle.node_kernel());
 }
 
 /// Gate and root counts one below, at and one above the sizes 64, 128 and 256,
@@ -1019,13 +1019,13 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
 #[test]
 #[ignore = "requires Metal: formula limits resize identity and word boundaries remain explicit"]
 fn metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit() {
-    for projection in GateProjection::ALL {
-        qualify_resources(GpuApi::Metal, projection);
+    for node_kernel in BinaryNodeKernel::ALL {
+        qualify_resources(GpuApi::Metal, node_kernel);
     }
 }
 
-fn qualify_resources(backend: GpuApi, projection: GateProjection) {
-    let mut oracle = oracle(backend, projection);
+fn qualify_resources(backend: GpuApi, node_kernel: BinaryNodeKernel) {
+    let mut oracle = oracle(backend, node_kernel);
     qualify_prefixes(&mut oracle);
     let graph = theory(1, vec![Node::atom(0)], vec![0]);
     let inputs = candidates(&graph);
@@ -1181,16 +1181,16 @@ fn assert_clears_residency(
 #[test]
 #[ignore = "requires Vulkan: formula queries preserve frozen semantics"]
 fn vulkan_formula_queries_preserve_frozen_semantics() {
-    for projection in GateProjection::ALL {
-        qualify_frozen_queries(GpuApi::Vulkan, projection);
+    for node_kernel in BinaryNodeKernel::ALL {
+        qualify_frozen_queries(GpuApi::Vulkan, node_kernel);
     }
 }
 
 #[test]
 #[ignore = "requires Vulkan: formula resource boundaries remain explicit"]
 fn vulkan_formula_resource_boundaries_remain_explicit() {
-    for projection in GateProjection::ALL {
-        qualify_resources(GpuApi::Vulkan, projection);
+    for node_kernel in BinaryNodeKernel::ALL {
+        qualify_resources(GpuApi::Vulkan, node_kernel);
     }
 }
 

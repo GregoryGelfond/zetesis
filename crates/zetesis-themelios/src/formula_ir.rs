@@ -11,6 +11,7 @@ pub(crate) mod testing;
 
 mod objective_scope;
 
+mod constants;
 mod domain;
 
 mod comparison;
@@ -24,7 +25,7 @@ mod facts;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::formula_support::components::{
-    Filter, Pattern as AtomPattern, Predicate, Term as CoreTerm,
+    FilterCoordinate, Pattern as AtomPattern, Predicate, Term as CoreTerm,
 };
 use crate::{ProgramSite, StatementId};
 use themelios_program::program::{
@@ -59,7 +60,7 @@ pub(crate) struct Prepared {
     /// reader that never sees facts, [`Self::rules_without_facts`].
     items: crate::formula_facts::Items,
     pub projection: Vec<RuleIr>,
-    pub project_selection: crate::ProjectSelection,
+    pub project_directives: crate::ProjectDirectives,
     pub objectives: Vec<ObjectiveIr>,
     pub objective_declarations: Vec<ProgramSite>,
     /// Extrema tuple carriers selected for an optional numeric-weight precision
@@ -134,7 +135,7 @@ pub(crate) struct ObjectiveIr {
     pub priority: Expression,
     pub tuple: Vec<ObjectiveField>,
     pub positive: Vec<AtomPattern>,
-    pub filters: Vec<Filter>,
+    pub filters: Vec<FilterCoordinate>,
     pub polarity: WeightPolarity,
     /// Positive conditions whose generated values affect priority evaluation or
     /// source eligibility through a literal, filter or repeated variable.
@@ -329,7 +330,7 @@ pub(super) enum ComparisonParts {
 pub(crate) enum LiteralIr {
     Atom(DefaultNegation, AtomPattern),
     PatternAtom(crate::formula_pattern::PatternAtom),
-    ProjectedAtom(DefaultNegation, Projection),
+    AnonymousAtom(DefaultNegation, AnonymousWitnesses),
     Compare(Comparison),
     /// Equality between a captured positive subterm and its source expression:
     /// the comparison `captured = value`, captured on the left. This is
@@ -354,8 +355,10 @@ pub(crate) enum LiteralIr {
         binder: bool,
     },
 }
-/// Complete existential witnesses, with a flat relational fast path.
-pub(crate) enum Projection {
+/// Anonymous-variable witnesses for one source literal. Grounding expands them
+/// to a disjunction of possible atoms (then applies the literal's negation).
+/// This is literal lowering, not `Lifted.Project` head emission or `#project`.
+pub(crate) enum AnonymousWitnesses {
     Arguments {
         predicate: Predicate,
         terms: Vec<Option<CoreTerm>>,
@@ -369,7 +372,7 @@ pub(crate) enum Projection {
         inputs: usize,
     },
 }
-impl Projection {
+impl AnonymousWitnesses {
     pub(crate) fn predicate<'a>(
         &self,
         view: zetesis_core::TemplateComponentsRef<'a>,
@@ -444,7 +447,7 @@ pub(crate) fn decided(literal: &LiteralIr) -> bool {
         | LiteralIr::Range { .. } => true,
         LiteralIr::Atom(..)
         | LiteralIr::PatternAtom(_)
-        | LiteralIr::ProjectedAtom(..)
+        | LiteralIr::AnonymousAtom(..)
         | LiteralIr::HeadGuard(_)
         | LiteralIr::Conditional(_)
         | LiteralIr::Aggregate(_) => false,
@@ -566,7 +569,7 @@ impl PreparationContext<'_> {
     pub(crate) fn prepare(
         self,
         source: &std::sync::Arc<SourceProgram>,
-        project_selection: crate::ProjectSelection,
+        project_directives: crate::ProjectDirectives,
     ) -> Result<Prepared, FormulaFailure> {
         let Self {
             options,
@@ -583,6 +586,7 @@ impl PreparationContext<'_> {
         let mut parts = Parts::default();
         let admission = catalog.component_admission(limits, counters, fallback)?;
         let domain = domain::Domain::new(&admission, limits, counters, fallback)?;
+        let imported = constants::Constants::new(&admission, limits, counters, fallback)?;
         let mut compiler = Compiler {
             options,
             limits,
@@ -590,13 +594,14 @@ impl PreparationContext<'_> {
             source: admission,
             counters,
             domain,
+            imported,
             next_aggregate: 0,
             dependency_projection: false,
             location: fallback,
         };
         let emitted_owners = compiler.compile_program(source, &constants, &mut parts, fallback)?;
         let (mut analyzed, owners) = crate::formula_analysis::Summary::collect(
-            std::sync::Arc::clone(source),
+            source,
             std::mem::take(&mut parts.analyzed),
             emitted_owners,
             std::mem::take(&mut parts.analysis_sources),
@@ -655,7 +660,7 @@ impl PreparationContext<'_> {
             analyzed,
             items: parts.items,
             projection: parts.projection,
-            project_selection,
+            project_directives,
             objectives: parts.objectives,
             objective_declarations: parts.objective_declarations,
             objective_extrema,
@@ -725,6 +730,7 @@ fn plan_constraint_replacements(
 struct Parts {
     items: crate::formula_facts::Items,
     fact_scratch: facts::Scratch,
+    fact_buffer: crate::fact_expansion::Facts,
     fact_families: crate::formula_analysis::Families,
     projection: Vec<RuleIr>,
     analyzed: Vec<WithProvenance<Statement>>,
@@ -1004,6 +1010,7 @@ pub(super) struct Compiler<'a> {
     pub(super) source: components::Admission<'a>,
     pub(super) counters: &'a mut Counters,
     pub(super) domain: domain::Domain,
+    pub(super) imported: constants::Constants,
     pub(super) next_aggregate: usize,
     pub(super) dependency_projection: bool,
     pub(super) location: ProgramSite,
@@ -1104,11 +1111,15 @@ impl Compiler<'_> {
             parts.analyzed.extend(observation);
             return Ok(());
         }
-        if let Some(facts) = if generated_fact(statement.get()) {
-            None
-        } else {
-            fact_expansion::facts(statement, self.budget, self.location)?
-        } {
+        if !generated_fact(statement.get())
+            && fact_expansion::facts_into(
+                statement,
+                self.budget,
+                self.location,
+                &mut parts.fact_buffer,
+            )?
+        {
+            let facts = &parts.fact_buffer;
             self.budget.charge(
                 ExpansionResource::Origins,
                 (facts.len() as u128).saturating_mul(origins.len() as u128),
@@ -1116,7 +1127,7 @@ impl Compiler<'_> {
             )?;
             #[cfg(test)]
             if facts::testing::facts_as_rules() {
-                let mut facts = facts.into_rows();
+                let mut facts = std::mem::take(&mut parts.fact_buffer).into_rows();
                 while let Some(head) = facts.next(self.budget, self.location)? {
                     parts.analyzed.push(crate::formula_analysis::fact(
                         &head,
@@ -1128,7 +1139,7 @@ impl Compiler<'_> {
                 }
                 return Ok(());
             }
-            self.facts(&facts, &origins, &mut parts.items, &mut parts.fact_scratch)?;
+            self.facts(facts, &origins, &mut parts.items, &mut parts.fact_scratch)?;
             if facts.len() != 0 {
                 let family = parts.fact_families.record(
                     fact_expansion::fact_atom(statement.get()).expect("accepted fact family"),
@@ -1817,17 +1828,57 @@ impl Compiler<'_> {
         &mut self,
         value: &Value,
     ) -> Result<components::Scalar, FormulaFailure> {
-        let key = self.value(value)?;
-        self.source
-            .scalar_key(&key, self.limits, self.counters, self.location)
+        let (key, slot) = self.value_slot(value)?;
+        if let Some(slot) = slot
+            && let Some(scalar) =
+                self.imported
+                    .scalar(slot, self.limits, self.counters, self.location)?
+        {
+            return Ok(scalar);
+        }
+        let scalar = self
+            .source
+            .scalar_key(&key, self.limits, self.counters, self.location)?;
+        if let Some(slot) = slot {
+            self.imported.remember_scalar(
+                slot,
+                scalar,
+                &self.source,
+                self.limits,
+                self.counters,
+                self.location,
+            )?;
+        }
+        Ok(scalar)
     }
 
     /// Admit one explicit source root. Interned descendants do not enlarge this
     /// scope's domain; objective and projection scopes own separate selections.
     pub(super) fn value(&mut self, value: &Value) -> Result<TermKey, FormulaFailure> {
-        let key = self
-            .source
-            .import(value.into(), self.limits, self.counters, self.location)?;
+        self.value_slot(value).map(|(key, _)| key)
+    }
+
+    /// [`Self::value`] with the memo slot remembering it, if any.
+    fn value_slot(&mut self, value: &Value) -> Result<(TermKey, Option<usize>), FormulaFailure> {
+        let found = self
+            .imported
+            .find(value, self.limits, self.counters, self.location)?;
+        let (key, slot) = if let Some((key, slot)) = found {
+            (key, Some(slot))
+        } else {
+            let key =
+                self.source
+                    .import(value.into(), self.limits, self.counters, self.location)?;
+            let slot = self.imported.remember(
+                value,
+                &key,
+                &self.source,
+                self.limits,
+                self.counters,
+                self.location,
+            )?;
+            (key, slot)
+        };
         if self.domain.insert(
             &key,
             &self.source,
@@ -1844,7 +1895,7 @@ impl Compiler<'_> {
                 self.location,
             )?;
         }
-        Ok(key)
+        Ok((key, slot))
     }
 
     pub(super) fn empty_domain(&self) -> Result<domain::Domain, FormulaFailure> {

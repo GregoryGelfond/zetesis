@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(checked.pending, 0);
     let regions = outcome
         .countermodel_statistics()
-        .and_then(|statistics| statistics.region_filter)
+        .and_then(|statistics| statistics.constraint_refutation)
         .ok_or("missing source region receipt")?;
     // Source consequences prevent the forbidden combinations before splitting.
     assert_eq!(regions.refuted, 0);

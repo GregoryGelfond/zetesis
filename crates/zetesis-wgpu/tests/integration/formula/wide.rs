@@ -5,7 +5,7 @@ use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, FrozenReduct, Interpretation, Limits, Node, OperandSpan, Theory,
     Verdict, check,
 };
-use zetesis_wgpu::{FormulaVerdict, GateProjection};
+use zetesis_wgpu::{BinaryNodeKernel, FormulaVerdict};
 
 pub(crate) fn theories() -> Vec<Theory> {
     let mut theories = Vec::new();
@@ -89,8 +89,8 @@ fn native_groups_preserve_arbitrary_frozen_truth_and_completions() {
                         .unwrap()
                 );
             }
-            for projection in GateProjection::ALL {
-                match propagate_with(&theory, candidate, 32, projection) {
+            for node_kernel in BinaryNodeKernel::ALL {
+                match propagate_with(&theory, candidate, 32, node_kernel) {
                     FormulaVerdict::NotModel => assert!(!model(&theory, candidate, None)),
                     FormulaVerdict::NoProperSubset => {
                         assert!((0..8).all(|inner| inner == candidate

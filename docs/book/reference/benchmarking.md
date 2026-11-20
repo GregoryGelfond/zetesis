@@ -57,7 +57,7 @@ inputs.
 
 | `--suite` | Workloads |
 | --- | --- |
-| `corpus` (the default) | All 95 maintained cases: the 94-case correctness catalog and integrated Family Crossing |
+| `corpus` (the default) | All 117 maintained cases: the 94-case correctness catalog, integrated Family Crossing, 13 of the 14 [reconstructed Vaelii-shaped workloads](https://github.com/GregoryGelfond/zetesis/blob/main/examples/vaelii-reconstructed/README.md) and 9 [exact Vaelii test programs](https://github.com/GregoryGelfond/zetesis/blob/main/examples/vaelii-exact/README.md) |
 | `baseline` | SEND, queens variant 02 and task allocation |
 | `queens` | The six unchanged eight-queens encodings |
 | `series` | The maintained 22 generated, constant-amended and original workloads |
@@ -105,14 +105,20 @@ A best incumbent, cost alone or an interrupted enumeration cannot qualify it.
 The original catalog and its correctness-gate population remain 94 cases.
 Historical 94-case performance reports keep that population; do not combine
 them with a separately timed Family Crossing run to claim a new 95-case total.
-A current whole-corpus comparison runs all 95 cases under one recorded plan.
+Reports of the 95-case corpus likewise keep that population. A current
+whole-corpus comparison runs all 117 cases under one recorded plan.
+Vaelii programs that exceed the corpus child timeout or capture limit (the
+exact 90-vertex cover and 13-pigeon pigeonhole, and reconstructed `sg1k`)
+stay in the separately selected `examples/vaelii-slow/manifest.json`
+supplement, run with `--workloads` and the supplement's larger limits.
 Existing caller time, solver, capture and decoding limits still apply, so a
 refused Family Crossing slot remains a visible non-pass in that population.
 
 Library callers use `performance::command::run` for the composed suite, or
 `performance::corpus::workloads` to prepare it without launching processes.
 The low-level `matrix::run` still uses the historical catalog directly.
-`performance::Limits` defaults to 95 case slots; an explicit caller case
+`performance::Limits` defaults to 117 case slots and 8 MiB of retained corpus
+source (the source catalog's own default stays 4 MiB); an explicit caller case
 ceiling remains binding. The source catalog's independent default stays 94.
 
 ### Declared external bundles
@@ -246,6 +252,26 @@ timing and memory rounds.
 
 Each benchmark profile admits at most 256 threads. On a host reporting more,
 choose an explicit count within that bound.
+
+The thread count applies to eager support grounding as well as search:
+grounding runs on at most `--threads` threads, the coordinating thread plus a
+pool of one fewer. Before this was fixed, eager
+grounding always used a private pool of fourteen workers whatever the setting,
+so earlier one-thread grounding times were measured with fourteen grounding
+workers. Reproduce the published fourteen-worker comparisons with an explicit
+`--threads 14` rather than `auto`, which follows the host. Grounding work
+receipts do not depend on the thread count; only wall time does.
+
+`--threads N` is a hard cap on the whole process: at most N solver threads
+run at once, the main thread included. Search runs N-1 region walkers beside
+the coordinating main thread (the scalar walk below three threads), so a
+fourteen-thread run now walks with thirteen; earlier fourteen-worker search
+runs used fourteen walkers plus the main thread. The deadline starts no
+thread, and nothing uses Rayon's global pool: a zetesis-maintenance test
+audits the library source for threads started outside
+`zetesis_algebra::threads`. With `ZETESIS_THREAD_AUDIT=1` the command reports
+the peak on standard error. A GPU backend may add its
+device-discovery thread and the driver's threads.
 
 The advanced controls, listed by `zetesis-bench run --help` and omitted from
 `-h`, apply to every profile:

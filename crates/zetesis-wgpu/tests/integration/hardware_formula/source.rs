@@ -11,7 +11,7 @@ pub(super) fn qualify(original: &GpuFormulaOracle) {
         default.compiled_profile().kernel_options(),
         GpuKernelOptions::default()
     );
-    assert_eq!(default.projection(), GateProjection::default());
+    assert_eq!(default.node_kernel(), BinaryNodeKernel::default());
     for graph in frozen_theories() {
         compare(&mut default, &graph);
         assert_eq!(
@@ -34,7 +34,7 @@ pub(super) fn qualify(original: &GpuFormulaOracle) {
                 .same_instance(original.compiled_profile())
         );
         assert_eq!(configured.compiled_profile().kernel_options(), options);
-        assert_eq!(configured.projection(), GateProjection::default());
+        assert_eq!(configured.node_kernel(), BinaryNodeKernel::default());
         assert_eq!(
             configured.context().compute_timing(),
             context.compute_timing()

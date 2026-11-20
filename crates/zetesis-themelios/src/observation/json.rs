@@ -307,7 +307,7 @@ mod tests {
     use hashbrown::HashMap;
     use std::convert::Infallible;
     use std::hash::BuildHasherDefault;
-    use zetesis_core::catalog::interner::{AtomInterner, ClosedCatalog, Limits};
+    use zetesis_core::catalog::registry::{AtomRegistry, ClosedCatalog, Limits};
     use zetesis_core::{AtomCatalog, Model, Sign};
     use zetesis_test_support::programs::signed_numbered as atom;
 
@@ -349,7 +349,7 @@ mod tests {
     /// lazy closure publishes each answer of a worker's workspace.
     fn one_owner_selections(selections: &[&[usize]]) -> Vec<Model> {
         let limits = Limits::for_atoms(32, 1 << 20);
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         for number in [2, 1, 3] {
             owner
                 .entry_atom_with(&atom("p", Sign::Positive, &[number]), limits, || {
@@ -371,9 +371,9 @@ mod tests {
     }
 
     /// A live writer holding one atom, as a closure worker's workspace does.
-    fn writer(number: i32) -> AtomInterner {
+    fn writer(number: i32) -> AtomRegistry {
         let limits = Limits::for_atoms(32, 1 << 20);
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         owner
             .entry_atom_with(&atom("p", Sign::Positive, &[number]), limits, || {
                 Ok::<_, Infallible>(())
@@ -384,7 +384,7 @@ mod tests {
         owner
     }
 
-    fn selection(owner: &mut AtomInterner) -> Model {
+    fn selection(owner: &mut AtomRegistry) -> Model {
         let limits = Limits::for_atoms(32, 1 << 20);
         let catalog = owner
             .publish_selection_with(&[0], limits, || Ok::<_, Infallible>(()))
@@ -541,7 +541,7 @@ mod tests {
     /// writer's model selecting `q(0)`, as a base answer does.
     fn closed_base() -> (ClosedCatalog, Model) {
         let limits = Limits::for_atoms(32, 1 << 20);
-        let mut source = AtomInterner::new();
+        let mut source = AtomRegistry::new();
         for atom in
             (0..5)
                 .map(|n| atom("q", Sign::Positive, &[n]))
@@ -568,7 +568,7 @@ mod tests {
     /// own `p(n)`, a row the descendant appends.
     fn descendant_answer(base: &ClosedCatalog, model: &Model, n: i32) -> Model {
         let limits = Limits::for_atoms(32, 1 << 20);
-        let mut writer = AtomInterner::for_closed_catalog(base, usize::MAX).unwrap();
+        let mut writer = AtomRegistry::for_closed_catalog(base, usize::MAX).unwrap();
         writer
             .discover_model_with(base, model, limits, || Ok::<_, Infallible>(()))
             .unwrap();
