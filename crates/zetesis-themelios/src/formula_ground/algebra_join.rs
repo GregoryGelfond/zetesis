@@ -265,8 +265,8 @@ pub(crate) fn evaluate<'a>(
     }
     let mut account = |amount: u64| charge(counters, limits, location, amount);
     let mut terms = TermMap::for_support(support);
-    let recursive = recursive_atoms(rule, support, &plan.atoms);
-    let Some(projected) = semi_naive(&plan, &recursive, support, &mut terms, &mut account)? else {
+    let deltas = delta_atoms(rule, support, &plan.atoms);
+    let Some(projected) = semi_naive(&plan, &deltas, support, &mut terms, &mut account)? else {
         return Ok(None);
     };
     let Some(filtered) = apply_residuals(
@@ -292,14 +292,15 @@ pub(crate) struct JoinTables {
     width: usize,
     atoms: Vec<Vec<usize>>,
     raw: Vec<Vec<Vec<i32>>>,
-    recursive: Vec<usize>,
+    /// Body occurrences that take a semi-naive delta ([`delta_atoms`]).
+    deltas: Vec<usize>,
     old_rows: Vec<usize>,
 }
 
-/// One semi-naive part: the new-row suffix of one recursive atom occurrence.
+/// One semi-naive part: the new-row suffix of one delta atom occurrence.
 #[derive(Clone, Copy)]
 pub(crate) struct DeltaPart {
-    /// Index into the recursive-occurrence list, used to pin earlier
+    /// Index into the delta-occurrence list, used to pin earlier
     /// occurrences to the old prefix.
     pub index: usize,
     /// Index into the planned atom list / raw tables.
@@ -335,7 +336,7 @@ pub(crate) struct PreparedJoin<'a> {
 impl JoinTables {
     pub(crate) fn delta_parts(&self) -> Vec<DeltaPart> {
         let mut parts = Vec::new();
-        for (index, &atom) in self.recursive.iter().enumerate() {
+        for (index, &atom) in self.deltas.iter().enumerate() {
             let old = self.old_rows[atom];
             let count = self.raw[atom].first().map_or(0, Vec::len);
             if old >= count {
@@ -358,7 +359,7 @@ impl JoinTables {
         until: usize,
     ) -> Vec<(usize, Option<usize>)> {
         let mut bounds = vec![(0, None); self.atoms.len()];
-        for &previous in self.recursive.iter().take(part.index) {
+        for &previous in self.deltas.iter().take(part.index) {
             bounds[previous] = (0, Some(self.old_rows[previous]));
         }
         bounds[part.atom] = (from, Some(until));
@@ -426,12 +427,12 @@ pub(crate) fn prepare<'a>(
         raw.push(load_raw(support, atom.predicate, atom.arity, &mut terms)?);
         old_rows.push(support.old_rows(atom.predicate));
     }
-    let recursive = recursive_atoms(rule, support, &plan.atoms);
+    let deltas = delta_atoms(rule, support, &plan.atoms);
     let tables = JoinTables {
         width: plan.width,
         atoms: plan.atoms.iter().map(|atom| atom.slots.clone()).collect(),
         raw,
-        recursive,
+        deltas,
         old_rows,
     };
     Some(PreparedJoin {
@@ -658,17 +659,17 @@ fn join_atoms_prebuilt(
 
 fn semi_naive<'a>(
     plan: &Plan<'a>,
-    recursive: &[usize],
+    deltas: &[usize],
     support: &'a Support<'_>,
     terms: &mut TermMap<'a>,
     account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
 ) -> Result<Option<Bindings>, FormulaFailure> {
-    let mut bounds_list = delta_bounds(&plan.atoms, support, recursive);
+    let mut bounds_list = delta_bounds(&plan.atoms, support, deltas);
     if bounds_list.is_empty() {
         bounds_list.push(vec![(0, None); plan.atoms.len()]);
-        // No recursive delta and no full fallback: a rec-only visit with
-        // no new rows should emit nothing, not rejoin the snapshot.
-        if !recursive.is_empty() {
+        // No delta and no full fallback: a visit with no new rows in any
+        // body relation should emit nothing, not rejoin the snapshot.
+        if !deltas.is_empty() {
             return Ok(Some(Bindings::empty(plan.width)));
         }
     }
@@ -714,20 +715,40 @@ fn recursive_atoms(rule: &RuleIr, support: &Support<'_>, atoms: &[PlannedAtom<'_
         .collect()
 }
 
+/// Body occurrences semi-naive evaluation takes a delta of: every
+/// occurrence of the head predicate, and every other occurrence whose
+/// relation grew since the previous round. A derived partner (a lower
+/// component, or any rule's head under a positive-flat plan) can grow
+/// after the recursive rule's first visit; its new rows must still meet
+/// the recursive relation's old rows, or the fixpoint stops short.
+/// Partners that did not grow have no new rows, so they add no part.
+fn delta_atoms(rule: &RuleIr, support: &Support<'_>, atoms: &[PlannedAtom<'_>]) -> Vec<usize> {
+    let recursive = recursive_atoms(rule, support, atoms);
+    atoms
+        .iter()
+        .enumerate()
+        .filter(|&(index, atom)| {
+            recursive.contains(&index)
+                || support.old_rows(atom.predicate) < support.row_count(atom.predicate)
+        })
+        .map(|(index, _)| index)
+        .collect()
+}
+
 fn delta_bounds(
     atoms: &[PlannedAtom<'_>],
     support: &Support<'_>,
-    recursive: &[usize],
+    deltas: &[usize],
 ) -> Vec<Vec<(usize, Option<usize>)>> {
     let mut parts = Vec::new();
-    for (k, &index) in recursive.iter().enumerate() {
+    for (k, &index) in deltas.iter().enumerate() {
         let old = support.old_rows(atoms[index].predicate);
         let count = support.row_count(atoms[index].predicate);
         if old >= count {
             continue;
         }
         let mut bounds = vec![(0, None); atoms.len()];
-        for &previous in recursive.iter().take(k) {
+        for &previous in deltas.iter().take(k) {
             bounds[previous] = (0, Some(support.old_rows(atoms[previous].predicate)));
         }
         bounds[index] = (old, None);
