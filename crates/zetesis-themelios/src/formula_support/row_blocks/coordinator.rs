@@ -113,6 +113,23 @@ pub(crate) fn run<T: Send>(
     ) -> Result<T, FormulaFailure>
     + Sync,
 ) -> Result<Completed<T>, FormulaFailure> {
+    run_grouped(executor, width, TASKS, budget, context, kernel)
+}
+
+pub(crate) fn run_grouped<T: Send>(
+    executor: &Executor,
+    width: usize,
+    groups: usize,
+    budget: &mut Budget,
+    context: Context<'_, &Computation<'_, '_>>,
+    kernel: impl Fn(
+        Range<usize>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ) -> Result<T, FormulaFailure>
+    + Sync,
+) -> Result<Completed<T>, FormulaFailure> {
     let Context {
         computation,
         work:
@@ -123,7 +140,7 @@ pub(crate) fn run<T: Send>(
             },
     } = context;
     let mut completed = completed(computation, limits, counters, location)?;
-    let mut blocks = blocks(width, computation, limits, counters, location)?;
+    let mut blocks = blocks(width, groups, computation, limits, counters, location)?;
     for _ in blocks.iter() {
         completed
             .slots
@@ -137,7 +154,7 @@ pub(crate) fn run<T: Send>(
     let cancel = counters.cancellation().cloned();
     let scalar_cancel = budget.cancellation().cloned();
     let observed = counters.observed.enabled();
-    executor.run(blocks.slice(), completed.slots.slice_mut(), |block| {
+    let execute_block = |block: &Block| {
         execute(
             block,
             cancel.as_ref(),
@@ -146,7 +163,12 @@ pub(crate) fn run<T: Send>(
             location,
             &kernel,
         )
-    });
+    };
+    if groups > TASKS {
+        executor.run_prime(blocks.slice(), completed.slots.slice_mut(), execute_block);
+    } else {
+        executor.run(blocks.slice(), completed.slots.slice_mut(), execute_block);
+    }
     let repeated = partitioned_refusals(&completed);
     // Even an interrupted settlement visits all receipts; no completed task's
     // work or scalar traffic can disappear behind an earlier stop.
@@ -266,20 +288,20 @@ fn completed<T>(
 
 fn blocks(
     width: usize,
+    groups: usize,
     computation: &Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Buffer<Block>, FormulaFailure> {
+    let count = super::prime::group_count(width, groups);
     let mut blocks = Buffer::new(computation, limits, counters, location)?;
-    blocks.reserve(width.min(TASKS), computation, limits, counters, location)?;
-    let mut start = 0;
-    for index in 0..width.min(TASKS) {
-        let length = width / TASKS + usize::from(index < width % TASKS);
-        let end = start + length;
+    blocks.reserve(count, computation, limits, counters, location)?;
+    for index in 0..count {
+        let rows = super::prime::group_range(width, groups, index);
         blocks.push(
             Block {
-                rows: start..end,
+                rows,
                 formula: *limits,
                 expansion: ExpansionLimits::default(),
             },
@@ -288,9 +310,8 @@ fn blocks(
             counters,
             location,
         )?;
-        start = end;
     }
-    debug_assert_eq!(start, width);
+    debug_assert_eq!(super::prime::group_start(width, groups, count), width);
     Ok(blocks)
 }
 
@@ -483,6 +504,27 @@ pub(in crate::formula_support) fn derive<'source>(
         limits,
         counters,
     )?;
+    if plan.prime() {
+        let remaining = limits
+            .max_support_bytes
+            .saturating_sub(computation.query_support().live_bytes());
+        // Until residual replay records integer columns, reserve only packed
+        // occurrence coordinates. I16 is the default integer width when a
+        // later column is added with a fitting range.
+        if super::prime::admit_reservation(
+            plan.len(),
+            plan.pattern_count(),
+            plan.max_row_index(),
+            0,
+            0,
+            0,
+            remaining,
+        )
+        .is_none()
+        {
+            return Ok(false);
+        }
+    }
     let completed = stage_witnesses(
         executor,
         &plan,
@@ -524,9 +566,10 @@ pub(crate) fn stage_witnesses<'plan, 'source: 'plan>(
             error: zetesis_core::relation::Failure::Owner,
             location,
         })?;
-    run(
+    run_grouped(
         executor,
         plan.len(),
+        plan.groups(),
         budget,
         Context::new(computation, limits, counters, location),
         |block, limits, budget, counters| {

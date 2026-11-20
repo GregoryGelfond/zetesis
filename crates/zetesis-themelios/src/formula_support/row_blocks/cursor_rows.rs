@@ -34,6 +34,9 @@ pub(crate) struct Descriptor<'plan, 'source> {
     pub(super) plan: &'plan order::Plan<'plan>,
     pub(super) relations: &'source relations::Relations<'source>,
     pub(super) rows: &'plan [usize],
+    /// True when this stream was admitted by A′ (`BodyKind::Prime`) and should
+    /// use [`super::prime::PRIME_GROUPS`] rather than `TASKS`.
+    pub(super) prime: bool,
 }
 
 impl Descriptor<'_, '_> {
@@ -44,6 +47,16 @@ impl Descriptor<'_, '_> {
     pub(super) fn location(self) -> ProgramSite {
         self.rule.location
     }
+
+    /// Existing positive-flat streams keep `TASKS` groups. A′ streams use the
+    /// data-defined `PRIME_GROUPS` cap. Either count is independent of `--threads`.
+    pub(super) fn groups(self) -> usize {
+        if self.prime {
+            super::prime::PRIME_GROUPS
+        } else {
+            crate::formula_support::parallel_executor::TASKS
+        }
+    }
 }
 
 /// The original cursor owns the plan and any prepared probe. This owner retains
@@ -53,6 +66,7 @@ pub(crate) struct CursorRows<'cursor, 'source> {
     plan: &'cursor order::Plan<'cursor>,
     relations: &'source relations::Relations<'source>,
     rows: Buffer<usize>,
+    prime: bool,
     _lease: StorageLease,
 }
 
@@ -91,6 +105,7 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
         if !std::ptr::eq(cursor.support, computation.query_support()) {
             return Err(owner(rule.location));
         }
+        let mut prime = false;
         if kind != Kind::Support {
             // Only this complete read-only body certificate makes the retained
             // family owner unreachable from worker traversal. It stays on the
@@ -112,16 +127,23 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
             {
                 return Ok(None);
             }
-        } else if !initial(cursor, Coverage::Selected, limits, counters, rule.location)?
-            || !checked_rule(
-                rule,
-                computation,
-                limits,
-                counters,
-                support_body(computation),
-            )?
-        {
+        } else if !initial(cursor, Coverage::Selected, limits, counters, rule.location)? {
             return Ok(None);
+        } else if !checked_rule(
+            rule,
+            computation,
+            limits,
+            counters,
+            support_body(computation),
+        )? {
+            // The existing positive-atom / producer-leaf path declined. Try A′
+            // admission so comparison, default-negation and integer-bind bodies
+            // can take the parallel path without changing already-admitted
+            // rules.
+            if !checked_rule(rule, computation, limits, counters, BodyKind::Prime)? {
+                return Ok(None);
+            }
+            prime = true;
         }
         // A scan followed only by fully bound tests remains in the ordinary
         // witnessed consumer. This source-shape decision precedes row-copy or
@@ -152,6 +174,7 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
             plan: &cursor.plan,
             relations: cursor.support.relations(),
             rows,
+            prime,
             _lease: lease,
         }))
     }
@@ -162,6 +185,7 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
             plan: self.plan,
             relations: self.relations,
             rows: self.rows.slice(),
+            prime: self.prime,
         }
     }
 }

@@ -15,6 +15,7 @@ mod tests;
 pub(crate) mod witness_rows;
 pub(crate) use objective_rows::try_numeric as parallel_numeric_rows;
 pub(crate) mod coordinator;
+pub(crate) mod prime;
 
 #[cfg(test)]
 use std::ops::Range;
@@ -68,6 +69,10 @@ fn checked_eligible(
 enum BodyKind {
     PositiveAtoms,
     ProducerLeaves,
+    /// Widened A′ admission: worker-pure comparisons, default negation,
+    /// structural patterns, and integer binds. Residuals are not yet admitted
+    /// (owner replay is wired separately).
+    Prime,
 }
 
 fn checked_rule(
@@ -138,6 +143,9 @@ fn checked_body_kind(
     location: ProgramSite,
     kind: BodyKind,
 ) -> Result<bool, FormulaFailure> {
+    if kind == BodyKind::Prime {
+        return checked_prime_body(body, variables, computation, limits, counters, location);
+    }
     for literal in body {
         counters.work(limits, location)?;
         match literal {
@@ -165,6 +173,40 @@ fn checked_body_kind(
         // Only source patterns are authenticated by this existing second pass.
         if let LiteralIr::Atom(_, pattern) = literal
             && !checked_pattern(*pattern, variables, computation, limits, counters, location)?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn checked_prime_body(
+    body: &[LiteralIr],
+    variables: usize,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    let Some(class) =
+        prime::classify_body(body, variables, computation, limits, counters, location)?
+    else {
+        return Ok(false);
+    };
+    // Residual replay is not yet on this path. A body with only worker-pure
+    // literals is admitted; anything else stays serial.
+    if class.residual != 0 {
+        return Ok(false);
+    }
+    for literal in body {
+        counters.work(limits, location)?;
+        let pattern = match literal {
+            LiteralIr::Atom(_, pattern) => Some(*pattern),
+            LiteralIr::PatternAtom(pattern) => Some(pattern.atom),
+            _ => None,
+        };
+        if let Some(pattern) = pattern
+            && !checked_pattern(pattern, variables, computation, limits, counters, location)?
         {
             return Ok(false);
         }
@@ -273,6 +315,7 @@ impl<'plan, 'source> RowPlan<'plan, 'source> {
             plan: &self.plan,
             relations: self.relations,
             rows: self.rows.slice(),
+            prime: false,
         }
     }
 

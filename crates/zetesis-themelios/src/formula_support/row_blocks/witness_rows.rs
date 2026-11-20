@@ -147,6 +147,22 @@ impl<'plan, 'source: 'plan> WitnessPlan<'plan, 'source> {
     pub(crate) fn location(&self) -> ProgramSite {
         self.base.location()
     }
+
+    pub(crate) fn groups(&self) -> usize {
+        self.base.groups()
+    }
+
+    pub(crate) fn prime(&self) -> bool {
+        self.base.prime
+    }
+
+    pub(crate) fn pattern_count(&self) -> usize {
+        self.base.plan.patterns.len()
+    }
+
+    pub(crate) fn max_row_index(&self) -> usize {
+        self.base.rows.iter().copied().max().unwrap_or(0)
+    }
 }
 
 /// A coordinate copied only from an actually matched source row. The local

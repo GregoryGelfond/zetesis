@@ -17,6 +17,9 @@ use zetesis_algebra::threads;
 /// Logical task geometry is independent of the matched physical worker count.
 pub(super) const TASKS: usize = 14;
 
+/// A′ data-defined groups: four times `TASKS`, also independent of `--threads`.
+pub(super) const PRIME_GROUPS: usize = 4 * TASKS;
+
 pub(crate) struct Executor {
     /// `None`: one requested thread; the caller runs every task in slot
     /// order with the same task geometry and receipts, spawning no thread.
@@ -213,7 +216,27 @@ impl Executor {
         R: Send,
         F: Fn(&T) -> R + Sync,
     {
-        assert!(tasks.len() <= TASKS);
+        self.run_at_most(TASKS, tasks, slots, run);
+    }
+
+    /// The A′ path may submit up to [`PRIME_GROUPS`] tasks. The existing
+    /// positive-flat path keeps [`run`] and its `TASKS` cap.
+    pub(super) fn run_prime<T, R, F>(&self, tasks: &[T], slots: &mut [Option<R>], run: F)
+    where
+        T: Sync,
+        R: Send,
+        F: Fn(&T) -> R + Sync,
+    {
+        self.run_at_most(PRIME_GROUPS, tasks, slots, run);
+    }
+
+    fn run_at_most<T, R, F>(&self, cap: usize, tasks: &[T], slots: &mut [Option<R>], run: F)
+    where
+        T: Sync,
+        R: Send,
+        F: Fn(&T) -> R + Sync,
+    {
+        assert!(tasks.len() <= cap);
         assert_eq!(tasks.len(), slots.len());
         assert!(slots.iter().all(Option::is_none));
         let (Some((first, tasks)), Some((first_slot, slots))) =
