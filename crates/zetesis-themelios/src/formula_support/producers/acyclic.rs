@@ -1,20 +1,27 @@
 //! One authenticated dependency order for the complete signed normal source.
 //!
 //! Unlike positive support scheduling, every body predicate must have a
-//! strictly smaller component rank, except inside a definite-closed
+//! strictly smaller component rank, except inside a certain
 //! component. No producer or negative edge is omitted.
 //!
-//! A component is definite-closed when none of its rules, and none of the
-//! rules of any component it depends on, contains a default-negated literal.
-//! Such a component may be recursive: its predicates' rules form a definite
-//! program whose unique answer set is its least model (its reduct is itself),
-//! and completed possible support is exactly that least fixed point, because
-//! no negative literal or optional head can widen it. Recursion through a
-//! component that is not definite-closed declines the class.
+//! A component is *certain* when each default-negated atom its rules read
+//! lies in a strictly lower certain component, and each atom they read
+//! positively lies in it or in a lower certain component. Its predicates are
+//! then certain in the sense of support completion (`super::certain`): their
+//! rules are definite once the decided negations over completed lower
+//! components are read, so completed possible support restricted to them is
+//! their least model, which holds in every answer set. Such a component may be
+//! recursive. Recursion through a component that is not certain declines the
+//! class.
+//!
+//! A recursive certain component, or one whose rules negate nothing, is
+//! *saturated*: evaluation publishes its completed support directly. A
+//! non-recursive certain component that negates is still folded once against
+//! the completed lower activity, as an acyclic component is.
 
 use super::{Memory, Node, find, graph_nodes, invalid};
 use crate::formula_facts::Item;
-use crate::formula_ir::{HeadIr, LiteralIr, Prepared};
+use crate::formula_ir::{AggregateIr, HeadIr, LiteralIr, Prepared};
 use crate::formula_support::components::Pattern;
 use crate::formula_support::{Counters, SourceScope, StorageLease, SupportCatalog};
 use crate::{AnalysisBasis, FormulaFailure, FormulaLimits, ProgramSite};
@@ -27,8 +34,8 @@ pub(crate) struct AcyclicPlan {
     // Component rank followed by item position: a rule's, or a fact block's
     // where its fact rules stood. Constraints sort last.
     items: Vec<(usize, usize)>,
-    // By component rank: whether the component is definite-closed.
-    closed: Vec<bool>,
+    // By component rank: how the component is closed.
+    closed: Vec<Closure>,
     _lease: StorageLease,
 }
 
@@ -62,7 +69,7 @@ impl AcyclicPlan {
         // definite closure below), then a rule reading its own component.
         let mut closed = Vec::new();
         memory.reserve(&mut closed, components_count)?;
-        closed.resize(components_count, true);
+        closed.resize(components_count, Closure::Saturated);
         let mut recursive = Vec::new();
         memory.reserve(&mut recursive, components_count)?;
         recursive.resize(components_count, false);
@@ -94,13 +101,19 @@ impl AcyclicPlan {
             };
             for literal in &rule.body {
                 counters.work(limits, rule.location)?;
+                // An assignment is evaluated from completed support only.
+                if matches!(literal, LiteralIr::Aggregate(_))
+                    && let Some(flag) = recursive.get_mut(rank)
+                {
+                    *flag = true;
+                }
                 let LiteralIr::Atom(negation, atom) = literal else {
                     continue;
                 };
                 if *negation != DefaultNegation::None
                     && let Some(flag) = closed.get_mut(rank)
                 {
-                    *flag = false;
+                    *flag = Closure::Certain;
                 }
                 let dependency = ranks.atom(*atom, limits, counters, rule.location)?;
                 if dependency > rank {
@@ -120,11 +133,15 @@ impl AcyclicPlan {
             |left, right, _| Ok(left.cmp(right)),
         )?;
         close(&mut closed, &items, source, &ranks, limits, counters)?;
-        // Recursion through a component that is not closed declines the class.
-        for (&recursive, &closed) in recursive.iter().zip(&closed) {
+        // Recursion through a component that is not certain declines the
+        // class; a recursive certain component is saturated.
+        for (&recursive, closed) in recursive.iter().zip(&mut closed) {
             counters.work(limits, location)?;
-            if recursive && !closed {
-                return Ok(None);
+            if recursive {
+                if *closed == Closure::Open {
+                    return Ok(None);
+                }
+                *closed = Closure::Saturated;
             }
         }
         memory.release(size_of::<bool>() * recursive.capacity());
@@ -150,10 +167,11 @@ impl AcyclicPlan {
         &self.items
     }
 
-    /// Whether the component of `rank` is definite-closed. Constraints have
-    /// no component and are never closed.
+    /// Whether the component of `rank` is saturated: certain, and recursive
+    /// or free of default negation. Constraints have no component and are
+    /// never saturated.
     pub(crate) fn closed(&self, rank: usize) -> bool {
-        self.closed.get(rank).copied().unwrap_or(false)
+        self.closed.get(rank) == Some(&Closure::Saturated)
     }
 }
 
@@ -205,11 +223,23 @@ impl<'plan> Ranks<'plan, '_> {
     }
 }
 
-/// Fold definite closure over the rank-sorted items: a component stays closed
-/// when it has no default-negated literal and every strictly lower component
-/// its rules read is closed. Lower ranks are final before a rank reads them.
+/// How a component is closed under what it reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Closure {
+    /// Not certain.
+    Open,
+    /// Certain, with a default negation over a lower certain component.
+    Certain,
+    /// Certain, and evaluated from completed support.
+    Saturated,
+}
+
+/// Fold certainty over the rank-sorted items: a component stays certain when
+/// each atom its rules negate lies in a strictly lower certain component and
+/// each lower component they read positively is certain. Lower ranks are final
+/// before a rank reads them.
 fn close(
-    closed: &mut [bool],
+    closed: &mut [Closure],
     items: &[(usize, usize)],
     source: &Prepared,
     ranks: &Ranks<'_, '_>,
@@ -221,22 +251,68 @@ fn close(
             continue;
         };
         counters.work(limits, rule.location)?;
-        if !closed.get(rank).copied().unwrap_or(false) {
+        if closed
+            .get(rank)
+            .is_none_or(|closure| *closure == Closure::Open)
+        {
             continue;
         }
         for literal in &rule.body {
             counters.work(limits, rule.location)?;
-            let LiteralIr::Atom(_, atom) = literal else {
-                continue;
+            let certain = match literal {
+                LiteralIr::Atom(negation, atom) => {
+                    let dependency = ranks.atom(*atom, limits, counters, rule.location)?;
+                    let lower = dependency < rank && closed[dependency] != Closure::Open;
+                    (*negation == DefaultNegation::None && dependency == rank) || lower
+                }
+                LiteralIr::Aggregate(aggregate) => elements_certain(
+                    aggregate,
+                    rank,
+                    closed,
+                    ranks,
+                    limits,
+                    counters,
+                    rule.location,
+                )?,
+                _ => true,
             };
-            let dependency = ranks.atom(*atom, limits, counters, rule.location)?;
-            if dependency < rank && !closed[dependency] {
-                closed[rank] = false;
+            if !certain {
+                closed[rank] = Closure::Open;
                 break;
             }
         }
     }
     Ok(())
+}
+
+/// Whether every element of an assignment reads only positive atoms of
+/// strictly lower certain components and literals its local join decides,
+/// so that each of its tuples is required over completed support.
+fn elements_certain(
+    aggregate: &AggregateIr,
+    rank: usize,
+    closed: &[Closure],
+    ranks: &Ranks<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    for element in &aggregate.elements {
+        for literal in &element.condition {
+            counters.work(limits, location)?;
+            match literal {
+                LiteralIr::Atom(DefaultNegation::None, atom) => {
+                    let dependency = ranks.atom(*atom, limits, counters, location)?;
+                    if dependency >= rank || closed[dependency] == Closure::Open {
+                        return Ok(false);
+                    }
+                }
+                LiteralIr::Compare(..) => {}
+                _ => return Ok(false),
+            }
+        }
+    }
+    Ok(true)
 }
 
 fn eligible(
@@ -254,8 +330,8 @@ fn eligible(
     {
         return Ok(false);
     }
-    // Recursion is admitted only through definite-closed components, which
-    // the plan establishes; negative and aggregate cycles decline early.
+    // Recursion is admitted only through certain components, which the plan
+    // establishes; negative and aggregate cycles decline early.
     for component in source.analysis.dependencies().components() {
         counters.work(limits, location)?;
         if component.has_negative_cycle() || component.has_aggregate_cycle() {
@@ -265,19 +341,28 @@ fn eligible(
     // A fact block is a normal producer with an empty body: always in class.
     for rule in source.rules_without_facts() {
         counters.work(limits, rule.location)?;
+        // An assignment aggregate binds its target outside the body's own
+        // variables; any other binding plan keeps the ordinary door.
+        let assigns = rule.body.iter().any(|literal| {
+            matches!(literal, LiteralIr::Aggregate(aggregate)
+                if aggregate.binding.is_some() && aggregate.negation == DefaultNegation::None)
+        });
         if !matches!(rule.head, HeadIr::Normal(_))
-            || rule.bindings.is_some()
-            || rule.body_variables != rule.variables
+            || (!assigns && (rule.bindings.is_some() || rule.body_variables != rule.variables))
         {
             return Ok(false);
         }
         for literal in &rule.body {
             counters.work(limits, rule.location)?;
-            if !matches!(
-                literal,
+            let admitted = match literal {
                 LiteralIr::Atom(DefaultNegation::None | DefaultNegation::Not, _)
-                    | LiteralIr::Compare(..)
-            ) {
+                | LiteralIr::Compare(..) => true,
+                LiteralIr::Aggregate(aggregate) => {
+                    aggregate.binding.is_some() && aggregate.negation == DefaultNegation::None
+                }
+                _ => false,
+            };
+            if !admitted {
                 return Ok(false);
             }
         }

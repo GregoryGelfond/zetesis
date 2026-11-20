@@ -1,16 +1,17 @@
 //! Exact consequence scan under a complete signed stratified source
-//! certificate: acyclic, or recursive only through definite-closed components.
+//! certificate: recursive only through certain components.
 //! The activity cells and canonical source identities are the same ones used
 //! by source eligibility; only this stronger certificate permits exact output.
 
 use super::{Activity, Context, SourceEligibility};
 use crate::formula_facts::{FactBlock, Item};
-use crate::formula_ir::HeadIr;
+use crate::formula_ir::{HeadIr, LiteralIr};
 use crate::formula_support::{
     AcyclicPlan, Join, SourceAtom, SourceBatch, SourceSelection, StorageLease,
 };
 use crate::grounding_observer::Profile;
 use crate::{FormulaFailure, FormulaResource, GroundingPhase};
+use themelios_program::program::DefaultNegation;
 
 pub(crate) struct Exact {
     pub(crate) atoms: SourceSelection,
@@ -69,7 +70,7 @@ pub(crate) fn evaluate_acyclic(
     let mut result = SourceEligibility::new(context)?;
     result.exact = true;
     let mut consistent = true;
-    // Heads of the current definite-closed rank, published together when the
+    // Heads of the current saturated rank, published together when the
     // rank ends: no rule of a closed rank reads activity, and every later
     // rank starts after the publication.
     let mut closed: Option<(usize, SourceBatch)> = None;
@@ -123,7 +124,7 @@ pub(crate) fn evaluate_acyclic(
 }
 
 impl SourceEligibility {
-    /// Publish the heads of one completed definite-closed rank `Required`.
+    /// Publish the heads of one completed saturated rank `Required`.
     /// Already selected atoms are raised in place; new atoms take the next
     /// local coordinates, so the activity table grows by exactly that range.
     /// A refusal aborts the whole exact evaluation.
@@ -208,12 +209,15 @@ impl SourceEligibility {
     /// support and is not named here. The join has read the row's head
     /// arguments by then, so a fatal failure among them still refuses.
     ///
-    /// In a definite-closed component (`closed` holds its pending heads),
-    /// every passing row's body is `Required` without a fold: the join offers
-    /// only completed-support rows, and completed support restricted to
-    /// definite-closed predicates is their least model. This is what lets such
-    /// a component be recursive: a fold would read same-component atoms before
-    /// their producers are staged. Its heads are published with the rank.
+    /// In a saturated component (`closed` holds its pending heads), every
+    /// passing row whose decided negations hold has a `Required` body without
+    /// a fold: the join offers only completed-support rows, and completed
+    /// support restricted to certain predicates is their least model. This is
+    /// what lets such a component be recursive: a fold would read
+    /// same-component atoms before their producers are staged. Its heads are
+    /// published with the rank. Support completion must have decided every
+    /// default negation of such a rule; otherwise the plan and the support
+    /// disagree and the evaluation refuses rather than publish.
     fn rule_exact(
         &mut self,
         (index, rule): (usize, &crate::formula_ir::RuleIr),
@@ -222,6 +226,9 @@ impl SourceEligibility {
         context: &mut Context<'_, '_, '_>,
     ) -> Result<bool, FormulaFailure> {
         let mut consistent = true;
+        if closed.is_some() {
+            saturation_agrees(index, rule, support, context)?;
+        }
         let mut join = Join::rule(
             rule,
             support,
@@ -356,6 +363,49 @@ impl SourceEligibility {
             selected,
             consistent,
             lease,
+        })
+    }
+}
+
+/// Refuse a saturated rule whose default negations support completion did not
+/// all decide, or whose assignment elements it did not all require: the plan
+/// and the support would then disagree about the rule's certainty.
+fn saturation_agrees(
+    index: usize,
+    rule: &crate::formula_ir::RuleIr,
+    support: &crate::formula_support::Support<'_>,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<(), FormulaFailure> {
+    let mut negated = 0_usize;
+    let mut required = true;
+    for literal in &rule.body {
+        match literal {
+            LiteralIr::Atom(negation, _) if *negation != DefaultNegation::None => negated += 1,
+            LiteralIr::Aggregate(aggregate) => {
+                for (position, element) in aggregate.elements.iter().enumerate() {
+                    context.work()?;
+                    required &= crate::formula_support::certain::Certainty::requires(
+                        support.certainty(),
+                        aggregate.id,
+                        position,
+                        element,
+                    );
+                }
+            }
+            _ => {}
+        }
+        context.work()?;
+    }
+    let decided = negated == 0
+        || support
+            .certainty()
+            .is_some_and(|certainty| certainty.decided(index).count() == negated);
+    if decided && required {
+        Ok(())
+    } else {
+        Err(FormulaFailure::SupportRelation {
+            error: zetesis_core::relation::Failure::Owner,
+            location: rule.location,
         })
     }
 }
