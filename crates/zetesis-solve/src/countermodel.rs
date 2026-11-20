@@ -132,7 +132,28 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_stable::Limits {
         max_verification_work: options.max_work,
         // Learned rows are candidate-narrowing state: their tiers grow with
         // the same candidate memory allowance.
-        learning: zetesis_ferraris::LearningLimits::for_allowance(options.max_candidate_bytes),
+        learning: {
+            if options.learning {
+                let mut limits =
+                    zetesis_ferraris::LearningLimits::for_allowance(options.max_candidate_bytes);
+                limits.conflict_core = options.conflict_core;
+                if !options.scale_learning_attempts.is_enabled() {
+                    let defaults = zetesis_ferraris::LearningLimits::DEFAULT;
+                    limits.founded_attempts = defaults.founded_attempts;
+                    limits.conflict_attempts = defaults.conflict_attempts;
+                    limits.bound_attempts = defaults.bound_attempts;
+                }
+                if !options.conflict_learning.is_enabled() {
+                    limits.conflict_attempts = 0;
+                }
+                if !options.bound_learning.is_enabled() {
+                    limits.bound_attempts = 0;
+                }
+                limits
+            } else {
+                zetesis_ferraris::LearningLimits::disabled()
+            }
+        },
     }
 }
 

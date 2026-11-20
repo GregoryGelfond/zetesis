@@ -2,7 +2,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision};
+use crate::{Backend, GpuBatching, Grounder, LearningSwitch, Oracle, QueryDivision};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// formula search and objective work are cumulative; verification work is per
@@ -147,6 +147,23 @@ pub struct SolveConfig {
     /// the default. Off, each walk keeps its rows to itself. A measurement
     /// switch with no command-line flag: answer sets are the same either way.
     pub share_learned_rows: bool,
+    /// When false, no source captures or shares learned rows. Deleting every
+    /// learned row is the same policy: answers stay the same and only pruning
+    /// is lost.
+    pub learning: bool,
+    /// How a refuted region's decided literals are reduced to a core.
+    pub conflict_core: zetesis_ferraris::ConflictCore,
+    /// When [`LearningSwitch::Disabled`], the conflict source does not capture.
+    /// Measurement use.
+    pub conflict_learning: LearningSwitch,
+    /// When [`LearningSwitch::Disabled`], the bound source does not capture.
+    /// Measurement use.
+    pub bound_learning: LearningSwitch,
+    /// When [`LearningSwitch::Disabled`], attempt caps stay at
+    /// [`zetesis_ferraris::LearningLimits::DEFAULT`] even if the candidate-memory
+    /// allowance would raise them. Tier and store row caps still follow the
+    /// allowance, as they did before Stage C.
+    pub scale_learning_attempts: LearningSwitch,
 }
 
 impl SolveConfig {

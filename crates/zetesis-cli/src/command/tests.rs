@@ -8,8 +8,9 @@
 //! requirement, action, value count, value names, delimiters, parsed type,
 //! possible values, defaults and conflicts, with its help text. Clap's
 //! requirements between arguments, overrides, missing-value and conditional
-//! defaults and environment fallbacks are not rendered; the CLI uses none of
-//! them.
+//! defaults and environment fallbacks are not rendered. The hidden measurement
+//! disable flags use a missing-value default so a present flag turns the
+//! named policy off; the CLI uses none of the other unrendered features.
 
 use super::command;
 use clap::{Arg, Command};
@@ -199,6 +200,14 @@ fn parsed_type(argument: &Arg) -> &'static str {
         (
             TypeId::of::<zetesis_themelios::JoinStrategy>(),
             "JoinStrategy",
+        ),
+        (
+            TypeId::of::<zetesis_ferraris::ConflictCore>(),
+            "ConflictCore",
+        ),
+        (
+            TypeId::of::<crate::options::HiddenDisable>(),
+            "HiddenDisable",
         ),
     ]
     .into_iter()

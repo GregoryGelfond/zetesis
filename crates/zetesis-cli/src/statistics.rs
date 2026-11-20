@@ -562,6 +562,24 @@ fn candidate_regions(
         explanations.work,
         explanations.peak_bytes,
     )?;
+    let conflict = &counts.conflict_explanations;
+    writeln!(
+        sink,
+        "  conflict explanations: attempts={}; certified={}; declined={}; shrunk={}",
+        conflict.attempts, conflict.certified, conflict.declined, conflict.shrunk,
+    )?;
+    let bound = &counts.bound_explanations;
+    writeln!(
+        sink,
+        "  bound explanations: attempts={}; certified={}; declined={}; shrunk={}",
+        bound.attempts, bound.certified, bound.declined, bound.shrunk,
+    )?;
+    let occupancy = &counts.learning_occupancy;
+    writeln!(
+        sink,
+        "  learning occupancy: theory rows={}; bound rows={}; evicted={}; peak worker bytes={}",
+        occupancy.theory_rows, occupancy.bound_rows, occupancy.evicted, occupancy.peak_bytes,
+    )?;
     Ok(())
 }
 

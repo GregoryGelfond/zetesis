@@ -104,6 +104,7 @@ fn arithmetic_progress_does_not_start_a_source_allowance() {
         original: OriginalSubject::new(&theory, None),
         narrower: &narrower,
         arithmetic: Some(&prepared),
+        bound_learning: None,
     };
     let (trace, filter) = source(&theory, None);
     let mut worker = None;
@@ -147,6 +148,7 @@ fn later_arithmetic_progress_does_not_renew_the_source_allowance() {
         original: OriginalSubject::new(&theory, None),
         narrower: &narrower,
         arithmetic: Some(&prepared),
+        bound_learning: None,
     };
     let (trace, filter) = source(&theory, Some(0));
     let mut worker = None;
@@ -183,6 +185,7 @@ fn a_native_source_starts_even_when_global_progress_has_continued() {
         original: OriginalSubject::new(theory, None),
         narrower: &narrower,
         arithmetic: None,
+        bound_learning: None,
     };
     let source = Arc::new(StreamedConstraints::new(
         owner.core().clone(),
@@ -231,6 +234,7 @@ fn cancellation_before_source_entry_keeps_its_original_failure_boundary() {
         original: OriginalSubject::new(&theory, None),
         narrower: &narrower,
         arithmetic: None,
+        bound_learning: None,
     };
     let (trace, filter) = source(&theory, Some(0));
     let mut worker = None;

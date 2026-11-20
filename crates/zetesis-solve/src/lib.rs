@@ -125,7 +125,7 @@ pub use hybrid_session::HybridExecutionStatistics;
 pub use model_construction::{ModelConstructionStatistics, ModelConstructionStop};
 pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
-pub use policy::{GpuBatching, Grounder, OptimumSearch, Oracle};
+pub use policy::{GpuBatching, Grounder, LearningSwitch, OptimumSearch, Oracle};
 pub use projective::{ProjectiveError, ProjectiveLimits, ProjectiveResource, ProjectiveStatistics};
 pub use residual_handovers::sampling::{
     ResidualQuantiles, ResidualRunSamples, ResidualSampleGroup, ResidualSampleMetric,

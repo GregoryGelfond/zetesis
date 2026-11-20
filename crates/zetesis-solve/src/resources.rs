@@ -128,6 +128,11 @@ impl Resources {
             // every slot, and admits itself only when the batch size still fits.
             max_tight_batch_bytes: self.bytes(16) as u64,
             share_learned_rows: true,
+            learning: true,
+            conflict_core: zetesis_ferraris::ConflictCore::Full,
+            conflict_learning: crate::LearningSwitch::Enabled,
+            bound_learning: crate::LearningSwitch::Enabled,
+            scale_learning_attempts: crate::LearningSwitch::Enabled,
         }
     }
 

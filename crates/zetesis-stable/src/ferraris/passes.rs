@@ -253,6 +253,33 @@ fn counts(earlier: &RegionCounts, later: RegionCounts) -> RegionCounts {
             work: e.work.saturating_add(l.work),
             peak_bytes: e.peak_bytes.max(l.peak_bytes),
         },
+        conflict_explanations: {
+            let (a, b) = (earlier.conflict_explanations, later.conflict_explanations);
+            let mut stats = a;
+            stats.attempts = a.attempts.saturating_add(b.attempts);
+            stats.certified = a.certified.saturating_add(b.certified);
+            stats.declined = a.declined.saturating_add(b.declined);
+            stats.shrunk = a.shrunk.saturating_add(b.shrunk);
+            stats
+        },
+        bound_explanations: {
+            let (a, b) = (earlier.bound_explanations, later.bound_explanations);
+            let mut stats = a;
+            stats.attempts = a.attempts.saturating_add(b.attempts);
+            stats.certified = a.certified.saturating_add(b.certified);
+            stats.declined = a.declined.saturating_add(b.declined);
+            stats.shrunk = a.shrunk.saturating_add(b.shrunk);
+            stats
+        },
+        learning_occupancy: {
+            let (a, b) = (earlier.learning_occupancy, later.learning_occupancy);
+            let mut occupancy = a;
+            occupancy.theory_rows = a.theory_rows.max(b.theory_rows);
+            occupancy.bound_rows = a.bound_rows.max(b.bound_rows);
+            occupancy.evicted = a.evicted.saturating_add(b.evicted);
+            occupancy.peak_bytes = a.peak_bytes.max(b.peak_bytes);
+            occupancy
+        },
     }
 }
 
