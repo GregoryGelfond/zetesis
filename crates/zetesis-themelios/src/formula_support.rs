@@ -1114,7 +1114,7 @@ fn derive_variants_with_executor<'source>(
     // they must not suppress Bind when the compiler admits the body. The
     // compiler still declines free cross-product atoms, constraints, and
     // incomplete or recursive domains.
-    if derive_algebra_variants(
+    if derive_columnar_variants(
         rule,
         variants,
         support,
@@ -1211,6 +1211,96 @@ fn derive_variants_with_executor<'source>(
         }
     }
     Ok(())
+}
+
+
+
+fn derive_columnar_variants<'source>(
+    rule: &'source crate::formula_ir::RuleIr,
+    variants: &mut delta::Variants<'_, '_>,
+    support: &Support<'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    if derive_algebra_variants(rule, variants, support, computation, limits, budget, counters)? {
+        return Ok(true);
+    }
+    derive_algebra_join_variants(rule, variants, support, computation, limits, budget, counters)
+}
+
+/// Derive heads with the columnar binary Join, consuming every variant of
+/// this visit after a single snapshot enumeration, matching the Bind hook.
+fn derive_algebra_join_variants<'source>(
+    rule: &'source crate::formula_ir::RuleIr,
+    variants: &mut delta::Variants<'_, '_>,
+    support: &Support<'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    let HeadIr::Normal(Some(head)) = &rule.head else {
+        return Ok(false);
+    };
+    if !crate::formula_ground::algebra_join::body_repeats_head(rule, support) {
+        return Ok(false);
+    }
+    let Some(evaluated) = crate::formula_ground::algebra_join::evaluate(
+        rule,
+        support,
+        limits,
+        counters,
+        rule.location,
+    )?
+    else {
+        return Ok(false);
+    };
+    let mut next = variants.next(limits, counters)?;
+    let mut derivation = Derivation {
+        normal_head: None,
+        computation,
+        limits,
+        budget,
+        counters,
+    };
+    let mut enumerated = false;
+    while next.is_some() {
+        if !enumerated {
+            let mut assignment = Binding::new(
+                derivation.computation,
+                limits,
+                derivation.counters,
+                rule.location,
+            )?;
+            assignment.extend_scope(
+                rule.variables,
+                derivation.computation,
+                limits,
+                derivation.counters,
+                rule.location,
+            )?;
+            let mut buffer = vec![0i32; evaluated.bindings.width()];
+            for row in evaluated.bindings.row_range() {
+                evaluated.bind_row(
+                    (
+                        derivation.computation,
+                        limits,
+                        derivation.counters,
+                        rule.location,
+                    ),
+                    &mut assignment,
+                    row,
+                    &mut buffer,
+                )?;
+                derivation.normal_head(*head, &assignment, rule.location)?;
+            }
+            enumerated = true;
+        }
+        next = variants.next(limits, derivation.counters)?;
+    }
+    Ok(true)
 }
 
 /// Derive a range-and-arithmetic producer's heads with the columnar operators.

@@ -1001,13 +1001,13 @@ impl<'source> Relations<'source> {
             .iter()
             .map(|rows| (rows.relation.predicate(), rows.atoms))
     }
-    pub(super) fn old_rows<'predicate>(
+    pub(crate) fn old_rows<'predicate>(
         &self,
         predicate: impl Into<PredicateRef<'predicate>>,
     ) -> usize {
         self.find(predicate.into()).map_or(0, |rows| rows.old_rows)
     }
-    pub(super) fn row_count<'predicate>(
+    pub(crate) fn row_count<'predicate>(
         &self,
         predicate: impl Into<PredicateRef<'predicate>>,
     ) -> usize {
