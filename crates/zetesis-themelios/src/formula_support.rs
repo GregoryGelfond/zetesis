@@ -1116,6 +1116,7 @@ fn derive_variants_with_executor<'source>(
         && derive_algebra_variants(
             rule,
             variants,
+            support,
             computation,
             limits,
             budget,
@@ -1215,20 +1216,27 @@ fn derive_variants_with_executor<'source>(
 /// Derive a range-and-arithmetic producer's heads with the columnar operators.
 ///
 /// Returns `Ok(true)` when the rule compiled and every variant of this visit
-/// was consumed. A producer without atom inputs has at most a single full
-/// variant, and only in the first round; later visits compile the same way
-/// and emit nothing because no variant remains. Rules the compiler declines
-/// stay on the Join cursor.
+/// was consumed. Enumeration runs once for the visit, including a delta
+/// visit whose body domains are complete in the snapshot; later variants of
+/// the same visit do not repeat it. Later rounds compile the same way and
+/// emit nothing when no variant remains. Rules the compiler declines stay
+/// on the Join cursor.
 fn derive_algebra_variants<'source>(
     rule: &'source crate::formula_ir::RuleIr,
     variants: &mut delta::Variants<'_, '_>,
+    support: &Support<'source>,
     computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<bool, FormulaFailure> {
-    let Some((template, width)) =
-        crate::formula_ground::algebra_rows::compile(rule, computation, limits, counters)?
+    let Some((template, width)) = crate::formula_ground::algebra_rows::compile(
+        rule,
+        computation,
+        limits,
+        counters,
+        support,
+    )?
     else {
         return Ok(false);
     };
@@ -1244,8 +1252,8 @@ fn derive_algebra_variants<'source>(
         counters,
     };
     let mut enumerated = false;
-    while let Some(variant) = next {
-        if matches!(variant, delta::Variant::Full) && !enumerated {
+    while let Some(_) = next {
+        if !enumerated {
             let bindings = crate::formula_ground::algebra_rows::enumerate(
                 &template,
                 limits,

@@ -8,14 +8,21 @@
 //! and emitted through the ordinary `Builder::rule` path so only retained
 //! rows become formula nodes. The same compilation is used during support
 //! completion to derive heads, so a producer of this class does not walk
-//! failing pairs on the Join cursor. Rules the compiler declines keep the
-//! Join cursor.
+//! failing pairs on the Join cursor. A positive 1-ary atom whose predicate
+//! is already in the snapshot, is not this rule's head, and holds only
+//! integers is a complete lower-stratum domain (Guerin's `num(X)` form):
+//! nothing is narrowed without those complete bounds, so the compiler
+//! declines a missing or growing (recursive) domain. Rules the compiler
+//! declines keep the Join cursor.
 
-use themelios_program::program::Relation;
+use std::collections::BTreeMap;
+
+use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::BinaryOp;
 use zetesis_algebra::{Atoms, Bindings, EnumerationStats, Schedule, Template, TemplateError, rows};
+use zetesis_core::TemplateTerm;
 use zetesis_core::ValueNodeRef;
-use zetesis_core::catalog::TermKey;
+use zetesis_core::catalog::{PredicateRef, TermKey};
 
 use super::Builder;
 use crate::formula_binding::Binding;
@@ -34,8 +41,13 @@ pub(super) fn instantiate<'source>(
     rule: &'source RuleIr,
     support: &Support<'source>,
 ) -> Result<bool, FormulaFailure> {
-    let Some((template, width)) =
-        compile(rule, builder.computation, builder.limits, builder.counters)?
+    let Some((template, width)) = compile(
+        rule,
+        builder.computation,
+        builder.limits,
+        builder.counters,
+        support,
+    )?
     else {
         return Ok(false);
     };
@@ -48,11 +60,14 @@ fn admissible(rule: &RuleIr) -> bool {
     if !matches!(rule.head, HeadIr::Normal(_)) || rule.variables != rule.body_variables {
         return false;
     }
-    let mut saw_domain = rule.body_variables == 0;
+    let mut saw_range = rule.body_variables == 0;
+    let mut saw_compare = false;
+    let mut saw_atom = false;
     for literal in &rule.body {
         match literal {
-            LiteralIr::Range { binder: true, .. } => saw_domain = true,
-            LiteralIr::Compare(_) => {}
+            LiteralIr::Range { binder: true, .. } => saw_range = true,
+            LiteralIr::Compare(_) => saw_compare = true,
+            LiteralIr::Atom(DefaultNegation::None, _) => saw_atom = true,
             LiteralIr::Atom(..)
             | LiteralIr::PatternAtom(_)
             | LiteralIr::AnonymousAtom(..)
@@ -66,7 +81,96 @@ fn admissible(rule: &RuleIr) -> bool {
             | LiteralIr::Range { binder: false, .. } => return false,
         }
     }
-    saw_domain
+    // Binder ranges already supply the domain. Atom facts are a complete
+    // lower-stratum domain only when they replace that range, not when they
+    // sit beside one: those programs keep the Join cursor so existing range
+    // selection and sparse probes still run. Constraints with atom domains
+    // also stay on the Join cursor: their pairwise exclusion certificates
+    // are collected there, not from Bind rows.
+    if saw_atom && !matches!(rule.head, HeadIr::Normal(Some(_))) {
+        return false;
+    }
+    (saw_range && !saw_atom) || (saw_atom && saw_compare && !saw_range)
+}
+
+fn complete_atom_domains(
+    rule: &RuleIr,
+    support: &Support<'_>,
+) -> Result<Option<BTreeMap<usize, Vec<i32>>>, FormulaFailure> {
+    let mut facts: BTreeMap<usize, Vec<i32>> = BTreeMap::new();
+    let mut needed = false;
+    for literal in &rule.body {
+        if matches!(literal, LiteralIr::Atom(DefaultNegation::None, _)) {
+            needed = true;
+            break;
+        }
+    }
+    if !needed {
+        return Ok(Some(facts));
+    }
+    let Some(view) = support.components() else {
+        return Ok(None);
+    };
+    let head = match &rule.head {
+        HeadIr::Normal(Some(pattern)) => pattern.resolve(view).map(|pattern| pattern.predicate()),
+        _ => None,
+    };
+    for literal in &rule.body {
+        let LiteralIr::Atom(DefaultNegation::None, pattern) = literal else {
+            continue;
+        };
+        let Some(pattern) = pattern.resolve(view) else {
+            return Ok(None);
+        };
+        if pattern.predicate().arity() != 1 {
+            return Ok(None);
+        }
+        let Some(TemplateTerm::Variable(slot)) = pattern.terms().at(0) else {
+            return Ok(None);
+        };
+        let predicate = pattern.predicate();
+        if head.is_some_and(|head| same_predicate(head, predicate)) {
+            // A recursive domain is still growing; delta variants stay on Join.
+            return Ok(None);
+        }
+        if !published(support, predicate) {
+            return Ok(None);
+        }
+        let Some(values) = numeric_column(support, predicate) else {
+            return Ok(None);
+        };
+        match facts.entry(slot) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(values);
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().retain(|value| values.contains(value));
+            }
+        }
+    }
+    Ok(Some(facts))
+}
+
+fn published(support: &Support<'_>, predicate: PredicateRef<'_>) -> bool {
+    support
+        .predicates()
+        .any(|found| same_predicate(found, predicate))
+}
+
+fn same_predicate(left: PredicateRef<'_>, right: PredicateRef<'_>) -> bool {
+    left.sign() == right.sign() && left.name() == right.name() && left.arity() == right.arity()
+}
+
+fn numeric_column(support: &Support<'_>, predicate: PredicateRef<'_>) -> Option<Vec<i32>> {
+    let mut values = Vec::new();
+    for row in support.rows(predicate) {
+        let term = row.value(0)?;
+        match term.descriptor() {
+            ValueNodeRef::Number(number) => values.push(number),
+            _ => return None,
+        }
+    }
+    Some(values)
 }
 
 /// Compile a range-and-arithmetic rule into the shared Template.
@@ -78,10 +182,16 @@ pub(crate) fn compile(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
+    support: &Support<'_>,
 ) -> Result<Option<(Template, usize)>, FormulaFailure> {
     if !admissible(rule) {
         return Ok(None);
     }
+    // Load atom domains before any scalar work so a declined incomplete
+    // domain charges nothing and leaves the Join cursor's accounting intact.
+    let Some(facts) = complete_atom_domains(rule, support)? else {
+        return Ok(None);
+    };
     let width = rule.body_variables;
     let mut intern = Intern {
         computation,
@@ -89,7 +199,13 @@ pub(crate) fn compile(
         counters,
     };
     let mut template = Template::new(width);
-    let mut saw_domain = width == 0;
+    let mut saw_domain = width == 0 || !facts.is_empty();
+    for (slot, values) in facts {
+        template = match template.with_facts(slot, values) {
+            Ok(template) => template,
+            Err(TemplateError::Slot | TemplateError::MissingHead) => return Ok(None),
+        };
+    }
     for literal in &rule.body {
         match literal {
             LiteralIr::Range {
@@ -120,6 +236,7 @@ pub(crate) fn compile(
                 };
                 template = template_next;
             }
+            LiteralIr::Atom(DefaultNegation::None, _) => {}
             LiteralIr::Atom(..)
             | LiteralIr::PatternAtom(_)
             | LiteralIr::AnonymousAtom(..)
