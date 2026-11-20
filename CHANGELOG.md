@@ -39,6 +39,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- The tight-program certificate admits head disjunctions of distinct atoms
+  (head-cycle-free by tightness) through their shift: a head atom is supported
+  only while its body holds and no other atom of the head is present. Tight
+  disjunctive programs then decide membership by original satisfaction and
+  support instead of a general reduct query, with complete enumeration and
+  optimum ties unchanged. The device route still uses general propagation for
+  such plans. Lean proves the shifted-support sufficiency
+  (`ShiftedSupport.ranked_support_stable`).
 - The maintained benchmark corpus adds 13 of 14 reconstructed Vaelii-shaped
   Datalog workloads (`examples/vaelii-reconstructed`), labeled as
   reconstructions, and 9 exact Vaelii test programs transcribed from

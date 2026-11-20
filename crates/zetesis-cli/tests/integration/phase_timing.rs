@@ -206,8 +206,9 @@ fn retention_stop_and_failed_answer_write_never_claim_complete_output() {
         SolvePhase::ObjectiveScoringRetention,
     );
     let mut diagnostics = Vec::new();
+    // Not head-cycle-free, so membership stays exact reduct checking.
     let error = run_with_diagnostics(
-        "a|b.".into(),
+        "a|b. a :- b. b :- a.".into(),
         &options(&[], true),
         &mut zetesis_test_support::io::FailAt::new(b"Answer:"),
         &mut diagnostics,

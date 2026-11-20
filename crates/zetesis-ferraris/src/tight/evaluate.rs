@@ -4,7 +4,7 @@ use std::collections::{BinaryHeap, TryReserveError};
 use super::readers::{ReaderKind, Readers};
 use super::{
     Tick, TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightProducer,
-    TightVerdict, bytes,
+    TightProducerKind, TightVerdict, bytes,
 };
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::{Interpretation, NodeView, Theory};
@@ -288,7 +288,13 @@ impl TightWorkspace {
                     .map_err(|_| Stop::Allocation)?;
                 let logical_bytes = self.admit(plan, limits.max_bytes)?;
                 self.supported.storage_mut().resize(words, 0);
-                mark_support(&plan.producers, &self.values, &mut self.supported, meter)?;
+                mark_support(
+                    &plan.theory,
+                    &plan.producers,
+                    &self.values,
+                    &mut self.supported,
+                    meter,
+                )?;
                 let verdict = match unsupported_atom(candidate, &self.supported, meter)? {
                     Some(unsupported_atom) => TightVerdict::Residual { unsupported_atom },
                     None => TightVerdict::Stable,
@@ -409,7 +415,7 @@ impl TightWorkspace {
             .resize(roots.len().div_ceil(64), 0);
         for producer in &plan.producers {
             Tick::tick(meter)?;
-            if producer.body.is_none_or(|body| self.values[body] != 0) {
+            if supports(&plan.theory, producer, &self.values, meter)? {
                 let count = &mut retained.support[producer.head];
                 *count = count.checked_add(1).ok_or(Stop::InvalidProgram)?;
             }
@@ -758,10 +764,11 @@ fn false_root(
     Ok(None)
 }
 
-/// Mark the head of every bodyless producer and of every producer whose body
-/// is true, one charged visit per producer.
+/// Mark the head of every producer that [`supports`] it, one charged visit
+/// per producer.
 #[inline(never)]
 fn mark_support(
+    theory: &Theory,
     producers: &[TightProducer],
     values: &[u8],
     supported: &mut [u32],
@@ -770,11 +777,36 @@ fn mark_support(
     let mut supported = Words::<u32, _>::new(supported);
     for producer in producers {
         Tick::tick(meter)?;
-        if producer.body.is_none_or(|body| values[body] != 0) {
+        if supports(theory, producer, values, meter)? {
             supported.insert(producer.head);
         }
     }
     Ok(())
+}
+
+/// Whether `producer` supports its head: it is bodyless or its body is true,
+/// and, for a shifted head disjunction, no other of its heads is present. At
+/// most one present head suffices, since support matters only for a present
+/// head and the heads are distinct atoms. One charged step per disjunct.
+fn supports(
+    theory: &Theory,
+    producer: &TightProducer,
+    values: &[u8],
+    meter: &mut Meter<'_>,
+) -> Result<bool, TightError> {
+    if producer.body.is_some_and(|body| values[body] == 0) {
+        return Ok(false);
+    }
+    let TightProducerKind::Shifted { heads } = producer.kind else {
+        return Ok(true);
+    };
+    let (leaves, count) = super::head_disjunction(theory, heads).ok_or(Stop::InvalidProgram)?;
+    let mut present = 0usize;
+    for &(node, _) in &leaves[..count] {
+        Tick::tick(meter)?;
+        present += usize::from(values[node] != 0);
+    }
+    Ok(present <= 1)
 }
 
 /// The least present atom without support, one charged operation per 32-bit
