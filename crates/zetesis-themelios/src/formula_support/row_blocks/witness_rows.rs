@@ -435,9 +435,9 @@ where
 /// All tasks and receipts must settle before this call. Batches are supplied in
 /// their original block order. The caller retains the workers' output-capacity
 /// reservation outside the coordinator allowance until these buffers drop.
-pub(super) fn publish<'batch, 'plan: 'batch, 'source: 'plan>(
+pub(super) fn publish<'plan, 'source: 'plan>(
     prepared: &'plan WitnessPlan<'plan, 'source>,
-    batches: impl IntoIterator<Item = &'batch Batch<'plan, 'source>>,
+    batches: impl IntoIterator<Item = impl core::borrow::Borrow<Batch<'plan, 'source>>>,
     support: &Support<'source>,
     computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
@@ -483,6 +483,7 @@ pub(super) fn publish<'batch, 'plan: 'batch, 'source: 'plan>(
     let mut binding = None;
     let mut published = 0;
     for batch in batches {
+        let batch = core::borrow::Borrow::borrow(&batch);
         let mut rows = replay.batch(batch, limits, counters)?;
         while let Some(row) = rows.next(Context::new(&*computation, limits, counters, location))? {
             if owner_replay {

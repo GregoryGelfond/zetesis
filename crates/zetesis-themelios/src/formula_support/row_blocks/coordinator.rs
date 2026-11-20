@@ -90,11 +90,46 @@ impl<T> Completed<T> {
         })
     }
 
+    /// Yield each settled batch in task order, dropping the slot as soon as
+    /// the caller is done with that item. The conservative reservation stays
+    /// until this `Completed` is dropped, so publication limits and receipts
+    /// are unchanged; only the staged payload is released after each publish.
+    pub(crate) fn drain(&mut self) -> Drain<'_, T> {
+        Drain {
+            slots: self.slots.slice_mut(),
+            index: 0,
+        }
+    }
+
     pub(crate) fn publication_limits(&self, limits: &FormulaLimits) -> FormulaLimits {
         FormulaLimits {
             max_support_bytes: limits.max_support_bytes - self.reserved,
             ..*limits
         }
+    }
+}
+
+/// Ordered take of settled worker outputs. Each `next` releases that slot.
+pub(crate) struct Drain<'a, T> {
+    slots: &'a mut [Option<Capture<T, FormulaFailure, Receipt>>],
+    index: usize,
+}
+
+impl<T> Iterator for Drain<'_, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        while self.index < self.slots.len() {
+            let index = self.index;
+            self.index += 1;
+            if let Some(capture) = self.slots[index].take() {
+                return Some(match capture.into_outcome() {
+                    Outcome::Returned(Ok(value)) => value,
+                    _ => unreachable!("all outcomes checked before completion"),
+                });
+            }
+        }
+        None
     }
 }
 
@@ -525,7 +560,7 @@ pub(in crate::formula_support) fn derive<'source>(
             return Ok(false);
         }
     }
-    let completed = stage_witnesses(
+    let mut completed = stage_witnesses(
         executor,
         &plan,
         budget,
@@ -534,7 +569,7 @@ pub(in crate::formula_support) fn derive<'source>(
     let publication = completed.publication_limits(limits);
     witness_rows::publish(
         &plan,
-        completed.results(),
+        completed.drain(),
         support,
         computation,
         &publication,
