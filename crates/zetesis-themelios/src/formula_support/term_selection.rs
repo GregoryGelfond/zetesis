@@ -128,6 +128,13 @@ impl TermSelection {
             .map_err(|error| crate::formula_binding::failure(error, location))
     }
 
+    /// The selected values in the order they were first inserted, for a
+    /// reduction whose result does not depend on the order of its distinct
+    /// inputs. No comparison is made.
+    pub(crate) fn unordered(self) -> Binding<'static> {
+        self.values
+    }
+
     pub(crate) fn ordered(
         mut self,
         tuples: bool,

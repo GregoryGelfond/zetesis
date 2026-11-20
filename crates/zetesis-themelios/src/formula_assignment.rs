@@ -57,12 +57,17 @@ pub(crate) fn values<'a, 'source: 'a>(
         location,
     } = work;
     let mut observer = IgnoreTuples;
-    let collected = collect(
+    // A count reduces its distinct tuples to their number alone, so its
+    // carrier needs no order among them; every other reduction keeps the
+    // ordered walk its overflow, extremum and packing traces are stated over.
+    let order = !matches!(Kind::of(aggregate.function), Kind::Numeric(Numeric::Count));
+    let collected = collect_tuples(
         aggregate,
         assignment,
         support,
         budget,
         &mut observer,
+        order,
         Context::new(&mut *computation, limits, counters, location),
     )?;
     collected.carrier(
@@ -162,6 +167,22 @@ pub(crate) fn collect<'a, 'source: 'a, O: TupleRows<'source>>(
     observer: &mut O,
     context: Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<Collected, FormulaFailure> {
+    collect_tuples(
+        aggregate, assignment, support, budget, observer, true, context,
+    )
+}
+
+/// [`collect`], with the distinct tuples in ascending tuple order when `order`
+/// holds and otherwise in the order the local joins first produced them.
+fn collect_tuples<'a, 'source: 'a, O: TupleRows<'source>>(
+    aggregate: Ir<'a, 'source, AggregateIr>,
+    assignment: &Binding,
+    support: &Support<'source>,
+    budget: &mut Budget,
+    observer: &mut O,
+    order: bool,
+    context: Context<'_, &mut Computation<'_, '_>>,
+) -> Result<Collected, FormulaFailure> {
     let Context { computation, work } = context;
     let GroundingWork {
         limits,
@@ -243,7 +264,11 @@ pub(crate) fn collect<'a, 'source: 'a, O: TupleRows<'source>>(
         }
         observer.end(Context::new(&*computation, limits, counters, location))?;
     }
-    let tuples = tuples.ordered(true, computation, limits, counters, location)?;
+    let tuples = if order {
+        tuples.ordered(true, computation, limits, counters, location)?
+    } else {
+        tuples.unordered()
+    };
     Ok(Collected {
         tuples,
         required: required_tuples,
