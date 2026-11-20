@@ -106,19 +106,6 @@ impl Drop for InternCacheGuard {
     }
 }
 
-/// E2: publish hook heads in binding-table order, like the cursor's staged
-/// publish. Default (E1) keeps TermRef emission order, which is what
-/// preserves the model-construction solve win.
-pub(crate) fn staged_emit() -> bool {
-    matches!(
-        std::env::var("ZETESIS_JOIN_EMIT")
-            .ok()
-            .as_deref()
-            .map(str::trim),
-        Some("stage")
-    )
-}
-
 /// True when a normal head also occurs as a positive body atom, so this
 /// is a recursive producer. Fact-only one-shot joins stay on the expanding
 /// Join generators, which own the parallel dispatch contract.
@@ -174,15 +161,6 @@ impl Evaluated<'_> {
             })?;
         }
         Ok(())
-    }
-
-    /// Row indices to emit: TermRef order (E1) or binding-table order (E2).
-    pub(crate) fn emit_rows(&self, rule: &RuleIr, support: &Support<'_>) -> Vec<usize> {
-        if staged_emit() {
-            self.bindings.row_range().collect()
-        } else {
-            self.emission_order(rule, support)
-        }
     }
 
     /// Row indices of the binding table in semantic head order.
