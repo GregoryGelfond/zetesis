@@ -105,10 +105,17 @@ merged onto this integration branch (which also has #29, #30 and #32) before its
 - Long-horizon planning: the planning horizons (vanilla_b-h7 and beyond, integrated-h5,
   s_crossing) are where zetesis is weakest; `close_events` dominates and conflict
   learning has not yet paid for itself.
-- Three programs time out on both the 9a63 base and this branch:
-  `family_crossing_vanilla_mode_b`, `five_crosser_light_mode_b_plan` and
-  `guerin/wolf-goat-cabbage`.
+- Four programs time out on both the 9a63 base and this branch:
+  `family_crossing_vanilla_mode_b`, `five_crosser_light_mode_b_plan`,
+  `guerin/wolf-goat-cabbage`, and `corpus95/family-crossing/integrated.lp` (`--all`
+  with an objective). integrated.lp sits at the 30 s gold budget at t1 on both builds
+  (it sometimes finishes just under it) and solves at t14; clingo takes 0.9 s.
 - Guerin bin-packing: the default path is about 2.7 s against clingo's 0.015 s (≈180×).
+- Clingo head-to-head timings should use the CPU-only front build
+  (`cargo build --release -p zetesis-cli --no-default-features --features front`).
+  GPU-linked binaries pay about 2 ms extra startup to load the Metal framework, which
+  dominates small programs: guerin/sat is 4.2 ms with the front build, 6.1 ms
+  GPU-linked, and 8.7 ms for clingo.
 - Measurement scripts and logs live outside the repo on Gregory's Mac in
   `~/Worktrees/zetesis/vaelii-artifacts/` (the longer running handoff log is its
   `HANDOFF-CODEX.md`).
