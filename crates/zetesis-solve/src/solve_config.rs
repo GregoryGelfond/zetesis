@@ -153,6 +153,14 @@ pub struct SolveConfig {
     pub learning: bool,
     /// How a refuted region's decided literals are reduced to a core.
     pub conflict_core: zetesis_ferraris::ConflictCore,
+    /// When false, the conflict source does not capture. Measurement use.
+    pub conflict_learning: bool,
+    /// When false, the bound source does not capture. Measurement use.
+    pub bound_learning: bool,
+    /// When false, attempt caps stay at [`zetesis_ferraris::LearningLimits::DEFAULT`]
+    /// even if the candidate-memory allowance would raise them. Tier and store
+    /// row caps still follow the allowance, as they did before Stage C.
+    pub scale_learning_attempts: bool,
 }
 
 impl SolveConfig {

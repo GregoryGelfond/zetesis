@@ -71,6 +71,18 @@ command zetesis | An answer-set solver
       index=None action=Set num_args=Some(1) value_names=Some(["LEARNING_CONFLICT_CORE"]) delimiter=None terminator=None parser=ConflictCore flags=[] conflicts=[]
       help "How a refuted region's decided literals are reduced to a core. Measurement use; the default records a full decided-literal core"
       long ""
+    arg disable_conflict_learning long=Some("disable-conflict-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["DISABLE_CONFLICT_LEARNING"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
+      help "Disable the refuted-region conflict source. Measurement use"
+      long ""
+    arg disable_bound_learning long=Some("disable-bound-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["DISABLE_BOUND_LEARNING"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
+      help "Disable the objective-bound source. Measurement use"
+      long ""
+    arg no_learning_attempt_scaling long=Some("no-learning-attempt-scaling") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["NO_LEARNING_ATTEMPT_SCALING"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
+      help "Keep attempt caps at the default 256 even when the memory allowance would raise them. Tier and store row caps still follow the allowance. Measurement use"
+      long ""
     arg help long=Some("help") short=Some('h') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
       index=None action=HelpShort num_args=Some(0) value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show everyday solving options"
@@ -399,6 +411,18 @@ command zetesis | An answer-set solver
     arg learning_conflict_core long=Some("learning-conflict-core") short=None aliases=None values=["full", "minimized"] defaults=["full"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
       index=None action=Set num_args=Some(1) value_names=Some(["LEARNING_CONFLICT_CORE"]) delimiter=None terminator=None parser=ConflictCore flags=[] conflicts=[]
       help "How a refuted region's decided literals are reduced to a core. Measurement use; the default records a full decided-literal core"
+      long ""
+    arg disable_conflict_learning long=Some("disable-conflict-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["DISABLE_CONFLICT_LEARNING"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
+      help "Disable the refuted-region conflict source. Measurement use"
+      long ""
+    arg disable_bound_learning long=Some("disable-bound-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["DISABLE_BOUND_LEARNING"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
+      help "Disable the objective-bound source. Measurement use"
+      long ""
+    arg no_learning_attempt_scaling long=Some("no-learning-attempt-scaling") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["NO_LEARNING_ATTEMPT_SCALING"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
+      help "Keep attempt caps at the default 256 even when the memory allowance would raise them. Tier and store row caps still follow the allowance. Measurement use"
       long ""
     arg help long=Some("help") short=Some('h') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
       index=None action=HelpShort num_args=Some(0) value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]

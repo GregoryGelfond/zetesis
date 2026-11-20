@@ -130,6 +130,9 @@ impl Resources {
             share_learned_rows: true,
             learning: true,
             conflict_core: zetesis_ferraris::ConflictCore::Full,
+            conflict_learning: true,
+            bound_learning: true,
+            scale_learning_attempts: true,
         }
     }
 

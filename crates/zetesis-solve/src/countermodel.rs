@@ -137,6 +137,18 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_stable::Limits {
                 let mut limits =
                     zetesis_ferraris::LearningLimits::for_allowance(options.max_candidate_bytes);
                 limits.conflict_core = options.conflict_core;
+                if !options.scale_learning_attempts {
+                    let defaults = zetesis_ferraris::LearningLimits::DEFAULT;
+                    limits.founded_attempts = defaults.founded_attempts;
+                    limits.conflict_attempts = defaults.conflict_attempts;
+                    limits.bound_attempts = defaults.bound_attempts;
+                }
+                if !options.conflict_learning {
+                    limits.conflict_attempts = 0;
+                }
+                if !options.bound_learning {
+                    limits.bound_attempts = 0;
+                }
                 limits
             } else {
                 zetesis_ferraris::LearningLimits::disabled()

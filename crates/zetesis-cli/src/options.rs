@@ -156,6 +156,17 @@ pub struct Options {
         hide = true
     )]
     pub learning_conflict_core: zetesis_ferraris::ConflictCore,
+    /// Disable the refuted-region conflict source. Measurement use.
+    #[arg(long = "disable-conflict-learning", hide = true)]
+    pub disable_conflict_learning: bool,
+    /// Disable the objective-bound source. Measurement use.
+    #[arg(long = "disable-bound-learning", hide = true)]
+    pub disable_bound_learning: bool,
+    /// Keep attempt caps at the default 256 even when the memory allowance
+    /// would raise them. Tier and store row caps still follow the allowance.
+    /// Measurement use.
+    #[arg(long = "no-learning-attempt-scaling", hide = true)]
+    pub no_learning_attempt_scaling: bool,
 }
 
 /// The full help's account of `--backend`: every value with its meaning, in the
@@ -297,6 +308,9 @@ impl From<&Options> for crate::SolveConfig {
             models: options.models,
             learning: !options.disable_learning,
             conflict_core: options.learning_conflict_core,
+            conflict_learning: !options.disable_conflict_learning,
+            bound_learning: !options.disable_bound_learning,
+            scale_learning_attempts: !options.no_learning_attempt_scaling,
             ..options.resources().solve_config()
         }
     }
