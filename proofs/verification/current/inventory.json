@@ -9101,6 +9101,26 @@
       "name": "Zetesis.SharedRowCharges.accepted_prefix_stays_within"
     },
     {
+      "file": "Zetesis/ShiftedSupport.lean",
+      "line": 67,
+      "name": "Zetesis.ShiftedSupport.sole_head_forced"
+    },
+    {
+      "file": "Zetesis/ShiftedSupport.lean",
+      "line": 76,
+      "name": "Zetesis.ShiftedSupport.producer_forces_head"
+    },
+    {
+      "file": "Zetesis/ShiftedSupport.lean",
+      "line": 92,
+      "name": "Zetesis.ShiftedSupport.ranked_support_contained"
+    },
+    {
+      "file": "Zetesis/ShiftedSupport.lean",
+      "line": 115,
+      "name": "Zetesis.ShiftedSupport.ranked_support_stable"
+    },
+    {
       "file": "Zetesis/SignedHeadElements.lean",
       "line": 62,
       "name": "Zetesis.SignedHeadElements.operand_original"
@@ -11947,6 +11967,7 @@
     "Zetesis/SelectedProducerComparisons.lean",
     "Zetesis/Semantics.lean",
     "Zetesis/SharedRowCharges.lean",
+    "Zetesis/ShiftedSupport.lean",
     "Zetesis/SignedHeadElements.lean",
     "Zetesis/SignedObjectiveBounds.lean",
     "Zetesis/SignedOriginal.lean",
@@ -11997,8 +12018,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "ce5b10a5944691d2f6097605867ac7984e9cd05eee62957969f67ac0467b7abf",
-    "Zetesis.lean": "eae6c7fcff502b42da6fbe8f23d5c96c301f28f75ba5efcbe18c382b6e9feb77",
+    "Audit.lean": "b3c1843fa88f54cf14664d3260a4b4df994b1198527e79b4409b09920ce03601",
+    "Zetesis.lean": "a89fcf8dc57e59a246d3ef7703f63179199719fe74d5218803201df4966c03fc",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -12179,6 +12200,7 @@
     "Zetesis/SelectedProducerComparisons.lean": "c0b640cc6331bb35147950e8a98618b9ca06189ee9483b7e520875f71e36796e",
     "Zetesis/Semantics.lean": "fe4d59f5da0332897efa90e7b6dd9e5d1b1a4003017f1630799e5e6029f35dc8",
     "Zetesis/SharedRowCharges.lean": "e7112605798f299954c0048415980a13c29f0ec25130438634ab49fc4bd68538",
+    "Zetesis/ShiftedSupport.lean": "d38d9ee6a701c68689b6c6884256d3a5e5f6adffe42033e2c766d03460ba6a96",
     "Zetesis/SignedHeadElements.lean": "98653a0d01452caa8383ad0549be3e720c4ca027944326f3c566474abee26275",
     "Zetesis/SignedObjectiveBounds.lean": "9a196ef4647a4999a96373134d80c92ecd940d4c3ee7dc7c173545a2a4816045",
     "Zetesis/SignedOriginal.lean": "f78c51fb8a6ca332ede4a1ea4243092011d948f9cf2d21e85f025141ab5aad64",
