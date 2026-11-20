@@ -15,8 +15,8 @@ pub use rows::{PreparedRows, RowColumn};
 /// it owns no tuple, replacement assignment, lookup result or secondary index.
 /// Constants are validated at preparation; selected variables remain checked on
 /// each insertion. This is identity preparation, never membership or truth.
-/// Candidate predicate locations avoid repeated owner-directory searches while
-/// they still name the same signed predicate. Commit or interleaved insertion
+/// A candidate predicate column location avoids repeated owner-directory
+/// searches while it still names the same signed predicate. Commit or interleaved insertion
 /// may make a location stale; insertion checks it and uses ordinary lookup then.
 /// No absence result is retained, and no mutation or synchronization is needed.
 ///
@@ -37,8 +37,8 @@ impl AtomAppender<'_> {
     /// this writer. Construction input returns `None` and keeps the general
     /// [`Self::insert_pattern_with`] path; no metadata is copied or allocated.
     /// This phase checks constants before any assignment is supplied.
-    /// It also visits the current canonical predicate blocks once and searches
-    /// the discovery predicate directory. Candidate locations remain immutable;
+    /// It also visits the current canonical predicate blocks once. The
+    /// candidate location remains immutable;
     /// repeated use after they become stale is correct but can repeat lookup.
     ///
     /// # Errors
@@ -78,16 +78,12 @@ impl AtomAppender<'_> {
             .store
             .atom_column_location_with(predicate, &mut before)
             .map_err(Failure::Stopped)?;
-        let subtree =
-            super::super::subtree_of(self.store, self.subtrees, pattern.predicate(), &mut before)
-                .map_err(Failure::Stopped)?
-                .unwrap_or_else(|position| position);
         Ok(Some(PreparedPattern {
             owner: self.store.atom_scope(),
             source,
             pattern: data,
             term_limits,
-            locations: PredicateLocations { column, subtree },
+            locations: PredicateLocations { column },
         }))
     }
 

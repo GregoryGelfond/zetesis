@@ -695,6 +695,20 @@ fn grounding(out: &mut Buffer, timings: Option<&crate::GroundingTimings>) -> Res
             out.text("null")?;
         }
     }
+    out.text("},\"operators\":{")?;
+    for (index, operator) in crate::GroundingOperator::ALL.into_iter().enumerate() {
+        if index != 0 {
+            out.text(",")?;
+        }
+        out.string(operator.label())?;
+        out.text(":")?;
+        optional_number(
+            out,
+            timings
+                .operator(operator)
+                .map(|duration| duration.as_nanos()),
+        )?;
+    }
     out.text("},\"overhead\":\"included\",\"relational_grounding\":null,\"kernel_time\":null}")
 }
 

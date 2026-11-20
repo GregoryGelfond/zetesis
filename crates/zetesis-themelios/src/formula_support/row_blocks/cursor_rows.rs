@@ -11,8 +11,8 @@ mod producer;
 mod tests;
 
 use super::{
-    BodyKind, Buffer, Computation, Context, Counters, Join, RuleIr, StorageLease, checked_eligible,
-    checked_rule, order, relations, selected_rows,
+    BodyKind, Buffer, Computation, Context, Counters, Join, RuleIr, StorageLease, checked_rule,
+    order, relations, selected_rows,
 };
 use crate::formula_support::{Comparisons, Coverage, Traversal, projections, scalar_selection};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
@@ -111,7 +111,13 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
                 return Ok(None);
             }
         } else if !initial(cursor, Coverage::Selected, limits, counters, rule.location)?
-            || !checked_eligible(rule, computation, limits, counters)?
+            || !checked_rule(
+                rule,
+                computation,
+                limits,
+                counters,
+                support_body(computation),
+            )?
         {
             return Ok(None);
         }
@@ -155,6 +161,17 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
             relations: self.relations,
             rows: self.rows.slice(),
         }
+    }
+}
+
+/// A support producer's workers evaluate total comparison leaves in their own
+/// traversal, as a source-activity producer's do; table joins keep the
+/// positive-atom body their row blocks were admitted for.
+fn support_body(computation: &Computation<'_, '_>) -> BodyKind {
+    if computation.query_support().strategy() == crate::JoinStrategy::Table {
+        BodyKind::PositiveAtoms
+    } else {
+        BodyKind::ProducerLeaves
     }
 }
 

@@ -1,5 +1,4 @@
 //! The coordinator phase, engagement and the walk's record.
-
 use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::sync::atomic::AtomicUsize;

@@ -4,7 +4,7 @@ mod receipt;
 mod reservation;
 
 use super::*;
-use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
 #[test]
@@ -39,13 +39,11 @@ fn boundary_decisions_do_not_overflow_at_the_counter_limit() {
 
 fn wait_for_expiry(cancellation: &Cancellation) {
     let deadline = &cancellation.deadline.as_ref().unwrap().deadline;
-    let timeout = Instant::now() + Duration::from_secs(5);
-    // Observe the flag directly: a boundary poll must not cause the expiry.
-    // The bound detects a stalled timer, not a promised scheduling latency.
-    while !deadline.expired.load(Ordering::Relaxed) {
-        assert!(Instant::now() < timeout, "deadline timer did not expire");
+    while Instant::now() < deadline.at {
         thread::sleep(Duration::from_millis(1));
     }
+    // Nothing observes the clock until a coarse boundary: the flag is clear.
+    assert!(!deadline.expired.load(Ordering::Relaxed));
 }
 
 /// Charge once through a meter that has admitted `charged` operations under
@@ -234,14 +232,169 @@ fn stops_classify_resource_refusals() {
     }
 }
 
+/// Start this thread's clock stride afresh, so its next coarse observation
+/// reads the clock regardless of which tests ran on it before.
+fn fresh_clock_stride() {
+    UNTIL_CLOCK.with(|until| until.set(0));
+}
+
+fn clock_reads() -> u64 {
+    CLOCK_READS.with(std::cell::Cell::get)
+}
+
+fn latched(cancellation: &Cancellation) -> bool {
+    cancellation
+        .deadline
+        .as_ref()
+        .unwrap()
+        .deadline
+        .expired
+        .load(Ordering::Relaxed)
+}
+
 #[test]
-fn a_deadline_expires_without_polling() {
+fn the_inlined_poll_reads_flags_only_and_a_coarse_boundary_latches() {
+    fresh_clock_stride();
     let cancellation =
         Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
     let polling = cancellation.polling();
     wait_for_expiry(&cancellation);
+    let reads = clock_reads();
+    for _ in 0..10_000 {
+        assert_eq!(polling.poll(), Ok(()));
+    }
+    assert_eq!(
+        clock_reads(),
+        reads,
+        "the inlined poll never reads the clock"
+    );
+    assert!(!latched(&cancellation));
+    // A fresh test thread reads the clock at its first coarse observation.
+    assert_eq!(polling.poll_deadline(), Err(Stop::Deadline));
+    assert_eq!(clock_reads(), reads + 1);
+    assert!(latched(&cancellation));
+    // Once latched, the flag-only poll reports it for every view and clone.
     assert_eq!(polling.poll(), Err(Stop::Deadline));
+    assert_eq!(cancellation.clone().polling().poll(), Err(Stop::Deadline));
+}
+
+#[test]
+fn without_a_deadline_no_poll_reads_the_clock() {
+    let cancellation = Cancellation::default();
+    let polling = cancellation.polling();
+    let reads = clock_reads();
+    for _ in 0..1000 {
+        assert_eq!(polling.poll(), Ok(()));
+        assert_eq!(polling.poll_deadline(), Ok(()));
+        assert_eq!(cancellation.poll(), Ok(()));
+    }
+    let metered = cancellation.metered(u64::MAX, |meter| {
+        for _ in 0..10 * POLL_INTERVAL {
+            meter.charge().unwrap();
+        }
+        meter.poll()
+    });
+    assert_eq!(metered.result, Ok(()));
+    assert_eq!(clock_reads(), reads);
+}
+
+#[test]
+fn an_unexpired_deadline_is_read_only_at_coarse_boundaries() {
+    fresh_clock_stride();
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_hours(1)).unwrap();
+    let reads = clock_reads();
+    let metered = cancellation.metered(u64::MAX, |meter| {
+        for _ in 0..u64::from(CLOCK_STRIDE) * POLL_INTERVAL {
+            meter.charge().unwrap();
+        }
+        Ok::<_, Stop>(())
+    });
+    assert_eq!(metered.result, Ok(()));
+    // One observation per POLL_INTERVAL boundary, one clock read per stride
+    // of observations on this thread.
+    assert_eq!(clock_reads(), reads + 1);
+    assert!(!latched(&cancellation));
+}
+
+#[test]
+fn an_owned_handle_poll_observes_an_expired_deadline() {
+    fresh_clock_stride();
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
+    let polling = cancellation.polling();
+    wait_for_expiry(&cancellation);
+    assert_eq!(polling.poll(), Ok(()));
     assert_eq!(cancellation.poll(), Err(Stop::Deadline));
+    assert_eq!(polling.poll(), Err(Stop::Deadline));
+}
+
+#[test]
+fn a_local_meter_refill_boundary_observes_an_expired_deadline() {
+    fresh_clock_stride();
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
+    wait_for_expiry(&cancellation);
+    // Between boundaries a charge reads the flags only and proceeds.
+    assert_eq!(charge_from(&cancellation, 7, u64::MAX), (Ok(()), 8));
+    assert!(!latched(&cancellation));
+    assert_eq!(
+        charge_from(&cancellation, POLL_INTERVAL, u64::MAX),
+        (Err(ChargeError::Stopped(Stop::Deadline)), POLL_INTERVAL)
+    );
+    assert!(latched(&cancellation));
+}
+
+#[test]
+fn a_local_meter_ceiling_observes_an_expired_deadline() {
+    fresh_clock_stride();
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
+    wait_for_expiry(&cancellation);
+    // Seven is not a boundary; the refusal at the ceiling observes the deadline.
+    assert_eq!(
+        charge_from(&cancellation, 7, 7),
+        (Err(ChargeError::Stopped(Stop::Deadline)), 7)
+    );
+}
+
+/// An account that, like the solver's budgets, polls its owned handle at
+/// every refill.
+struct PollingAccount<'a>(&'a Cancellation);
+
+impl Quota for PollingAccount<'_> {
+    type Error = Stop;
+
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
+        self.0.poll()?;
+        Ok(wanted)
+    }
+
+    fn refund(&mut self, _: u64) {}
+}
+
+#[test]
+fn a_reserved_meter_refill_observes_an_expired_deadline() {
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
+    let mut account = PollingAccount(&cancellation);
+    let mut meter = Meter::reserved(&mut account);
+    // The first refill observes an unexpired deadline on this thread.
+    meter.tick().unwrap();
+    wait_for_expiry(&cancellation);
+    let stopped = loop {
+        if let Err(failure) = meter.tick() {
+            break failure;
+        }
+        assert!(
+            meter.charged() <= u64::from(CLOCK_STRIDE) * POLL_INTERVAL,
+            "a refill must observe the deadline within a clock stride"
+        );
+    };
+    assert_eq!(stopped.into_stop(), Stop::Deadline);
+    // Only a refill stops: the meter ran every permit it was granted.
+    assert_eq!(meter.charged() % POLL_INTERVAL, 0);
+    assert!(latched(&cancellation));
 }
 
 #[test]
@@ -259,26 +412,21 @@ fn clones_share_the_deadline() {
 }
 
 #[test]
-fn dropping_the_last_clone_retires_the_timer() {
-    // A second waiter on the same deadline stands in for the timer thread,
-    // whose handle is not retained: retirement wakes every waiter.
-    let owner = DeadlineOwner::arm(Instant::now() + Duration::from_hours(1)).unwrap();
-    let deadline = Arc::clone(&owner.deadline);
-    let (retired, observer) = mpsc::channel();
-    thread::spawn(move || {
-        deadline.wait();
-        retired.send(()).unwrap();
-    });
-    assert!(observer.recv_timeout(Duration::from_millis(100)).is_err());
-    drop(owner);
-    assert!(observer.recv_timeout(Duration::from_secs(5)).is_ok());
-}
-
-#[test]
-fn retirement_does_not_expire_the_deadline() {
-    let owner = DeadlineOwner::arm(Instant::now() + Duration::from_hours(1)).unwrap();
-    let deadline = Arc::clone(&owner.deadline);
-    drop(owner);
-    deadline.wait();
+fn a_deadline_starts_no_thread_and_latches_at_the_first_late_poll() {
+    // The deadline is observed by polling, so --threads bounds every thread.
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_hours(1)).unwrap();
+    assert_eq!(cancellation.poll(), Ok(()));
+    let deadline = &cancellation.deadline.as_ref().unwrap().deadline;
     assert!(!deadline.expired.load(Ordering::Relaxed));
+    let past = Cancellation::with_deadline(Instant::now()).unwrap();
+    assert!(
+        past.deadline
+            .as_ref()
+            .unwrap()
+            .deadline
+            .expired
+            .load(Ordering::Relaxed)
+    );
+    assert_eq!(past.poll(), Err(Stop::Deadline));
 }

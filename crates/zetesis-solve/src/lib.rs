@@ -148,7 +148,7 @@ pub use world_view::{
 pub use zetesis_backend::{Backend, GpuApi};
 pub use zetesis_stable::{BatchVerdict, QueryDivision};
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
-pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
+pub use zetesis_themelios::{GroundingOperator, GroundingOutcome, GroundingPhase, GroundingWork};
 
 mod measurements;
 pub use measurements::{MeasurementSpan, SolveMeasurements};

@@ -71,7 +71,10 @@ fn ground(
     observation: &Observation,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     prepare(source)?
-        .with_grounding_options(GroundingOptions { joins: strategy })
+        .with_grounding_options(GroundingOptions {
+            joins: strategy,
+            ..GroundingOptions::default()
+        })
         .with_domain_analysis(domains)
         .ground_with_observer(Some(observation))
 }

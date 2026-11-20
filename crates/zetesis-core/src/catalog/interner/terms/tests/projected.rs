@@ -594,8 +594,8 @@ fn before_frame<E>(
             predicate,
             values,
             ProjectionSource::Pattern(pattern.terms()),
-            TermLimits::default(),
-            limits(),
+            (TermLimits::default(), limits()),
+            None,
             before,
         )
     })

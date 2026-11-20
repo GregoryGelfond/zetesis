@@ -1,5 +1,4 @@
 //! Prepared scopes preserve exact traversal, emitted graphs and failure boundaries.
-
 use super::testing as route;
 use super::*;
 use crate::formula_support::{Counters, testing};

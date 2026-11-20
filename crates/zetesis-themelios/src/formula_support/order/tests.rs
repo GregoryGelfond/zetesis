@@ -108,6 +108,24 @@ fn a_comparison_is_decided_before_an_unrelated_occurrence_of_the_same_size() {
 }
 
 #[test]
+fn an_independent_generator_waits_for_a_connected_one_that_binds_it() {
+    // vc(C,CV), edge(C,P), vp(P,PV), PV < CV: after vc, vp would decide the
+    // comparison but joins every vc row with every vp row; edge binds P from
+    // C, after which vp is a posting probe that still decides it.
+    let mut fixture = Fixture::default();
+    let literals = [
+        atom(&mut fixture, "edge", &[0, 2]),
+        atom(&mut fixture, "vc", &[0, 1]),
+        atom(&mut fixture, "vp", &[2, 3]),
+        less(&mut fixture, 3, 1),
+    ];
+    assert_eq!(
+        order(&mut fixture, &literals, &[100, 90, 90], 4),
+        ["vc", "edge", "vp"]
+    );
+}
+
+#[test]
 fn ready_comparisons_precede_smaller_generators() {
     let mut fixture = Fixture::default();
     let literals = [

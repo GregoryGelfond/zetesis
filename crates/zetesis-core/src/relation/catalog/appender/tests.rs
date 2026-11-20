@@ -150,7 +150,6 @@ fn refused_row_preserves_the_successful_prefix() {
         assert_eq!(append.catalog.layout.dictionary.len(), 1);
         assert!(append.plan.ids.is_empty());
         assert!(append.plan.added.is_empty());
-        assert!(append.plan.patches.is_empty());
         assert_eq!(error.retained_bytes, append.catalog.retained_bytes());
         let retry = append
             .insert(owner.get(1).unwrap(), Limits::default())
@@ -171,14 +170,12 @@ fn reused_plan_keeps_its_admitted_allocations() {
         .unwrap();
     let ids = append.plan.ids.as_ptr();
     let added = append.plan.added.as_ptr();
-    let patches = append.plan.patches.as_ptr();
     let retained = append.scratch_bytes();
     append
         .insert(owner.get(1).unwrap(), Limits::default())
         .unwrap();
     assert_eq!(append.plan.ids.as_ptr(), ids);
     assert_eq!(append.plan.added.as_ptr(), added);
-    assert_eq!(append.plan.patches.as_ptr(), patches);
     assert_eq!(append.scratch_bytes(), retained);
 }
 

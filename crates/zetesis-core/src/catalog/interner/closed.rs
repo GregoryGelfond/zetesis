@@ -3,8 +3,8 @@
 use std::fmt;
 
 use super::{
-    AtomAppender, AtomEntry, AtomInterner, Directions, EntryPosition, Failure, InsertionPath,
-    Limits, PREPARED_BYTES, Query, admit, population, storage, store_failure,
+    AtomAppender, AtomEntry, AtomInterner, EntryPosition, Failure, Limits, Query, admit,
+    population, storage, store_failure,
 };
 use crate::Model;
 use crate::catalog::{AtomCatalog, AtomRef, CatalogRead, Error, ReadError};
@@ -138,14 +138,10 @@ impl AtomInterner {
             snapshot,
             committed,
             pending,
-            index,
+            peak: _,
             discovery,
-            spines,
-            subtrees,
         } = self;
-        let retained = (
-            snapshot, committed, pending, index, discovery, spines, subtrees,
-        );
+        let retained = (snapshot, committed, pending, discovery);
         let result = store
             .close_with(metadata, before)
             .map(|storage| ClosedCatalog { storage })
@@ -183,15 +179,13 @@ impl AtomInterner {
     /// original closed catalog. Authenticate both the supplied base allocation
     /// and the model's original writer scope and prefix before copying any IDs.
     /// Descendant, sibling and merely equal catalogs cannot supply this seed.
-    /// The model's semantic order and uniqueness justify each new predicate at
-    /// the end of the relation directory and each row beyond its predicate's
-    /// last row. Canonical IDs themselves are not treated as semantic order.
+    /// The model's uniqueness justifies each row's absence from discovery.
     ///
-    /// Reuses the ordinary discovery map, AVL insertion and storage receipts;
-    /// no tuple lookup, term import or additional index is needed. For n selected
-    /// atoms, work is O(n log n) bounded index operations plus immutable segment
-    /// lookups, and retained discovery space is O(n), excluding the shared base
-    /// and caller's model.
+    /// Reuses the ordinary discovery map and storage receipts; no tuple lookup,
+    /// term import or additional index is needed. For n selected atoms, work is
+    /// O(n) bounded discovery operations plus immutable segment lookups, and
+    /// retained discovery space is O(n), excluding the shared base and caller's
+    /// model.
     /// The committed prefix stays empty until an explicit commit. Discovery
     /// records the supplied selection; it does not establish model membership.
     ///
@@ -199,7 +193,7 @@ impl AtomInterner {
     /// Nonempty discovery or an unauthenticated base/model returns a catalog
     /// shape refusal before discovery changes. A later resource or caller
     /// refusal retains the completed selected prefix and any reserved capacity;
-    /// no partial row or AVL update is published. Ordinary entries can continue
+    /// no partial row is published. Ordinary entries can continue
     /// from that prefix, but this operation requires a fresh empty descendant.
     ///
     /// # Panics
@@ -246,7 +240,7 @@ impl AtomInterner {
 impl AtomAppender<'_> {
     /// The caller authenticated the whole selection and started empty. The
     /// current discovery is exactly its completed, strictly ordered prefix.
-    /// Hence this row is absent and follows all earlier rows of its predicate.
+    /// Hence this row is absent from discovery.
     fn discover_ordered_atom<E>(
         mut self,
         atom: AtomRef<'_>,
@@ -256,44 +250,11 @@ impl AtomAppender<'_> {
         self.admit_entry(0, limits)?;
         before().map_err(Failure::Stopped)?;
         let (_, identity) = atom.canonical().expect("authenticated original selection");
-        let predicate = atom
-            .predicate()
-            .canonical()
-            .expect("authenticated original predicate")
-            .1;
-        let relation = match self.subtrees.last() {
-            Some(last) => {
-                before().map_err(Failure::Stopped)?;
-                let previous = AtomRef::new(&*self.store, last.representative)
-                    .expect("published relation representative")
-                    .predicate()
-                    .canonical()
-                    .expect("canonical relation predicate")
-                    .1;
-                if predicate == previous {
-                    Ok(self.subtrees.len() - 1)
-                } else {
-                    Err(self.subtrees.len())
-                }
-            }
-            None => Err(0),
-        };
-        let directions = Directions::default();
-        let (root, route) = relation.map_or((None, InsertionPath::Recorded(&directions)), |at| {
-            let subtree = &self.subtrees[at];
-            (subtree.root, InsertionPath::BeyondLast(subtree.last))
-        });
-        self.prepare_path(root, route, PREPARED_BYTES, limits, &mut || {
-            before().map_err(Failure::Stopped)
-        })?;
         AtomEntry {
             appender: self,
             query: Query::Atom(atom),
             prepared: Some(storage::PreparedAtom::existing(identity)),
-            position: EntryPosition::Vacant {
-                relation,
-                beyond: relation.is_ok(),
-            },
+            position: EntryPosition::Vacant,
         }
         .insert_with(limits, before)?;
         Ok(())

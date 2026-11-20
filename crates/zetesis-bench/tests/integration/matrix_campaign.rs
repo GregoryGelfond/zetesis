@@ -1162,17 +1162,22 @@ fn corpus_command_counts_family_in_the_regular_scorecard() {
         &std::sync::atomic::AtomicBool::new(true),
     )
     .unwrap();
-    assert_eq!(report.cases().len(), 95);
+    assert_eq!(report.cases().len(), 109);
     assert_eq!(report.cases()[94], "family-crossing/integrated.lp");
-    assert!(report.workloads().unwrap()[94].is_bundle());
+    assert_eq!(report.cases()[95], "vaelii-reconstructed/arith1k.lp");
+    assert!(
+        report.workloads().unwrap()[94..]
+            .iter()
+            .all(zetesis_validation::performance::matrix::Workload::is_bundle)
+    );
     assert!(report.accounted());
-    assert_eq!(report.samples().len(), 380);
+    assert_eq!(report.samples().len(), 436);
     assert!(report.samples().iter().all(|sample| {
         sample.decision() == Decision::NotAttempted && sample.capture().is_none()
     }));
     let summary = report.summary();
-    assert_eq!(summary.cases.len(), 95);
-    assert_eq!(summary.cells.len(), 190);
+    assert_eq!(summary.cases.len(), 109);
+    assert_eq!(summary.cells.len(), 218);
     assert_eq!(
         summary.cells.iter().filter(|cell| cell.case == 94).count(),
         2
@@ -1212,7 +1217,7 @@ fn corpus_command_preserves_the_callers_case_ceiling() {
     assert!(matches!(
         performance::command::run(&request, matrix::NativeInvocation::Solve),
         Err(performance::Error::Configuration(
-            "explicit workload population must fit 1..=95"
+            "explicit workload population must fit 1..=109"
         ))
     ));
     assert!(!fixture.report.exists());

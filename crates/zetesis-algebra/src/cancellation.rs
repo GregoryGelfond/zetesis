@@ -2,9 +2,8 @@
 
 use std::fmt;
 use std::io;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
-use std::thread;
 use std::time::Instant;
 
 mod bytes;
@@ -20,7 +19,10 @@ pub use slot::{CancellationRun, CancellationSlot, CancellationSlotError};
 /// of its cancellation and deadline flags. A poll reads up to three shared
 /// flags; reading them once per this many operations instead of at every
 /// operation takes that read out of per-node loops, while at most
-/// `POLL_INTERVAL - 1` further operations can follow a requested stop.
+/// `POLL_INTERVAL - 1` further operations can follow a requested stop. A
+/// local meter's boundary also reads the clock for an unexpired deadline
+/// ([`CancellationPoll::poll_deadline`]); a borrowed account's refill does so
+/// through its own owned-handle poll.
 pub const POLL_INTERVAL: u64 = 256;
 
 /// Whether admitting `amount` operations after `charged` contains an
@@ -269,7 +271,7 @@ impl ChargeError {
 #[inline(never)]
 fn settled<E: Refusal>(poll: CancellationPoll<'_>, error: E) -> E {
     if error.is_resource_refusal()
-        && let Err(stop) = poll.poll()
+        && let Err(stop) = poll.poll_deadline()
     {
         return E::from_stop(stop);
     }
@@ -531,7 +533,9 @@ impl<'a> Meter<'a> {
 
     /// Charge one operation with the existing local meter error shape.
     /// Poll before operation zero and each 256-step boundary, and again before
-    /// refusing the local ceiling. A refused charge performs no operation.
+    /// refusing the local ceiling. Each of those boundaries is a refill of the
+    /// local allowance and also observes the deadline, reading the clock while
+    /// it is unexpired. A refused charge performs no operation.
     ///
     /// # Errors
     /// Returns the requested stop, otherwise the exhausted work limit.
@@ -576,7 +580,9 @@ impl<'a> Meter<'a> {
 impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
     /// Borrow a caller's account without reserving, polling or allocating.
     /// Per-read refills request [`POLL_INTERVAL`] permits. The account owns
-    /// control polling at those refills; the meter adds no per-read poll.
+    /// control polling at those refills, cancellation and deadline alike
+    /// (an account polling its owned [`Cancellation`] observes the deadline
+    /// there); the meter adds no per-read poll.
     #[must_use]
     pub fn reserved(quota: &'a mut Q) -> Self {
         Self {
@@ -614,7 +620,7 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
         if let Some(poll) = &self.poll
             && poll_due(self.count.value, 1)
         {
-            poll.poll()?;
+            poll.poll_deadline()?;
         }
         let Self {
             count,
@@ -690,15 +696,18 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
         }
     }
 
-    /// Observe this local meter's control view, if it has one.
-    /// A reserved meter's account owns its control observations; this method
-    /// does not obtain permits or add an account poll.
+    /// Observe this local meter's control view, if it has one, deadline
+    /// included (a coarse boundary). A reserved meter's account owns its
+    /// control observations; this method does not obtain permits or add an
+    /// account poll.
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
     #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
-        self.poll.as_ref().map_or(Ok(()), CancellationPoll::poll)
+        self.poll
+            .as_ref()
+            .map_or(Ok(()), CancellationPoll::poll_deadline)
     }
 
     #[inline]
@@ -717,7 +726,7 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
         poll: Option<&CancellationPoll<'_>>,
     ) -> Result<(), Failure<Q::Error>> {
         let Some(quota) = quota else {
-            poll.map_or(Ok(()), CancellationPoll::poll)?;
+            poll.map_or(Ok(()), CancellationPoll::poll_deadline)?;
             return Err(Stop::WorkLimit.into());
         };
         let granted = quota.reserve(POLL_INTERVAL).map_err(Failure::Refused)?;
@@ -735,7 +744,20 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
         Ok(())
     }
 
+    /// Ensure `minimum` permits before a bounded operation. Already-held
+    /// permits are checked inline; a refill, where the account polls control
+    /// (and observes the deadline), stays out of line.
+    #[inline]
     fn top_up(&mut self, minimum: u64) -> Result<(), Failure<Q::Error>> {
+        if self.count.value.checked_add(minimum).is_some() && self.remaining() >= minimum {
+            return Ok(());
+        }
+        self.refill(minimum)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn refill(&mut self, minimum: u64) -> Result<(), Failure<Q::Error>> {
         self.count
             .value
             .checked_add(minimum)
@@ -779,10 +801,17 @@ pub struct Metered<T, E> {
 }
 
 /// Shared cancellation and an optional immutable deadline. Clones observe the
-/// same flags. A deadline is observed the way cancellation is: a timer thread
-/// sets an expiry flag when the deadline passes, and a poll reads flags only,
-/// never the clock. The timer retires at the deadline or when the last clone
-/// drops, whichever comes first.
+/// same flags. No thread is started, so `--threads` bounds every thread the
+/// solver runs. Cancellation is observed at every poll. A deadline is
+/// observed by reading the monotonic clock, and latching a shared expiry flag
+/// once it has passed, only at coarse boundaries: a poll of this owned handle
+/// ([`Self::poll`]), a local meter's allowance boundary under
+/// [`Self::metered`] (each [`POLL_INTERVAL`] charges and its ceiling), a
+/// borrowed account's refill that polls its owned handle, and a caller's
+/// explicit [`CancellationPoll::poll_deadline`] at its own coarse boundary
+/// (for example between region-walk steps). The inlined
+/// [`CancellationPoll::poll`] reads flags only: it reports a deadline once
+/// some boundary has latched it, and never reads the clock.
 #[derive(Clone, Debug, Default)]
 pub struct Cancellation {
     cancelled: Arc<AtomicBool>,
@@ -791,14 +820,14 @@ pub struct Cancellation {
 }
 
 impl Cancellation {
-    /// A fresh cancellation handle with the specified absolute deadline. A deadline that
-    /// has already passed is expired at once and starts no thread.
+    /// A fresh cancellation handle with the specified absolute deadline. A
+    /// deadline that has already passed is expired at once. No thread starts.
     ///
     /// # Errors
-    /// Returns the operating system's refusal to start the timer thread.
+    /// Never fails; the `io::Result` is kept for source compatibility.
     pub fn with_deadline(deadline: Instant) -> io::Result<Self> {
         Ok(Self {
-            deadline: Some(Arc::new(DeadlineOwner::arm(deadline)?)),
+            deadline: Some(Arc::new(DeadlineOwner::arm(deadline))),
             ..Self::default()
         })
     }
@@ -810,14 +839,16 @@ impl Cancellation {
 
     /// Observe cancellation and the deadline at a bounded work boundary.
     /// Ordinary handles read at most two relaxed flags; a handle from a
-    /// [`CancellationSlot`] additionally reads its run's membership. No clock
-    /// is read. A retired or superseded run reports cancellation.
+    /// [`CancellationSlot`] additionally reads its run's membership. A handle
+    /// with an unexpired deadline also reads the monotonic clock once, out of
+    /// line, and latches expiry for every clone. A retired or superseded run
+    /// reports cancellation.
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
     #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
-        self.polling().poll()
+        self.polling().poll_deadline()
     }
 
     /// Run one metered operation under a work `limit` and settle its outcome
@@ -864,19 +895,25 @@ impl Cancellation {
 /// Tight loops can retain this view to avoid traversing the owning handle at
 /// each boundary. It caches references and the immutable run identity, never
 /// an observed flag value. Copying it neither owns a token nor prolongs a run.
+/// [`Self::poll`] reads flags only; a loop that holds only this view and runs
+/// without a meter calls [`Self::poll_deadline`] at a coarse boundary of its
+/// own, or it observes a deadline only after another boundary latches it.
 #[derive(Clone, Copy, Debug)]
 pub struct CancellationPoll<'a> {
     cancelled: &'a AtomicBool,
-    expired: Option<&'a AtomicBool>,
+    expired: Option<&'a Deadline>,
     membership: Option<slot::MembershipPoll<'a>>,
 }
 
 impl CancellationPoll<'_> {
-    /// Observe exactly the same flags, in the same order, as the owning token.
-    /// Reads only relaxed atomics; no clock, allocation or lock is involved.
+    /// Observe the same flags, in the same order, as the owning token: the
+    /// cancellation flag, the run's membership and the latched deadline
+    /// expiry. Reads relaxed atomics only; no clock, allocation, lock or
+    /// thread is involved, and no call leaves the inlined path. A deadline
+    /// that has passed is reported once a coarse boundary has latched it.
     ///
     /// # Errors
-    /// Returns cancellation first, otherwise an expired deadline.
+    /// Returns cancellation first, otherwise a latched deadline.
     #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
         if self.cancelled.load(Ordering::Relaxed)
@@ -885,89 +922,100 @@ impl CancellationPoll<'_> {
             Err(Stop::Cancelled)
         } else if self
             .expired
-            .is_some_and(|expired| expired.load(Ordering::Relaxed))
+            .is_some_and(|deadline| deadline.expired.load(Ordering::Relaxed))
         {
             Err(Stop::Deadline)
         } else {
             Ok(())
         }
     }
+
+    /// Observe the flags as [`Self::poll`] does and then, for an unexpired
+    /// deadline, read the monotonic clock once and latch expiry for every
+    /// clone. For coarse boundaries only: a meter allowance boundary or
+    /// refill, an owned-handle poll, a region-walk step. Without a deadline
+    /// no clock is read.
+    ///
+    /// # Errors
+    /// Returns cancellation first, otherwise an expired deadline.
+    #[inline]
+    pub fn poll_deadline(&self) -> Result<(), Stop> {
+        self.poll()?;
+        match self.expired {
+            Some(deadline) if deadline.observe() => Err(Stop::Deadline),
+            _ => Ok(()),
+        }
+    }
 }
 
-/// The flags a timer sets and the wake-up it waits on.
+/// Coarse deadline observations on one thread between two clock reads. A
+/// thread reads the clock at its first observation and then once per this
+/// many, so an expired deadline is latched at most `CLOCK_STRIDE - 1`
+/// observations late on each thread.
+const CLOCK_STRIDE: u32 = 16;
+
+thread_local! {
+    /// This thread's deadline observations left before its next clock read.
+    static UNTIL_CLOCK: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+thread_local! {
+    /// This thread's deadline clock reads, for tests of the placement.
+    static CLOCK_READS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// An absolute deadline and the flag that latches its expiry for every clone.
 #[derive(Debug)]
 struct Deadline {
     at: Instant,
     expired: AtomicBool,
-    /// True once every cancellation handle has dropped; the timer then exits early.
-    retired: Mutex<bool>,
-    wake: Condvar,
 }
 
-/// Held by the cancellation handles, not by the timer, so that dropping the last
-/// clone is observable as the owner's drop.
+impl Deadline {
+    /// Whether the deadline has passed: at every [`CLOCK_STRIDE`]th
+    /// observation on this thread, one clock read that latches it. Kept out
+    /// of line so a boundary that observes it adds one call.
+    #[cold]
+    #[inline(never)]
+    fn observe(&self) -> bool {
+        let due = UNTIL_CLOCK.with(|until| {
+            let left = until.get();
+            until.set(left.checked_sub(1).unwrap_or(CLOCK_STRIDE - 1));
+            left == 0
+        });
+        if !due {
+            return false;
+        }
+        #[cfg(test)]
+        CLOCK_READS.with(|reads| reads.set(reads.get() + 1));
+        let expired = Instant::now() >= self.at;
+        if expired {
+            self.expired.store(true, Ordering::Relaxed);
+        }
+        expired
+    }
+}
+
+/// Held by the cancellation handles; clones share one deadline.
 #[derive(Debug)]
 struct DeadlineOwner {
     deadline: Arc<Deadline>,
 }
 
 impl DeadlineOwner {
-    /// Borrow an optional timer flag without observing its current value.
+    /// Borrow an optional deadline without observing it.
     #[inline]
-    fn expiry(deadline: Option<&Arc<Self>>) -> Option<&AtomicBool> {
-        let owner = deadline?;
-        Some(&owner.deadline.expired)
+    fn expiry(deadline: Option<&Arc<Self>>) -> Option<&Deadline> {
+        Some(&deadline?.deadline)
     }
 
-    fn arm(at: Instant) -> io::Result<Self> {
-        let deadline = Arc::new(Deadline {
-            at,
-            expired: AtomicBool::new(false),
-            retired: Mutex::new(false),
-            wake: Condvar::new(),
-        });
-        if Instant::now() >= at {
-            deadline.expired.store(true, Ordering::Relaxed);
-        } else {
-            let timer = Arc::clone(&deadline);
-            thread::Builder::new()
-                .name("zetesis-deadline".into())
-                .spawn(move || timer.wait())?;
-        }
-        Ok(Self { deadline })
-    }
-}
-
-impl Drop for DeadlineOwner {
-    fn drop(&mut self) {
-        *self.deadline.lock() = true;
-        self.deadline.wake.notify_all();
-    }
-}
-
-impl Deadline {
-    fn lock(&self) -> std::sync::MutexGuard<'_, bool> {
-        self.retired.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Sleep until the deadline or retirement. Timed waits bound the sleep to
-    /// the remaining time, so a spurious wake-up costs one clock read.
-    fn wait(&self) {
-        let mut retired = self.lock();
-        loop {
-            if *retired {
-                return;
-            }
-            let now = Instant::now();
-            if now >= self.at {
-                self.expired.store(true, Ordering::Relaxed);
-                return;
-            }
-            retired = self
-                .wake
-                .wait_timeout(retired, self.at - now)
-                .unwrap_or_else(PoisonError::into_inner)
-                .0;
+    fn arm(at: Instant) -> Self {
+        Self {
+            deadline: Arc::new(Deadline {
+                at,
+                expired: AtomicBool::new(Instant::now() >= at),
+            }),
         }
     }
 }

@@ -14,13 +14,14 @@ pub(crate) mod sort;
 mod storage;
 pub(crate) use computation::Computation;
 pub(crate) use publication::Publication;
-pub(crate) use selection::{SourceBatch, SourceSelection};
+pub(crate) use selection::{FactAtoms, SourceBatch, SourceSelection};
 pub(crate) use storage::{
     StorageLease, growth_capacity, growth_target, reserve, reserve_exact, reserve_exact_scoped,
 };
 mod accounting;
 mod expression_keys;
 mod generated;
+mod head_run;
 mod heads;
 mod integer_comparisons;
 pub(crate) use heads::RowHead;
@@ -94,7 +95,7 @@ use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Prepared};
 use crate::grounding_observer::{Event, Work};
-use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
+use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, GroundingOperator};
 use rows::{Advance, Frame, Ownership, Staged};
 
 pub(crate) use accounting::{Accounting, AccountingBaseline};
@@ -675,9 +676,59 @@ fn complete(
     complete_with_executor(catalog, prepared, producers, domains, budget, work, None)
 }
 
-/// Every round joins each selected rule under its domain guards, when the
-/// analysis prepared candidates: a row a guard rejects has no complete
-/// continuation the exclusion rule keeps, in this round as in the final one.
+/// Install certainty and posting demand, publish the catalog, and let the
+/// first round record each fact row's atom for grounding to read back.
+fn prepare_rounds(
+    catalog: &mut SupportCatalog,
+    prepared: &Prepared,
+    producers: &mut producers::Producers<'_>,
+    (limits, counters): (&FormulaLimits, &mut Counters),
+    fallback: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    catalog.prepared_bytes(producers.bytes());
+    // Certain predicates are read by assignment proposals from the first
+    // round on, so they are installed before the first snapshot.
+    if certain::every_predicate_assumed() {
+        catalog.install_certainty(certain::Certainty::all(), limits, counters, fallback)?;
+    } else if !certain::left_out()
+        && let Some(certainty) =
+            producers.certainty(prepared, catalog, limits, counters, fallback)?
+    {
+        catalog.install_certainty(certainty, limits, counters, fallback)?;
+    }
+    // Postings are kept only for columns a join can bind, decided before the
+    // first relation is created, since a column cannot gain postings later.
+    if let Some(view) = catalog.component_view(limits, counters, fallback)? {
+        let demand = demand::Demand::of(prepared, view, limits, counters, fallback)?;
+        catalog.install_demand(demand);
+    }
+    catalog.publish(limits, counters, fallback)?;
+    let mut rows = 0_usize;
+    for block in prepared.items().blocks() {
+        counters.work(limits, block.location())?;
+        rows = rows
+            .checked_add(block.len())
+            .ok_or(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Overflow,
+                location: fallback,
+            })?;
+    }
+    if rows > 0 {
+        catalog.open_fact_rows(rows, limits, counters, fallback)?;
+    } else {
+        // Without fact blocks, a cell per fact rule for its head's atom.
+        let mut facts = 0_usize;
+        for rule in prepared.rules_without_facts() {
+            counters.work(limits, rule.location)?;
+            facts += usize::from(head_run::fact_head(rule).is_some());
+        }
+        if facts > 1 {
+            catalog.open_head_rows(facts, limits, counters, fallback)?;
+        }
+    }
+    Ok(())
+}
+
 fn complete_with_executor(
     mut catalog: SupportCatalog,
     prepared: &Prepared,
@@ -692,24 +743,13 @@ fn complete_with_executor(
         counters,
         location: fallback,
     } = work;
-    catalog.prepared_bytes(producers.bytes());
-    // Certain predicates are read by assignment proposals from the first
-    // round on, so they are installed before the first snapshot.
-    if certain::every_predicate_assumed() {
-        catalog.install_certainty(certain::Certainty::all(), limits, counters, fallback)?;
-    } else if !certain::left_out()
-        && let Some(certainty) =
-            producers.certainty(prepared, &catalog, limits, counters, fallback)?
-    {
-        catalog.install_certainty(certainty, limits, counters, fallback)?;
-    }
-    // Postings are kept only for columns a join can bind, decided before the
-    // first relation is created, since a column cannot gain postings later.
-    if let Some(view) = catalog.component_view(limits, counters, fallback)? {
-        let demand = demand::Demand::of(prepared, view, limits, counters, fallback)?;
-        catalog.install_demand(demand);
-    }
-    catalog.publish(limits, counters, fallback)?;
+    prepare_rounds(
+        &mut catalog,
+        prepared,
+        &mut producers,
+        (limits, counters),
+        fallback,
+    )?;
     #[cfg(test)]
     postings::begin_support();
     let mut rounds = 0_u64;
@@ -725,11 +765,8 @@ fn complete_with_executor(
         rounds += 1;
         counters.record(Event::SupportRound);
         let changed = {
-            // Rules alone are scheduled: a fact block has no producer slot,
-            // and enters support in the first round at its item position.
             let mut schedule = producers.schedule();
-            let mut facts = (rounds == 1 && prepared.items().blocks().next().is_some())
-                .then(|| facts::FirstRound::new(prepared.items()));
+            let (mut facts, mut heads) = first_round(rounds, prepared);
             let mut selected = schedule.next(limits, counters, fallback)?;
             if selected.is_none() && producers.is_planned() && facts.is_none() {
                 // Every zero-input producer ran at bootstrap. Every subsequent
@@ -743,42 +780,37 @@ fn complete_with_executor(
             }
             counters.work(limits, fallback)?;
             counters.record(Event::SupportSnapshotPreparation);
-            let (relations, mut delta) = catalog.split(limits, counters, fallback)?;
+            let (relations, mut delta) = counters
+                .operator(GroundingOperator::SupportIndex, |counters| {
+                    catalog.split(limits, counters, fallback)
+                })?;
             let kept = std::mem::take(&mut retained);
-            let support = Support::indexed_retaining(&relations, kept, limits, counters, fallback)?;
-            counters.observe_work(Event::SupportProductionWork, |counters| {
-                while let Some((index, scheduled)) = next_producer(
-                    selected,
-                    &mut facts,
-                    (&producers, &mut delta, &support),
-                    (limits, counters, fallback),
-                )? {
-                    if let Some(facts) = &mut facts {
-                        facts.before_rule(index, &mut delta, &support, limits, counters)?;
+            let support = counters.operator(GroundingOperator::SupportIndex, |counters| {
+                Support::indexed_retaining(&relations, kept, limits, counters, fallback)
+            })?;
+            counters.operator(GroundingOperator::SupportJoin, |counters| {
+                counters.observe_work(Event::SupportProductionWork, |counters| {
+                    while let Some((index, scheduled)) = next_producer(
+                        selected,
+                        (&mut facts, &mut heads),
+                        (&producers, &mut delta, &support),
+                        (limits, counters, fallback),
+                    )? {
+                        visit_producer(
+                            (index, scheduled, rounds),
+                            (&mut facts, &mut heads),
+                            prepared,
+                            (&producers, &mut delta, &support, domains),
+                            budget,
+                            (limits, counters),
+                            executor,
+                        )?;
+                        if !scheduled {
+                            selected = schedule.next(limits, counters, fallback)?;
+                        }
                     }
-                    let rule = &prepared.rules_without_facts()[index];
-                    counters.work(limits, rule.location)?;
-                    counters.record(Event::SupportProducerVisit);
-                    let mut variants = if scheduled {
-                        counters.record(Event::SupportRichTraversal);
-                        delta::traversal(rule, &support, true)
-                    } else {
-                        producers.variants(index, rule, &support, rounds == 1, limits, counters)?
-                    };
-                    let round = (&mut delta, &support, domains);
-                    produce(
-                        (index, rule),
-                        &mut variants,
-                        round,
-                        budget,
-                        (limits, counters),
-                        executor,
-                    )?;
-                    if !scheduled {
-                        selected = schedule.next(limits, counters, fallback)?;
-                    }
-                }
-                Ok::<_, FormulaFailure>(())
+                    Ok::<_, FormulaFailure>(())
+                })
             })?;
             // No join remains live. Release its query descriptor before the
             // pending selection borrows the catalog's semantic ordering index.
@@ -787,8 +819,10 @@ fn complete_with_executor(
                 &mut delta,
                 Some(&mut producers),
                 GroundingWork::new(limits, counters, fallback),
+                executor,
             )?
         };
+        catalog.close_fact_rows();
         if !changed {
             // An unchanged round decides every component no waiting producer
             // still feeds, so the earliest waiting producer was traversed. A
@@ -802,8 +836,85 @@ fn complete_with_executor(
                 GroundingWork::new(limits, counters, fallback),
             );
         }
-        catalog.publish(limits, counters, fallback)?;
+        counters.operator(GroundingOperator::SupportPublish, |counters| {
+            catalog.publish(limits, counters, fallback)
+        })?;
     }
+}
+
+/// Run one selected producer of the round: admit the first round's facts or
+/// heads before it, then derive its variants into the round's pending atoms.
+fn visit_producer<'source>(
+    (index, scheduled, rounds): (usize, bool, u64),
+    first: (
+        &mut Option<facts::FirstRound<'_>>,
+        &mut Option<head_run::HeadRun>,
+    ),
+    prepared: &'source Prepared,
+    (producers, delta, support, domains): (
+        &producers::Producers<'_>,
+        &mut SupportAppend<'source>,
+        &Support<'source>,
+        Option<&crate::formula_domains::Domains<'_>>,
+    ),
+    budget: &mut Budget,
+    (limits, counters): (&FormulaLimits, &mut Counters),
+    executor: Option<&Executor>,
+) -> Result<(), FormulaFailure> {
+    let rules = prepared.rules_without_facts();
+    enter_rule(index, first, rules, (delta, support), (limits, counters))?;
+    let rule = &rules[index];
+    counters.work(limits, rule.location)?;
+    counters.record(Event::SupportProducerVisit);
+    let mut variants = if scheduled {
+        counters.record(Event::SupportRichTraversal);
+        delta::traversal(rule, support, true)
+    } else {
+        producers.variants(index, rule, support, rounds == 1, limits, counters)?
+    };
+    produce(
+        (index, rule),
+        &mut variants,
+        (delta, support, domains),
+        budget,
+        (limits, counters),
+        executor,
+    )
+}
+
+/// What the first round admits beside its producers. Rules alone are
+/// scheduled: a fact block has no producer slot, and enters support in the
+/// first round at its item position. Without fact blocks, the first round
+/// admits runs of fact rules of one predicate as head blocks instead.
+fn first_round(
+    rounds: u64,
+    prepared: &Prepared,
+) -> (Option<facts::FirstRound<'_>>, Option<head_run::HeadRun>) {
+    let facts = (rounds == 1 && prepared.items().blocks().next().is_some())
+        .then(|| facts::FirstRound::new(prepared.items()));
+    let heads = (rounds == 1 && facts.is_none()).then(head_run::HeadRun::default);
+    (facts, heads)
+}
+
+/// Admit what the first round holds before the rule `index`: the fact blocks
+/// that precede it, or the run of fact rules it opens or continues.
+fn enter_rule<'source>(
+    index: usize,
+    (facts, heads): (
+        &mut Option<facts::FirstRound<'_>>,
+        &mut Option<head_run::HeadRun>,
+    ),
+    rules: &'source [crate::formula_ir::RuleIr],
+    (delta, support): (&mut SupportAppend<'source>, &Support<'source>),
+    (limits, counters): (&FormulaLimits, &mut Counters),
+) -> Result<(), FormulaFailure> {
+    if let Some(facts) = facts {
+        facts.before_rule(index, delta, support, limits, counters)?;
+    }
+    if let Some(heads) = heads {
+        heads.before_rule(index, rules, delta, support, limits, counters)?;
+    }
+    Ok(())
 }
 
 /// The round's next producer: the schedule's, then, once it is exhausted and
@@ -812,7 +923,10 @@ fn complete_with_executor(
 /// in full.
 fn next_producer<'source>(
     selected: Option<usize>,
-    facts: &mut Option<facts::FirstRound<'_>>,
+    (facts, heads): (
+        &mut Option<facts::FirstRound<'_>>,
+        &mut Option<head_run::HeadRun>,
+    ),
     (producers, delta, support): (
         &producers::Producers<'_>,
         &mut SupportAppend<'source>,
@@ -825,6 +939,10 @@ fn next_producer<'source>(
     }
     if let Some(facts) = facts.take() {
         facts.finish(delta, support, limits, counters)?;
+    }
+    // A producer the component schedule releases starts no head run.
+    if let Some(mut heads) = heads.take() {
+        heads.close(delta, support, limits, counters, location)?;
     }
     let ready = match producers.take_ready() {
         Some(index) => Some(index),
@@ -880,6 +998,7 @@ fn advance_round(
     delta: &mut SupportAppend<'_>,
     producers: Option<&mut producers::Producers<'_>>,
     work: GroundingWork<'_>,
+    executor: Option<&Executor>,
 ) -> Result<bool, FormulaFailure> {
     let GroundingWork {
         limits,
@@ -889,14 +1008,18 @@ fn advance_round(
     if delta.is_empty() {
         return Ok(false);
     }
-    counters.observe_work(Event::SupportOrderWork, |counters| {
-        delta.order(limits, counters, location)
+    counters.operator(GroundingOperator::SupportDedup, |counters| {
+        counters.observe_work(Event::SupportOrderWork, |counters| {
+            delta.order(limits, counters, location, executor)
+        })
     })?;
     #[cfg(test)]
     facts::rounds::record(delta.atoms());
     if let Some(producers) = producers {
-        counters.observe_work(Event::SupportWakeWork, |counters| {
-            producers.advance(delta.atoms(), limits, counters, location)
+        counters.operator(GroundingOperator::SupportWake, |counters| {
+            counters.observe_work(Event::SupportWakeWork, |counters| {
+                producers.advance(delta.atoms(), limits, counters, location)
+            })
         })?;
     }
     Ok(true)
@@ -920,7 +1043,9 @@ fn finish(
     drop(producers);
     drop(retained);
     catalog.release_preparation();
-    catalog.publish(limits, counters, location)?;
+    counters.operator(GroundingOperator::SupportPublish, |counters| {
+        catalog.publish(limits, counters, location)
+    })?;
     Ok(CompletedCatalog {
         catalog,
         completion: Completion(std::sync::Arc::new(())),
@@ -982,6 +1107,30 @@ fn derive_variants_with_executor<'source>(
                 location: _,
             },
     } = context;
+    // A body-less normal rule without variables has exactly one binding, the
+    // empty one, under every variant: no join, selection or witness cursor
+    // has anything to visit. Its head is derived from that binding as the
+    // join's one row would derive it.
+    if rule.body.is_empty()
+        && rule.variables == 0
+        && let HeadIr::Normal(Some(head)) = &rule.head
+    {
+        let mut next = variants.next(limits, counters)?;
+        while next.is_some() {
+            let binding = Binding::new(computation, limits, counters, rule.location)?;
+            let mut derivation = Derivation {
+                normal_head: None,
+                computation: &mut *computation,
+                limits,
+                budget: &mut *budget,
+                counters: &mut *counters,
+            };
+            derivation.normal_head(*head, &binding, rule.location)?;
+            drop(derivation);
+            next = variants.next(limits, counters)?;
+        }
+        return Ok(());
+    }
     // A successful map belongs to this exact rule and immutable round. The
     // first cursor retains its ordinary mutable preparation; later variants
     // borrow it only after that cursor has finished and released its state.
@@ -1113,8 +1262,10 @@ fn derive_rule_with_executor<'source>(
         budget,
         counters,
     };
+    // A body-less rule has one binding, so asking first whether its head is
+    // already derived saves nothing: deriving it again finds the same atom.
     let projected = match &rule.head {
-        HeadIr::Normal(head) => *head,
+        HeadIr::Normal(head) if !rule.body.is_empty() => *head,
         _ => None,
     };
     let certainty = support.certainty();
@@ -1478,6 +1629,9 @@ pub(crate) struct Join<'a, 'source> {
     /// Immutable necessary rows, borrowed only by post-capture prepared joins.
     pattern_rows: Option<&'a prepared::PatternRows<'a>>,
     witnesses: Option<witnesses::Witnesses<'source>>,
+    /// A passing completion found by an existence check and not yet lent:
+    /// the next matched-row request lends it before the join advances.
+    held: Option<rows::Frame>,
     depth: usize,
     traversal: Traversal,
 }
@@ -2206,8 +2360,39 @@ impl<'a, 'source> Join<'a, 'source> {
             None,
             Context::new(computation, limits, counters, location),
         )?;
+        join.arrange_fixed(computation, limits, budget, counters, location)?;
         join.decide(computation, limits, budget, counters, location)?;
         Ok(join)
+    }
+
+    /// Reorder a fresh component cursor once its fixed slots are installed,
+    /// as a prepared component plan is ordered: a fixed slot is bound.
+    fn arrange_fixed(
+        &mut self,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let fixed = self.bound_slots(computation, limits, counters, location)?;
+        let empty = Binding::new(computation, limits, counters, location)?;
+        let mut admit =
+            |capacity| computation.preparation_capacity(capacity, limits, counters, location);
+        let plan = order::Plan::with_fixed(
+            self.literals.get(),
+            (&empty, fixed.slice()),
+            fixed.len(),
+            order::SourceRows {
+                relations: self.support,
+                pivot: None,
+            },
+            budget,
+            location,
+            Some(&mut admit),
+        )?;
+        *self.owned_plan() = plan;
+        Ok(())
     }
 
     fn fix_component(
@@ -2228,18 +2413,19 @@ impl<'a, 'source> Join<'a, 'source> {
         } = work;
         for slot in 0..fixed.len().min(self.values.len()) {
             counters.work(limits, location)?;
-            let value = fixed
+            let present = fixed
                 .slots()
-                .key(slot)
+                .is_bound(slot)
                 .map_err(|error| crate::formula_binding::assignment(error, location))?;
-            if expected.is_some_and(|expected| expected[slot] != value.is_some()) {
+            if expected.is_some_and(|expected| expected[slot] != present) {
                 return Err(FormulaFailure::SupportRelation {
                     error: zetesis_core::relation::Failure::Owner,
                     location,
                 });
             }
-            if let Some(value) = value {
-                self.values.set(slot, &value, limits, counters, location)?;
+            if present {
+                self.values
+                    .copy_present(slot, fixed.slots(), slot, limits, counters, location)?;
             }
         }
         let mut used_cursor = 0;
@@ -2254,6 +2440,98 @@ impl<'a, 'source> Join<'a, 'source> {
             }
         }
         Ok(())
+    }
+    /// Return a join that [`ComponentPlans`] lent to its state just after it
+    /// was lent, for another fixed binding of the same component. The lease,
+    /// buffers and evaluation scratch stay, so successive head rows take no
+    /// new storage handle or vocabulary witness. Every reset cell is charged
+    /// as constructing it was, and the borrowed plan replaces any plan a
+    /// scalar selection installed.
+    pub(in crate::formula_support) fn rebind(
+        &mut self,
+        plan: &'a order::Plan<'a>,
+        fixed: &Binding<'_>,
+        used: &[usize],
+        expected: Option<&[bool]>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        self.plan = JoinPlan::Borrowed(plan);
+        self.scalar_selection = scalar_selection::Preparation::Pending;
+        self.comparisons = Comparisons::Deferred;
+        self.pending_comparisons = Comparisons::Deferred;
+        self.source_evidence = false;
+        self.certified_total = false;
+        self.expression_keys = None;
+        self.multiples = None;
+        self.range_selection = None;
+        self.family = family::Evidence::default();
+        self.delta = self.plan.pivot;
+        self.failure = None;
+        self.evaluation.clear_zero_divisor();
+        self.pending = None;
+        self.pending_head = None;
+        self.anchor = None;
+        self.positive_prefix = None;
+        self.structural_query = None;
+        self.held = None;
+        self.depth = 0;
+        self.traversal = Traversal::Searching;
+        self.pattern_captures.clear();
+        self.probe_selections.clear();
+        if let Some(witnesses) = self.witnesses.as_mut() {
+            witnesses.clear();
+        }
+        for slot in 0..self.values.len() {
+            self.values.clear(slot, limits, counters, location)?;
+        }
+        for slot in &mut self.slots {
+            counters.work(limits, location)?;
+            *slot = Slot::Relational;
+        }
+        for verdict in &mut self.verdicts {
+            counters.work(limits, location)?;
+            *verdict = true;
+        }
+        for position in &mut self.positions {
+            counters.work(limits, location)?;
+            *position = 0;
+        }
+        for probe in &mut self.probes {
+            counters.work(limits, location)?;
+            *probe = None;
+        }
+        for resolution in &mut self.resolutions {
+            counters.work(limits, location)?;
+            *resolution = Resolution::Unresolved;
+        }
+        for changes in &mut self.changes {
+            counters.work(limits, location)?;
+            changes.clear();
+        }
+        for target in self
+            .literals
+            .get()
+            .iter()
+            .filter_map(crate::formula_binding_cursor::target)
+        {
+            self.slots[target] = Slot::Generated;
+        }
+        self.lease.observe(self.storage_bytes(), location)?;
+        self.fix_component(
+            fixed,
+            used,
+            expected,
+            Context::new(computation, limits, counters, location),
+        )
     }
     /// Share the existing final Builder's family stages. This is installed
     /// before traversal; the query borrow keeps the exact Support alive.
@@ -2463,7 +2741,6 @@ impl<'a, 'source> Join<'a, 'source> {
                 },
         } = context;
         let count = plan.patterns.len();
-        let delta = plan.pivot;
         let mut lease = computation.lease();
         let plan_bytes = match &plan {
             JoinPlan::Owned(plan) => plan.retained_bytes(),
@@ -2510,6 +2787,7 @@ impl<'a, 'source> Join<'a, 'source> {
             family: family::Evidence::default(),
             head_bounds: &[],
             checked_guard: None,
+            delta: plan.pivot,
             plan,
             verdicts: Vec::new(),
             failure: None,
@@ -2518,7 +2796,6 @@ impl<'a, 'source> Join<'a, 'source> {
                 total,
                 &Context::new(computation, limits, counters, location),
             )?,
-            delta,
             domains: None,
             row_filter: None,
             anchor: None,
@@ -2538,6 +2815,7 @@ impl<'a, 'source> Join<'a, 'source> {
             structural_query: None,
             pattern_rows: None,
             witnesses: None,
+            held: None,
             depth: 0,
             traversal: Traversal::Searching,
         };

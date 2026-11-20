@@ -25,6 +25,17 @@ impl Payload for CandidateKnowledge {
     }
 }
 
+/// Pending entries below a deque's newest that keep their knowledge; older
+/// ones are shed ([`CandidateKnowledge::shed`]) and recompute it when visited.
+/// Each kept copy is one closure state of the theory, so a depth-first walk
+/// keeps at most this many per worker instead of one per open split.
+pub(super) const KEPT_KNOWLEDGE: usize = 64;
+
+/// Shed one pending entry's knowledge.
+pub(super) fn shed(entry: &mut Entry) {
+    entry.state.shed();
+}
+
 /// The sole frontier protocol specialized to candidate state and solver errors.
 pub(super) type RegionFrontier = Frontier<Entry, Incomplete>;
 

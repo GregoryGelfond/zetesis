@@ -138,7 +138,9 @@ fn full_rows(variant: delta::Variant, add_delta: bool) -> Vec<Vec<Value>> {
                     rule.location,
                 )
                 .unwrap();
-            append.order(&limits, &mut counters, rule.location).unwrap();
+            append
+                .order(&limits, &mut counters, rule.location, None)
+                .unwrap();
         }
         catalog
             .publish(&limits, &mut counters, rule.location)

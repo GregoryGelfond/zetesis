@@ -6,8 +6,9 @@
 returns templates for lazy or eager normal-rule execution. Formula preparation
 returns scoped instructions; grounding consumes them to construct a finite
 Ferraris theory. Automatic CPU solving can instead certify and directly evaluate
-a complete acyclic normal source, retaining its original program and canonical
-interpretation without a formula graph. None of these preparation paths searches
+a complete stratified normal source, retaining its original program and canonical
+interpretation without a formula graph. Such a source may be
+[recursive through certain components](#direct-evaluation-of-stratified-recursion). None of these preparation paths searches
 candidate regions.
 
 This chapter maps the implementation for readers extending the source language.
@@ -19,6 +20,56 @@ head at a time in source order. Formula admission consumes that head directly. C
 validation and logical expansion limits precede emission. This removes temporary
 range columns and per-statement template vectors, without changing duplicates,
 provenance or arithmetic diagnostics.
+
+## Direct evaluation of stratified recursion
+
+Datalog-shaped programs (closures, joins and arithmetic filters, with negation
+over completed lower strata) take the direct route. A dependency component is
+*certain* when each atom its rules negate lies in a strictly lower certain
+component, and each atom they read positively lies in it or in a lower certain
+component. Its bodies are flat atoms and comparisons, so its predicates are
+certain in the sense of
+[completed possible support](grounding.md#completed-possible-support): every
+negation it reads is decided, support completion passes over the rows a
+decided negation falsifies, and the remaining rules form a definite program
+whose least model is exactly their completed support
+([`CertainAtoms.derived_stable`](../lean/theorems.md)). A certain component may
+therefore be recursive. In a complete normal source without negative or
+aggregate cycles every component is certain, by induction along the ranks.
+
+The plan ranks components as before. A non-recursive component that negates
+is folded once against the completed lower activity, as an acyclic one is. A
+*saturated* rank (recursive, or free of default negation) re-joins each rule
+once over completed support, which also repeats the original key validation,
+skips the rows a decided negation falsifies, as support completion did, and
+stages every remaining row's head as required without folding its body;
+same-rank atoms are never read before they are published. Before that, it
+checks that support completion decided every default negation of the rule; a
+disagreement between the plan and support refuses the evaluation rather than
+publishing. Its heads are collected in a deferred source batch and merged into
+the local selection when the rank ends, by one sorted linear merge rather than
+one shifting insertion per atom. A negative or aggregate cycle declines the
+class, retaining the ordinary grounding door and every accepted charge.
+
+A rule may also hold an assignment aggregate, such as
+`c(X,N) :- n(X), N = #count{ Y : e(X,Y) }.`, whose elements read only positive
+atoms of strictly lower certain components and comparisons. Every tuple such
+an element yields over completed support is required, so the assignment's
+carrier is the single exact value that support completion proposes, and the
+head predicate stays certain. Its rank is saturated: the rows support offers
+are published without a fold, which has no aggregate reading. Evaluation
+again first checks that support completion listed every element as required.
+Any other aggregate, or an element with negation or a nested literal, keeps
+the ordinary door.
+
+The resulting rank structure is a stratification in the sense of
+[`StratifiedEvaluation`](../lean/theorems.md): positive dependencies stay
+within a rank and frozen gates read lower ranks. Strict ranks use the one-pass
+scan of `AcyclicEvaluation`; saturated ranks use the complete positive closure,
+filtered by decided gates, that support completion has already computed.
+Constraints and opposite classical signs then decide membership, as before.
+Component recognition, the support fixed point and the Rust execution remain
+separate correspondence obligations, as for the acyclic class.
 
 ## Follow the owned objects
 
