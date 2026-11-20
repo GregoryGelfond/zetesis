@@ -13,8 +13,9 @@
 
 use super::{Computation, Counters, SourceAtom, SourceSelection, owner_failure};
 use crate::formula::ceiling;
-use crate::formula_support::{Context, GroundingWork, reserve, sort};
+use crate::formula_support::{Context, GroundingWork, Support, reserve, sort};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
+use zetesis_core::PatternRef;
 
 pub(crate) struct SourceBatch(SourceSelection);
 
@@ -45,6 +46,40 @@ impl SourceBatch {
         )?;
         counters.work(limits, location)?;
         self.0.positions.push(atom.position);
+        Ok(())
+    }
+
+    /// Push every completed-support row of `pattern`'s predicate.
+    ///
+    /// The caller vouches that the predicate's support is its exact extension:
+    /// a saturated component's certain predicates, whose completed support is
+    /// their least model. Those rows are then exactly the heads one more
+    /// application of the component's rules would derive over them, so the
+    /// rows are read once instead of joining the rule bodies again. Each row
+    /// costs one charged identity lookup and one charged push.
+    pub(crate) fn push_supported(
+        &mut self,
+        pattern: PatternRef<'_>,
+        support: &Support<'_>,
+        computation: &mut Computation<'_, '_>,
+        work: GroundingWork<'_>,
+    ) -> Result<(), FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let Some(rows) = support.resolve(pattern, limits, counters, location)? else {
+            return Ok(());
+        };
+        for position in 0..rows.row_count() {
+            counters.work(limits, location)?;
+            let row = rows
+                .row(position)
+                .expect("a position below the row count is a row");
+            let atom = computation.atom_ref(row.atom(), limits, counters, location)?;
+            self.push(&atom, computation, limits, counters, location)?;
+        }
         Ok(())
     }
 

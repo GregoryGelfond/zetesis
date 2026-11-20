@@ -74,12 +74,17 @@ pub(crate) fn evaluate_acyclic(
     // rank ends: no rule of a closed rank reads activity, and every later
     // rank starts after the publication.
     let mut closed: Option<(usize, SourceBatch)> = None;
-    for &(rank, position) in plan.items() {
+    // Where the current rank's items begin in the plan.
+    let mut rank_start = 0;
+    for (at, &(rank, position)) in plan.items().iter().enumerate() {
         if let Some((pending, _)) = &closed
             && *pending != rank
         {
             let (_, batch) = closed.take().expect("checked pending rank");
             result.publish_required(batch, context)?;
+        }
+        if at == 0 || plan.items()[at - 1].0 != rank {
+            rank_start = at;
         }
         let item = source.items().get(position);
         context.location = match item {
@@ -105,13 +110,23 @@ pub(crate) fn evaluate_acyclic(
             None
         };
         match item {
-            Item::Rule(index, rule) => {
-                consistent &= profile.phase(
-                    GroundingPhase::RuleInstantiation,
-                    Some(rule.location),
-                    || result.rule_exact((index, rule), batch, support, context),
-                )?;
-            }
+            Item::Rule(index, rule) => match batch {
+                Some(batch) => {
+                    let earlier = &plan.items()[rank_start..at];
+                    profile.phase(
+                        GroundingPhase::RuleInstantiation,
+                        Some(rule.location),
+                        || rule_saturated((index, rule), batch, earlier, source, support, context),
+                    )?;
+                }
+                None => {
+                    consistent &= profile.phase(
+                        GroundingPhase::RuleInstantiation,
+                        Some(rule.location),
+                        || result.rule_exact((index, rule), support, context),
+                    )?;
+                }
+            },
             Item::Facts(block) => {
                 profile.phase(
                     GroundingPhase::RuleInstantiation,
@@ -227,27 +242,14 @@ impl SourceEligibility {
     /// its head, which no other row derives, lies outside the completed
     /// support and is not named here. The join has read the row's head
     /// arguments by then, so a fatal failure among them still refuses.
-    ///
-    /// In a saturated component (`closed` holds its pending heads), every
-    /// passing row whose decided negations hold has a `Required` body without
-    /// a fold: the join offers only completed-support rows, and completed
-    /// support restricted to certain predicates is their least model. This is
-    /// what lets such a component be recursive: a fold would read
-    /// same-component atoms before their producers are staged. Its heads are
-    /// published with the rank. Support completion must have decided every
-    /// default negation of such a rule; otherwise the plan and the support
-    /// disagree and the evaluation refuses rather than publish.
+    /// Rules of a saturated component take [`rule_saturated`] instead.
     fn rule_exact(
         &mut self,
         (index, rule): (usize, &crate::formula_ir::RuleIr),
-        mut closed: Option<&mut SourceBatch>,
         support: &crate::formula_support::Support<'_>,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<bool, FormulaFailure> {
         let mut consistent = true;
-        if closed.is_some() {
-            saturation_agrees(index, rule, support, context)?;
-        }
         let mut join = Join::rule(
             rule,
             support,
@@ -288,20 +290,6 @@ impl SourceEligibility {
                     context.counters,
                 )?
             {
-                continue;
-            }
-            if let Some(batch) = closed.as_deref_mut() {
-                let HeadIr::Normal(Some(head)) = &rule.head else {
-                    unreachable!("a closed component has a head")
-                };
-                let atom = context.atom(*head, &row.values)?;
-                batch.push(
-                    &atom,
-                    context.computation,
-                    context.limits,
-                    context.counters,
-                    context.location,
-                )?;
                 continue;
             }
             let body = self.fold_activity(&rule.body, &row.values, true, context)?;
@@ -384,6 +372,75 @@ impl SourceEligibility {
             lease,
         })
     }
+}
+
+/// Stage the heads of a rule of a saturated component into its rank's batch.
+///
+/// In a saturated component every body row the join would offer is a
+/// completed-support row whose decided negations hold, and its body is
+/// `Required` without a fold: completed support restricted to certain
+/// predicates is their least model. That is what lets such a component be
+/// recursive: a fold would read same-component atoms before their producers
+/// are staged. The heads those rows derive are then exactly the completed
+/// support of the head predicate, which already holds the least fixpoint, so
+/// they are read from it rather than derived again by rejoining every body
+/// over it. A predicate is read once per rank, at its first rule; facts of the
+/// rank are staged with their blocks as before, and the batch's merge drops
+/// the repeats. Support completion must have decided every default negation
+/// of such a rule; otherwise the plan and the support disagree and the
+/// evaluation refuses rather than publish. A saturated component has no
+/// constraint, so no instance can be violated.
+fn rule_saturated(
+    (index, rule): (usize, &crate::formula_ir::RuleIr),
+    batch: &mut SourceBatch,
+    earlier: &[(usize, usize)],
+    source: &crate::formula_ir::Prepared,
+    support: &crate::formula_support::Support<'_>,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<(), FormulaFailure> {
+    saturation_agrees(index, rule, support, context)?;
+    let HeadIr::Normal(Some(head)) = &rule.head else {
+        unreachable!("a closed component has a head")
+    };
+    let pattern = context.computation.static_pattern(
+        *head,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
+    for &(_, position) in earlier {
+        context.work()?;
+        let Item::Rule(_, other) = source.items().get(position) else {
+            continue;
+        };
+        let HeadIr::Normal(Some(other)) = &other.head else {
+            continue;
+        };
+        let other = context.computation.static_pattern(
+            *other,
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+        let (limits, counters, location) =
+            (context.limits, &mut *context.counters, context.location);
+        if other
+            .predicate()
+            .equals_ref_with(pattern.predicate(), || counters.work(limits, location))?
+        {
+            return Ok(());
+        }
+    }
+    batch.push_supported(
+        pattern,
+        support,
+        context.computation,
+        crate::formula_support::GroundingWork::new(
+            context.limits,
+            context.counters,
+            context.location,
+        ),
+    )
 }
 
 /// Refuse a saturated rule whose default negations support completion did not
