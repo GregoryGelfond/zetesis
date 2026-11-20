@@ -11,8 +11,8 @@ mod tests;
 mod wake;
 mod acyclic;
 mod registration;
-pub(in crate::formula_support) use registration::PredicateStage;
 pub(crate) use acyclic::AcyclicPlan;
+pub(in crate::formula_support) use registration::PredicateStage;
 pub(super) use registration::Registration;
 #[cfg(test)]
 pub(crate) use registration::testing;

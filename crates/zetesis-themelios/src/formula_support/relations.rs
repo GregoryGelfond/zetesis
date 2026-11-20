@@ -1035,11 +1035,13 @@ impl<'source> Relations<'source> {
         predicate: impl Into<PredicateRef<'predicate>>,
         from: usize,
     ) -> impl Iterator<Item = Row<'_, '_>> {
-        self.find(predicate.into()).into_iter().flat_map(move |rows| {
-            let count = rows.relation.row_count();
-            let start = from.min(count);
-            (start..count).map(|row| rows.relation.row(row).expect("bounded row"))
-        })
+        self.find(predicate.into())
+            .into_iter()
+            .flat_map(move |rows| {
+                let count = rows.relation.row_count();
+                let start = from.min(count);
+                (start..count).map(|row| rows.relation.row(row).expect("bounded row"))
+            })
     }
     #[cfg(test)]
     pub(super) fn row<'predicate>(

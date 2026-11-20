@@ -1223,9 +1223,6 @@ fn derive_variants_with_executor<'source>(
     Ok(())
 }
 
-
-
-
 /// Whether default-negation is sound for the hook on this visit.
 ///
 /// Every negated body position must be in `Certainty::decided(rule_index)`.
@@ -1265,7 +1262,11 @@ fn positive_partners_complete(
     };
     let head_predicate = head.predicate();
     for literal in &rule.body {
-        let crate::formula_ir::LiteralIr::Atom(themelios_program::program::DefaultNegation::None, pattern) = literal else {
+        let crate::formula_ir::LiteralIr::Atom(
+            themelios_program::program::DefaultNegation::None,
+            pattern,
+        ) = literal
+        else {
             continue;
         };
         let Some(pattern) = pattern.resolve(view) else {
@@ -1309,7 +1310,10 @@ fn negation_admission(
         return Ok((false, Vec::new()));
     };
     let decided: Vec<usize> = certainty.decided(index).collect();
-    if !occurrences.iter().all(|occurrence| decided.contains(occurrence)) {
+    if !occurrences
+        .iter()
+        .all(|occurrence| decided.contains(occurrence))
+    {
         return Ok((false, Vec::new()));
     }
     let allow_settled = admit_settled_negation();
@@ -1391,12 +1395,9 @@ fn evaluate_algebra_join<'a, 'source>(
             pending,
         );
     }
-    let Some(prepared) = crate::formula_ground::algebra_join::prepare(
-        rule,
-        support,
-        allow_negation,
-        pending,
-    ) else {
+    let Some(prepared) =
+        crate::formula_ground::algebra_join::prepare(rule, support, allow_negation, pending)
+    else {
         return Ok(None);
     };
     let parts_spec = prepared.tables.delta_parts();
@@ -1506,7 +1507,15 @@ fn derive_columnar_variants<'source>(
     counters: &mut Counters,
     executor: Option<&Executor>,
 ) -> Result<bool, FormulaFailure> {
-    if derive_algebra_variants(rule, variants, support, computation, limits, budget, counters)? {
+    if derive_algebra_variants(
+        rule,
+        variants,
+        support,
+        computation,
+        limits,
+        budget,
+        counters,
+    )? {
         return Ok(true);
     }
     derive_algebra_join_variants(
