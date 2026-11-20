@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 zetesis-algebra.workspace = true
+hashbrown.workspace = true
 
 [dev-dependencies]
 rayon.workspace = true

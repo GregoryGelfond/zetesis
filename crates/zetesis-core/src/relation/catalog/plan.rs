@@ -1,16 +1,12 @@
-//! A one-tuple transaction containing only equality IDs, new values and the
-//! row's tentative AVL path.
+//! A one-tuple transaction containing only equality IDs and new values.
 //!
 //! A new value is staged with its content hash; a later column of the same
 //! tuple that repeats it reuses its tentative ID. No row, dictionary
-//! representative, content chain or tree link changes before final admission.
+//! representative or content chain changes before final admission.
 //! The staged state depends on this tuple's width, never on the historical
 //! dictionary.
 
-use crate::{
-    catalog::{AtomRef, Atoms, storage::TermId},
-    ordered_index::{Directions, Index, Node, Planned, Step, position, spine::RightSpine},
-};
+use crate::catalog::{AtomRef, Atoms, storage::TermId};
 
 use super::super::{
     Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling,
@@ -82,6 +78,9 @@ pub(super) fn values(
     let DictionaryIndex::Append(index) = index else {
         return Err(Failure::Dictionary);
     };
+    if index.terms {
+        return terms(index, atoms, atom, encoding_bytes, plan, work);
+    }
     plan.encoding_bytes = encoding_bytes;
     work.grow(&mut plan.ids, atom.values().len())?;
     work.grow(&mut plan.added, atom.values().len())?;
@@ -135,78 +134,72 @@ pub(super) fn values(
     Ok(())
 }
 
-/// Both routes come from this owner's actual checked tuple comparisons.
-#[derive(Clone, Copy)]
-pub(super) enum RowPath<'a> {
-    Recorded(&'a Directions),
-    BeyondLast(usize),
-}
-
-pub(super) fn row(
-    index: &mut Index,
-    id: usize,
-    route: RowPath<'_>,
-    retained: Option<RightSpine>,
+/// An interned owner's IDs are the values' own term identities: a value new
+/// to this owner is staged once for its presence entry, with no content hash,
+/// representative or renumbering.
+fn terms(
+    index: &super::super::dictionary::Append,
+    atoms: Atoms<'_>,
+    atom: AtomRef<'_>,
+    encoding_bytes: u128,
+    plan: &mut Plan,
     work: &mut Work,
-) -> Result<Planned, Failure> {
-    let reuse = match (&route, retained) {
-        (RowPath::BeyondLast(last), Some(spine)) => {
-            work.tick(1)?;
-            spine.matches(index, index.root, *last)
-        }
-        _ => false,
-    };
-    if !reuse {
-        index.path.clear();
-    }
-    let mut cursor = if reuse { None } else { index.root };
-    let mut offset = 0;
-    while let Some(link) = cursor {
-        work.tick(1)?;
-        let right = match &route {
-            RowPath::Recorded(directions) => directions.get(offset).ok_or(Failure::Dictionary)?,
-            RowPath::BeyondLast(_) => true,
-        };
-        let previous = position(link);
-        let node = index.nodes[previous];
-        push(
-            index,
-            Step {
-                id: previous,
-                node,
-                right,
-                changed: false,
-            },
-            work,
-        )?;
-        cursor = node.children[usize::from(right)];
-        offset += 1;
-    }
-    match route {
-        RowPath::Recorded(directions) if offset != directions.len() => {
-            return Err(Failure::Dictionary);
-        }
-        RowPath::BeyondLast(last) => {
-            debug_assert_eq!(index.path.last().map(|step| step.id), Some(last));
-        }
-        RowPath::Recorded(_) => {}
-    }
-    push(
-        index,
-        Step {
-            id,
-            node: Node::default(),
-            right: false,
-            changed: true,
-        },
-        work,
-    )?;
-    index.plan_changes_from(index.root, id, &mut || work.tick(1))
+) -> Result<(), Failure> {
+    identities(index, atoms, atom, plan, work)?;
+    encoding(atom, encoding_bytes, plan, work)
 }
 
-fn push(index: &mut Index, step: Step, work: &mut Work) -> Result<(), Failure> {
-    work.grow(&mut index.path, 1)?;
-    work.tick(1)?;
-    index.path.push(step);
+/// The term identities of an interned owner's tuple, staging each value new
+/// to the owner once. Encoding bytes are left to [`encoding`], which only a
+/// tuple that will be published needs.
+pub(super) fn identities(
+    index: &super::super::dictionary::Append,
+    atoms: Atoms<'_>,
+    atom: AtomRef<'_>,
+    plan: &mut Plan,
+    work: &mut Work,
+) -> Result<(), Failure> {
+    work.grow(&mut plan.ids, atom.values().len())?;
+    work.grow(&mut plan.added, atom.values().len())?;
+    for (column, value) in atom.values().iter().enumerate() {
+        work.tick(1)?;
+        let (term, found) = match index
+            .identities
+            .probe_with(atoms.read(), value, &mut || work.tick(1))?
+        {
+            Probe::Local { term, equality } => (term, equality.is_some()),
+            Probe::Unavailable(error) => return Err(Failure::Read(error)),
+        };
+        if !found && plan.staged(term, 0, work)?.is_none() {
+            plan.added.push(Added {
+                cell: Cell {
+                    row: atoms.len(),
+                    column,
+                },
+                term,
+                hash: 0,
+            });
+        }
+        plan.ids.push(term.word());
+    }
+    Ok(())
+}
+
+/// The owner's referenced encoding bytes once this tuple is published.
+pub(super) fn encoding(
+    atom: AtomRef<'_>,
+    encoding_bytes: u128,
+    plan: &mut Plan,
+    work: &mut Work,
+) -> Result<(), Failure> {
+    plan.encoding_bytes = encoding_bytes;
+    for value in atom.values() {
+        work.tick(1)?;
+        let bytes = value.canonical_bytes_with(|| work.tick(1))?;
+        plan.encoding_bytes = plan
+            .encoding_bytes
+            .checked_add(bytes as u128)
+            .ok_or(Failure::Overflow)?;
+    }
     Ok(())
 }

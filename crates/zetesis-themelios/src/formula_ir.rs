@@ -11,6 +11,7 @@ pub(crate) mod testing;
 
 mod objective_scope;
 
+mod constants;
 mod domain;
 
 mod comparison;
@@ -583,6 +584,7 @@ impl PreparationContext<'_> {
         let mut parts = Parts::default();
         let admission = catalog.component_admission(limits, counters, fallback)?;
         let domain = domain::Domain::new(&admission, limits, counters, fallback)?;
+        let imported = constants::Constants::new(&admission, limits, counters, fallback)?;
         let mut compiler = Compiler {
             options,
             limits,
@@ -590,6 +592,7 @@ impl PreparationContext<'_> {
             source: admission,
             counters,
             domain,
+            imported,
             next_aggregate: 0,
             dependency_projection: false,
             location: fallback,
@@ -1004,6 +1007,7 @@ pub(super) struct Compiler<'a> {
     pub(super) source: components::Admission<'a>,
     pub(super) counters: &'a mut Counters,
     pub(super) domain: domain::Domain,
+    pub(super) imported: constants::Constants,
     pub(super) next_aggregate: usize,
     pub(super) dependency_projection: bool,
     pub(super) location: ProgramSite,
@@ -1817,17 +1821,57 @@ impl Compiler<'_> {
         &mut self,
         value: &Value,
     ) -> Result<components::Scalar, FormulaFailure> {
-        let key = self.value(value)?;
-        self.source
-            .scalar_key(&key, self.limits, self.counters, self.location)
+        let (key, slot) = self.value_slot(value)?;
+        if let Some(slot) = slot
+            && let Some(scalar) =
+                self.imported
+                    .scalar(slot, self.limits, self.counters, self.location)?
+        {
+            return Ok(scalar);
+        }
+        let scalar = self
+            .source
+            .scalar_key(&key, self.limits, self.counters, self.location)?;
+        if let Some(slot) = slot {
+            self.imported.remember_scalar(
+                slot,
+                scalar,
+                &self.source,
+                self.limits,
+                self.counters,
+                self.location,
+            )?;
+        }
+        Ok(scalar)
     }
 
     /// Admit one explicit source root. Interned descendants do not enlarge this
     /// scope's domain; objective and projection scopes own separate selections.
     pub(super) fn value(&mut self, value: &Value) -> Result<TermKey, FormulaFailure> {
-        let key = self
-            .source
-            .import(value.into(), self.limits, self.counters, self.location)?;
+        self.value_slot(value).map(|(key, _)| key)
+    }
+
+    /// [`Self::value`] with the memo slot remembering it, if any.
+    fn value_slot(&mut self, value: &Value) -> Result<(TermKey, Option<usize>), FormulaFailure> {
+        let found = self
+            .imported
+            .find(value, self.limits, self.counters, self.location)?;
+        let (key, slot) = if let Some((key, slot)) = found {
+            (key, Some(slot))
+        } else {
+            let key =
+                self.source
+                    .import(value.into(), self.limits, self.counters, self.location)?;
+            let slot = self.imported.remember(
+                value,
+                &key,
+                &self.source,
+                self.limits,
+                self.counters,
+                self.location,
+            )?;
+            (key, slot)
+        };
         if self.domain.insert(
             &key,
             &self.source,
@@ -1844,7 +1888,7 @@ impl Compiler<'_> {
                 self.location,
             )?;
         }
-        Ok(key)
+        Ok((key, slot))
     }
 
     pub(super) fn empty_domain(&self) -> Result<domain::Domain, FormulaFailure> {

@@ -83,6 +83,26 @@ struct Component {
     used: Vec<usize>,
 }
 
+/// How a component cursor reaches the rule's prepared component plans.
+enum Plans<'cursor, 'plan, 'source> {
+    /// Component plans are disabled (tests): each cursor owns its plan.
+    Owned,
+    /// Plan the component on its first traversal.
+    Lazy(&'cursor mut ComponentPlans<'plan, 'source>),
+    /// The component is already planned; other cursors may share the owner.
+    Shared(&'cursor ComponentPlans<'plan, 'source>),
+}
+
+impl<'plan, 'source> Plans<'_, 'plan, 'source> {
+    fn reborrow(&mut self) -> Plans<'_, 'plan, 'source> {
+        match self {
+            Self::Owned => Plans::Owned,
+            Self::Lazy(plans) => Plans::Lazy(plans),
+            Self::Shared(plans) => Plans::Shared(plans),
+        }
+    }
+}
+
 impl Component {
     fn join<'plan: 'cursor, 'cursor, 'source>(
         &'plan self,
@@ -91,40 +111,34 @@ impl Component {
         support: &'plan Support<'source>,
         fixed: &Binding<'_>,
         index: usize,
-        prepared: Option<&'cursor mut ComponentPlans<'plan, 'source>>,
+        plans: Plans<'cursor, 'plan, 'source>,
     ) -> Result<Join<'cursor, 'source>, FormulaFailure> {
-        let mut join = if let Some(prepared) = prepared {
-            prepared.join(
-                index,
-                ComponentScope {
-                    literals: &self.literals,
-                    used: &self.used,
-                },
-                fixed,
-                support,
-                builder.budget,
-                Context::new(
-                    &*builder.computation,
-                    builder.limits,
-                    builder.counters,
-                    rule.location,
-                ),
-            )?
-        } else {
-            Join::component(
+        let scope = ComponentScope {
+            literals: &self.literals,
+            used: &self.used,
+        };
+        let context = Context::new(
+            &*builder.computation,
+            builder.limits,
+            builder.counters,
+            rule.location,
+        );
+        let mut join = match plans {
+            Plans::Lazy(prepared) => {
+                prepared.join(index, scope, fixed, support, builder.budget, context)?
+            }
+            Plans::Shared(prepared) => {
+                prepared.join_prepared(index, scope, fixed, support, context)?
+            }
+            Plans::Owned => Join::component(
                 &self.literals,
                 rule.variables,
                 &self.used,
                 fixed,
                 support,
                 builder.budget,
-                Context::new(
-                    &*builder.computation,
-                    builder.limits,
-                    builder.counters,
-                    rule.location,
-                ),
-            )?
+                context,
+            )?,
         };
         // Both constructors preserve the same plan and install the current
         // fixed head values. The local selector certifies only the scalar
@@ -136,6 +150,13 @@ impl Component {
             rule.location,
         ))?;
         Ok(join)
+    }
+
+    fn scope(&self) -> ComponentScope<'_> {
+        ComponentScope {
+            literals: &self.literals,
+            used: &self.used,
+        }
     }
 }
 
@@ -239,15 +260,86 @@ fn emit<'plan, 'source>(
             ),
         )?);
     }
-    if !inhabited(builder, rule, support, components, prepared.as_mut(), fixed)? {
-        return Ok(());
+    // A rule with a head stops at its first component without an alternative,
+    // before that component or any later one names an atom, so only the
+    // components after the first need a witness in advance. A constraint
+    // names every component's atoms, so all of its components need one.
+    let first = usize::from(!matches!(rule.head, HeadIr::Normal(None)));
+    if let Some(plans) = prepared.as_mut() {
+        for (index, component) in components.components.iter().enumerate().skip(first) {
+            plans.prepare(
+                index,
+                component.scope(),
+                builder.budget,
+                Context::new(
+                    &*builder.computation,
+                    builder.limits,
+                    builder.counters,
+                    rule.location,
+                ),
+            )?;
+        }
     }
+    // Components before `first` are planned on their first emission, as
+    // before; until then the witnesses' cursors cannot share the owner with
+    // that planning and are rebuilt for emission.
+    let ready = prepared
+        .as_ref()
+        .is_none_or(|plans| (0..first).all(|index| plans.is_prepared(index)));
+    let shared = || prepared.as_ref().map_or(Plans::Owned, Plans::Shared);
+    let Some(mut held) = inhabited(builder, rule, support, components, shared, fixed, first)?
+    else {
+        return Ok(());
+    };
+    if !ready {
+        drop(held);
+        return body(
+            builder,
+            rule,
+            support,
+            components,
+            prepared.as_mut().map_or(Plans::Owned, Plans::Lazy),
+            fixed,
+            &mut Vec::new(),
+        );
+    }
+    body(
+        builder,
+        rule,
+        support,
+        components,
+        shared(),
+        fixed,
+        &mut held,
+    )
+}
+
+/// Emit the rule instance: each component's alternatives, in order, then the
+/// implication. `witnesses[i]` is component `first + i`'s witness cursor, holding
+/// its first passing completion; an absent one is built here.
+fn body<'cursor, 'plan: 'cursor, 'source>(
+    builder: &mut Builder<'_, '_, 'source>,
+    rule: &RuleIr,
+    support: &'plan Support<'source>,
+    components: &'plan plan::Plan,
+    mut plans: Plans<'cursor, 'plan, 'source>,
+    fixed: &Binding,
+    witnesses: &mut Vec<Join<'cursor, 'source>>,
+) -> Result<(), FormulaFailure> {
+    let first = usize::from(!matches!(rule.head, HeadIr::Normal(None)));
+    let mut witnesses = witnesses.drain(..);
     let mut body = VERUM;
     for (index, component) in components.components.iter().enumerate() {
         let mut alternatives = FALSUM;
-        let mut bindings =
-            component.join(builder, rule, support, fixed, index, prepared.as_mut())?;
-        builder.retain_matched_rows(&mut bindings, rule.location)?;
+        let mut bindings = if let Some(join) = (index >= first).then(|| witnesses.next()).flatten()
+        {
+            join
+        } else {
+            let mut join =
+                component.join(builder, rule, support, fixed, index, plans.reborrow())?;
+            builder.retain_matched_rows(&mut join, rule.location)?;
+            join
+        };
         let mut matched = None;
         while let Some(row) = bindings.next_matched_row(
             builder.budget,
@@ -309,43 +401,43 @@ fn emit<'plan, 'source>(
     Ok(())
 }
 
-/// Establish a complete Cartesian witness before naming any component atoms.
+/// Establish a complete Cartesian witness, from component `first` on, before
+/// naming any component atoms.
 /// Naming an early component records the rule as an atom's first origin; a
 /// later empty component must not leave that unused origin in completion roots.
 /// The ordinary profile has only scalar leaves; the extended profile has its
 /// fixed-input arithmetic certificate. One selected row per independent component
-/// proves existence, not body truth. Emission subsequently traverses every
-/// selected row without retaining a cache. Work and typed refusal belong to the
-/// same join as emission; only one cursor and its first frame coexist here.
-fn inhabited<'plan, 'source>(
+/// proves existence, not body truth. Each witness cursor is the one emission
+/// then consumes: it stops at its first passing completion, unlent, and
+/// emission resumes it there, so no row is traversed twice. The held cursors
+/// coexist, each charged by its own workspace lease.
+fn inhabited<'cursor, 'plan: 'cursor, 'source>(
     builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
     support: &'plan Support<'source>,
     components: &'plan plan::Plan,
-    mut prepared: Option<&mut ComponentPlans<'plan, 'source>>,
+    plans: impl Fn() -> Plans<'cursor, 'plan, 'source>,
     fixed: &Binding<'_>,
-) -> Result<bool, FormulaFailure> {
-    for (index, component) in components.components.iter().enumerate() {
-        let mut bindings = component.join(
-            builder,
-            rule,
-            support,
-            fixed,
-            index,
-            prepared.as_deref_mut(),
-        )?;
-        if bindings
-            .next(
+    first: usize,
+) -> Result<Option<Vec<Join<'cursor, 'source>>>, FormulaFailure> {
+    let count = components.components.len().saturating_sub(first);
+    builder.work(rule.location)?;
+    let mut held = Vec::with_capacity(count);
+    for (index, component) in components.components.iter().enumerate().skip(first) {
+        let mut join = component.join(builder, rule, support, fixed, index, plans())?;
+        builder.retain_matched_rows(&mut join, rule.location)?;
+        if !join.hold_passing_row(
+            builder.budget,
+            Context::new(
                 builder.computation,
                 builder.limits,
-                builder.budget,
                 builder.counters,
                 rule.location,
-            )?
-            .is_none()
-        {
-            return Ok(false);
+            ),
+        )? {
+            return Ok(None);
         }
+        held.push(join);
     }
-    Ok(true)
+    Ok(Some(held))
 }

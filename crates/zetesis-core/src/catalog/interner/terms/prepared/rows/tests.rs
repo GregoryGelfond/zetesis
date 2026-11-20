@@ -360,8 +360,7 @@ fn every_row_publication_stop_preserves_publication_coherence() {
             }), Err(AssignedFailure::Interner(Failure::Stopped(actual))) if actual == cutoff));
             assert_eq!(work, cutoff);
             assert_eq!(append.len(), initial);
-            assert_eq!(append.index.nodes.len(), initial);
-            assert_eq!(append.discovery.nodes.len(), initial);
+            assert_eq!(append.discovery.len(), initial);
             let binding = frame(append, source.row(0).unwrap());
             let projected = Projected {
                 predicate: prepared.pattern.pattern.predicate,
@@ -585,50 +584,4 @@ fn canonical_admission_bounds_combined_lengths_before_projection() {
     }
     assert!(refused_bytes);
     assert!(append.is_empty());
-}
-
-#[test]
-fn projected_rows_reuse_published_paths_without_repeating_preparation() {
-    fn run(reuse: bool) -> usize {
-        let values: Vec<_> = (0..64).map(Value::Number).collect();
-        Fixture::new(&values).run(|append, pattern, source| {
-            let prepared = append
-                .prepare_row_pattern_with(
-                    pattern,
-                    vec![source],
-                    columns(),
-                    unrestricted(),
-                    limits(),
-                    PERMIT,
-                )
-                .unwrap()
-                .unwrap();
-            let mut work = 0;
-            for index in 0..values.len() {
-                if !reuse {
-                    *append.spines = crate::catalog::interner::Spines::default();
-                }
-                let id = append
-                    .insert_prepared_rows_with(
-                        &prepared,
-                        &[source.row(index).unwrap()],
-                        limits(),
-                        || {
-                            work += 1;
-                            Ok::<_, Infallible>(())
-                        },
-                    )
-                    .unwrap();
-                assert_eq!(id, values.len() + index);
-                assert_eq!(append.get(id).unwrap(), expected(values[index].clone()));
-                assert!(append.spines.semantic.is_some());
-                assert!(append.spines.discovery.is_some());
-            }
-            assert_eq!(append.len(), 128);
-            work
-        })
-    }
-    let warm = run(true);
-    let cold = run(false);
-    assert!(warm < cold, "{warm} versus {cold}");
 }

@@ -729,6 +729,23 @@ impl<'a> PredicateRef<'a> {
         left.same_vocabulary(right).then_some(left_id == right_id)
     }
 
+    /// Whether two canonical predicates of one vocabulary are the same, by
+    /// identity alone: no name is read. `None` when either is not canonical
+    /// or their vocabularies differ.
+    #[must_use]
+    pub fn same_canonical(self, other: Self) -> Option<bool> {
+        self.canonical_equality(other)
+    }
+
+    /// A canonical predicate's dense position in its vocabulary, for keying
+    /// a caller's table; `None` for an ingress predicate. Positions of
+    /// different vocabularies may coincide: confirm a hit with
+    /// [`Self::same_canonical`].
+    #[must_use]
+    pub fn canonical_position(self) -> Option<usize> {
+        self.canonical().map(|(_, id)| id.position())
+    }
+
     fn read(self) -> PredicateRead<'a> {
         match self.0 {
             PredicateSource::Canonical { snapshot, id } => PredicateRead::Canonical(

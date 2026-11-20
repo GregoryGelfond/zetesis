@@ -130,7 +130,106 @@ impl<'a, 'source: 'a> ComponentPlans<'a, 'source> {
             )?;
             self.slots.slice_mut()[index] = Some(prepared);
         }
-        let prepared = self.slots.slice()[index].as_ref().expect("prepared above");
+        self.cursor(
+            index,
+            scope,
+            fixed,
+            Context::new(computation, limits, counters, location),
+        )
+    }
+
+    /// Plan component `index` if it has no plan yet, as [`Self::join`] would
+    /// on its first traversal; a prepared component costs nothing more.
+    pub(crate) fn prepare(
+        &mut self,
+        index: usize,
+        scope: ComponentScope<'a>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context { computation, work } = context;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        if index >= self.slots.len() {
+            return Err(owner(location));
+        }
+        if self.slots.slice()[index].is_none() {
+            let prepared = Prepared::new(
+                scope,
+                self.bound.slice(),
+                self.support,
+                budget,
+                Context::new(computation, limits, counters, location),
+            )?;
+            self.slots.slice_mut()[index] = Some(prepared);
+        }
+        Ok(())
+    }
+
+    /// Whether component `index` already has its plan.
+    pub(crate) fn is_prepared(&self, index: usize) -> bool {
+        self.slots.slice().get(index).is_some_and(Option::is_some)
+    }
+
+    /// [`Self::join`] for a component whose plan is already prepared, so
+    /// several cursors may borrow this owner at once. The same entry checks
+    /// and charges apply; an unprepared component is refused as foreign.
+    pub(crate) fn join_prepared<'cursor>(
+        &'cursor self,
+        index: usize,
+        scope: ComponentScope<'a>,
+        fixed: &Binding<'_>,
+        support: &'a Support<'source>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Join<'cursor, 'source>, FormulaFailure> {
+        let Context { computation, work } = context;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        counters.work(limits, location)?;
+        if !std::ptr::eq(support, self.support)
+            || fixed.len() != self.fixed_len
+            || !self.is_prepared(index)
+        {
+            return Err(owner(location));
+        }
+        computation.storage_observed(
+            &self.lease,
+            self.lease.bytes(),
+            0,
+            limits,
+            counters,
+            location,
+        )?;
+        self.cursor(
+            index,
+            scope,
+            fixed,
+            Context::new(computation, limits, counters, location),
+        )
+    }
+
+    fn cursor<'cursor>(
+        &'cursor self,
+        index: usize,
+        scope: ComponentScope<'a>,
+        fixed: &Binding<'_>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Join<'cursor, 'source>, FormulaFailure> {
+        let Context { computation, work } = context;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let prepared = self.slots.slice()[index]
+            .as_ref()
+            .expect("prepared component");
         if !std::ptr::eq(scope.literals, prepared.scope.literals)
             || !std::ptr::eq(scope.used, prepared.scope.used)
         {
@@ -172,9 +271,9 @@ impl<'a> Prepared<'a> {
             location,
         } = work;
         let empty = Binding::new(computation, limits, counters, location)?;
-        let mut plan = order::Plan::new(
+        let mut plan = order::Plan::with_fixed(
             scope.literals,
-            &empty,
+            (&empty, bound),
             bound.len(),
             order::SourceRows {
                 relations: support,
@@ -186,8 +285,8 @@ impl<'a> Prepared<'a> {
                 computation.preparation_capacity(capacity, limits, counters, location)
             }),
         )?;
-        // Keep today's empty-prefix order. Fixed head slots only change the
-        // comparison schedule, just as the ordinary component's decide does.
+        // Fixed head slots are bound before the first row is read, so they
+        // order the component as well as its comparison schedule.
         let mut lease = computation.lease();
         let bytes = usize::try_from(plan.retained_bytes()).map_err(|_| overflow(location))?;
         lease.observe(bytes, location)?;

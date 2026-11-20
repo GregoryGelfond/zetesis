@@ -544,6 +544,15 @@ impl<'source> Row<'_, 'source> {
     #[must_use]
     pub fn value(&self, column: usize) -> Option<TermRef<'source>> {
         let id = self.relation.column(column)?.get(self.position)?;
+        if let DictionaryIndex::Append(index) = &self.relation.layout.index
+            && index.terms
+        {
+            return self
+                .relation
+                .source
+                .read()?
+                .resolved_term(crate::catalog::storage::TermId::from_word(id));
+        }
         self.relation
             .layout
             .dictionary

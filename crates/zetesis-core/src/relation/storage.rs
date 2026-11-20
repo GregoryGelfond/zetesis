@@ -260,6 +260,9 @@ pub(super) fn lookup_with<E: From<Failure>>(
             {
                 return Ok(equality);
             }
+            if index.terms {
+                return foreign_term(layout, source, value, before);
+            }
             // Hashing reads every payload word once and is charged as such.
             let bytes = value.canonical_bytes_with(&mut *before)?;
             let hash_work = super::dictionary::Content::hash_work(value.expanded_nodes(), bytes);
@@ -275,4 +278,33 @@ pub(super) fn lookup_with<E: From<Failure>>(
             })
         }
     }
+}
+
+/// A value an interned owner's read cannot name is compared with each stored
+/// cell in row order. Equal content shares one identity in the read, so the
+/// first equal cell supplies the only possible ID. Supported inputs are
+/// always named by the read; this keeps foreign values exact, not fast.
+fn foreign_term<E: From<Failure>>(
+    layout: &Layout,
+    source: &Source<'_>,
+    value: TermRef<'_>,
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<Option<u32>, E> {
+    let Some(read) = source.read() else {
+        return Ok(None);
+    };
+    for column in &layout.columns {
+        let column = column.view();
+        for row in 0..column.len() {
+            before()?;
+            let id = column.get(row).ok_or(Failure::CatalogIndex)?;
+            let stored = read
+                .resolved_term(crate::catalog::storage::TermId::from_word(id))
+                .ok_or(Failure::CatalogIndex)?;
+            if value.compare_ref_with(stored, &mut *before)?.is_eq() {
+                return Ok(Some(id));
+            }
+        }
+    }
+    Ok(None)
 }

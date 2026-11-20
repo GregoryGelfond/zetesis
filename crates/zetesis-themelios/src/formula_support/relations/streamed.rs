@@ -129,6 +129,8 @@ impl StreamedRows {
             components: closed.components.as_ref(),
             // A streamed constraint proposes no assignment and emits no body.
             certainty: None,
+            fact_rows: &[],
+            head_rows: &[],
             read: closed.storage.read(),
             entries: self.entries,
             bytes,

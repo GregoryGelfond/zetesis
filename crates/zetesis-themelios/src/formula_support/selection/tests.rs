@@ -86,3 +86,52 @@ fn empty_sort_still_checks_the_source_scope() {
         })
     ));
 }
+
+#[test]
+fn insertion_work_is_linear_in_any_source_order() {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut catalog = SupportCatalog::default();
+    let (relations, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+    let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
+    let mut computation = Computation::new(&mut append, &support);
+    let count = 4096_usize;
+    let sources: Vec<_> = (0..i32::try_from(count).unwrap())
+        .map(|number| {
+            let atom =
+                Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(number)]).unwrap();
+            computation
+                .atom_ref((&atom).into(), &limits, &mut counters, location())
+                .unwrap()
+        })
+        .collect();
+    let mut selected = SourceSelection::new(&computation, &limits, &counters, location()).unwrap();
+    let before = counters.accounting.work;
+    // Descending source positions: every insertion precedes all earlier ones.
+    for source in sources.iter().rev() {
+        let (_, new) = selected
+            .insert(
+                source,
+                (FormulaResource::ProjectAtoms, count),
+                &computation,
+                &limits,
+                &mut counters,
+                location(),
+            )
+            .unwrap();
+        assert!(new);
+    }
+    let spent = counters.accounting.work - before;
+    assert!(
+        spent < 64 * count as u64,
+        "{spent} units for {count} insertions"
+    );
+    for (index, source) in sources.iter().enumerate() {
+        assert_eq!(
+            selected
+                .position(source, &limits, &mut counters, location())
+                .unwrap(),
+            Some(count - 1 - index)
+        );
+    }
+}

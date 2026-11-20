@@ -98,6 +98,51 @@ impl<'a> Plan<'a> {
         location: ProgramSite,
         admit: Option<&mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>>,
     ) -> Result<Self, FormulaFailure> {
+        Self::arranged(
+            literals,
+            (prefix, &[]),
+            variables,
+            (rows, comparisons),
+            budget,
+            location,
+            admit,
+        )
+    }
+
+    /// Order a component whose fixed slots are installed after the plan is
+    /// built. The order sees `fixed` as bound, so a fixed head slot makes its
+    /// occurrence a posting probe instead of a generator over its relation.
+    /// The prefix binding still holds no values and decides no comparison;
+    /// the cursor recomputes its decisions once the fixed slots are installed.
+    pub(super) fn with_fixed(
+        literals: &'a [LiteralIr],
+        (prefix, fixed): (&Binding, &[bool]),
+        variables: usize,
+        rows: SourceRows<'_, 'a>,
+        budget: &mut Budget,
+        location: ProgramSite,
+        admit: Option<&mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>>,
+    ) -> Result<Self, FormulaFailure> {
+        Self::arranged(
+            literals,
+            (prefix, fixed),
+            variables,
+            (rows, None),
+            budget,
+            location,
+            admit,
+        )
+    }
+
+    fn arranged(
+        literals: &'a [LiteralIr],
+        (prefix, fixed): (&Binding, &[bool]),
+        variables: usize,
+        (rows, comparisons): (SourceRows<'_, 'a>, Option<&View>),
+        budget: &mut Budget,
+        location: ProgramSite,
+        admit: Option<&mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>>,
+    ) -> Result<Self, FormulaFailure> {
         let mut space = Workspace {
             bytes: 0,
             location: Some(location),
@@ -158,6 +203,12 @@ impl<'a> Plan<'a> {
         prefix.resize(variables, false);
         work(budget, prefix.len() as u128, location)?;
         let mut bound = space.collect(prefix.iter().copied(), variables)?;
+        work(budget, fixed.len() as u128, location)?;
+        for (slot, &fixed) in fixed.iter().enumerate() {
+            if fixed && let Some(bound) = bound.get_mut(slot) {
+                *bound = true;
+            }
+        }
         arrange_with(
             &mut patterns,
             literals,

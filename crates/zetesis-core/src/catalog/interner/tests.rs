@@ -1,7 +1,6 @@
-//! Exact denotation, AVL shape, transaction refusal and scoped prefix controls.
+//! Exact denotation, discovery identity, transaction refusal and scoped prefix controls.
 
 mod probes;
-mod spine_tests;
 mod discovery_tests;
 mod ordering_tests;
 mod prepared_tests;
@@ -59,51 +58,10 @@ fn owner(values: &[i32]) -> AtomInterner {
     owner
 }
 
-// Literal recursive height/order validation is restricted to these small test
-// populations. Production insertion and traversal are iterative.
+// Discovery is exact: each position finds itself, and positions name distinct
+// atoms. Typed order is checked where it is sorted (ordering and typed_order).
 fn validate(owner: &AtomInterner) {
-    fn subtree<'a>(
-        owner: &'a AtomInterner,
-        root: index::Link,
-        seen: &mut BTreeSet<usize>,
-    ) -> (i32, Vec<AtomRef<'a>>) {
-        let Some(root) = root else {
-            return (0, Vec::new());
-        };
-        let id = position(root);
-        assert!(seen.insert(id), "duplicate or cyclic link {id}");
-        let node = owner.index.nodes[id];
-        let (left_height, mut left) = subtree(owner, node.children[0], seen);
-        let (right_height, right) = subtree(owner, node.children[1], seen);
-        let atom = owner.get(id).unwrap();
-        assert!(left.iter().all(|previous| *previous < atom));
-        assert!(right.iter().all(|next| atom < *next));
-        assert!((right_height - left_height).abs() <= 1);
-        assert_eq!(i32::from(node.balance), right_height - left_height);
-        left.push(atom);
-        left.extend(right);
-        (1 + left_height.max(right_height), left)
-    }
-    let mut seen = BTreeSet::new();
-    let mut actual = Vec::new();
-    for (index, relation) in owner.subtrees.iter().enumerate() {
-        if let Some(previous) = index.checked_sub(1) {
-            let previous =
-                AtomRef::new(&owner.store, owner.subtrees[previous].representative).unwrap();
-            let current = AtomRef::new(&owner.store, relation.representative).unwrap();
-            assert!(previous.predicate() < current.predicate());
-        }
-        let (_, atoms) = subtree(owner, relation.root, &mut seen);
-        assert!(atoms.iter().all(|atom| {
-            atom.predicate()
-                == AtomRef::new(&owner.store, relation.representative)
-                    .unwrap()
-                    .predicate()
-        }));
-        actual.extend(atoms);
-    }
-    assert_eq!(seen, (0..owner.len()).collect());
-    assert_eq!(owner.discovery.nodes.len(), owner.len());
+    assert_eq!(owner.discovery.len(), owner.len());
     for id in 0..owner.len() {
         assert_eq!(
             owner
@@ -116,8 +74,8 @@ fn validate(owner: &AtomInterner) {
             Some(id),
         );
     }
-    let expected: BTreeSet<_> = (0..owner.len()).map(|id| owner.get(id).unwrap()).collect();
-    assert_eq!(actual, expected.into_iter().collect::<Vec<_>>());
+    let distinct: BTreeSet<_> = (0..owner.len()).map(|id| owner.get(id).unwrap()).collect();
+    assert_eq!(distinct.len(), owner.len());
 }
 
 proptest! {
@@ -590,8 +548,7 @@ fn refused_discovery_retries_one_existing_identity() {
     assert!(matches!(result, Err(Failure::Stopped("discovery stopped"))));
     assert_eq!(admitted, operations - 1);
     assert!(owner.is_empty());
-    assert!(owner.index.nodes.is_empty());
-    assert!(owner.discovery.nodes.is_empty());
+    assert_eq!(owner.discovery.len(), 0);
     assert!(owner.get(0).is_none());
     assert_eq!(
         owner

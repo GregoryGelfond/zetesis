@@ -34,8 +34,8 @@ fn atom_lookup_work(width: usize) -> usize {
 
 #[test]
 fn canonical_atom_lookup_does_not_compare_text() {
-    // The queried first discovery is not the semantic AVL root. An ordered
-    // content search would inspect unequal strings with their common prefix.
+    // An ordered content search would inspect unequal strings with their
+    // common prefix; the exact identity path compares no text.
     assert_eq!(atom_lookup_work(1), atom_lookup_work(4096));
 }
 
@@ -64,11 +64,9 @@ fn canonical_key_lookup_does_not_compare_text() {
 }
 
 #[test]
-fn canonical_occupied_entries_need_no_path_storage() {
+fn canonical_occupied_entries_need_no_scratch_storage() {
     let mut owner = owner(&[2, 1, 3]);
     owner.commit_with(limits(), PERMIT).unwrap();
-    owner.index.path = Vec::new();
-    owner.discovery.path = Vec::new();
     owner.restart_storage_peak();
     let bytes = owner.storage_bytes();
     let exact = Limits {
@@ -96,8 +94,6 @@ fn canonical_occupied_entries_need_no_path_storage() {
             Some(1)
         );
     }
-    assert_eq!(owner.index.path.capacity(), 0);
-    assert_eq!(owner.discovery.path.capacity(), 0);
     assert_eq!(owner.storage_bytes(), bytes);
     assert_eq!(owner.storage_peak_bytes(), bytes + PREPARED_BYTES);
 }
@@ -169,7 +165,7 @@ fn canonical_only_rows_are_not_discoveries() {
         .unwrap();
     let row = AtomRef::new(&owner.store, id).unwrap();
     assert_eq!(owner.find_atom_with(row, limits(), PERMIT).unwrap(), None);
-    assert!(owner.discovery.nodes.is_empty());
+    assert_eq!(owner.discovery.len(), 0);
     assert!(owner.is_empty());
     assert_eq!(insert(&mut owner, &atom(2)), 0);
     assert_eq!(insert(&mut owner, &atom(7)), 1);
@@ -183,18 +179,7 @@ fn canonical_only_rows_are_not_discoveries() {
 }
 
 #[test]
-fn inverse_rotations_preserve_discovery_positions() {
-    fn height(owner: &AtomInterner, link: Link) -> i32 {
-        let Some(link) = link else {
-            return 0;
-        };
-        let node = owner.discovery.nodes[position(link)];
-        let left = height(owner, node.children[0]);
-        let right = height(owner, node.children[1]);
-        assert!((right - left).abs() <= 1);
-        assert_eq!(i32::from(node.balance), right - left);
-        1 + left.max(right)
-    }
+fn discovery_positions_do_not_follow_identity_order() {
     for order in [[0, 1, 2], [2, 1, 0], [2, 0, 1], [0, 2, 1]] {
         let mut owner = AtomInterner::new();
         for value in 0..3 {
@@ -206,7 +191,6 @@ fn inverse_rotations_preserve_discovery_positions() {
         // Identity allocation precedes this independently ordered discovery.
         for (position, value) in order.into_iter().enumerate() {
             assert_eq!(insert(&mut owner, &atom(value)), position);
-            height(&owner, owner.discovery.root);
             validate(&owner);
         }
     }
@@ -245,7 +229,7 @@ fn inverse_growth_obeys_the_combined_storage_peak() {
         .and_then(|entry| entry.insert_with(short, PERMIT));
     assert!(matches!(result, Err(Failure::Bytes { required, limit }) if required > limit));
     assert_eq!(refused.len(), 8);
-    assert_eq!(refused.discovery.nodes.len(), 8);
+    assert_eq!(refused.discovery.len(), 8);
     assert!(refused.storage_peak_bytes() >= refused.storage_bytes());
     validate(&refused);
 }
@@ -281,7 +265,6 @@ fn derived_allowance_covers_distinct_signed_predicates() {
             owner.commit_with(limits, PERMIT).unwrap();
         }
     }
-    assert_eq!(owner.subtrees.len(), ATOMS);
     assert!(
         owner.store.current_bytes() + owner.snapshot.metadata_bytes() <= CANONICAL_BYTES as u128
     );
@@ -326,7 +309,7 @@ fn every_inverse_publication_cut_keeps_prior_discovery() {
             .and_then(|entry| entry.insert_with(limits(), &mut before));
         assert!(matches!(result, Err(Failure::Stopped(actual)) if actual == cutoff));
         assert_eq!(owner.len(), 3);
-        assert_eq!(owner.discovery.nodes.len(), 3);
+        assert_eq!(owner.discovery.len(), 3);
         validate(&owner);
         assert_eq!(insert(&mut owner, &addition), 3);
         assert_eq!(insert(&mut owner, &addition), 3);

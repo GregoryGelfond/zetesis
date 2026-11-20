@@ -17,6 +17,9 @@ use super::{Failure, Resource, Work, ceiling};
 pub(super) struct Append {
     pub identities: Inverse,
     pub content: Content,
+    /// Equality IDs are the owner's term identities, so no representative,
+    /// content chain or renumbering is kept: the read resolves each ID.
+    pub terms: bool,
 }
 
 /// Content identity for values this owner's read cannot name.

@@ -77,6 +77,40 @@ fn target_capacity(len: usize, capacity: usize, additional: usize) -> Result<usi
     })
 }
 
+/// The capacity reached by growing for `additional` cells one at a time:
+/// [`target_capacity`] applied once per cell.
+pub(super) fn chain_capacity(
+    len: usize,
+    capacity: usize,
+    additional: usize,
+) -> Result<usize, Fault> {
+    let count = len.checked_add(additional).ok_or(Fault::Overflow)?;
+    let mut target = capacity;
+    while target < count {
+        target = target.checked_mul(2).ok_or(Fault::Overflow)?.max(4);
+    }
+    Ok(target)
+}
+
+/// [`reserve`] for `additional` cells at the capacity one-at-a-time growth
+/// would reach, so a batch leaves the same capacity as its rows one by one.
+pub(super) fn reserve_rows<T>(
+    values: &mut Vec<T>,
+    additional: usize,
+    budget: &mut Budget,
+) -> Result<(), Fault> {
+    let target = chain_capacity(values.len(), values.capacity(), additional)?;
+    if target <= values.capacity() {
+        return budget.check();
+    }
+    let before = capacity(values);
+    budget.check_extra(target as u128 * size_of::<T>() as u128)?;
+    values
+        .try_reserve_exact(target - values.len())
+        .map_err(|_| Fault::Allocation)?;
+    budget.observed(before, capacity(values))
+}
+
 /// Known requested capacity, before any allocation. An allocator may still
 /// return more, so callers must also check the observed capacity afterwards.
 pub(super) fn reservation_bytes<T>(values: &Vec<T>, additional: usize) -> Result<u128, Fault> {

@@ -224,8 +224,10 @@ fn arithmetic_components_name_their_selected_rows() {
 
 #[test]
 fn reordered_components_keep_their_literal_mapping() {
-    let source = "{p(1,a);p(1,b);q(1,c);q(1,d);r(a);s(c)}. \
-        h(X) :- p(X,Y),r(Y),q(X,Z),s(Z).";
+    // The fixed head slot X is bound when each component is ordered, so
+    // r(Y,X) must offer fewer rows than p(X,Y) to lead its component.
+    let source = "{p(1,a);p(1,b);q(1,c);q(1,d);r(a,1);s(c)}. \
+        h(X) :- p(X,Y),r(Y,X),q(X,Z),s(Z).";
     let (work, visits) = pair(source, false);
     assert!(work.row_atoms.unwrap() > 0);
     assert!(

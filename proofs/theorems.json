@@ -3170,6 +3170,21 @@
     "line": 183
   },
   {
+    "name": "Zetesis.ContentOrderInterning.id_injective_of_law",
+    "file": "Zetesis/ContentOrderInterning.lean",
+    "line": 28
+  },
+  {
+    "name": "Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare",
+    "file": "Zetesis/ContentOrderInterning.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.ContentOrderInterning.freeze_establishes_law",
+    "file": "Zetesis/ContentOrderInterning.lean",
+    "line": 65
+  },
+  {
     "name": "Zetesis.sub_refl",
     "file": "Zetesis/Core.lean",
     "line": 22

@@ -1,6 +1,6 @@
 //! Deferred local coordinates for a finite source-identity batch.
 //!
-//! Push authenticates and appends one occurrence without searching or shifting
+//! Push authenticates and appends one occurrence without searching or growing
 //! an inverse. Finish consumes the private batch, sorts IDs using the existing
 //! metered constant-scratch heapsort, compacts duplicates, and only then builds
 //! the ordinary selection's inverse. No partially sorted/indexed selection is
@@ -80,17 +80,8 @@ impl SourceBatch {
         ceiling(bound.0, distinct as u128, bound.1 as u128, location)?;
         counters.work(limits, location)?;
         self.0.positions.truncate(distinct);
-        reserve(
-            &mut self.0.inverse,
-            distinct,
-            &mut self.0.lease,
-            size_of::<SourceSelection>() + self.0.positions.capacity() * size_of::<usize>(),
-            Context::new(computation, limits, counters, location),
-        )?;
-        for (local, &source) in self.0.positions.iter().enumerate() {
-            counters.work(limits, location)?;
-            self.0.inverse.push((source, local));
-        }
+        self.0
+            .grow(0, Context::new(computation, limits, counters, location))?;
         Ok(self.0)
     }
 }
@@ -99,11 +90,10 @@ impl SourceBatch {
     /// Merge this batch into an existing selection of the same source scope,
     /// visiting the local coordinate of every distinct batch atom: existing
     /// coordinates first, in increasing source order, then new ones as they
-    /// are appended. The sparse inverse is extended by one backward linear
-    /// merge rather than one shifting insertion per atom.
+    /// are appended. The sparse inverse places each new coordinate once.
     ///
     /// R pushed occurrences against N selected atoms cost O(R log R) sorting,
-    /// O(R log N) lookups and O(N + R) merging work, all charged. Both buffers
+    /// O(R) expected lookups and placements, and O(N + R) growth, all charged. Both buffers
     /// are reserved before any coordinate is published; a refusal after
     /// reservation publishes nothing, though the selection may keep capacity.
     pub(crate) fn merge_into(
@@ -143,10 +133,10 @@ impl SourceBatch {
                 scope: self.0.scope.clone(),
                 position,
             };
-            if let Ok(entry) = selection.search(&atom, limits, counters, location)? {
+            if let Ok(local) = selection.search(&atom, limits, counters, location)? {
                 // Repeated present positions are adjacent after sorting.
                 if read == 0 || self.0.positions[read - 1] != position {
-                    visit(selection.inverse[entry].1, counters)?;
+                    visit(local, counters)?;
                 }
             } else {
                 self.0.positions[absent] = position;
@@ -165,37 +155,24 @@ impl SourceBatch {
             &mut selection.positions,
             absent,
             &mut selection.lease,
-            size_of::<SourceSelection>()
-                + selection.inverse.capacity() * size_of::<(usize, usize)>(),
+            size_of::<SourceSelection>() + selection.inverse.capacity() * size_of::<usize>(),
             Context::new(computation, limits, counters, location),
         )?;
-        reserve(
-            &mut selection.inverse,
+        selection.grow(
             absent,
-            &mut selection.lease,
-            size_of::<SourceSelection>() + selection.positions.capacity() * size_of::<usize>(),
             Context::new(computation, limits, counters, location),
         )?;
-        counters.charge_work(
-            selection.inverse.len() as u128 + 2 * absent as u128 + 1,
-            limits,
-            location,
-        )?;
-        // Publication: append coordinates, then merge the inverse from the back.
+        // Admit the placements, each by its probes of the table as it stands,
+        // before publishing any coordinate.
+        let mut probes = 0_u128;
+        for &position in &self.0.positions {
+            probes += selection.probe(position) as u128;
+        }
+        counters.charge_work(probes + absent as u128 + 1, limits, location)?;
+        // Publication: append coordinates, then place each in the inverse.
         selection.positions.extend_from_slice(&self.0.positions);
-        let old = selection.inverse.len();
-        selection.inverse.resize(old + absent, (0, 0));
-        let (mut left, mut right, mut write) = (old, absent, old + absent);
-        while right > 0 {
-            write -= 1;
-            let incoming = self.0.positions[right - 1];
-            if left > 0 && selection.inverse[left - 1].0 > incoming {
-                selection.inverse[write] = selection.inverse[left - 1];
-                left -= 1;
-            } else {
-                selection.inverse[write] = (incoming, before + right - 1);
-                right -= 1;
-            }
+        for local in before..before + absent {
+            selection.place(local);
         }
         for local in before..before + absent {
             visit(local, counters)?;

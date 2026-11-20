@@ -7,7 +7,8 @@ use crate::relation::{Failure, Limits, Relation, Resource, Storage};
 use crate::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 
 mod dictionary;
-mod spine;
+mod interned;
+mod rows;
 
 fn atom(left: i32, right: i32) -> Atom {
     Atom::new(
@@ -35,6 +36,16 @@ impl Fixture {
             .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
             .unwrap();
         let rows = Catalog::new(authority.read(), declared, limits)?;
+        Ok(Self { authority, rows })
+    }
+
+    /// The same owner with the interner's term identities as equality IDs.
+    fn interned(predicate: &Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
+        let mut authority = AtomInterner::default();
+        let declared = authority
+            .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
+            .unwrap();
+        let rows = Catalog::interned(authority.read(), declared, limits)?;
         Ok(Self { authority, rows })
     }
 
@@ -1196,7 +1207,7 @@ fn canonical_insertion_does_not_recheck_predicate() {
     let occupied = catalog.rows.insert(canonical, Limits::default()).unwrap();
     assert_eq!(lookup.row, Some(occupied.row));
     assert!(!occupied.inserted);
-    // Both paths admit the operation, bind the rows, and search the same AVL.
+    // Both paths admit the operation, bind the rows, and probe the same row hash.
     // Only public lookup must compare the query's canonical predicate after
     // binding; insertion already established it through Membership::member.
     assert_eq!(
@@ -1370,13 +1381,13 @@ fn row_work(values: impl Iterator<Item = i32>) -> u128 {
 }
 
 #[test]
-fn rows_beyond_the_last_skip_the_typed_search() {
+fn row_work_does_not_depend_on_insertion_order() {
     const COUNT: i32 = 1 << 12;
     let ascending = row_work(0..COUNT);
     let scrambled = row_work((0..COUNT).map(|index| index.wrapping_mul(7919) % COUNT));
-    // Dictionary and value work remain for every row; the search does not.
+    // No row is placed by comparison; only shared hash chains differ.
     assert!(
-        ascending * 10 <= scrambled * 6,
+        ascending.abs_diff(scrambled) * 1000 <= ascending,
         "ascending {ascending}, scrambled {scrambled}"
     );
 }

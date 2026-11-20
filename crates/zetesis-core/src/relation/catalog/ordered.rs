@@ -2,10 +2,7 @@
 
 use std::mem::size_of;
 
-use crate::{
-    catalog::{Atoms, CatalogRead},
-    ordered_index::{Index, position},
-};
+use crate::catalog::{Atoms, CatalogRead};
 
 use super::{Catalog, CatalogFailure, Failure, Limits, Storage, Work};
 
@@ -81,8 +78,8 @@ impl Catalog {
     /// Prepare ordered row access without cloning tuple payload.
     ///
     /// A prepared extent is reused with zero traversal work. The first
-    /// preparation of a nonempty extent traverses the row index once, O(n),
-    /// into the tail. A later preparation first promotes the previous tail to
+    /// preparation of a nonempty extent sorts every row into the tail,
+    /// O(n log n) comparisons. A later preparation first promotes the previous tail to
     /// a level and merges levels until each is less than half its
     /// predecessor, then sorts the `d` rows appended since into the new tail.
     /// Merging two runs of `a` and `b` rows costs `a + b` charged comparisons
@@ -108,7 +105,7 @@ impl Catalog {
             .bind(read)
             .map_err(|error| self.failed(Failure::Read(error), &work))?;
         self.ordered
-            .prepare(atoms, &self.rows, &mut work)
+            .prepare(atoms, &mut work)
             .map_err(|error| self.failed(error, &work))?;
         Ok(Preparation {
             storage: self.receipt(&work),
@@ -191,14 +188,9 @@ impl Ordered {
         })
     }
 
-    fn prepare(&mut self, atoms: Atoms<'_>, rows: &Index, work: &mut Work) -> Result<(), Failure> {
+    fn prepare(&mut self, atoms: Atoms<'_>, work: &mut Work) -> Result<(), Failure> {
         if self.prepared != atoms.len() {
-            if self.levels.is_empty() && self.tail.is_empty() {
-                self.traverse(rows, atoms.len(), work)
-                    .inspect_err(|_| self.tail.clear())?;
-            } else {
-                self.append_run(atoms, work)?;
-            }
+            self.append_run(atoms, work)?;
             self.prepared = atoms.len();
         }
         Ok(())
@@ -240,34 +232,6 @@ impl Ordered {
             cursors[run] += 1;
         }
         Ok(merged)
-    }
-
-    /// Build the first run by an in-order traversal of the row index.
-    fn traverse(&mut self, rows: &Index, length: usize, work: &mut Work) -> Result<(), Failure> {
-        work.grow(&mut self.tail, length)?;
-        work.include(size_of::<Vec<usize>>())?;
-        let mut path = work.reserve::<usize>(0)?;
-        self.tail.clear();
-        let mut cursor = rows.root;
-        loop {
-            while let Some(link) = cursor {
-                work.tick(1)?;
-                let id = position(link);
-                work.grow(&mut path, 1)?;
-                work.tick(1)?;
-                path.push(id);
-                cursor = rows.nodes[id].children[0];
-            }
-            let Some(id) = path.pop() else {
-                break;
-            };
-            work.tick(1)?;
-            self.tail.push(id);
-            cursor = rows.nodes[id].children[1];
-        }
-        work.release(path);
-        work.live -= size_of::<Vec<usize>>();
-        Ok(())
     }
 
     /// Promote the previous tail to a level, compact the levels, and sort the

@@ -15,6 +15,18 @@ impl Admission<'_> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Predicate, FormulaFailure> {
+        if let Some(last) = self.last_predicate {
+            // One checked signature comparison (one step between canonical
+            // predicates of this owner) replaces declaration and a component.
+            let view = self
+                .catalog
+                .component_view(limits, counters, location)?
+                .ok_or_else(|| missing(location))?;
+            let previous = last.resolve(view).ok_or_else(|| missing(location))?;
+            if predicate.equals_ref_with(previous, || counters.work(limits, location))? {
+                return Ok(last);
+            }
+        }
         let outer = self.total(location)? as u128 - self.catalog.owner.storage_bytes();
         let checked = owner_limits(limits, outer, location)?;
         self.catalog.owner.restart_storage_peak();
@@ -25,7 +37,7 @@ impl Admission<'_> {
         let observed = self.owner_observed(outer, limits, counters, location);
         let declaration = result.map_err(|error| atom_failure(error, limits, outer, location))?;
         observed?;
-        self.append(
+        let admitted = self.append(
             limits,
             counters,
             location,
@@ -36,7 +48,9 @@ impl Admission<'_> {
                     })
                     .map(Predicate)
             },
-        )
+        )?;
+        self.last_predicate = Some(admitted);
+        Ok(admitted)
     }
 
     pub(crate) fn pattern(
