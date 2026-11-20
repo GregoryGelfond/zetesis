@@ -1,5 +1,5 @@
 //! Shared execution primitives: cancellation, regions, walks, packed words,
-//! and the relational operators Bind, Filter, Project, Union, and Least.
+//! and the relational operators Bind, Filter, Project, Union, Join, and Least.
 //!
 //! Cancellation, regions, walks and words carry no program semantics. The
 //! relational operators implement the Lean relations of the same names;
@@ -26,6 +26,7 @@ pub use cancellation::{
 };
 
 pub use operators::{
-    Atoms, Bindings, ColumnLayout, Cpu, EnumerationStats, LayoutError, RelationalOps, Schedule,
-    Template, TemplateError, bind, filter, least, project, rows, union,
+    Atoms, Bindings, ColumnLayout, Cpu, EnumerationStats, JoinMethod, JoinStats, LayoutError,
+    RelationalOps, Schedule, Template, TemplateError, bind, filter, join, least, project, rows,
+    union,
 };
