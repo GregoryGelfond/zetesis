@@ -89,3 +89,36 @@ fn without_meminfo_a_group_limit_is_no_reading() {
     let read = files(&[IN_GROUP, ("/sys/fs/cgroup/app/memory.max", "1073741824\n")]);
     assert_eq!(available_memory(read), None);
 }
+
+#[test]
+fn hidden_measurement_flags_disable_the_named_learning_policies() {
+    use clap::Parser;
+    use zetesis_ferraris::ConflictCore;
+    use zetesis_solve::LearningSwitch;
+
+    let ordinary = crate::Options::try_parse_from(["zetesis"]).unwrap();
+    let config = crate::SolveConfig::from(&ordinary);
+    assert!(config.learning);
+    assert_eq!(config.conflict_learning, LearningSwitch::Enabled);
+    assert_eq!(config.bound_learning, LearningSwitch::Enabled);
+    assert_eq!(config.scale_learning_attempts, LearningSwitch::Enabled);
+    assert_eq!(config.conflict_core, ConflictCore::Full);
+
+    let isolated = crate::Options::try_parse_from([
+        "zetesis",
+        "--disable-conflict-learning",
+        "--disable-bound-learning",
+        "--no-learning-attempt-scaling",
+        "--learning-conflict-core=minimized",
+    ])
+    .unwrap();
+    let config = crate::SolveConfig::from(&isolated);
+    assert!(config.learning);
+    assert_eq!(config.conflict_learning, LearningSwitch::Disabled);
+    assert_eq!(config.bound_learning, LearningSwitch::Disabled);
+    assert_eq!(config.scale_learning_attempts, LearningSwitch::Disabled);
+    assert_eq!(config.conflict_core, ConflictCore::Minimized);
+
+    let off = crate::Options::try_parse_from(["zetesis", "--disable-learning"]).unwrap();
+    assert!(!crate::SolveConfig::from(&off).learning);
+}

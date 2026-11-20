@@ -2,16 +2,12 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision};
+use crate::{Backend, GpuBatching, Grounder, LearningSwitch, Oracle, QueryDivision};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// formula search and objective work are cumulative; verification work is per
 /// call. No field selects an output format, file path, source loader or writer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-// Independent policy switches, not a state machine. The isolation flags
-// for conflict, bound, and attempt scaling take the count past clippy's
-// three-bool limit.
-#[allow(clippy::struct_excessive_bools)]
 pub struct SolveConfig {
     /// Execution backend: the CPU (the default) walks regions on an owned Rayon
     /// pool; a GPU backend requires a physical device of its API and runs exact
@@ -157,14 +153,17 @@ pub struct SolveConfig {
     pub learning: bool,
     /// How a refuted region's decided literals are reduced to a core.
     pub conflict_core: zetesis_ferraris::ConflictCore,
-    /// When false, the conflict source does not capture. Measurement use.
-    pub conflict_learning: bool,
-    /// When false, the bound source does not capture. Measurement use.
-    pub bound_learning: bool,
-    /// When false, attempt caps stay at [`zetesis_ferraris::LearningLimits::DEFAULT`]
-    /// even if the candidate-memory allowance would raise them. Tier and store
-    /// row caps still follow the allowance, as they did before Stage C.
-    pub scale_learning_attempts: bool,
+    /// When [`LearningSwitch::Disabled`], the conflict source does not capture.
+    /// Measurement use.
+    pub conflict_learning: LearningSwitch,
+    /// When [`LearningSwitch::Disabled`], the bound source does not capture.
+    /// Measurement use.
+    pub bound_learning: LearningSwitch,
+    /// When [`LearningSwitch::Disabled`], attempt caps stay at
+    /// [`zetesis_ferraris::LearningLimits::DEFAULT`] even if the candidate-memory
+    /// allowance would raise them. Tier and store row caps still follow the
+    /// allowance, as they did before Stage C.
+    pub scale_learning_attempts: LearningSwitch,
 }
 
 impl SolveConfig {

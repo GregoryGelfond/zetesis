@@ -145,8 +145,15 @@ pub struct Options {
     pub workers: NonZeroUsize,
     /// Disable every learned-row source. Answers are unchanged; only pruning
     /// is lost. Measurement use.
-    #[arg(long = "disable-learning", hide = true)]
-    pub disable_learning: bool,
+    #[arg(
+        long = "disable-learning",
+        hide = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0,
+        value_parser = parse_hidden_disable
+    )]
+    pub disable_learning: HiddenDisable,
     /// How a refuted region's decided literals are reduced to a core.
     /// Measurement use; the default records a full decided-literal core.
     #[arg(
@@ -157,16 +164,69 @@ pub struct Options {
     )]
     pub learning_conflict_core: zetesis_ferraris::ConflictCore,
     /// Disable the refuted-region conflict source. Measurement use.
-    #[arg(long = "disable-conflict-learning", hide = true)]
-    pub disable_conflict_learning: bool,
+    #[arg(
+        long = "disable-conflict-learning",
+        hide = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0,
+        value_parser = parse_hidden_disable
+    )]
+    pub disable_conflict_learning: HiddenDisable,
     /// Disable the objective-bound source. Measurement use.
-    #[arg(long = "disable-bound-learning", hide = true)]
-    pub disable_bound_learning: bool,
+    #[arg(
+        long = "disable-bound-learning",
+        hide = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0,
+        value_parser = parse_hidden_disable
+    )]
+    pub disable_bound_learning: HiddenDisable,
     /// Keep attempt caps at the default 256 even when the memory allowance
     /// would raise them. Tier and store row caps still follow the allowance.
     /// Measurement use.
-    #[arg(long = "no-learning-attempt-scaling", hide = true)]
-    pub no_learning_attempt_scaling: bool,
+    #[arg(
+        long = "no-learning-attempt-scaling",
+        hide = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0,
+        value_parser = parse_hidden_disable
+    )]
+    pub no_learning_attempt_scaling: HiddenDisable,
+}
+
+/// Presence of a hidden measurement disable flag. The flag takes no value:
+/// omitted leaves the ordinary policy in force, and present turns it off.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HiddenDisable {
+    set: bool,
+}
+
+impl HiddenDisable {
+    /// The flag was not given.
+    pub const UNSET: Self = Self { set: false };
+
+    /// Whether the flag was present.
+    #[must_use]
+    pub const fn is_set(self) -> bool {
+        self.set
+    }
+}
+
+impl std::fmt::Display for HiddenDisable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.set { "true" } else { "false" })
+    }
+}
+
+fn parse_hidden_disable(value: &str) -> Result<HiddenDisable, String> {
+    match value {
+        "true" => Ok(HiddenDisable { set: true }),
+        "false" => Ok(HiddenDisable { set: false }),
+        other => Err(format!("unexpected value {other}")),
+    }
 }
 
 /// The full help's account of `--backend`: every value with its meaning, in the
@@ -306,11 +366,23 @@ impl From<&Options> for crate::SolveConfig {
             oracle: options.oracle,
             stats: options.stats,
             models: options.models,
-            learning: !options.disable_learning,
+            learning: !options.disable_learning.is_set(),
             conflict_core: options.learning_conflict_core,
-            conflict_learning: !options.disable_conflict_learning,
-            bound_learning: !options.disable_bound_learning,
-            scale_learning_attempts: !options.no_learning_attempt_scaling,
+            conflict_learning: if options.disable_conflict_learning.is_set() {
+                zetesis_solve::LearningSwitch::Disabled
+            } else {
+                zetesis_solve::LearningSwitch::Enabled
+            },
+            bound_learning: if options.disable_bound_learning.is_set() {
+                zetesis_solve::LearningSwitch::Disabled
+            } else {
+                zetesis_solve::LearningSwitch::Enabled
+            },
+            scale_learning_attempts: if options.no_learning_attempt_scaling.is_set() {
+                zetesis_solve::LearningSwitch::Disabled
+            } else {
+                zetesis_solve::LearningSwitch::Enabled
+            },
             ..options.resources().solve_config()
         }
     }
