@@ -199,6 +199,24 @@ impl Binding<'static> {
         )
     }
 
+    /// Whether `extend_scope(end)` stays within this frame's storage
+    /// allowance. A query only: nothing is reserved, observed or charged.
+    pub(crate) fn admits_scope(
+        &self,
+        end: usize,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        location: ProgramSite,
+    ) -> bool {
+        let Slots::Owned { values, lease } = &self.slots else {
+            return false;
+        };
+        let extra = size_of::<Self>() - size_of::<TermAssignment>();
+        computation
+            .allowance(lease, limits, location)
+            .is_ok_and(|limit| values.admits(end, limit.saturating_sub(extra)))
+    }
+
     pub(crate) fn truncate(
         &mut self,
         end: usize,

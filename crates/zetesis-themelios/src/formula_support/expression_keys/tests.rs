@@ -176,6 +176,29 @@ fn hybrid_capture_keeps_its_original_rows() {
 }
 
 #[test]
+fn retained_instantiation_uses_the_same_postings_as_eager() {
+    use crate::formula_ground::ground_retained;
+    // Every schedule's rule instantiation opts in; only hybrid capture stays out.
+    let reference = controlled(true, || {
+        ground_retained(testing::prepare(DIAGONAL), None, false)
+    })
+    .unwrap();
+    let receipts = Receipts::default();
+    let selected = ground_retained(testing::prepare(DIAGONAL), Some(&receipts), false).unwrap();
+    assert_same_program(&reference.compiled, &selected.compiled);
+    assert_eq!(receipts.emission.get().numeric_index_builds, Some(1));
+    assert_eq!(receipts.emission.get().expression_key_probes, Some(9));
+    assert_eq!(receipts.emission.get().expression_key_rows, Some(19));
+
+    let receipts = Receipts::default();
+    crate::test_support::without_pair_exclusions(|| {
+        ground_retained(testing::prepare(DIAGONAL), Some(&receipts), true)
+    })
+    .unwrap();
+    assert_eq!(receipts.emission.get().expression_key_probes, Some(0));
+}
+
+#[test]
 fn computed_domains_preserve_repeated_column_matching() {
     let reference = controlled(true, || ground(testing::prepare(ALIAS), None, None)).unwrap();
     let receipts = Receipts::default();
