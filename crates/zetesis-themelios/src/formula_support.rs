@@ -1230,13 +1230,8 @@ fn derive_algebra_variants<'source>(
     budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<bool, FormulaFailure> {
-    let Some((template, width)) = crate::formula_ground::algebra_rows::compile(
-        rule,
-        computation,
-        limits,
-        counters,
-        support,
-    )?
+    let Some((template, width)) =
+        crate::formula_ground::algebra_rows::compile(rule, computation, limits, counters, support)?
     else {
         return Ok(false);
     };
