@@ -1,5 +1,4 @@
 //! Work-stealing coordination and termination for the region scheduler.
-
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::time::Instant;

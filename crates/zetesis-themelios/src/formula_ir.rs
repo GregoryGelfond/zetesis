@@ -596,7 +596,7 @@ impl PreparationContext<'_> {
         };
         let emitted_owners = compiler.compile_program(source, &constants, &mut parts, fallback)?;
         let (mut analyzed, owners) = crate::formula_analysis::Summary::collect(
-            std::sync::Arc::clone(source),
+            source,
             std::mem::take(&mut parts.analyzed),
             emitted_owners,
             std::mem::take(&mut parts.analysis_sources),

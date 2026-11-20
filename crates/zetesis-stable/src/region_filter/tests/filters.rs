@@ -1,5 +1,4 @@
 //! Original region constraints compose with candidate coverage, never reduct queries.
-
 use std::collections::BTreeSet;
 use std::sync::atomic::Ordering;
 

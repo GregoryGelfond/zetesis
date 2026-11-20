@@ -85,7 +85,7 @@ pub struct CompletionStatistics {
 /// limit.
 #[derive(Debug)]
 pub struct CompletionExecutor {
-    pool: Option<rayon::ThreadPool>,
+    pool: Option<zetesis_algebra::threads::Pool>,
     last: Option<CompletionStatistics>,
     request: Option<(u64, u64)>,
     regional: Option<RegionalObservations>,
@@ -135,12 +135,9 @@ impl CompletionExecutor {
             pool: if workers.get() == 1 {
                 None
             } else {
-                Some(
-                    rayon::ThreadPoolBuilder::new()
-                        .num_threads(workers.get())
-                        .thread_name(|index| format!("zetesis-reduct-{index}"))
-                        .build()?,
-                )
+                Some(zetesis_algebra::threads::Pool::new(workers, |index| {
+                    format!("zetesis-reduct-{index}")
+                })?)
             },
             last: None,
             request: None,
@@ -154,7 +151,7 @@ impl CompletionExecutor {
     pub fn workers(&self) -> usize {
         self.pool
             .as_ref()
-            .map_or(1, rayon::ThreadPool::current_num_threads)
+            .map_or(1, |pool| pool.current_num_threads())
     }
 
     /// The last entered executor attempt. Proposal/checker failures leave it

@@ -1,5 +1,4 @@
 //! Fault injection at the production worker accounting and failure boundaries.
-
 use super::*;
 use zetesis_algebra::region::Narrowing;
 

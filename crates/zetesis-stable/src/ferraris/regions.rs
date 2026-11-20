@@ -834,7 +834,11 @@ impl RegionSearch {
             statistics,
             parts,
             traversal: Walk::with_state(root, Counting::Never, CandidateKnowledge::default())
-                .with_held_first(),
+                .with_held_first()
+                .with_recomputation(
+                    super::region_frontier::KEPT_KNOWLEDGE,
+                    CandidateKnowledge::shed,
+                ),
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
             tier: Tier::default(),

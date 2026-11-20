@@ -1,5 +1,4 @@
 //! Independent exhaustive valuation and objective-budget regression checks.
-
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};

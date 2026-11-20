@@ -126,3 +126,114 @@ fn sorting_respects_a_logarithmic_work_bound() {
         }
     }
 }
+
+/// Charges one navigation permit, as `compare` does.
+fn merge_compare<T: Ord>(left: &T, right: &T, charged: &mut u64) -> Ordering {
+    *charged += 1;
+    left.cmp(right)
+}
+
+fn merged(original: &[i32], limits: &FormulaLimits) -> (Result<(), FormulaFailure>, Vec<i32>, u64) {
+    let mut values = original.to_vec();
+    let mut scratch = Vec::with_capacity(values.len());
+    let mut counters = Counters::default();
+    let result = merge_by(
+        &mut values,
+        &mut scratch,
+        None,
+        GroundingWork::new(limits, &mut counters, location()),
+        merge_compare,
+    );
+    (result, values, counters.accounting.work)
+}
+
+#[test]
+fn merge_sorting_matches_integer_order_and_heapsort() {
+    for original in [
+        vec![],
+        vec![1],
+        vec![1, 1],
+        vec![3, 1, 2, 1],
+        vec![4, 3, 2, 1],
+        (0..1000).map(|i| (i * 7919) % 1009).collect(),
+    ] {
+        let mut expected = original.clone();
+        expected.sort_unstable();
+        let (result, actual, merge_work) = merged(&original, &FormulaLimits::default());
+        result.unwrap();
+        assert_eq!(actual, expected);
+        let mut heap = original.clone();
+        let mut counters = Counters::default();
+        by(
+            &mut heap,
+            GroundingWork::new(&FormulaLimits::default(), &mut counters, location()),
+            compare,
+        )
+        .unwrap();
+        assert_eq!(heap, expected);
+        if original.len() >= 1000 {
+            // Fewer comparisons and no swaps: well under heapsort's receipt.
+            assert!(merge_work * 2 < counters.accounting.work, "{merge_work}");
+        }
+    }
+}
+
+#[test]
+fn merge_sorting_refusal_preserves_the_population() {
+    let original = [3, 1, 2, 1, 5, 4, 9, 0];
+    let mut expected = original.to_vec();
+    expected.sort_unstable();
+    let (_, _, needed) = merged(&original, &FormulaLimits::default());
+    for cutoff in 0..needed {
+        let limits = FormulaLimits {
+            max_work: cutoff,
+            ..Default::default()
+        };
+        let (result, mut values, _) = merged(&original, &limits);
+        assert!(matches!(
+            result,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                ..
+            })
+        ));
+        values.sort_unstable();
+        assert_eq!(values, expected);
+    }
+}
+
+/// The sort and its receipt are the same on the caller alone and on pools
+/// of several sizes, with a comparator whose navigation varies by value.
+#[test]
+fn merge_sorting_is_identical_for_every_worker_count() {
+    let original: Vec<u64> = (0..50_000u64)
+        .map(|i| (i * 2_654_435_761) % 1_000_003)
+        .collect();
+    let sort = |pool: Option<&rayon::ThreadPool>| {
+        let mut values = original.clone();
+        let mut scratch = Vec::with_capacity(values.len());
+        let mut counters = Counters::default();
+        merge_by(
+            &mut values,
+            &mut scratch,
+            pool,
+            GroundingWork::new(&FormulaLimits::default(), &mut counters, location()),
+            |left: &u64, right: &u64, charged: &mut u64| {
+                *charged += (left ^ right) % 4;
+                left.cmp(right)
+            },
+        )
+        .unwrap();
+        (values, counters.accounting.work)
+    };
+    let serial = sort(None);
+    let mut expected = original.clone();
+    expected.sort_unstable();
+    assert_eq!(serial.0, expected);
+    for workers in [2, 4, 14] {
+        let executor =
+            crate::formula_support::Executor::new(std::num::NonZeroUsize::new(workers).unwrap())
+                .unwrap();
+        assert_eq!(sort(executor.pool()), serial, "{workers} workers");
+    }
+}

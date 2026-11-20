@@ -138,7 +138,8 @@ mod terminal_refusal;
 
 #[test]
 fn parallel_regions_publish_the_actual_countermodel_procedure() {
-    let (report, document, text) = capture("a | b.", "countermodel", "2");
+    // Three threads: the coordinator and two walkers.
+    let (report, document, text) = capture("a | b.", "countermodel", "3");
     assert_eq!(report.models, 2);
     assert!(report.countermodel_statistics.unwrap().regions.is_some());
     assert!(

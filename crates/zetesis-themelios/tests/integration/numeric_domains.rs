@@ -23,7 +23,10 @@ fn ground(
 ) -> Result<AdmittedFormula, FormulaFailure> {
     // Do not inspect the preparation's analyzed/original Program or Debug view.
     prepare(source)?
-        .with_grounding_options(GroundingOptions { joins: strategy })
+        .with_grounding_options(GroundingOptions {
+            joins: strategy,
+            ..GroundingOptions::default()
+        })
         .with_domain_analysis(domains)
         .ground_with_observer(Some(observer))
 }

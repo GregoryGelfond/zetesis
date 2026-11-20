@@ -59,7 +59,9 @@ fn dense_order_reuses_the_semantic_index() {
     )
     .unwrap();
     let before = counters.accounting.work;
-    append.order(&limits, &mut counters, location()).unwrap();
+    append
+        .order(&limits, &mut counters, location(), None)
+        .unwrap();
     assert_eq!(*append.pending, comparison);
     // Replacing index traversal with the comparison route breaks this bound.
     assert!(counters.accounting.work - before < comparison_counters.accounting.work);
@@ -87,7 +89,9 @@ fn scratch_refusal_selects_the_comparison_route() {
             .unwrap()
             .is_none()
     );
-    append.order(&short, &mut counters, location()).unwrap();
+    append
+        .order(&short, &mut counters, location(), None)
+        .unwrap();
     assert_eq!(numbers(&append), [1, 2, 3]);
 }
 
@@ -109,7 +113,7 @@ fn selected_order_does_not_retry_a_work_refusal() {
         ..limits
     };
     assert!(matches!(
-        append.order(&stopped, &mut counters, location()),
+        append.order(&stopped, &mut counters, location(), None),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Work,
             ..
@@ -136,7 +140,9 @@ fn sparse_work(history: i32) -> u64 {
             .is_none()
     );
     let before = counters.accounting.work;
-    append.order(&limits, &mut counters, location()).unwrap();
+    append
+        .order(&limits, &mut counters, location(), None)
+        .unwrap();
     assert_eq!(numbers(&append), [-2, -1]);
     counters.accounting.work - before
 }
@@ -177,6 +183,8 @@ fn pending_order_can_include_an_older_discovery() {
             .unwrap()
             .is_some()
     );
-    append.order(&limits, &mut counters, location()).unwrap();
+    append
+        .order(&limits, &mut counters, location(), None)
+        .unwrap();
     assert_eq!(numbers(&append), [1, 2, 3]);
 }
