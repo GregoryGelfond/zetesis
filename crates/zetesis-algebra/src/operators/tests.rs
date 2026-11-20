@@ -388,3 +388,36 @@ fn overflow_and_undefined_arithmetic_drop_the_row() {
     assert!(rows.is_empty());
     assert_eq!(stats.retained, 0);
 }
+
+#[test]
+fn sparse_facts_are_not_a_dense_generating_range() {
+    // The hull of {1, i32::MAX} is not the interval 1..=MAX. Generating
+    // multiples of 2 through that hull would visit more than a billion
+    // integers the relation does not contain.
+    let filter_only = Template::new(2)
+        .with_schedule(Schedule::FilterOnly)
+        .with_facts(0, vec![1, i32::MAX])
+        .unwrap()
+        .with_facts(1, vec![2])
+        .unwrap()
+        .with_remainder(0, 1)
+        .unwrap()
+        .with_head_slot(0)
+        .unwrap();
+    let generating = filter_only.clone().with_schedule(Schedule::Generating);
+    let (filter_rows, filter_stats) = run_rows(&filter_only);
+    let (gen_rows, gen_stats) = run_rows(&generating);
+    same_bindings(&filter_rows, &gen_rows);
+    assert!(filter_rows.is_empty());
+    assert!(
+        gen_stats.candidates <= 4,
+        "generating candidates={}",
+        gen_stats.candidates
+    );
+    assert!(
+        filter_stats.candidates <= 4,
+        "filter-only candidates={}",
+        filter_stats.candidates
+    );
+    let _ = (filter_stats, gen_stats);
+}

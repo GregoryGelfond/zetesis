@@ -113,6 +113,36 @@ pub(super) fn multiples_in_range(divisor: i32, lo: i32, hi: i32, out: &mut Vec<i
     }
 }
 
+/// How many multiples of `divisor` lie in `lo..=hi`, without materializing them.
+pub(super) fn multiples_count(divisor: i32, lo: i32, hi: i32) -> u64 {
+    if lo > hi {
+        return 0;
+    }
+    let Some(step) = divisor.checked_abs().filter(|&step| step > 0) else {
+        return 0;
+    };
+    let Some(first) = first_multiple(divisor, lo) else {
+        return 0;
+    };
+    if first > hi {
+        return 0;
+    }
+    let span = i64::from(hi) - i64::from(first);
+    (span as u64) / (step as u64) + 1
+}
+
+/// Whether `value` is a multiple of `divisor` in `lo..=hi`, matching
+/// [`multiples_in_range`].
+pub(super) fn is_multiple_in_range(divisor: i32, lo: i32, hi: i32, value: i32) -> bool {
+    if value < lo || value > hi {
+        return false;
+    }
+    let Some(step) = divisor.checked_abs().filter(|&step| step > 0) else {
+        return false;
+    };
+    i64::from(value).rem_euclid(i64::from(step)) == 0
+}
+
 /// Append every divisor of `value` that lies in `lo..=hi`.
 pub(super) fn divisors_in_range(value: i32, lo: i32, hi: i32, out: &mut Vec<i32>) {
     if value == 0 {

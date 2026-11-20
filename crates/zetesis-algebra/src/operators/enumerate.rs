@@ -1,8 +1,10 @@
 //! Domain enumeration for Bind, with filter-only and generating schedules.
 
+use std::collections::HashSet;
+
 use super::arithmetic::{
     EnumerationStats, dividends_for_quotient, divisors_in_range, evaluate_arithmetic,
-    evaluate_comparison, multiples_in_range,
+    evaluate_comparison, is_multiple_in_range, multiples_count, multiples_in_range, remainder,
 };
 use super::relation::Bindings;
 use super::template::{Arithmetic, Comparison, DependentRange, Schedule, Template};
@@ -51,6 +53,9 @@ where
 struct Plan<'a> {
     ranges: Vec<(usize, i32, i32)>,
     facts: Vec<(usize, &'a [i32])>,
+    /// Same columns as `facts`, as sets, so a generated candidate can be
+    /// tested for membership without treating the fact hull as a dense range.
+    fact_sets: Vec<(usize, HashSet<i32>)>,
     dependent: Vec<DependentRange>,
     generated: Vec<Generated>,
     residual_arithmetic: Vec<Arithmetic>,
@@ -131,6 +136,10 @@ impl<'a> Plan<'a> {
             .iter()
             .map(|fact| (fact.slot, fact.values.as_slice()))
             .collect();
+        let fact_sets: Vec<(usize, HashSet<i32>)> = facts
+            .iter()
+            .map(|&(slot, values)| (slot, values.iter().copied().collect()))
+            .collect();
         let mut generated = Vec::new();
         let mut residual_arithmetic = Vec::new();
         if template.schedule() == Schedule::Generating {
@@ -147,6 +156,7 @@ impl<'a> Plan<'a> {
         Self {
             ranges,
             facts,
+            fact_sets,
             dependent,
             generated,
             residual_arithmetic,
@@ -407,11 +417,55 @@ where
     }
 
     fn generate(&mut self, step: Generated) -> Result<(), E> {
+        let dest = generated_dest(step);
+        if let Some(facts) = self
+            .plan
+            .facts
+            .iter()
+            .find(|fact| fact.0 == dest)
+            .map(|fact| fact.1)
+        {
+            return self.generate_into_facts(step, dest, facts);
+        }
         let mut values = Vec::new();
         collect_generated(step, self.row, &mut values, self.stats);
-        let dest = generated_dest(step);
         for value in values {
             self.bind_and_descend(dest, value)?;
+        }
+        Ok(())
+    }
+
+    /// A fact column is a set, not the interval between its least and greatest
+    /// values. Generating multiples through that hull would visit (and could
+    /// retain) integers the relation does not contain, so the cheaper of
+    /// filtering the facts or membership-testing the generated span is used.
+    fn generate_into_facts(
+        &mut self,
+        step: Generated,
+        dest: usize,
+        facts: &[i32],
+    ) -> Result<(), E> {
+        let estimate = generated_estimate(step, self.row);
+        if (facts.len() as u64) <= estimate {
+            for &value in facts {
+                if fact_satisfies(step, self.row, value) {
+                    self.bind_and_descend(dest, value)?;
+                }
+            }
+            return Ok(());
+        }
+        let mut values = Vec::new();
+        collect_generated(step, self.row, &mut values, self.stats);
+        let set = self
+            .plan
+            .fact_sets
+            .iter()
+            .find(|facts| facts.0 == dest)
+            .map(|facts| &facts.1);
+        for value in values {
+            if set.is_some_and(|set| set.contains(&value)) {
+                self.bind_and_descend(dest, value)?;
+            }
         }
         Ok(())
     }
@@ -520,6 +574,90 @@ fn is_generated_dest(plan: &Plan<'_>, slot: usize) -> bool {
     plan.generated
         .iter()
         .any(|step| generated_dest(*step) == slot)
+}
+
+fn generated_estimate(step: Generated, row: &[i32]) -> u64 {
+    match step {
+        Generated::Remainder { src, lo, hi, .. } => multiples_count(row[src], lo, hi),
+        Generated::Divisors { src, lo, hi, .. } => {
+            if row[src] == 0 {
+                range_len_excluding_zero(lo, hi)
+            } else {
+                divisor_estimate(row[src])
+            }
+        }
+        Generated::Dividend {
+            lo, hi, divisor, ..
+        } => {
+            // One dividend per multiple of the divisor in the span, at most.
+            multiples_count(row[divisor], lo, hi)
+        }
+        Generated::AbsInv { .. } => 2,
+        Generated::Plus { .. }
+        | Generated::Times { .. }
+        | Generated::Abs { .. }
+        | Generated::Quotient { .. } => 1,
+    }
+}
+
+fn range_len_excluding_zero(lo: i32, hi: i32) -> u64 {
+    if lo > hi {
+        return 0;
+    }
+    let mut count = (i64::from(hi) - i64::from(lo) + 1) as u64;
+    if lo <= 0 && hi >= 0 {
+        count = count.saturating_sub(1);
+    }
+    count
+}
+
+fn divisor_estimate(value: i32) -> u64 {
+    let Some(abs) = value.checked_abs() else {
+        return 4;
+    };
+    // At most four signed images of each factor up to sqrt(|value|).
+    let root = (abs as u64).isqrt() + 1;
+    root.saturating_mul(4)
+}
+
+fn fact_satisfies(step: Generated, row: &[i32], value: i32) -> bool {
+    match step {
+        Generated::Remainder { src, lo, hi, .. } => is_multiple_in_range(row[src], lo, hi, value),
+        Generated::Divisors { src, lo, hi, .. } => {
+            if value < lo || value > hi || value == 0 {
+                return false;
+            }
+            if row[src] == 0 {
+                return true;
+            }
+            remainder(row[src], value) == Some(0)
+        }
+        Generated::Plus { left, right, .. } => row[left].checked_add(row[right]) == Some(value),
+        Generated::Times { left, right, .. } => row[left].checked_mul(row[right]) == Some(value),
+        Generated::Abs { src, .. } => row[src].checked_abs() == Some(value),
+        Generated::AbsInv { src, lo, hi, .. } => {
+            let expected = row[src];
+            if value < lo || value > hi || expected < 0 {
+                return false;
+            }
+            value == expected || Some(value) == expected.checked_neg()
+        }
+        Generated::Quotient {
+            dividend, divisor, ..
+        } => super::arithmetic::quotient(row[dividend], row[divisor]) == Some(value),
+        Generated::Dividend {
+            quot,
+            divisor,
+            lo,
+            hi,
+            ..
+        } => {
+            if value < lo || value > hi {
+                return false;
+            }
+            super::arithmetic::quotient(value, row[divisor]) == Some(row[quot])
+        }
+    }
 }
 
 fn collect_generated(
