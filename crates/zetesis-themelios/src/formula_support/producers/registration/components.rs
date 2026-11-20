@@ -136,6 +136,24 @@ use themelios_program::program::DefaultNegation;
 
 use super::super::super::Counters;
 
+/// Completeness of a predicate's defining component, visible crate-internally
+/// to the columnar Join hook.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::formula_support) enum PredicateStage {
+    /// Every defining producer has finished and published; the snapshot
+    /// alone is the complete relation.
+    Reached,
+    /// Snapshot union this round's pending atoms is complete; not every
+    /// atom is in the snapshot yet.
+    Settled,
+    /// The defining component is not yet complete.
+    Open,
+    /// The predicate has no component the schedule tracks (extensional
+    /// facts, or no defining producers). The snapshot is the complete
+    /// relation.
+    Extensional,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum State {
     Waiting,
@@ -436,6 +454,36 @@ impl<'source> Schedule<'source> {
         self.state.iter().zip(&self.waits).any(|(state, wait)| {
             wait.is_some() && !matches!(state.get(), State::Traversed | State::Released)
         })
+    }
+
+    /// The completeness of `predicate`'s defining component at this
+    /// moment in the round. `Open` when the predicate has no component
+    /// or that component is neither settled nor reached.
+    pub(super) fn predicate_stage(
+        &self,
+        predicate: PredicateRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<PredicateStage, FormulaFailure> {
+        let found = lookup(
+            self.nodes.len(),
+            |index| self.nodes[index].signature,
+            predicate,
+            limits,
+            counters,
+            location,
+        )?;
+        let Some(component) = found.and_then(|index| self.nodes[index].component) else {
+            return Ok(PredicateStage::Extensional);
+        };
+        if self.reached.borrow()[component] {
+            return Ok(PredicateStage::Reached);
+        }
+        if self.settled.borrow()[component] {
+            return Ok(PredicateStage::Settled);
+        }
+        Ok(PredicateStage::Open)
     }
 
     /// Mark ready every waiting producer whose read components are complete,

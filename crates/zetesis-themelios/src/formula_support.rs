@@ -752,6 +752,9 @@ fn complete_with_executor(
     )?;
     #[cfg(test)]
     postings::begin_support();
+    // Persist interned ID columns for the hook across support rounds,
+    // and drop them when this completion ends (PRIOR-ART.md).
+    let _intern_cache = crate::formula_ground::algebra_join::InternCacheGuard::new();
     let mut rounds = 0_u64;
     // Rows are only appended, so each round extends the kept certificates.
     let mut retained = queries::Retained::default();
@@ -876,6 +879,7 @@ fn visit_producer<'source>(
         (index, rule),
         &mut variants,
         (delta, support, domains),
+        producers,
         budget,
         (limits, counters),
         executor,
@@ -962,6 +966,7 @@ fn produce<'source>(
         &Support<'source>,
         Option<&crate::formula_domains::Domains<'_>>,
     ),
+    producers: &producers::Producers<'_>,
     budget: &mut Budget,
     (limits, counters): (&FormulaLimits, &mut Counters),
     executor: Option<&Executor>,
@@ -986,9 +991,9 @@ fn produce<'source>(
         variants,
         (guards.as_ref(), totality),
         support,
-        budget,
+        Some(producers),
+        (budget, executor),
         Context::new(&mut computation, limits, counters, rule.location),
-        executor,
     )
 }
 
@@ -1080,9 +1085,9 @@ fn derive_variants<'source>(
         variants,
         (guards, totality),
         support,
-        budget,
-        context,
         None,
+        (budget, None),
+        context,
     )
 }
 
@@ -1094,9 +1099,9 @@ fn derive_variants_with_executor<'source>(
         Option<&crate::formula_domains::numeric_ir::TotalBody<'_>>,
     ),
     support: &Support<'source>,
-    budget: &mut Budget,
+    producers: Option<&producers::Producers<'_>>,
+    (budget, executor): (&mut Budget, Option<&Executor>),
     context: Context<'_, &mut Computation<'_, 'source>>,
-    executor: Option<&Executor>,
 ) -> Result<(), FormulaFailure> {
     let Context {
         computation,
@@ -1114,14 +1119,12 @@ fn derive_variants_with_executor<'source>(
     // they must not suppress Bind when the compiler admits the body. The
     // compiler still declines free cross-product atoms, constraints, and
     // incomplete or recursive domains.
-    if derive_algebra_variants(
-        rule,
+    if derive_columnar_variants(
+        (index, rule),
         variants,
         support,
-        computation,
-        limits,
-        budget,
-        counters,
+        (computation, limits, budget, counters),
+        producers,
     )? {
         return Ok(());
     }
@@ -1211,6 +1214,186 @@ fn derive_variants_with_executor<'source>(
         }
     }
     Ok(())
+}
+
+/// Whether every non-recursive positive body predicate is complete.
+///
+/// The hook consumes every variant of a visit after one snapshot join;
+/// if a partner such as `open/2` can still grow (choice-dependent facts,
+/// a later stratum), that join would miss later rows and could drop heads
+/// the cursor would still derive — observed as unsat on network-repair
+/// and equality-generalized-tsp. Extensional predicates (no schedule
+/// component) are already complete. Recursive body atoms of the head stay
+/// on the semi-naive path and are not required to be reached. When
+/// `producers` is missing (unit-test wrapper), skip the gate so existing
+/// tests keep the hook.
+fn positive_partners_complete(
+    rule: &crate::formula_ir::RuleIr,
+    support: &Support<'_>,
+    producers: Option<&producers::Producers<'_>>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    use crate::formula_support::producers::PredicateStage;
+    let Some(producers) = producers else {
+        return Ok(true);
+    };
+    let HeadIr::Normal(Some(head)) = &rule.head else {
+        return Ok(false);
+    };
+    let Some(view) = support.components() else {
+        return Ok(false);
+    };
+    let Some(head) = head.resolve(view) else {
+        return Ok(false);
+    };
+    let head_predicate = head.predicate();
+    for literal in &rule.body {
+        let crate::formula_ir::LiteralIr::Atom(
+            themelios_program::program::DefaultNegation::None,
+            pattern,
+        ) = literal
+        else {
+            continue;
+        };
+        let Some(pattern) = pattern.resolve(view) else {
+            return Ok(false);
+        };
+        if pattern.predicate() == head_predicate {
+            continue;
+        }
+        match producers.predicate_stage(pattern.predicate(), limits, counters, rule.location)? {
+            PredicateStage::Reached | PredicateStage::Extensional => {}
+            PredicateStage::Settled | PredicateStage::Open => return Ok(false),
+        }
+    }
+    Ok(true)
+}
+
+fn derive_columnar_variants<'source>(
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
+    variants: &mut delta::Variants<'_, '_>,
+    support: &Support<'source>,
+    (computation, limits, budget, counters): (
+        &mut Computation<'_, 'source>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ),
+    producers: Option<&producers::Producers<'_>>,
+) -> Result<bool, FormulaFailure> {
+    if derive_algebra_variants(
+        rule,
+        variants,
+        support,
+        computation,
+        limits,
+        budget,
+        counters,
+    )? {
+        return Ok(true);
+    }
+    derive_algebra_join_variants(
+        (index, rule),
+        variants,
+        support,
+        (computation, limits, budget, counters),
+        producers,
+    )
+}
+
+/// Derive heads with the columnar binary Join, consuming every variant of
+/// this visit after a single snapshot enumeration, matching the Bind hook.
+fn derive_algebra_join_variants<'source>(
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
+    variants: &mut delta::Variants<'_, '_>,
+    support: &Support<'source>,
+    (computation, limits, budget, counters): (
+        &mut Computation<'_, 'source>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ),
+    producers: Option<&producers::Producers<'_>>,
+) -> Result<bool, FormulaFailure> {
+    let HeadIr::Normal(Some(head)) = &rule.head else {
+        return Ok(false);
+    };
+    if !crate::formula_ground::algebra_join::body_repeats_head(rule, support) {
+        return Ok(false);
+    }
+    if !positive_partners_complete(rule, support, producers, limits, counters)? {
+        return Ok(false);
+    }
+    // N1 and N2 both gold-diff clean vs 9a63, but both regress stratrec
+    // t14 (N1 wall 1.117× / ground 1.261×; N2 1.134× / 1.351×) once the
+    // hook admits `not`. Neither is kept. The hook declines default
+    // negation; the partner-completeness gate above stays.
+    let _ = index;
+    let allow_negation = false;
+    let pending: Vec<usize> = Vec::new();
+    // The hook evaluates serially at every thread count. A partitioned
+    // delta charged a different receipt at tN than at t1 (sg1k, closure10k
+    // and agg10k by up to 3×), and running its fixed task blocks inline at
+    // t1 cost 1.1–1.3× wall there; one evaluation keeps the receipt and the
+    // t1 win.
+    let Some(evaluated) = crate::formula_ground::algebra_join::evaluate(
+        rule,
+        support,
+        limits,
+        counters,
+        rule.location,
+        allow_negation,
+        pending.as_slice(),
+    )?
+    else {
+        return Ok(false);
+    };
+    let mut next = variants.next(limits, counters)?;
+    let mut derivation = Derivation {
+        normal_head: None,
+        computation,
+        limits,
+        budget,
+        counters,
+    };
+    let mut enumerated = false;
+    while next.is_some() {
+        if !enumerated {
+            let mut assignment = Binding::new(
+                derivation.computation,
+                limits,
+                derivation.counters,
+                rule.location,
+            )?;
+            assignment.extend_scope(
+                rule.variables,
+                derivation.computation,
+                limits,
+                derivation.counters,
+                rule.location,
+            )?;
+            let mut buffer = vec![0i32; evaluated.bindings.width()];
+            let rows = evaluated.emission_order(rule, support);
+            for row in rows {
+                evaluated.bind_row(
+                    (
+                        derivation.computation,
+                        limits,
+                        derivation.counters,
+                        rule.location,
+                    ),
+                    &mut assignment,
+                    row,
+                    &mut buffer,
+                )?;
+                derivation.normal_head(*head, &assignment, rule.location)?;
+            }
+            enumerated = true;
+        }
+        next = variants.next(limits, derivation.counters)?;
+    }
+    Ok(true)
 }
 
 /// Derive a range-and-arithmetic producer's heads with the columnar operators.

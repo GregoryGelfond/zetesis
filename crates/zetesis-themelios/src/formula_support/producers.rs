@@ -12,6 +12,7 @@ mod wake;
 mod acyclic;
 mod registration;
 pub(crate) use acyclic::AcyclicPlan;
+pub(in crate::formula_support) use registration::PredicateStage;
 pub(super) use registration::Registration;
 #[cfg(test)]
 pub(crate) use registration::testing;
@@ -169,6 +170,27 @@ impl<'source> Producers<'source> {
         match self {
             Self::Planned(_) => false,
             Self::Registered(registration) => registration.pending(),
+        }
+    }
+
+    /// Crate-internal completeness of a predicate's defining component.
+    pub(in crate::formula_support) fn predicate_stage(
+        &self,
+        predicate: zetesis_core::catalog::PredicateRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<registration::PredicateStage, FormulaFailure> {
+        match self {
+            // A positive-flat plan has no component schedule: every rule
+            // is definite and every predicate is certain. The snapshot
+            // the visit sees is the complete relation, so partners are
+            // Extensional rather than Open (Open would decline the hook
+            // on sg/closure and drop the TermRef-emit solve win).
+            Self::Planned(_) => Ok(registration::PredicateStage::Extensional),
+            Self::Registered(registration) => {
+                registration.predicate_stage(predicate, limits, counters, location)
+            }
         }
     }
 

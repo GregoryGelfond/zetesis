@@ -1,4 +1,4 @@
-//! Relational operators Bind, Filter, Project, Union, and Least.
+//! Relational operators Bind, Filter, Project, Union, Join, and Least.
 //!
 //! These are the executable counterparts of the Lean relations in
 //! `Zetesis.Lifted` and `Core.Union` / `ComponentClosure`. They stay generic
@@ -17,6 +17,7 @@ mod arithmetic;
 mod enumerate;
 mod filter;
 mod gpu;
+mod join;
 mod least;
 mod project;
 mod relation;
@@ -29,13 +30,14 @@ mod tests;
 pub use arithmetic::EnumerationStats;
 pub use filter::filter;
 pub use gpu::ColumnLayout;
+pub use join::{JoinMethod, JoinStats, join};
 pub use least::least;
 pub use project::project;
 pub use relation::{Atoms, Bindings, LayoutError};
 pub use template::{Schedule, Template, TemplateError};
 pub use union::union;
 
-/// Named Bind / Filter / Project / Union / Least over columnar relations.
+/// Named Bind / Filter / Project / Union / Join / Least over columnar relations.
 ///
 /// The CPU implementation is [`Cpu`]. A later GPU backend implements the
 /// same trait over [`ColumnLayout`]; it is not a second semantics.
@@ -87,6 +89,21 @@ pub trait RelationalOps {
         right: &Atoms,
         account: &mut impl FnMut(u64) -> Result<(), E>,
     ) -> Result<Atoms, E>;
+
+    /// Binary equijoin of two atom sets on the given key columns.
+    ///
+    /// # Errors
+    /// Returns the first account refusal, or a [`LayoutError`] for a key
+    /// that is out of range or a key-width mismatch.
+    fn join<E>(
+        &self,
+        left: &Atoms,
+        right: &Atoms,
+        left_keys: &[usize],
+        right_keys: &[usize],
+        method: JoinMethod,
+        account: &mut impl FnMut(u64) -> Result<(), E>,
+    ) -> Result<Result<Bindings, LayoutError>, E>;
 
     /// Least pre-fixpoint of `transform`, starting from the empty set of
     /// `width` attributes.
@@ -141,6 +158,21 @@ impl RelationalOps for Cpu {
         account: &mut impl FnMut(u64) -> Result<(), E>,
     ) -> Result<Atoms, E> {
         union(left, right, account)
+    }
+
+    fn join<E>(
+        &self,
+        left: &Atoms,
+        right: &Atoms,
+        left_keys: &[usize],
+        right_keys: &[usize],
+        method: JoinMethod,
+        account: &mut impl FnMut(u64) -> Result<(), E>,
+    ) -> Result<Result<Bindings, LayoutError>, E> {
+        let mut stats = JoinStats::default();
+        join::join(
+            left, right, left_keys, right_keys, method, account, &mut stats,
+        )
     }
 
     fn least<E, A, F>(&self, width: usize, transform: F, account: &mut A) -> Result<Atoms, E>
