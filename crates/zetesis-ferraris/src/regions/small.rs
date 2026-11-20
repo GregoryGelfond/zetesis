@@ -70,6 +70,10 @@ pub struct SmallPolicy {
     /// and a spent allowance count against it. One region in
     /// [`GATE_RETRY`] skipped is still read, so the yield can recover.
     pub gate: usize,
+    /// The learned search reads only regions with at least this many open
+    /// atoms (0: any): below it the general narrowing's own subtree is small
+    /// and cheaper than one search over the whole encoding.
+    pub learn_from: usize,
 }
 
 /// No enumeration reads more than `2^22` completions.
@@ -114,13 +118,20 @@ impl SmallPolicy {
                 "decide" => policy.decide_all = value == "all",
                 "probe" => policy.probe = parsed,
                 "gate" => policy.gate = parsed,
+                "from" => policy.learn_from = parsed,
                 _ => {}
             }
         }
         policy
     }
 
-    const fn active(&self) -> bool {
+    /// The environment's policy, read once per process.
+    pub(crate) fn environment() -> Self {
+        static POLICY: std::sync::OnceLock<SmallPolicy> = std::sync::OnceLock::new();
+        *POLICY.get_or_init(Self::from_environment)
+    }
+
+    pub(crate) const fn active(&self) -> bool {
         self.enumerate_up_to > 0 || self.learn_up_to > 0 || self.adapt_from > 0 || self.probe > 0
     }
 }
@@ -454,7 +465,7 @@ impl SmallScratch {
     pub(crate) fn policy(&mut self) -> SmallPolicy {
         *self
             .policy
-            .get_or_insert_with(SmallPolicy::from_environment)
+            .get_or_insert_with(SmallPolicy::environment)
     }
 
     pub(crate) fn active(&mut self) -> bool {
@@ -538,7 +549,7 @@ impl SmallScratch {
         } else {
             policy.learn_up_to
         };
-        if open <= learn_up_to {
+        if open <= learn_up_to && open >= policy.learn_from {
             if self.shape(theory, producers).is_none() {
                 return Ok(SmallNarrowing::Declined);
             }

@@ -200,7 +200,7 @@ impl<'a> OriginalSubject<'a> {
         restrictions: &[&Theory],
         cancellation: &Cancellation,
     ) -> Result<small::SmallNarrowing, Stop> {
-        scratch.small.narrow(
+        scratch.small_scratch().narrow(
             self.theory,
             self.producers,
             restrictions,
@@ -1815,7 +1815,7 @@ pub struct NarrowingScratch {
     learning: LearningScratch,
     arithmetic: arithmetic::runtime::ArithmeticScratch,
     /// The walker's size-specialized narrowing state ([`small`]).
-    small: small::SmallScratch,
+    small: Option<Box<small::SmallScratch>>,
 }
 
 /// Worklists shared by original and frozen closure execution.
@@ -1872,25 +1872,37 @@ impl NarrowingScratch {
     /// The size-specialized narrowings this walker made.
     #[must_use]
     pub fn small_statistics(&self) -> small::SmallStatistics {
-        self.small.statistics
+        self.small
+            .as_ref()
+            .map_or_else(small::SmallStatistics::default, |small| small.statistics)
+    }
+
+    /// The size-specialized state, created on first use.
+    fn small_scratch(&mut self) -> &mut small::SmallScratch {
+        self.small.get_or_insert_with(Box::default)
     }
 
     /// Whether a size-specialized narrowing policy is in force (off unless
     /// `ZETESIS_SMALL_REGIONS` or [`Self::set_small_policy`] names one).
     pub fn small_active(&mut self) -> bool {
-        self.small.active()
+        match &mut self.small {
+            Some(small) => small.active(),
+            None => small::SmallPolicy::environment().active(),
+        }
     }
 
     /// Tell the size-specialized narrowing that the general narrowing refuted
     /// `region` (an adapting policy reads its size).
     pub fn note_general_refutation(&mut self, region: &Region) {
-        self.small.note_refuted(region);
+        if let Some(small) = &mut self.small {
+            small.note_refuted(region);
+        }
     }
 
     /// Fix the size-specialized narrowing policy instead of reading it from
     /// the environment.
     pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {
-        self.small.set_policy(policy);
+        self.small_scratch().set_policy(policy);
     }
 
     /// Worklist and pending-mask capacity in bytes; the value's own header is
