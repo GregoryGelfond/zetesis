@@ -79,6 +79,7 @@ pub use generators::{
 };
 mod masks;
 mod preference;
+pub(crate) mod small;
 mod support;
 mod thresholds;
 mod witnesses;
@@ -181,6 +182,31 @@ impl<'a> OriginalSubject<'a> {
     #[must_use]
     pub const fn generator_order(&self) -> Option<&'a GeneratorOrder> {
         self.generator_order
+    }
+
+    /// Narrow an original region, already closed by the general narrowing of
+    /// this subject, by the size-specialized implementation its open-atom
+    /// count selects ([`small`]). It refutes the region or leaves it.
+    ///
+    /// # Errors
+    /// Cancellation observed during a learned search.
+    /// `restrictions` are the theories also active on the region (permanent
+    /// restrictions and an objective bound); the learned search reads their
+    /// roots too.
+    pub fn narrow_small(
+        &self,
+        region: &Region,
+        scratch: &mut NarrowingScratch,
+        restrictions: &[&Theory],
+        cancellation: &Cancellation,
+    ) -> Result<small::SmallNarrowing, Stop> {
+        scratch.small.narrow(
+            self.theory,
+            self.producers,
+            restrictions,
+            region,
+            cancellation,
+        )
     }
 
     /// The theory read.
@@ -1788,6 +1814,8 @@ pub struct NarrowingScratch {
     common: CommonScratch,
     learning: LearningScratch,
     arithmetic: arithmetic::runtime::ArithmeticScratch,
+    /// The walker's size-specialized narrowing state ([`small`]).
+    small: small::SmallScratch,
 }
 
 /// Worklists shared by original and frozen closure execution.
@@ -1841,6 +1869,30 @@ struct LearningScratch {
 }
 
 impl NarrowingScratch {
+    /// The size-specialized narrowings this walker made.
+    #[must_use]
+    pub fn small_statistics(&self) -> small::SmallStatistics {
+        self.small.statistics
+    }
+
+    /// Whether a size-specialized narrowing policy is in force (off unless
+    /// `ZETESIS_SMALL_REGIONS` or [`Self::set_small_policy`] names one).
+    pub fn small_active(&mut self) -> bool {
+        self.small.active()
+    }
+
+    /// Tell the size-specialized narrowing that the general narrowing refuted
+    /// `region` (an adapting policy reads its size).
+    pub fn note_general_refutation(&mut self, region: &Region) {
+        self.small.note_refuted(region);
+    }
+
+    /// Fix the size-specialized narrowing policy instead of reading it from
+    /// the environment.
+    pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {
+        self.small.set_policy(policy);
+    }
+
     /// Worklist and pending-mask capacity in bytes; the value's own header is
     /// counted by its owner.
     #[must_use]

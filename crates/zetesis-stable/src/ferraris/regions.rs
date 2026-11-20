@@ -1134,7 +1134,19 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     let mut late = subjects::late(&reading, filter);
     let result = joint(eager, &mut late, region, knowledge, scratch, budget, counts)?;
     if result == Narrowing::Refuted {
+        scratch.note_general_refutation(region);
         return Ok(result);
+    }
+    // Below the policy's size, a size-specialized implementation of the same
+    // narrowing may refute what the general closure left open.
+    if scratch.small_active() {
+        let active: Vec<&Theory> = restrictions.iter().map(|(theory, _)| theory).collect();
+        if let zetesis_ferraris::SmallNarrowing::Refuted(_) = original
+            .narrow_small(region, scratch, &active, budget.cancellation)
+            .map_err(stopped)?
+        {
+            return Ok(Narrowing::Refuted);
+        }
     }
     let preferred = prefer_split(
         (original, narrower),

@@ -1184,6 +1184,16 @@
 'Zetesis.LazyRounds.chunk_concatenation' depends on axioms: [propext, Quot.sound]
 'Zetesis.LazyRounds.completed_round_closed' does not depend on any axioms
 'Zetesis.LazyRounds.completed_round_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.LeafRefinement.refutation_keeps_outputs' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.LeafRefinement.necessary_refutes' does not depend on any axioms
+'Zetesis.LeafRefinement.enumeration_exact' does not depend on any axioms
+'Zetesis.LeafRefinement.enumeration_refutes' does not depend on any axioms
+'Zetesis.LeafRefinement.lanes_refute' depends on axioms: [propext, Quot.sound]
+'Zetesis.LeafRefinement.resolvent_sound' depends on axioms: [propext, Quot.sound]
+'Zetesis.LeafRefinement.clause_entails_core' does not depend on any axioms
+'Zetesis.LeafRefinement.learned_refutes' does not depend on any axioms
+'Zetesis.LeafRefinement.core_row' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.LeafRefinement.core_row_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.LearnedRegions.decides_holds' does not depend on any axioms
 'Zetesis.LearnedRegions.holds_negate_excludes' does not depend on any axioms
 'Zetesis.LearnedRegions.holds_or_negate' depends on axioms: [propext, Classical.choice, Quot.sound]

@@ -54,6 +54,7 @@ pub use frozen_positive::{FrozenPositiveAttempt, FrozenPositiveOutcome, FrozenPo
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
 pub use regions::ParityKnowledge;
+pub use regions::small::{SmallNarrowing, SmallPolicy, SmallStatistics, Variant as SmallVariant};
 pub use regions::{
     ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ChoiceHeads,
     ClosedQuery, Extraction, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
