@@ -1,12 +1,9 @@
 //! Values keyed by the row-scoped identity of canonical atoms.
 
-use std::{
-    collections::HashMap,
-    hash::{BuildHasherDefault, Hasher},
-    mem::size_of,
-};
+use std::{collections::HashMap, hash::BuildHasherDefault, mem::size_of};
 
 use super::{AtomRef, Error, storage};
+use crate::word_mix::WordHasher;
 
 /// Values keyed by the row-scoped identity of canonical atoms, for any number
 /// of atom owners. A lookup hashes the scope's identity and then one identity
@@ -26,36 +23,14 @@ use super::{AtomRef, Error, storage};
 pub struct AtomIdentityMap<T> {
     /// By the owner's address, which the entry's own scope handle keeps
     /// unique and stable while the entry exists.
-    owners: HashMap<usize, Scoped<T>, BuildHasherDefault<IdentityHasher>>,
+    owners: HashMap<usize, Scoped<T>, BuildHasherDefault<WordHasher>>,
 }
 
 /// One owner's entries.
 #[derive(Debug)]
 struct Scoped<T> {
     scope: storage::AtomScope,
-    values: HashMap<storage::AtomId, T, BuildHasherDefault<IdentityHasher>>,
-}
-
-/// Identities are assigned by their owner, not by input, so one
-/// [`mix_word`](crate::mix_word) of the identity word places them.
-#[derive(Default)]
-struct IdentityHasher(u64);
-
-impl Hasher for IdentityHasher {
-    fn finish(&self) -> u64 {
-        self.0
-    }
-    fn write(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
-            self.write_u64(u64::from(byte));
-        }
-    }
-    fn write_u32(&mut self, word: u32) {
-        self.write_u64(u64::from(word));
-    }
-    fn write_u64(&mut self, word: u64) {
-        self.0 = crate::mix_word(self.0, word);
-    }
+    values: HashMap<storage::AtomId, T, BuildHasherDefault<WordHasher>>,
 }
 
 impl<T> Default for AtomIdentityMap<T> {

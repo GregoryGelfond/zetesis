@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, DefaultHasher, Hash, Hasher};
 
 use crate::catalog::{CatalogRead, ReadError, TermRef, storage::TermId};
+use crate::word_mix::{Prehashed, WordHasher};
 
 use super::{Failure, Resource, Work, ceiling};
 
@@ -40,26 +41,6 @@ pub(super) struct Content {
 
 /// The chain end.
 const NO_LINK: u32 = u32::MAX;
-
-/// Head keys are already semantic hashes; the table uses them as they are.
-#[derive(Default)]
-pub(super) struct Prehashed(u64);
-
-impl Hasher for Prehashed {
-    fn finish(&self) -> u64 {
-        self.0
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
-            self.0 = self.0.rotate_left(8) ^ u64::from(byte);
-        }
-    }
-
-    fn write_u64(&mut self, value: u64) {
-        self.0 = value;
-    }
-}
 
 impl Content {
     /// The semantic hash of a value: fixed keys, so the same in every run.
@@ -146,7 +127,7 @@ impl Content {
 
 #[derive(Default)]
 pub(super) struct Inverse {
-    entries: HashMap<TermId, u32>,
+    entries: HashMap<TermId, u32, BuildHasherDefault<WordHasher>>,
 }
 
 pub(super) enum Probe {

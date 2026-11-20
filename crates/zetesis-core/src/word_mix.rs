@@ -10,6 +10,51 @@ pub const fn mix_word(state: u64, word: u64) -> u64 {
     (state.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95)
 }
 
+/// Places keys by folding each word written to it through [`mix_word`]. The
+/// crate's tables keyed by its own identities use it instead of the standard
+/// library's randomized hash: the placement is reproducible and the mixing
+/// a few instructions per word.
+#[derive(Default)]
+pub(crate) struct WordHasher(u64);
+
+impl std::hash::Hasher for WordHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u64(u64::from(byte));
+        }
+    }
+    fn write_u32(&mut self, word: u32) {
+        self.write_u64(u64::from(word));
+    }
+    fn write_usize(&mut self, word: usize) {
+        self.write_u64(word as u64);
+    }
+    fn write_u64(&mut self, word: u64) {
+        self.0 = mix_word(self.0, word);
+    }
+}
+
+/// Places keys that are already semantic hashes by those hashes as they are.
+#[derive(Default)]
+pub(crate) struct Prehashed(u64);
+
+impl std::hash::Hasher for Prehashed {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = self.0.rotate_left(8) ^ u64::from(byte);
+        }
+    }
+    fn write_u64(&mut self, value: u64) {
+        self.0 = value;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::mix_word;

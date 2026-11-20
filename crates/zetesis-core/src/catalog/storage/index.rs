@@ -1,13 +1,16 @@
 //! Collision-exact candidate chains. Only IDs, links and hash filters are owned;
 //! equality is always checked against the authoritative storage by the caller.
 
-use std::{collections::HashMap, mem::size_of};
+use std::{collections::HashMap, hash::BuildHasherDefault, mem::size_of};
+
+use crate::word_mix::Prehashed;
 
 use super::{Failure, Fault, budget::Budget, control::Work};
 
 #[derive(Debug, Default)]
 pub(super) struct Index {
-    heads: HashMap<u64, u32>,
+    /// Keyed by semantic hashes, placed as they are.
+    heads: HashMap<u64, u32, BuildHasherDefault<Prehashed>>,
     next: Vec<Option<u32>>,
 }
 
