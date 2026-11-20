@@ -49,7 +49,7 @@ pub(super) fn semantic_order<E>(
     for (position, slot) in semantic.iter_mut().enumerate() {
         *slot = position;
     }
-    used.radix(read, ids, &mut semantic, &mut spare, live, account, checked)?;
+    used.radix(&mut semantic, &mut spare, live, account, checked)?;
     drop(used);
     equivalence(ids, &semantic, &mut spare, checked)?;
     Ok((semantic, spare))
@@ -66,8 +66,10 @@ fn argument(atom: Atom<'_>, column: usize) -> usize {
 }
 
 /// Rank tables indexed by term and predicate identity, over the identities
-/// the occurrences use.
-struct Used {
+/// the occurrences use, beside the occurrences they rank.
+struct Used<'a> {
+    read: Read<'a>,
+    ids: &'a [AtomId],
     term_rank: Vec<u32>,
     predicate_rank: Vec<u32>,
     terms: usize,
@@ -75,15 +77,17 @@ struct Used {
     widest: usize,
 }
 
-impl Used {
+impl<'a> Used<'a> {
     fn rank<E>(
-        read: Read<'_>,
-        ids: &[AtomId],
+        read: Read<'a>,
+        ids: &'a [AtomId],
         live: &mut u128,
         account: &mut Account,
         checked: &mut impl FnMut() -> Result<(), ModelFailure<E>>,
     ) -> Result<Self, ModelFailure<E>> {
         let mut used = Self {
+            read,
+            ids,
             term_rank: Vec::new(),
             predicate_rank: Vec::new(),
             terms: 0,
@@ -152,17 +156,15 @@ impl Used {
     /// one key lane: each argument column from the last, then the predicate.
     /// A column beyond an atom's arity reads zero; atoms of one predicate
     /// share their arity, and the predicate is the most significant key.
-    #[allow(clippy::too_many_arguments)]
     fn radix<E>(
         &self,
-        read: Read<'_>,
-        ids: &[AtomId],
         semantic: &mut Vec<usize>,
         spare: &mut Vec<usize>,
         mut live: u128,
         account: &mut Account,
         checked: &mut impl FnMut() -> Result<(), ModelFailure<E>>,
     ) -> Result<(), ModelFailure<E>> {
+        let (read, ids) = (self.read, self.ids);
         let count = ids.len();
         let mut lane: Vec<u32> = Vec::new();
         fill(&mut lane, count, 0, &mut live, account, checked)?;
