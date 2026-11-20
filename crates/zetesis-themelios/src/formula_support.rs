@@ -1336,7 +1336,7 @@ fn derive_rule_with_executor<'source>(
     if let Some(executor) = executor
         && row_blocks::coordinator::derive(
             executor,
-            rule,
+            (index, rule),
             outer,
             support,
             budget,
@@ -1660,6 +1660,8 @@ pub(crate) struct Join<'a, 'source> {
     scalar_selection: scalar_selection::Preparation,
     literals: Ir<'a, 'source, [LiteralIr]>,
     generated: bool,
+    /// Trailing residual suffix (`u16::MAX` = none). Fits in existing padding.
+    residual_from: u16,
     /// The certificate of the last completed row, taken by its consumer.
     comparisons: Comparisons,
     /// The active proposal cursor keeps its own base certificate during lookahead.
@@ -2391,6 +2393,29 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(())
     }
 
+    /// Install a trailing residual-skip. `literals` stays on `rule.body`; the
+    /// walk omits residual indices. If every remaining body generator is in
+    /// the suffix, the binding cursor is not started.
+    pub(super) fn skip_residuals(&mut self, skip: row_blocks::prime::ResidualSkip) {
+        self.residual_from = skip.raw();
+        if self.generated && !skip.is_empty() {
+            self.generated = self
+                .literals
+                .get()
+                .iter()
+                .enumerate()
+                .any(|(index, literal)| {
+                    !skip.contains(index)
+                        && crate::formula_binding_cursor::target(literal).is_some()
+                });
+        }
+    }
+
+    fn is_residual(&self, index: usize) -> bool {
+        self.residual_from != row_blocks::prime::ResidualSkip::NONE
+            && index >= self.residual_from as usize
+    }
+
     pub(crate) fn objective(
         objective: impl Into<Ir<'a, 'source, crate::formula_ir::ObjectiveIr>>,
         support: &'a Support<'source>,
@@ -2572,6 +2597,7 @@ impl<'a, 'source> Join<'a, 'source> {
         self.evaluation.clear_zero_divisor();
         self.pending = None;
         self.pending_head = None;
+        self.residual_from = row_blocks::prime::ResidualSkip::NONE;
         self.anchor = None;
         self.positive_prefix = None;
         self.structural_query = None;
@@ -2862,6 +2888,7 @@ impl<'a, 'source> Join<'a, 'source> {
             generated: literals
                 .iter()
                 .any(|literal| crate::formula_binding_cursor::target(literal).is_some()),
+            residual_from: row_blocks::prime::ResidualSkip::NONE,
             pending: None,
             pending_head: None,
             head_slots: variables..variables,
@@ -3464,6 +3491,7 @@ impl<'a, 'source> Join<'a, 'source> {
                             limits,
                             counters,
                             location,
+                            row_blocks::prime::ResidualSkip::from_raw(self.residual_from),
                         )?;
                         pending.reject(location)?;
                         if !excluded {
@@ -3520,6 +3548,7 @@ impl<'a, 'source> Join<'a, 'source> {
             &mut self.evaluation,
             pending.binding(),
             Context::new(computation, limits, counters, location),
+            row_blocks::prime::ResidualSkip::from_raw(self.residual_from),
         )
     }
     /// Reuse only a complete support continuation; otherwise restart its
@@ -3564,13 +3593,18 @@ impl<'a, 'source> Join<'a, 'source> {
             )?;
         } else {
             self.pending_comparisons = self.comparisons.clone();
-            let mut pending = crate::formula_binding_cursor::Cursor::new(
+            let residual_from = self.residual_from;
+            let mut pending = crate::formula_binding_cursor::Cursor::new_filtered(
                 self.literals,
                 binding,
                 self.support,
                 self.bindings,
                 0..self.head_slots.start,
                 Context::new(computation, limits, counters, location),
+                |index| {
+                    residual_from != row_blocks::prime::ResidualSkip::NONE
+                        && index >= residual_from as usize
+                },
             )?;
             if let Some(families) = &self.families {
                 pending.share_families(std::rc::Rc::clone(families), limits, counters, location)?;
@@ -4163,6 +4197,9 @@ impl<'a, 'source> Join<'a, 'source> {
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
         for index in self.plan.decisions.decided_at(depth) {
+            if self.is_residual(index) {
+                continue;
+            }
             let compared = if let Some(operands) = self
                 .scalar_selection
                 .comparisons()

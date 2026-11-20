@@ -475,7 +475,7 @@ fn arbitrate<T>(
 /// the original cursor available to the serial implementation.
 pub(in crate::formula_support) fn derive<'source>(
     executor: &Executor,
-    rule: &'source RuleIr,
+    (index, rule): (usize, &'source RuleIr),
     outer: &mut Join<'_, 'source>,
     support: &Support<'source>,
     budget: &mut Budget,
@@ -539,6 +539,7 @@ pub(in crate::formula_support) fn derive<'source>(
         computation,
         &publication,
         counters,
+        index,
     )?;
     Ok(true)
 }

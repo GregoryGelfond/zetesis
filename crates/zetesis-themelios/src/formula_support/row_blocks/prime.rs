@@ -47,6 +47,88 @@ pub(super) struct Classification {
     pub(super) worker_pure: usize,
     pub(super) residual: usize,
     pub(super) integer_binds: usize,
+    /// Trailing residual suffix. Empty when every admitted literal is worker-pure.
+    pub(super) skip: ResidualSkip,
+}
+
+/// Packed trailing residual-skip for the Join walk.
+///
+/// Residuals are a suffix of `rule.body`. The `rule.body` pointer is never
+/// sliced: the walk keeps `literals` on that slice and skips indices `>= from`.
+/// `u16::MAX` means no skip. The first residual is never at index 0 on an
+/// admitted body (`classify_body` requires a worker-pure prefix). Stored on
+/// `Join` as a `u16` that fits in existing padding, so serial and 14-task
+/// storage receipts are unchanged.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct ResidualSkip {
+    from: u16,
+}
+
+impl ResidualSkip {
+    pub(in crate::formula_support) const NONE: u16 = u16::MAX;
+
+    pub(in crate::formula_support) const fn none() -> Self {
+        Self { from: Self::NONE }
+    }
+
+    pub(in crate::formula_support) const fn is_empty(self) -> bool {
+        self.from == Self::NONE
+    }
+
+    pub(in crate::formula_support) const fn first(self) -> Option<usize> {
+        if self.from == Self::NONE {
+            None
+        } else {
+            Some(self.from as usize)
+        }
+    }
+
+    pub(in crate::formula_support) const fn contains(self, index: usize) -> bool {
+        match self.first() {
+            Some(first) => index >= first,
+            None => false,
+        }
+    }
+
+    pub(in crate::formula_support) const fn raw(self) -> u16 {
+        self.from
+    }
+
+    pub(in crate::formula_support) const fn from_raw(from: u16) -> Self {
+        Self { from }
+    }
+
+    /// Suffix starting at `first`. `None` if `first` does not fit in `u16`.
+    pub(in crate::formula_support) fn suffix(first: usize) -> Option<Self> {
+        if first >= usize::from(Self::NONE) {
+            return None;
+        }
+        Some(Self { from: first as u16 })
+    }
+}
+
+/// A generating atom in the join's pattern walk: a positive flat or structural
+/// atom. Default-negated atoms are not patterns and can sit in a residual suffix.
+pub(super) fn generating_atom(literal: &LiteralIr) -> bool {
+    matches!(
+        literal,
+        LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::PatternAtom(_)
+    )
+}
+
+/// Owner must replay binds, decided default negation, or a residual suffix
+/// (comparisons after the first residual) before projecting the head.
+pub(in crate::formula_support) fn owner_replays(body: &[LiteralIr], skip: ResidualSkip) -> bool {
+    if !skip.is_empty() {
+        return true;
+    }
+    body.iter().any(|literal| {
+        matches!(
+            literal,
+            LiteralIr::Bind { .. }
+                | LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
+        )
+    })
 }
 
 /// Choose the narrowest coordinate width that can address `max_index`.
@@ -172,11 +254,17 @@ pub(super) fn classify_body(
     let mut worker_pure = 0;
     let mut residual = 0;
     let mut integer_binds = 0;
-    for literal in body {
+    let mut first_residual = None;
+    for (index, literal) in body.iter().enumerate() {
         counters.work(limits, location)?;
         match literal_role(literal, &bound, variables, limits, counters, location)? {
             LiteralRole::Serial => return Ok(None),
-            LiteralRole::Residual => residual += 1,
+            LiteralRole::Residual => {
+                if first_residual.is_none() {
+                    first_residual = Some(index);
+                }
+                residual += 1;
+            }
             LiteralRole::WorkerPure => {
                 worker_pure += 1;
                 record_worker_bindings(
@@ -197,11 +285,29 @@ pub(super) fn classify_body(
     if worker_pure == 0 {
         return Ok(None);
     }
+    let Some(skip) = trailing_skip(body, first_residual) else {
+        return Ok(None);
+    };
     Ok(Some(Classification {
         worker_pure,
         residual,
         integer_binds,
+        skip,
     }))
+}
+
+/// A residual suffix starts at the first residual literal. A generating atom
+/// at or after that index is a join pattern and cannot be skipped, so the
+/// body declines. Later worker-pure comparisons, binds and default negation
+/// join the suffix and are applied by the owner after restore.
+fn trailing_skip(body: &[LiteralIr], first_residual: Option<usize>) -> Option<ResidualSkip> {
+    let Some(first) = first_residual else {
+        return Some(ResidualSkip::none());
+    };
+    if body[first..].iter().any(generating_atom) {
+        return None;
+    }
+    ResidualSkip::suffix(first)
 }
 
 fn literal_role(

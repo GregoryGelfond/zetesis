@@ -13,7 +13,14 @@ use super::{
     Binding, Buffer, Computation, Context, FormulaFailure, GroundingWork, StorageLease,
     WitnessPlan, WitnessRow, owner,
 };
+use crate::ExpansionFailure;
+use crate::formula_ir::LiteralIr;
+use crate::formula_support::decided_negations_hold;
+use crate::formula_support::evaluation::Evaluation;
 use crate::formula_support::heads::row_column;
+use crate::formula_support::integer_comparisons;
+use crate::formula_support::row_blocks::prime::ResidualSkip;
+use themelios_program::program::DefaultNegation;
 
 pub(crate) struct RowBinding<'plan, 'source> {
     plan: &'plan WitnessPlan<'plan, 'source>,
@@ -105,6 +112,96 @@ impl<'plan, 'source: 'plan> RowBinding<'plan, 'source> {
                 })?;
         }
         Ok(&self.values)
+    }
+
+    pub(crate) fn assignment(&self) -> &Binding<'static> {
+        &self.values
+    }
+
+    /// Apply body binds, residual-suffix comparisons, and decided default
+    /// negation to the restored assignment. `false` omits the row, matching a
+    /// serial walk that rejected the same binding.
+    pub(crate) fn replay_residuals(
+        &mut self,
+        skip: ResidualSkip,
+        decided: impl Iterator<Item = usize>,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        let rule = self.plan.base.rule;
+        for (variable, column) in self.columns.iter().enumerate() {
+            if column.is_none() {
+                self.values.clear(variable, limits, counters, location)?;
+            }
+        }
+        let mut evaluation = Evaluation::default();
+        for (index, literal) in rule.body.iter().enumerate() {
+            counters.work(limits, location)?;
+            match literal {
+                LiteralIr::Bind { target, value } => {
+                    match crate::formula_support::expression(
+                        value,
+                        &self.values,
+                        computation,
+                        limits,
+                        counters,
+                        location,
+                    ) {
+                        Ok(key) => {
+                            self.values.set(*target, &key, limits, counters, location)?;
+                        }
+                        Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })) => {
+                            return Ok(false);
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
+                LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison)
+                    if skip.contains(index) =>
+                {
+                    let decided = integer_comparisons::decide(
+                        comparison,
+                        &self.values,
+                        Context::new(&*computation, limits, counters, location),
+                    )?;
+                    let holds = if let Some(holds) = decided {
+                        holds
+                    } else {
+                        match evaluation.source_comparison(
+                            comparison.operands(),
+                            &self.values,
+                            Context::new(computation, limits, counters, location),
+                        ) {
+                            Ok(holds) => holds,
+                            Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                                ..
+                            })) => {
+                                return Ok(false);
+                            }
+                            Err(error) => return Err(error),
+                        }
+                    };
+                    if !holds {
+                        return Ok(false);
+                    }
+                }
+                LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
+                | LiteralIr::Atom(_, _)
+                | LiteralIr::PatternAtom(_)
+                | LiteralIr::Compare(_)
+                | LiteralIr::ArgumentCheck(_) => {}
+                _ => {}
+            }
+        }
+        decided_negations_hold(rule, decided, &self.values, computation, limits, counters)
     }
 }
 

@@ -394,6 +394,20 @@ where
             Context::new(computation, limits, counters, location),
         )?;
         join.configure_rule(Ir::Source(prepared.base.rule), limits, counters)?;
+        if prepared.prime() {
+            let skip = match super::prime::classify_body(
+                &prepared.base.rule.body,
+                prepared.base.rule.body_variables,
+                computation,
+                limits,
+                counters,
+                location,
+            )? {
+                Some(class) => class.skip,
+                None => return Err(owner(location)),
+            };
+            join.skip_residuals(skip);
+        }
         let first = join.plan.patterns[0];
         join.resolve_probe_source(first, GroundingWork::new(limits, counters, location))?;
         join.probes[0] = Some(Probe::Indexed(delta::Rows::Posting(rows)));
@@ -428,6 +442,7 @@ pub(super) fn publish<'batch, 'plan: 'batch, 'source: 'plan>(
     computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     counters: &mut Counters,
+    rule_index: usize,
 ) -> Result<usize, FormulaFailure> {
     let location = prepared.location();
     let HeadIr::Normal(Some(pattern)) = prepared.base.rule.head else {
@@ -438,14 +453,85 @@ pub(super) fn publish<'batch, 'plan: 'batch, 'source: 'plan>(
         support,
         Context::new(&*computation, limits, counters, location),
     )?;
-    let mut head = None;
+    let skip = if prepared.prime() {
+        match super::prime::classify_body(
+            &prepared.base.rule.body,
+            prepared.base.rule.body_variables,
+            computation,
+            limits,
+            counters,
+            location,
+        )? {
+            Some(class) => class.skip,
+            None => return Err(owner(location)),
+        }
+    } else {
+        super::prime::ResidualSkip::none()
+    };
+    let owner_replay =
+        prepared.prime() && super::prime::owner_replays(&prepared.base.rule.body, skip);
+    let decided: Vec<usize> = if owner_replay {
+        support
+            .certainty()
+            .map(|certainty| certainty.decided(rule_index).collect())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let mut row_head = None;
+    let mut assignment_head = None;
+    let mut binding = None;
     let mut published = 0;
     for batch in batches {
         let mut rows = replay.batch(batch, limits, counters)?;
         while let Some(row) = rows.next(Context::new(&*computation, limits, counters, location))? {
+            if owner_replay {
+                let values = match binding.as_mut() {
+                    Some(existing) => existing,
+                    None => {
+                        binding = Some(RowBinding::new(
+                            prepared,
+                            &row,
+                            Context::new(&*computation, limits, counters, location),
+                        )?);
+                        binding.as_mut().expect("just installed")
+                    }
+                };
+                values.read(
+                    &row,
+                    Context::new(&*computation, limits, counters, location),
+                )?;
+                if !values.replay_residuals(
+                    skip,
+                    decided.iter().copied(),
+                    Context::new(computation, limits, counters, location),
+                )? {
+                    continue;
+                }
+                counters.observe_work(Event::SupportHeadWork, |counters| {
+                    if assignment_head.is_none() {
+                        assignment_head = Some(super::super::heads::Head::new(
+                            pattern,
+                            computation,
+                            limits,
+                            counters,
+                            location,
+                        )?);
+                    }
+                    assignment_head
+                        .as_ref()
+                        .expect("prepared assignment head")
+                        .derive(values.assignment(), computation, limits, counters, location)?;
+                    counters.work(limits, location)?;
+                    published = zetesis_algebra::Meter::check_count(published, 1, usize::MAX)
+                        .map_err(|_| owner(location))?;
+                    Ok::<_, FormulaFailure>(())
+                })?;
+                continue;
+            }
             counters.observe_work(Event::SupportHeadWork, |counters| {
-                if head.is_none() {
-                    head = Some(RowHead::new(
+                if row_head.is_none() {
+                    row_head = Some(RowHead::new(
                         pattern,
                         &row,
                         computation,
@@ -454,7 +540,7 @@ pub(super) fn publish<'batch, 'plan: 'batch, 'source: 'plan>(
                         location,
                     )?);
                 }
-                let atom = head.as_ref().expect("prepared row projection").atom(
+                let atom = row_head.as_ref().expect("prepared row projection").atom(
                     &row,
                     computation,
                     limits,

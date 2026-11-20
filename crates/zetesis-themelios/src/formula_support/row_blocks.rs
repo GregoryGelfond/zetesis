@@ -70,8 +70,9 @@ enum BodyKind {
     PositiveAtoms,
     ProducerLeaves,
     /// Widened A′ admission: worker-pure comparisons, default negation,
-    /// structural patterns, and integer binds. Residuals are not yet admitted
-    /// (owner replay is wired separately).
+    /// structural patterns, and integer binds. Trailing residuals (`not not`,
+    /// term-minting binds, and any later comparisons) are skipped in the
+    /// Join walk and replayed by the owner after restore.
     Prime,
 }
 
@@ -188,16 +189,11 @@ fn checked_prime_body(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
-    let Some(class) =
-        prime::classify_body(body, variables, computation, limits, counters, location)?
-    else {
-        return Ok(false);
-    };
-    // Residual replay is not yet on this path. A body with only worker-pure
-    // literals is admitted; anything else stays serial.
-    if class.residual != 0 {
+    if prime::classify_body(body, variables, computation, limits, counters, location)?.is_none() {
         return Ok(false);
     }
+    // Trailing residuals are admitted: classify_body already declined a
+    // generating atom at or after the first residual.
     for literal in body {
         counters.work(limits, location)?;
         let pattern = match literal {

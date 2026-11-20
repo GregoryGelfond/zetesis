@@ -1,6 +1,6 @@
 use super::{
-    CoordWidth, IntWidth, PRIME_GROUPS, admit_reservation, coord_bytes, coord_width, group_count,
-    group_range, group_start, int_bytes, int_width, reservation_fits,
+    CoordWidth, IntWidth, PRIME_GROUPS, ResidualSkip, admit_reservation, coord_bytes, coord_width,
+    group_count, group_range, group_start, int_bytes, int_width, reservation_fits,
 };
 use crate::formula_support::parallel_executor::TASKS;
 
@@ -133,4 +133,34 @@ fn width_for_index_overflows_above_u32() {
     use crate::test_support::location;
     assert!(super::width_for_index(u32::MAX as usize, location()).is_ok());
     assert!(super::width_for_index(u32::MAX as usize + 1, location()).is_err());
+}
+
+#[test]
+fn a_trailing_residual_skip_keeps_the_body_unsplit() {
+    let skip = ResidualSkip::suffix(3).unwrap();
+    assert!(!skip.is_empty());
+    assert_eq!(skip.first(), Some(3));
+    assert!(!skip.contains(2));
+    assert!(skip.contains(3));
+    assert!(skip.contains(10));
+    assert!(ResidualSkip::none().is_empty());
+    assert_eq!(ResidualSkip::none().first(), None);
+    assert!(!ResidualSkip::none().contains(0));
+    assert!(!ResidualSkip::none().contains(3));
+}
+
+#[test]
+fn a_residual_suffix_index_that_does_not_fit_a_u16_is_declined() {
+    assert!(ResidualSkip::suffix(usize::from(u16::MAX)).is_none());
+    assert!(ResidualSkip::suffix(0).is_some());
+}
+
+#[test]
+fn residual_from_raw_round_trips() {
+    let skip = ResidualSkip::suffix(12).unwrap();
+    assert_eq!(ResidualSkip::from_raw(skip.raw()), skip);
+    assert_eq!(
+        ResidualSkip::from_raw(ResidualSkip::NONE),
+        ResidualSkip::none()
+    );
 }

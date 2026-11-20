@@ -123,26 +123,46 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
                     counters,
                     rule.location,
                     true,
+                    false,
                 )?
             {
                 return Ok(None);
             }
-        } else if !initial(cursor, Coverage::Selected, limits, counters, rule.location)? {
-            return Ok(None);
-        } else if !checked_rule(
-            rule,
-            computation,
+        } else if !cursor.generated {
+            // The 14-task path still requires a not-yet-generated cursor, and
+            // its work charges stay exactly as they were.
+            if !initial(cursor, Coverage::Selected, limits, counters, rule.location)? {
+                return Ok(None);
+            } else if !checked_rule(
+                rule,
+                computation,
+                limits,
+                counters,
+                support_body(computation),
+            )? {
+                // The existing positive-atom / producer-leaf path declined.
+                // Try A′ admission so comparison, default-negation and
+                // integer-bind bodies can take the parallel path without
+                // changing already-admitted rules.
+                if !checked_rule(rule, computation, limits, counters, BodyKind::Prime)? {
+                    return Ok(None);
+                }
+                prime = true;
+            }
+        } else if !initial_kind(
+            cursor,
+            Coverage::Selected,
             limits,
             counters,
-            support_body(computation),
-        )? {
-            // The existing positive-atom / producer-leaf path declined. Try A′
-            // admission so comparison, default-negation and integer-bind bodies
-            // can take the parallel path without changing already-admitted
-            // rules.
-            if !checked_rule(rule, computation, limits, counters, BodyKind::Prime)? {
-                return Ok(None);
-            }
+            rule.location,
+            false,
+            true,
+        )? || !checked_rule(rule, computation, limits, counters, BodyKind::Prime)?
+        {
+            // Bind and other body generators set `generated`. Only A′ admits
+            // those cursors; the existing 14-task gates are unchanged.
+            return Ok(None);
+        } else {
             prime = true;
         }
         // A scan followed only by fully bound tests remains in the ordinary
@@ -210,7 +230,7 @@ pub(super) fn initial(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
-    initial_kind(cursor, coverage, limits, counters, location, false)
+    initial_kind(cursor, coverage, limits, counters, location, false, false)
 }
 
 fn initial_kind(
@@ -220,6 +240,7 @@ fn initial_kind(
     counters: &mut Counters,
     location: ProgramSite,
     retain_unused_families: bool,
+    allow_generated: bool,
 ) -> Result<bool, FormulaFailure> {
     macro_rules! require {
         ($condition:expr) => {
@@ -231,7 +252,7 @@ fn initial_kind(
     }
     require!(matches!(cursor.traversal, Traversal::Searching));
     require!(cursor.depth == 0);
-    require!(!cursor.generated);
+    require!(allow_generated || !cursor.generated);
     require!(cursor.head_slots.is_empty());
     require!(cursor.source_evidence == (coverage == Coverage::Complete));
     require!(!cursor.certified_total);

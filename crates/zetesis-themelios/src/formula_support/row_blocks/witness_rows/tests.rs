@@ -224,6 +224,7 @@ fn run_with_reader(
             &mut computation,
             &publication,
             &mut counters,
+            0,
         )
         .unwrap()
     };
@@ -496,6 +497,7 @@ fn staged_occurrences_are_authenticated_before_the_first_head_is_published() {
             &mut computation,
             &limits,
             &mut counters,
+            0,
         )
     };
     assert!(matches!(

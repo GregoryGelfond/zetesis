@@ -3,7 +3,7 @@
 
 use super::{
     Comparisons, Computation, Counters, Coverage, Evaluation, Failures, Join, compare, comparison,
-    integer_comparisons,
+    integer_comparisons, row_blocks::prime::ResidualSkip,
 };
 use crate::ProgramSite;
 use crate::formula_binding::Binding;
@@ -49,6 +49,9 @@ impl Join<'_, '_> {
             Comparisons::Verified | Comparisons::Deferred => None,
         };
         for (index, literal) in self.literals.get().iter().enumerate() {
+            if self.is_residual(index) {
+                continue;
+            }
             if crate::formula_binding_cursor::target(literal)
                 .is_some_and(|target| target >= binding.len())
                 || (self.coverage == Coverage::Selected
@@ -200,10 +203,14 @@ pub(super) fn excludes(
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
+    skip: ResidualSkip,
 ) -> Result<bool, FormulaFailure> {
     let mut excluded = false;
     let mut fatal = None;
     for (index, literal) in literals.iter().enumerate() {
+        if skip.contains(index) {
+            continue;
+        }
         match pending_check(
             literal,
             binding,
@@ -256,6 +263,7 @@ pub(super) fn valueless(
     evaluation: &mut Evaluation,
     binding: &Binding,
     context: super::Context<'_, &mut Computation<'_, '_>>,
+    skip: ResidualSkip,
 ) -> Result<(), FormulaFailure> {
     let super::Context {
         computation,
@@ -298,6 +306,7 @@ pub(super) fn valueless(
         limits,
         counters,
         location,
+        skip,
     )? {
         return Ok(());
     }
