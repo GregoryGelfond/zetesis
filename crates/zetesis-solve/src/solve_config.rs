@@ -8,6 +8,10 @@ use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision};
 /// formula search and objective work are cumulative; verification work is per
 /// call. No field selects an output format, file path, source loader or writer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+// Independent policy switches, not a state machine. The isolation flags
+// for conflict, bound, and attempt scaling take the count past clippy's
+// three-bool limit.
+#[allow(clippy::struct_excessive_bools)]
 pub struct SolveConfig {
     /// Execution backend: the CPU (the default) walks regions on an owned Rayon
     /// pool; a GPU backend requires a physical device of its API and runs exact
