@@ -371,6 +371,19 @@ impl Counters {
     pub(super) fn record(&self, event: Event) {
         self.observed.record(event);
     }
+
+    /// Run `op` against the same work and storage limits, but without recording
+    /// occurrence statistics. Prefix census is charged work; JoinRow and
+    /// JoinProbe counts belong to the walk that produces staged rows.
+    pub(in crate::formula_support) fn without_observation<T>(
+        &mut self,
+        op: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let observed = std::mem::replace(&mut self.observed, Work::worker(false));
+        let result = op(self);
+        self.observed = observed;
+        result
+    }
     #[inline]
     pub(crate) fn work(
         &mut self,
@@ -3758,6 +3771,192 @@ impl<'a, 'source> Join<'a, 'source> {
             }
         }
     }
+
+    /// Install the selected first-row posting at depth 0, the same source
+    /// the d = 1 path copies, without advancing the probe.
+    fn install_first_posting(
+        &mut self,
+        first_rows: &'a [usize],
+        work: GroundingWork<'_>,
+    ) -> Result<(), FormulaFailure> {
+        if self.plan.patterns.is_empty() {
+            return Err(owner(work.location));
+        }
+        let first = self.plan.patterns[0];
+        self.resolve_probe_source(first, work)?;
+        self.probes[0] = Some(Probe::Indexed(delta::Rows::Posting(first_rows)));
+        Ok(())
+    }
+
+    /// Walk until the first `depth` patterns are bound, then yield that
+    /// tuple and backtrack so the next call continues at the last prefix
+    /// depth. Residual literals stay skipped; complete-row filters and head
+    /// publication are not applied.
+    fn next_prefix(
+        &mut self,
+        depth: usize,
+        budget: &mut Budget,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Option<row_blocks::prime::prefixes::PrefixIds>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        if depth == 0
+            || depth > row_blocks::prime::prefixes::MAX_PREFIX_DEPTH
+            || depth > self.plan.patterns.len()
+        {
+            return Err(owner(location));
+        }
+        self.prepare_scalar_comparisons(computation, limits, budget, counters, location)?;
+        self.resume(limits, counters, location)?;
+        self.comparisons = Comparisons::Deferred;
+        if self.traversal == Traversal::Finished || self.plan.patterns.is_empty() {
+            return Ok(None);
+        }
+        loop {
+            counters.work(limits, location)?;
+            let pattern = self.plan.patterns[self.depth];
+            let row = self.advance_probe(
+                pattern,
+                Context::new(computation, limits, counters, location),
+            )?;
+            let atom = row.and_then(|row| self.resolutions[self.depth].rows()?.row(row));
+            let Some(atom) = atom else {
+                self.positions[self.depth] = 0;
+                self.probes[self.depth] = None;
+                if self.depth == 0 {
+                    self.traversal = Traversal::Finished;
+                    return Ok(None);
+                }
+                self.undo_at(self.depth - 1, limits, counters, location)?;
+                self.depth -= 1;
+                continue;
+            };
+            // The prefix census is charged work, but JoinRow counts belong
+            // to the later suffix walk (and the d = 1 path). Recording them
+            // here would double occurrence statistics on the A′ path.
+            let selected = self.permits_row(pattern, atom, limits, counters, location)?;
+            let permitted = selected.permits()
+                && self
+                    .positive_prefix
+                    .as_ref()
+                    .is_none_or(|prefix| prefix.permits(selected));
+            if let Some(selection) = self.probe_selections.get_mut(self.depth) {
+                selection.record(self.positions[self.depth] - 1, permitted);
+            }
+            if !permitted {
+                continue;
+            }
+            let matches = self.match_row(
+                pattern.pattern,
+                atom,
+                budget,
+                Context::new(computation, limits, counters, location),
+            )?;
+            if matches && self.filter_prefix(computation, limits, counters, location)? {
+                if let Some(witnesses) = &mut self.witnesses {
+                    counters.work(limits, location)?;
+                    witnesses.push(self.depth, atom);
+                }
+                if let Some(prefix) = &mut self.positive_prefix {
+                    prefix.advance(self.depth, pattern.source, selected);
+                }
+                self.depth += 1;
+                if self.depth == depth {
+                    let ids = self.prefix_ids(depth, location)?;
+                    self.undo_at(self.depth - 1, limits, counters, location)?;
+                    self.depth -= 1;
+                    return Ok(Some(ids));
+                }
+            } else {
+                self.undo_at(self.depth, limits, counters, location)?;
+            }
+        }
+    }
+
+    /// Recover the source-row identities of the just-accepted prefix from
+    /// each probe's already-advanced position. No extra Join field is kept.
+    fn prefix_ids(
+        &self,
+        depth: usize,
+        location: ProgramSite,
+    ) -> Result<row_blocks::prime::prefixes::PrefixIds, FormulaFailure> {
+        let mut packed = [0u32; row_blocks::prime::prefixes::MAX_PREFIX_DEPTH];
+        for index in 0..depth {
+            let row = self.probe_row(index).ok_or_else(|| owner(location))?;
+            packed[index] = u32::try_from(row).map_err(|_| overflow(location))?;
+        }
+        Ok(row_blocks::prime::prefixes::PrefixIds::packed(
+            depth as u8,
+            packed,
+        ))
+    }
+
+    fn probe_row(&self, depth: usize) -> Option<usize> {
+        let probe = self.probes.get(depth)?.as_ref()?;
+        let position = self.positions.get(depth)?.checked_sub(1)?;
+        match probe {
+            Probe::Indexed(rows) => rows.get(position),
+            Probe::Owned(rows) | Probe::Range(rows) => rows.slice().get(position).copied(),
+            Probe::Expression(rows) => rows.get(position),
+            Probe::Table(_) => None,
+        }
+    }
+
+    /// Bind one prefix tuple by installing a single-row interval at each
+    /// prefix depth, then leave the join at the start of its suffix walk.
+    /// Resolutions from a previous prefix of the same rule are kept. The
+    /// interval carries no borrow, so the tuple need not outlive the walk.
+    fn seed_prefix(
+        &mut self,
+        prefix: row_blocks::prime::prefixes::PrefixIds,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let depth = prefix.depth();
+        if depth == 0 || depth > self.plan.patterns.len() {
+            return Err(owner(location));
+        }
+        if self.traversal == Traversal::PendingUndo {
+            // A lent completion still holds the last suffix; drop it before
+            // installing a new prefix so the values trail stays empty.
+            // `resume` needs counters; seed is called with them by the
+            // caller via the reset below when traversal is Finished, and
+            // PendingUndo should not remain after next_witness_row returns
+            // None. Treat it as an owner error rather than silently undo
+            // without charging.
+            return Err(owner(location));
+        }
+        self.depth = 0;
+        self.traversal = Traversal::Searching;
+        self.pending = None;
+        self.pending_head = None;
+        self.held = None;
+        self.comparisons = Comparisons::Deferred;
+        self.pending_comparisons = Comparisons::Deferred;
+        self.failure = None;
+        if let Some(witnesses) = self.witnesses.as_mut() {
+            witnesses.clear();
+        }
+        for index in 0..self.positions.len() {
+            self.positions[index] = 0;
+        }
+        for probe in &mut self.probes {
+            *probe = None;
+        }
+        for index in 0..depth {
+            let id = prefix.get(index).ok_or_else(|| owner(location))?;
+            let end = id.checked_add(1).ok_or_else(|| overflow(location))?;
+            self.probes[index] = Some(Probe::Indexed(delta::Rows::Interval(id..end)));
+        }
+        Ok(())
+    }
+
     /// Authenticate this depth's relation and filter as one immutable pair.
     /// A refused authentication publishes neither half; backtracking reuses a
     /// successfully resolved pair independently of the chosen probe strategy.
@@ -4404,6 +4603,20 @@ impl<'a, 'source> Join<'a, 'source> {
 /// The comparison a literal decides: a comparison literal or an argument
 /// check. Captured arguments reuse comparison evaluation, never binding
 /// inference.
+fn owner(location: ProgramSite) -> FormulaFailure {
+    FormulaFailure::SupportRelation {
+        error: zetesis_core::relation::Failure::Owner,
+        location,
+    }
+}
+
+fn overflow(location: ProgramSite) -> FormulaFailure {
+    FormulaFailure::SupportRelation {
+        error: zetesis_core::relation::Failure::Overflow,
+        location,
+    }
+}
+
 fn comparison(literal: &LiteralIr) -> Option<&crate::formula_ir::Comparison> {
     match literal {
         LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => Some(comparison),

@@ -19,6 +19,7 @@ use std::ops::Range;
 use zetesis_core::atom_registry::TermLookup;
 use zetesis_core::relation::Row;
 
+use super::prime::prefixes::Prefixes;
 pub(super) use super::prime::{PackedCoords, width_for_index};
 use super::{
     Binding, Buffer, Computation, Context, Counters, GroundingWork, HeadIr, Ir, Join, JoinPlan,
@@ -164,6 +165,18 @@ impl<'plan, 'source: 'plan> WitnessPlan<'plan, 'source> {
 
     pub(crate) fn prime(&self) -> bool {
         self.base.prime
+    }
+
+    pub(crate) fn first_rows(&self) -> &[usize] {
+        self.base.rows
+    }
+
+    pub(crate) fn rule(&self) -> &'source crate::formula_ir::RuleIr {
+        self.base.rule
+    }
+
+    pub(in crate::formula_support) fn join_plan(&self) -> &'plan super::order::Plan<'plan> {
+        self.base.plan
     }
 
     pub(crate) fn pattern_count(&self) -> usize {
@@ -422,6 +435,109 @@ where
             Context::new(computation, limits, counters, location),
         )? {
             result.stage(&row, computation, limits, counters)?;
+        }
+        Ok(result)
+    };
+    if prepared.purpose == Purpose::Support {
+        counters.observe_work(Event::SupportJoinWork, operation)
+    } else {
+        operation(counters)
+    }
+}
+
+/// Walk each prefix tuple in `block` by seeding a private Join and
+/// enumerating its suffix. Used only when A′ chose `d > 1`.
+pub(crate) fn execute_prefixed<'plan, 'source>(
+    prepared: &'plan WitnessPlan<'plan, 'source>,
+    prefixes: &Prefixes<'_>,
+    block: Range<usize>,
+    append: &crate::formula_support::SupportAppend<'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<Batch<'plan, 'source>, FormulaFailure>
+where
+    'source: 'plan,
+{
+    let location = prepared.location();
+    if block.end < block.start || block.end > prefixes.len() {
+        return Err(owner(location));
+    }
+    let support = Support::indexed(prepared.relations, limits, counters, location)?;
+    let mut computation = Computation::borrowed(append, &support, limits, counters, location)?;
+    traverse_prefixed(
+        prepared,
+        prefixes,
+        block,
+        &support,
+        budget,
+        Context::new(&mut computation, limits, counters, location),
+    )
+}
+
+fn traverse_prefixed<'plan, 'source, 'read>(
+    prepared: &'plan WitnessPlan<'plan, 'source>,
+    prefixes: &Prefixes<'_>,
+    block: Range<usize>,
+    support: &Support<'read>,
+    budget: &mut Budget,
+    context: Context<'_, &mut Computation<'_, 'read>>,
+) -> Result<Batch<'plan, 'source>, FormulaFailure>
+where
+    'source: 'plan + 'read,
+{
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    let mut operation = |counters: &mut Counters| {
+        let mut result = Batch::new(prepared, computation, limits, counters)?;
+        if block.is_empty() {
+            return Ok(result);
+        }
+        let prefix = Binding::new(computation, limits, counters, location)?;
+        let mut join = Join::with_plan(
+            &prepared.base.rule.body,
+            &prefix,
+            prepared.base.rule.variables,
+            support,
+            JoinPlan::Borrowed(prepared.base.plan),
+            None,
+            Context::new(computation, limits, counters, location),
+        )?;
+        join.configure_rule(Ir::Source(prepared.base.rule), limits, counters)?;
+        let skip = match super::prime::classify_body(
+            &prepared.base.rule.body,
+            prepared.base.rule.body_variables,
+            computation,
+            limits,
+            counters,
+            location,
+        )? {
+            Some(class) => class.skip,
+            None => return Err(owner(location)),
+        };
+        join.skip_residuals(skip);
+        join.retain_witnesses(Context::new(computation, limits, counters, location))?;
+        let HeadIr::Normal(Some(head)) = prepared.base.rule.head else {
+            unreachable!("admitted normal producer");
+        };
+        let skip_existing = (prepared.purpose == Purpose::Support).then_some(head);
+        for index in block.start..block.end {
+            let tuple = prefixes.tuple(index).ok_or_else(|| owner(location))?;
+            join.seed_prefix(tuple, location)?;
+            while let Some(row) = join.next_witness_row(
+                skip_existing,
+                budget,
+                Context::new(computation, limits, counters, location),
+            )? {
+                result.stage(&row, computation, limits, counters)?;
+            }
         }
         Ok(result)
     };

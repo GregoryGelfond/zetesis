@@ -15,6 +15,7 @@ pub(in crate::formula_support) use crate::formula_support::parallel_executor::PR
 
 mod transport;
 pub(super) use transport::{PackedCoords, width_for_index};
+pub(crate) mod prefixes;
 
 /// Role of one body literal on the A′ path.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

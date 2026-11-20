@@ -539,15 +539,28 @@ pub(in crate::formula_support) fn derive<'source>(
         limits,
         counters,
     )?;
+    let prefixes = if plan.prime() {
+        super::prime::prefixes::adapt(
+            plan.rule(),
+            plan.join_plan(),
+            plan.first_rows(),
+            support,
+            budget,
+            Context::new(computation, limits, counters, location),
+        )?
+    } else {
+        super::prime::prefixes::Prefixes::first(plan.first_rows())
+    };
     if plan.prime() {
         let remaining = limits
             .max_support_bytes
             .saturating_sub(computation.query_support().live_bytes());
         // Until residual replay records integer columns, reserve only packed
         // occurrence coordinates. I16 is the default integer width when a
-        // later column is added with a fitting range.
+        // later column is added with a fitting range. Width is the prefix
+        // tuple count, which equals the first-row count when d = 1.
         if super::prime::admit_reservation(
-            plan.len(),
+            prefixes.len(),
             plan.pattern_count(),
             plan.max_row_index(),
             0,
@@ -560,9 +573,10 @@ pub(in crate::formula_support) fn derive<'source>(
             return Ok(false);
         }
     }
-    let mut completed = stage_witnesses(
+    let mut completed = stage_witnesses_with(
         executor,
         &plan,
+        &prefixes,
         budget,
         Context::new(&*computation, limits, counters, location),
     )?;
@@ -587,6 +601,24 @@ pub(crate) fn stage_witnesses<'plan, 'source: 'plan>(
     budget: &mut Budget,
     context: Context<'_, &Computation<'_, 'source>>,
 ) -> Result<Completed<witness_rows::Batch<'plan, 'source>>, FormulaFailure> {
+    stage_witnesses_with(
+        executor,
+        plan,
+        &super::prime::prefixes::Prefixes::first(plan.first_rows()),
+        budget,
+        context,
+    )
+}
+
+/// Stage worker batches over `prefixes`. A′ may pass a deeper list; every
+/// other caller keeps the first-probe stream via [`stage_witnesses`].
+pub(crate) fn stage_witnesses_with<'plan, 'source: 'plan>(
+    executor: &Executor,
+    plan: &'plan witness_rows::WitnessPlan<'plan, 'source>,
+    prefixes: &super::prime::prefixes::Prefixes<'_>,
+    budget: &mut Budget,
+    context: Context<'_, &Computation<'_, 'source>>,
+) -> Result<Completed<witness_rows::Batch<'plan, 'source>>, FormulaFailure> {
     let Context {
         computation,
         work:
@@ -602,14 +634,25 @@ pub(crate) fn stage_witnesses<'plan, 'source: 'plan>(
             error: zetesis_core::relation::Failure::Owner,
             location,
         })?;
+    let width = if prefixes.depth() <= 1 {
+        plan.len()
+    } else {
+        prefixes.len()
+    };
     run_grouped(
         executor,
-        plan.len(),
+        width,
         plan.groups(),
         budget,
         Context::new(computation, limits, counters, location),
         |block, limits, budget, counters| {
-            witness_rows::execute_borrowed(plan, block, append, limits, budget, counters)
+            if prefixes.depth() <= 1 {
+                witness_rows::execute_borrowed(plan, block, append, limits, budget, counters)
+            } else {
+                witness_rows::execute_prefixed(
+                    plan, prefixes, block, append, limits, budget, counters,
+                )
+            }
         },
     )
 }
