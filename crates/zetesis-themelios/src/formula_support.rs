@@ -1590,7 +1590,7 @@ fn derive_algebra_join_variants<'source>(
                 rule.location,
             )?;
             let mut buffer = vec![0i32; evaluated.bindings.width()];
-            let rows = evaluated.emission_order(rule, support);
+            let rows = evaluated.emit_rows(rule, support);
             for row in rows {
                 evaluated.bind_row(
                     (

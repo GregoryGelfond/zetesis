@@ -47,6 +47,12 @@ fn method() -> JoinMethod {
 struct InternCache {
     keys: HashMap<i32, TermKey>,
     bodies: HashMap<usize, CachedBody>,
+    /// Keys in TermRef order, grown by merging keys first seen at emit.
+    sorted_keys: Vec<i32>,
+    /// Dense ranks of `sorted_keys`. Relative order is TermRef order, so
+    /// ranks over a superset of one visit's output keys still sort that
+    /// visit correctly.
+    rank: HashMap<i32, u32>,
 }
 
 struct CachedBody {
@@ -59,12 +65,16 @@ impl InternCache {
         Self {
             keys: HashMap::new(),
             bodies: HashMap::new(),
+            sorted_keys: Vec::new(),
+            rank: HashMap::new(),
         }
     }
 
     fn clear(&mut self) {
         self.keys.clear();
         self.bodies.clear();
+        self.sorted_keys.clear();
+        self.rank.clear();
     }
 }
 
@@ -94,6 +104,19 @@ impl Drop for InternCacheGuard {
     fn drop(&mut self) {
         reset_intern_cache();
     }
+}
+
+/// E2: publish hook heads in binding-table order, like the cursor's staged
+/// publish. Default (E1) keeps TermRef emission order, which is what
+/// preserves the model-construction solve win.
+pub(crate) fn staged_emit() -> bool {
+    matches!(
+        std::env::var("ZETESIS_JOIN_EMIT")
+            .ok()
+            .as_deref()
+            .map(str::trim),
+        Some("stage")
+    )
 }
 
 /// True when a normal head also occurs as a positive body atom, so this
@@ -153,6 +176,15 @@ impl Evaluated<'_> {
         Ok(())
     }
 
+    /// Row indices to emit: TermRef order (E1) or binding-table order (E2).
+    pub(crate) fn emit_rows(&self, rule: &RuleIr, support: &Support<'_>) -> Vec<usize> {
+        if staged_emit() {
+            self.bindings.row_range().collect()
+        } else {
+            self.emission_order(rule, support)
+        }
+    }
+
     /// Row indices of the binding table in semantic head order.
     ///
     /// The algebra Join sorts by interned identity, which is not term
@@ -160,6 +192,10 @@ impl Evaluated<'_> {
     /// recursive stretch nearly sorted, so `ModelOrder::prepare_with`
     /// does far fewer checked comparisons. Ties break by the original
     /// row index so the order is deterministic at every thread count.
+    ///
+    /// Ranks are maintained incrementally in the support-run intern cache
+    /// (only new keys are TermRef-sorted and merged). The decorated row
+    /// keys are then radix-sorted as integers.
     pub(crate) fn emission_order(&self, rule: &RuleIr, support: &Support<'_>) -> Vec<usize> {
         let mut rows: Vec<usize> = self.bindings.row_range().collect();
         let HeadIr::Normal(Some(head)) = &rule.head else {
@@ -189,11 +225,10 @@ impl Evaluated<'_> {
             .collect();
         let ranks = self
             .terms
-            .ranks(columns.iter().copied().flatten(), rows.len());
+            .ranks_incremental(columns.iter().copied().flatten(), rows.len());
         // Decorate once, then integer-sort. HashMap lookups inside the
         // comparator were dominating support time (closure ~equal to
         // evaluate; sg even more) because each comparison re-probed ranks.
-        const MAX_HEAD: usize = 8;
         let arity = columns.iter().filter(|column| column.is_some()).count();
         if arity > MAX_HEAD {
             rows.sort_by(|&left, &right| {
@@ -231,8 +266,7 @@ impl Evaluated<'_> {
             }
             decorated.push((key, row));
         }
-        decorated.sort_unstable();
-        decorated.into_iter().map(|(_, row)| row).collect()
+        radix_sort_decorated(decorated, arity)
     }
 }
 
@@ -852,32 +886,64 @@ impl<'a> TermMap<'a> {
     }
 
     /// Dense semantic ranks for the keys that appear in `columns`.
-    fn ranks<'c>(
+    ///
+    /// Only keys not already in the support-run intern cache are
+    /// TermRef-sorted; they are merged into the cached order.
+    fn ranks_incremental<'c>(
         &self,
         columns: impl Iterator<Item = &'c [i32]>,
         rows: usize,
     ) -> HashMap<i32, u32> {
-        let mut terms: Vec<(i32, TermRef<'a>)> = Vec::new();
+        let mut needed: Vec<i32> = Vec::new();
         let mut seen: HashMap<i32, ()> = HashMap::new();
         for column in columns {
             let end = rows.min(column.len());
             for &key in &column[..end] {
-                if seen.contains_key(&key) {
-                    continue;
+                if seen.insert(key, ()).is_none() {
+                    needed.push(key);
                 }
-                let term = self
-                    .get(key)
-                    .expect("join keys are interned from the snapshot");
-                seen.insert(key, ());
-                terms.push((key, term));
             }
         }
-        terms.sort_by(|left, right| left.1.cmp(&right.1).then(left.0.cmp(&right.0)));
-        terms
-            .into_iter()
-            .enumerate()
-            .map(|(rank, (key, _))| (key, rank as u32))
-            .collect()
+        let (sorted_keys, rank) = INTERN.with(|cell| {
+            let intern = cell.borrow();
+            (intern.sorted_keys.clone(), intern.rank.clone())
+        });
+        let mut fresh: Vec<i32> = needed
+            .iter()
+            .copied()
+            .filter(|key| !rank.contains_key(key))
+            .collect();
+        if fresh.is_empty() {
+            return rank;
+        }
+        fresh.sort_by(|left, right| self.get(*left).cmp(&self.get(*right)).then(left.cmp(right)));
+        let mut merged = Vec::with_capacity(sorted_keys.len() + fresh.len());
+        let mut old = sorted_keys.iter().copied().peekable();
+        let mut new = fresh.iter().copied().peekable();
+        while let (Some(&left), Some(&right)) = (old.peek(), new.peek()) {
+            match self.get(left).cmp(&self.get(right)).then(left.cmp(&right)) {
+                std::cmp::Ordering::Greater => {
+                    merged.push(right);
+                    new.next();
+                }
+                _ => {
+                    merged.push(left);
+                    old.next();
+                }
+            }
+        }
+        merged.extend(old);
+        merged.extend(new);
+        let mut new_rank = HashMap::with_capacity(merged.len());
+        for (index, key) in merged.iter().copied().enumerate() {
+            new_rank.insert(key, index as u32);
+        }
+        INTERN.with(|cell| {
+            let mut intern = cell.borrow_mut();
+            intern.sorted_keys = merged;
+            intern.rank = new_rank.clone();
+        });
+        new_rank
     }
 }
 
@@ -887,6 +953,76 @@ fn term_key(term: TermRef<'_>) -> Option<i32> {
     let position = term.canonical_position()?;
     let word = u32::try_from(position).ok()?;
     Some(i32::from_ne_bytes(word.to_ne_bytes()))
+}
+
+const MAX_HEAD: usize = 8;
+
+/// LSD radix sort of decorated head-rank keys, then the original row index,
+/// so the order matches `sort_unstable` on `([u32; MAX_HEAD], usize)`.
+fn radix_sort_decorated(mut decorated: Vec<([u32; MAX_HEAD], usize)>, arity: usize) -> Vec<usize> {
+    let len = decorated.len();
+    if len <= 1 {
+        return decorated.into_iter().map(|(_, row)| row).collect();
+    }
+    let mut scratch = vec![([0u32; MAX_HEAD], 0usize); len];
+    // Row index first (least significant), then rank lanes from last to first.
+    counting_sort_usize(&mut decorated, &mut scratch, |_, row| row);
+    for lane in (0..arity).rev() {
+        counting_sort_u32(&mut decorated, &mut scratch, move |key, _| key[lane]);
+    }
+    decorated.into_iter().map(|(_, row)| row).collect()
+}
+
+fn counting_sort_u32(
+    src: &mut [([u32; MAX_HEAD], usize)],
+    dst: &mut [([u32; MAX_HEAD], usize)],
+    digit: impl Fn(&[u32; MAX_HEAD], usize) -> u32,
+) {
+    for shift in [0u32, 8, 16, 24] {
+        let mut counts = [0usize; 256];
+        for (key, row) in src.iter() {
+            counts[((digit(key, *row) >> shift) & 0xff) as usize] += 1;
+        }
+        let mut sum = 0;
+        for count in &mut counts {
+            let next = sum + *count;
+            *count = sum;
+            sum = next;
+        }
+        for entry in src.iter() {
+            let bucket = ((digit(&entry.0, entry.1) >> shift) & 0xff) as usize;
+            dst[counts[bucket]] = *entry;
+            counts[bucket] += 1;
+        }
+        src.swap_with_slice(dst);
+    }
+}
+
+fn counting_sort_usize(
+    src: &mut [([u32; MAX_HEAD], usize)],
+    dst: &mut [([u32; MAX_HEAD], usize)],
+    digit: impl Fn(&[u32; MAX_HEAD], usize) -> usize,
+) {
+    let passes = usize::BITS / 8;
+    for pass in 0..passes {
+        let shift = pass * 8;
+        let mut counts = [0usize; 256];
+        for (key, row) in src.iter() {
+            counts[((digit(key, *row) >> shift) & 0xff) as usize] += 1;
+        }
+        let mut sum = 0;
+        for count in &mut counts {
+            let next = sum + *count;
+            *count = sum;
+            sum = next;
+        }
+        for entry in src.iter() {
+            let bucket = ((digit(&entry.0, entry.1) >> shift) & 0xff) as usize;
+            dst[counts[bucket]] = *entry;
+            counts[bucket] += 1;
+        }
+        src.swap_with_slice(dst);
+    }
 }
 
 struct Plan<'a> {
