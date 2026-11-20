@@ -163,6 +163,10 @@ fn affected<'source>(
                 prepared,
                 Context::new(&*computation, limits, counters, rule.location),
             )?
+            && !divisors_exclude_zero(
+                rule,
+                Context::new(&*computation, limits, counters, rule.location),
+            )?
             && !certified::family(
                 prepared,
                 rule.location,
@@ -566,6 +570,117 @@ fn allocation(location: ProgramSite) -> FormulaFailure {
 enum Syntax<'a> {
     Body(&'a [LiteralIr]),
     Continued(Continue<'a>),
+}
+
+/// A Mod or Div divisor whose binder-range lower bound is a positive
+/// constant, or whose upper bound is a negative constant, never takes
+/// the value zero: every generated integer of that range sits strictly
+/// on one side of zero, or the range is empty. The family evidence scan
+/// has no zero-divisor to discover and must not walk the filter-only
+/// product of such a body.
+fn divisors_exclude_zero(
+    rule: &RuleIr,
+    mut context: Context<'_, &Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    let mut safe_slots = std::collections::BTreeSet::new();
+    for literal in &rule.body {
+        context
+            .work
+            .counters
+            .work(context.work.limits, context.work.location)?;
+        let LiteralIr::Range {
+            target,
+            lower,
+            upper,
+            binder: true,
+        } = literal
+        else {
+            continue;
+        };
+        if let Some(lo) = constant_number(lower, &mut context)?
+            && lo >= 1
+        {
+            safe_slots.insert(*target);
+        }
+        if let Some(hi) = constant_number(upper, &mut context)?
+            && hi <= -1
+        {
+            safe_slots.insert(*target);
+        }
+    }
+    let mut saw_divisor = false;
+    for literal in &rule.body {
+        context
+            .work
+            .counters
+            .work(context.work.limits, context.work.location)?;
+        let expressions: Box<dyn Iterator<Item = &crate::formula_ir::Expression>> = match literal {
+            LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
+                Box::new([comparison.left(), comparison.right()].into_iter())
+            }
+            LiteralIr::TupleCompare(left, _, right) => Box::new(left.iter().chain(right)),
+            LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => Box::new(guard.expressions()),
+            LiteralIr::Bind { value, .. } => Box::new(std::iter::once(value)),
+            LiteralIr::Range { lower, upper, .. } => Box::new([lower, upper].into_iter()),
+            _ => continue,
+        };
+        for expression in expressions {
+            if !divisors_of(expression, &safe_slots, &mut saw_divisor, &mut context)? {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(saw_divisor)
+}
+
+fn divisors_of(
+    expression: &crate::formula_ir::Expression,
+    safe_slots: &std::collections::BTreeSet<usize>,
+    saw_divisor: &mut bool,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    for node in &expression.nodes {
+        context
+            .work
+            .counters
+            .work(context.work.limits, context.work.location)?;
+        let crate::formula_ir::Operation::Binary(
+            themelios_program::term::BinaryOp::Div | themelios_program::term::BinaryOp::Mod,
+            _,
+            right,
+        ) = node
+        else {
+            continue;
+        };
+        *saw_divisor = true;
+        let Some(crate::formula_ir::Operation::Variable(slot)) = expression.nodes.get(*right)
+        else {
+            return Ok(false);
+        };
+        if !safe_slots.contains(slot) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn constant_number(
+    expression: &crate::formula_ir::Expression,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<Option<i32>, FormulaFailure> {
+    let [crate::formula_ir::Operation::Constant(value)] = expression.nodes.as_slice() else {
+        return Ok(None);
+    };
+    let term = context.computation.static_scalar(
+        *value,
+        context.work.limits,
+        context.work.counters,
+        context.work.location,
+    )?;
+    match term.descriptor() {
+        zetesis_core::ValueNodeRef::Number(number) => Ok(Some(number)),
+        _ => Ok(None),
+    }
 }
 
 fn contains_partial(

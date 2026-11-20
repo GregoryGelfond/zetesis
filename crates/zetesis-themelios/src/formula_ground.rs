@@ -1,6 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 pub(crate) mod arithmetic;
+pub(crate) mod algebra_rows;
 mod objectives;
 mod scoped_body;
 pub(crate) use scoped_body::SourceBodies;
@@ -1292,9 +1293,6 @@ impl<'source> Builder<'_, '_, 'source> {
         {
             return Ok(());
         }
-        if crate::formula_factor::rule(self, rule, support)? {
-            return Ok(());
-        }
         // A body-less normal rule without variables has one passing row, the
         // empty binding, and no witness, selection or exclusion to consult:
         // it is emitted from that binding as the join's one row would be.
@@ -1321,6 +1319,18 @@ impl<'source> Builder<'_, '_, 'source> {
         } else {
             None
         };
+        // Range-and-arithmetic and atom-bounded complete domains can be
+        // enumerated by the shared columnar operators, which do not walk
+        // failed pairs. Prefer Bind over factored component joins when the
+        // compiler admits the body, so instantiation does not re-walk a
+        // family that support already enumerated. Domain guards remain a
+        // Join-cursor certificate for rules the compiler declines.
+        if algebra_rows::instantiate(self, rule, support)? {
+            return Ok(());
+        }
+        if crate::formula_factor::rule(self, rule, support)? {
+            return Ok(());
+        }
         let mut outer = Join::domain_rule(
             Ir::Source(rule),
             support,

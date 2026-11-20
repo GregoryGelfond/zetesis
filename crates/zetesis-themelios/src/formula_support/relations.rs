@@ -906,7 +906,7 @@ impl<'source> Relations<'source> {
         self.head_rows
     }
 
-    pub(super) fn components(&self) -> Option<TemplateComponentsRef<'source>> {
+    pub(crate) fn components(&self) -> Option<TemplateComponentsRef<'source>> {
         self.components
     }
     pub(super) fn current_bytes(&self) -> usize {

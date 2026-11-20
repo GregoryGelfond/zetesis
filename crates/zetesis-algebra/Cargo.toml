@@ -1,7 +1,7 @@
 [package]
 name = "zetesis-algebra"
 version.workspace = true
-description = "Shared execution algebra: cancellation, regions, walks and word operations."
+description = "Shared execution algebra: cancellation, regions, walks, word operations, and relational operators."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
