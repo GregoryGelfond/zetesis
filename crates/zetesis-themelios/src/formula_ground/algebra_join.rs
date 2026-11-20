@@ -132,25 +132,49 @@ impl Evaluated<'_> {
         let ranks = self
             .terms
             .ranks(columns.iter().copied().flatten(), rows.len());
-        rows.sort_by(|&left, &right| {
+        // Decorate once, then integer-sort. HashMap lookups inside the
+        // comparator were dominating support time (closure ~equal to
+        // evaluate; sg even more) because each comparison re-probed ranks.
+        const MAX_HEAD: usize = 8;
+        let arity = columns.iter().filter(|column| column.is_some()).count();
+        if arity > MAX_HEAD {
+            rows.sort_by(|&left, &right| {
+                for column in &columns {
+                    let Some(column) = column else {
+                        continue;
+                    };
+                    let left_rank = ranks
+                        .get(&column[left])
+                        .expect("join keys are interned from the snapshot");
+                    let right_rank = ranks
+                        .get(&column[right])
+                        .expect("join keys are interned from the snapshot");
+                    match left_rank.cmp(right_rank) {
+                        std::cmp::Ordering::Equal => {}
+                        ordering => return ordering,
+                    }
+                }
+                left.cmp(&right)
+            });
+            return rows;
+        }
+        let mut decorated: Vec<([u32; MAX_HEAD], usize)> = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut key = [0u32; MAX_HEAD];
+            let mut written = 0;
             for column in &columns {
                 let Some(column) = column else {
                     continue;
                 };
-                let left_rank = ranks
-                    .get(&column[left])
+                key[written] = *ranks
+                    .get(&column[row])
                     .expect("join keys are interned from the snapshot");
-                let right_rank = ranks
-                    .get(&column[right])
-                    .expect("join keys are interned from the snapshot");
-                match left_rank.cmp(right_rank) {
-                    std::cmp::Ordering::Equal => {}
-                    ordering => return ordering,
-                }
+                written += 1;
             }
-            left.cmp(&right)
-        });
-        rows
+            decorated.push((key, row));
+        }
+        decorated.sort_unstable();
+        decorated.into_iter().map(|(_, row)| row).collect()
     }
 }
 
@@ -165,10 +189,11 @@ pub(crate) fn evaluate<'a>(
     let Some(plan) = plan(rule, support) else {
         return Ok(None);
     };
-    // Default negation is declined until visits can wait for a completed
-    // negated relation. An empty snapshot looks stable (`old_rows ==
-    // row_count == 0`) and would otherwise walk through later-blocked
-    // parents, as observed on stratrec10k.
+    // Admit `not` only when every negated body position is already
+    // decided for this rule. An empty lower-stratum snapshot is not
+    // evidence of completeness (`old_rows == row_count == 0` on a
+    // relation that later grows) and would emit unblocked descendants
+    // of blocked parents, as observed on stratrec10k.
     if !plan.negated.is_empty() {
         return Ok(None);
     }
@@ -186,6 +211,330 @@ pub(crate) fn evaluate<'a>(
         bindings: filtered,
         terms,
     }))
+}
+
+/// Snapshot-order interned columns plus semi-naive bounds, all `Sync` so
+/// workers can join a delta slice without touching `Support`.
+pub(crate) struct JoinTables {
+    width: usize,
+    atoms: Vec<Vec<usize>>,
+    raw: Vec<Vec<Vec<i32>>>,
+    recursive: Vec<usize>,
+    old_rows: Vec<usize>,
+}
+
+/// One semi-naive part: the new-row suffix of one recursive atom occurrence.
+#[derive(Clone, Copy)]
+pub(crate) struct DeltaPart {
+    /// Index into the recursive-occurrence list, used to pin earlier
+    /// occurrences to the old prefix.
+    pub index: usize,
+    /// Index into the planned atom list / raw tables.
+    pub atom: usize,
+    pub from: usize,
+    pub until: usize,
+}
+
+impl DeltaPart {
+    pub(crate) fn len(self) -> usize {
+        self.until.saturating_sub(self.from)
+    }
+}
+
+/// Fixed body tables for one semi-naive part, built once on the coordinator
+/// so workers do not re-sort the non-delta relations 14 ways.
+pub(crate) struct PrebuiltPart {
+    part: DeltaPart,
+    fixed: Vec<Option<Atoms>>,
+}
+
+/// Coordinator-loaded join: `Sync` tables for workers, `TermMap` for emit.
+pub(crate) struct PreparedJoin<'a> {
+    pub tables: JoinTables,
+    plan: Plan<'a>,
+    terms: TermMap<'a>,
+}
+
+impl JoinTables {
+    pub(crate) fn delta_parts(&self) -> Vec<DeltaPart> {
+        let mut parts = Vec::new();
+        for (index, &atom) in self.recursive.iter().enumerate() {
+            let old = self.old_rows[atom];
+            let count = self.raw[atom].first().map_or(0, Vec::len);
+            if old >= count {
+                continue;
+            }
+            parts.push(DeltaPart {
+                index,
+                atom,
+                from: old,
+                until: count,
+            });
+        }
+        parts
+    }
+
+    fn bounds_for(
+        &self,
+        part: DeltaPart,
+        from: usize,
+        until: usize,
+    ) -> Vec<(usize, Option<usize>)> {
+        let mut bounds = vec![(0, None); self.atoms.len()];
+        for &previous in self.recursive.iter().take(part.index) {
+            bounds[previous] = (0, Some(self.old_rows[previous]));
+        }
+        bounds[part.atom] = (from, Some(until));
+        bounds
+    }
+
+    /// Sort every non-delta body of `part` once, on the coordinator.
+    pub(crate) fn prebuild(
+        &self,
+        part: DeltaPart,
+        account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
+    ) -> Result<Option<PrebuiltPart>, FormulaFailure> {
+        let bounds = self.bounds_for(part, part.from, part.until);
+        let mut fixed = Vec::with_capacity(self.atoms.len());
+        for (index, &(from_row, until_row)) in bounds.iter().enumerate() {
+            if index == part.atom {
+                fixed.push(None);
+                continue;
+            }
+            let sliced = slice_raw(&self.raw[index], from_row, until_row);
+            match Atoms::from_unsorted(&sliced, account)? {
+                Ok(atoms) => fixed.push(Some(atoms)),
+                Err(_) => return Ok(None),
+            }
+        }
+        Ok(Some(PrebuiltPart { part, fixed }))
+    }
+
+    pub(crate) fn join_range_prebuilt(
+        &self,
+        prebuilt: &PrebuiltPart,
+        from: usize,
+        until: usize,
+        account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
+    ) -> Result<Option<Bindings>, FormulaFailure> {
+        if until <= from {
+            return Ok(Some(Bindings::empty(self.width)));
+        }
+        let bounds = self.bounds_for(prebuilt.part, from, until);
+        let Some((table, slots)) =
+            join_atoms_prebuilt(&self.atoms, &self.raw, &prebuilt.fixed, &bounds, account)?
+        else {
+            return Ok(None);
+        };
+        project_slots(&table, &slots, self.width, account)
+    }
+}
+
+/// Load interned snapshot columns on the coordinator. Declines the same
+/// bodies as [`evaluate`].
+pub(crate) fn prepare<'a>(rule: &'a RuleIr, support: &'a Support<'_>) -> Option<PreparedJoin<'a>> {
+    let plan = plan(rule, support)?;
+    if !plan.negated.is_empty() {
+        return None;
+    }
+    let mut terms = TermMap::default();
+    let mut raw = Vec::with_capacity(plan.atoms.len());
+    let mut old_rows = Vec::with_capacity(plan.atoms.len());
+    for atom in &plan.atoms {
+        raw.push(load_raw(support, atom, &mut terms)?);
+        old_rows.push(support.old_rows(atom.predicate));
+    }
+    let recursive = recursive_atoms(rule, support, &plan.atoms);
+    let tables = JoinTables {
+        width: plan.width,
+        atoms: plan.atoms.iter().map(|atom| atom.slots.clone()).collect(),
+        raw,
+        recursive,
+        old_rows,
+    };
+    Some(PreparedJoin {
+        tables,
+        plan,
+        terms,
+    })
+}
+
+/// Concatenate worker (or part) bindings, apply residuals, and hand back
+/// an [`Evaluated`] table for TermRef-ordered emission.
+pub(crate) fn finish<'a>(
+    prepared: PreparedJoin<'a>,
+    parts: Vec<Bindings>,
+    support: &'a Support<'_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Option<Evaluated<'a>>, FormulaFailure> {
+    let mut account = |amount: u64| charge(counters, limits, location, amount);
+    let width = prepared.plan.width;
+    let Some(projected) = concat_bindings(width, parts, &mut account)? else {
+        return Ok(None);
+    };
+    let PreparedJoin {
+        plan, mut terms, ..
+    } = prepared;
+    let Some(filtered) = apply_residuals(&projected, &plan, support, &mut terms, &mut account)?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(Evaluated {
+        bindings: filtered,
+        terms,
+    }))
+}
+
+fn concat_bindings(
+    width: usize,
+    parts: Vec<Bindings>,
+    account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
+) -> Result<Option<Bindings>, FormulaFailure> {
+    if width == 0 {
+        return Ok(Some(Bindings::empty(0)));
+    }
+    if parts.is_empty() {
+        return Ok(Some(Bindings::empty(width)));
+    }
+    let mut rows = Vec::new();
+    for part in &parts {
+        rows.extend(part.to_rows());
+    }
+    let mut columns = vec![Vec::with_capacity(rows.len()); width];
+    for row in &rows {
+        account(1)?;
+        if row.len() != width {
+            return Ok(None);
+        }
+        for (column, &value) in columns.iter_mut().zip(row.iter()) {
+            column.push(value);
+        }
+    }
+    match Bindings::from_columns(columns) {
+        Ok(bindings) => Ok(Some(bindings)),
+        Err(_) => Ok(None),
+    }
+}
+
+fn load_raw<'a>(
+    support: &'a Support<'_>,
+    atom: &PlannedAtom<'a>,
+    terms: &mut TermMap<'a>,
+) -> Option<Vec<Vec<i32>>> {
+    let mut columns = vec![Vec::new(); atom.arity];
+    for row in support.rows(atom.predicate) {
+        for (column, values) in columns.iter_mut().enumerate() {
+            let key = terms.insert(row.value(column)?)?;
+            values.push(key);
+        }
+    }
+    if columns
+        .iter()
+        .any(|column| column.len() != columns[0].len())
+    {
+        return None;
+    }
+    Some(columns)
+}
+
+fn slice_raw(columns: &[Vec<i32>], from: usize, until: Option<usize>) -> Vec<Vec<i32>> {
+    let len = columns.first().map_or(0, Vec::len);
+    let until = until.unwrap_or(len).min(len);
+    let from = from.min(until);
+    columns
+        .iter()
+        .map(|column| column[from..until].to_vec())
+        .collect()
+}
+
+fn load_delta(
+    raw: &[Vec<i32>],
+    from_row: usize,
+    until_row: Option<usize>,
+    account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
+) -> Result<Option<Atoms>, FormulaFailure> {
+    let sliced = slice_raw(raw, from_row, until_row);
+    match Atoms::from_unsorted(&sliced, account)? {
+        Ok(atoms) => Ok(Some(atoms)),
+        Err(_) => Ok(None),
+    }
+}
+
+fn join_atoms_prebuilt(
+    slots: &[Vec<usize>],
+    raw: &[Vec<Vec<i32>>],
+    fixed: &[Option<Atoms>],
+    bounds: &[(usize, Option<usize>)],
+    account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
+) -> Result<Option<(Atoms, Vec<usize>)>, FormulaFailure> {
+    if bounds.is_empty() {
+        return Ok(None);
+    }
+    let mut delta: Option<Atoms> = None;
+    if fixed[0].is_none() {
+        let Some(table) = load_delta(&raw[0], bounds[0].0, bounds[0].1, account)? else {
+            return Ok(None);
+        };
+        delta = Some(table);
+    }
+    if bounds.len() == 1 {
+        let first = match (&fixed[0], &delta) {
+            (Some(table), _) => table.clone(),
+            (_, Some(table)) => table.clone(),
+            _ => return Ok(None),
+        };
+        return Ok(Some((first, slots[0].clone())));
+    }
+    // Left starts as a borrow of the first body (shared or this worker's
+    // delta). The first join output is owned; later steps join that.
+    let mut current: Option<(Atoms, Vec<usize>)> = None;
+    for index in 1..bounds.len() {
+        let (from_row, until_row) = bounds[index];
+        let mut right_delta: Option<Atoms> = None;
+        if fixed[index].is_none() {
+            let Some(table) = load_delta(&raw[index], from_row, until_row, account)? else {
+                return Ok(None);
+            };
+            right_delta = Some(table);
+        }
+        let right: &Atoms = match (&fixed[index], &right_delta) {
+            (Some(table), _) => table,
+            (_, Some(table)) => table,
+            _ => return Ok(None),
+        };
+        let (left, left_slots): (&Atoms, &[usize]) = match &current {
+            Some((table, left_slots)) => (table, left_slots),
+            None => {
+                let first: &Atoms = match (&fixed[0], &delta) {
+                    (Some(table), _) => table,
+                    (_, Some(table)) => table,
+                    _ => return Ok(None),
+                };
+                (first, slots[0].as_slice())
+            }
+        };
+        let Some((left_keys, right_keys)) = key_columns(left_slots, &slots[index]) else {
+            return Ok(None);
+        };
+        let mut stats = JoinStats::default();
+        let Ok(joined) = join(
+            left,
+            right,
+            &left_keys,
+            &right_keys,
+            method(),
+            account,
+            &mut stats,
+        )?
+        else {
+            return Ok(None);
+        };
+        let combined = [left_slots, slots[index].as_slice()].concat();
+        current = Some((bindings_to_atoms(&joined), combined));
+    }
+    Ok(current)
 }
 
 fn semi_naive<'a>(
@@ -731,7 +1080,7 @@ fn slot(expression: &Expression) -> Option<usize> {
     }
 }
 
-fn charge(
+pub(crate) fn charge(
     counters: &mut Counters,
     limits: &FormulaLimits,
     location: ProgramSite,

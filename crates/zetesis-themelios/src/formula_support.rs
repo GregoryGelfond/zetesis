@@ -1122,6 +1122,7 @@ fn derive_variants_with_executor<'source>(
         limits,
         budget,
         counters,
+        executor,
     )? {
         return Ok(());
     }
@@ -1215,6 +1216,126 @@ fn derive_variants_with_executor<'source>(
 
 
 
+
+/// Serial evaluate at t1 (and for tiny deltas). At tN, partition each
+/// semi-naive delta across coordinator tasks, merge the bindings, and
+/// finish residuals on the coordinator so emission stays in TermRef order.
+fn evaluate_algebra_join<'a, 'source>(
+    rule: &'a crate::formula_ir::RuleIr,
+    support: &'a Support<'_>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+    executor: Option<&Executor>,
+) -> Result<Option<crate::formula_ground::algebra_join::Evaluated<'a>>, FormulaFailure> {
+    let parallel = executor.and_then(|executor| executor.pool()).is_some();
+    if !parallel {
+        return crate::formula_ground::algebra_join::evaluate(
+            rule,
+            support,
+            limits,
+            counters,
+            rule.location,
+        );
+    }
+    let Some(prepared) = crate::formula_ground::algebra_join::prepare(rule, support) else {
+        return Ok(None);
+    };
+    let parts_spec = prepared.tables.delta_parts();
+    if parts_spec.is_empty() {
+        return crate::formula_ground::algebra_join::finish(
+            prepared,
+            Vec::new(),
+            support,
+            limits,
+            counters,
+            rule.location,
+        );
+    }
+    let Some(executor) = executor else {
+        return crate::formula_ground::algebra_join::evaluate(
+            rule,
+            support,
+            limits,
+            counters,
+            rule.location,
+        );
+    };
+    let tables = &prepared.tables;
+    let mut bindings = Vec::new();
+    const MIN_PARALLEL_DELTA: usize = 64;
+    for part in parts_spec {
+        let mut account = |amount: u64| {
+            crate::formula_ground::algebra_join::charge(counters, limits, rule.location, amount)
+        };
+        let Some(prebuilt) = tables.prebuild(part, &mut account)? else {
+            return Ok(None);
+        };
+        if part.len() < MIN_PARALLEL_DELTA {
+            match join_range_prebuilt_accounted(
+                tables,
+                &prebuilt,
+                part.from,
+                part.until,
+                limits,
+                counters,
+                rule.location,
+            )? {
+                Some(table) => bindings.push(table),
+                None => return Ok(None),
+            }
+            continue;
+        }
+        let mut completed = row_blocks::coordinator::run(
+            executor,
+            part.len(),
+            budget,
+            Context::new(computation, limits, counters, rule.location),
+            |rows, limits, _budget, counters| {
+                join_range_prebuilt_accounted(
+                    tables,
+                    &prebuilt,
+                    part.from + rows.start,
+                    part.from + rows.end,
+                    limits,
+                    counters,
+                    rule.location,
+                )
+            },
+        )?;
+        for table in completed.results_mut() {
+            match table.take() {
+                Some(table) => bindings.push(table),
+                None => return Ok(None),
+            }
+        }
+    }
+    crate::formula_ground::algebra_join::finish(
+        prepared,
+        bindings,
+        support,
+        limits,
+        counters,
+        rule.location,
+    )
+}
+
+fn join_range_prebuilt_accounted(
+    tables: &crate::formula_ground::algebra_join::JoinTables,
+    prebuilt: &crate::formula_ground::algebra_join::PrebuiltPart,
+    from: usize,
+    until: usize,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Option<zetesis_algebra::Bindings>, FormulaFailure> {
+    let mut account = |amount: u64| {
+        crate::formula_ground::algebra_join::charge(counters, limits, location, amount)
+    };
+    tables.join_range_prebuilt(prebuilt, from, until, &mut account)
+}
+
 fn derive_columnar_variants<'source>(
     rule: &'source crate::formula_ir::RuleIr,
     variants: &mut delta::Variants<'_, '_>,
@@ -1223,11 +1344,21 @@ fn derive_columnar_variants<'source>(
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
+    executor: Option<&Executor>,
 ) -> Result<bool, FormulaFailure> {
     if derive_algebra_variants(rule, variants, support, computation, limits, budget, counters)? {
         return Ok(true);
     }
-    derive_algebra_join_variants(rule, variants, support, computation, limits, budget, counters)
+    derive_algebra_join_variants(
+        rule,
+        variants,
+        support,
+        computation,
+        limits,
+        budget,
+        counters,
+        executor,
+    )
 }
 
 /// Derive heads with the columnar binary Join, consuming every variant of
@@ -1240,6 +1371,7 @@ fn derive_algebra_join_variants<'source>(
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
+    executor: Option<&Executor>,
 ) -> Result<bool, FormulaFailure> {
     let HeadIr::Normal(Some(head)) = &rule.head else {
         return Ok(false);
@@ -1247,12 +1379,14 @@ fn derive_algebra_join_variants<'source>(
     if !crate::formula_ground::algebra_join::body_repeats_head(rule, support) {
         return Ok(false);
     }
-    let Some(evaluated) = crate::formula_ground::algebra_join::evaluate(
+    let Some(evaluated) = evaluate_algebra_join(
         rule,
         support,
+        computation,
         limits,
+        budget,
         counters,
-        rule.location,
+        executor,
     )?
     else {
         return Ok(false);
