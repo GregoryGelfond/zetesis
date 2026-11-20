@@ -64,10 +64,22 @@ pub struct SmallPolicy {
     /// Failed-literal probes one region may spend (0: never): each open atom
     /// is tried both ways by propagation alone; both failing refutes.
     pub probe: usize,
+    /// Refutation yield, in percent, below which the learned search stops
+    /// reading regions (0: always read). The yield is a moving average of
+    /// the learned path's verdicts; a region left open, a cached completion
+    /// and a spent allowance count against it. One region in
+    /// [`GATE_RETRY`] skipped is still read, so the yield can recover.
+    pub gate: usize,
 }
 
 /// No enumeration reads more than `2^22` completions.
 pub(crate) const ENUMERATION_CEILING: usize = 22;
+
+/// The yield gate's unit: a yield of 1.
+const YIELD_ONE: u32 = 1 << 10;
+
+/// The yield gate still reads one region in this many it would skip.
+const GATE_RETRY: u32 = 32;
 
 /// Recent refutation cores a walker keeps.
 const CORES: usize = 64;
@@ -101,6 +113,7 @@ impl SmallPolicy {
                 "adapt" => policy.adapt_from = parsed,
                 "decide" => policy.decide_all = value == "all",
                 "probe" => policy.probe = parsed,
+                "gate" => policy.gate = parsed,
                 _ => {}
             }
         }
@@ -168,6 +181,8 @@ pub struct SmallStatistics {
     pub enumerated_nanos: u64,
     /// Nanoseconds spent in the learned search.
     pub learned_nanos: u64,
+    /// Regions the yield gate kept from the learned search.
+    pub gated: u64,
     /// Regions probed for failed literals.
     pub probed: u64,
     /// Probed regions refuted.
@@ -200,6 +215,10 @@ pub(crate) struct SmallScratch {
     guards: Vec<u32>,
     /// The adapted learned-search size, when adapting.
     cutoff: usize,
+    /// Moving average of learned-path refutations, out of [`YIELD_ONE`].
+    yield_score: u32,
+    /// Regions the yield gate skipped since its last read.
+    skipped: u32,
     /// Completions recently found to pass, as held-atom words.
     models: Vec<Vec<u64>>,
     /// The counts so far.
@@ -523,17 +542,26 @@ impl SmallScratch {
             if self.shape(theory, producers).is_none() {
                 return Ok(SmallNarrowing::Declined);
             }
+            if !self.gate_admits(policy.gate) {
+                self.statistics.gated += 1;
+                return Ok(SmallNarrowing::Declined);
+            }
             self.guard(restrictions);
             if self.cached(region) {
                 self.statistics.cached += 1;
+                self.record_yield(false);
                 return Ok(SmallNarrowing::Open(Variant::Learned));
             }
             if self.core_hit(region) {
                 self.statistics.core_hits += 1;
+                self.record_yield(true);
                 return Ok(SmallNarrowing::Refuted(Variant::Learned));
             }
             let started = Instant::now();
             let verdict = self.learn(region, policy.learn_conflicts, cancellation);
+            if let Ok(verdict) = &verdict {
+                self.record_yield(matches!(verdict, SmallNarrowing::Refuted(_)));
+            }
             self.statistics.learned_nanos += saturate(started.elapsed().as_nanos());
             if policy.adapt_from > 0 {
                 match verdict {
@@ -549,6 +577,34 @@ impl SmallScratch {
             return verdict;
         }
         Ok(SmallNarrowing::Declined)
+    }
+
+    /// Whether the yield gate lets the learned search read this region.
+    fn gate_admits(&mut self, gate: usize) -> bool {
+        if gate == 0 {
+            return true;
+        }
+        if self.yield_score == 0 && self.skipped == 0 && self.statistics.learned == 0 {
+            self.yield_score = YIELD_ONE; // optimistic start
+        }
+        let threshold = u64::from(YIELD_ONE) * gate as u64;
+        if u64::from(self.yield_score) * 100 >= threshold {
+            return true;
+        }
+        self.skipped += 1;
+        if self.skipped >= GATE_RETRY {
+            self.skipped = 0;
+            return true;
+        }
+        false
+    }
+
+    /// Fold one learned-path verdict into the yield (weight 1/16).
+    fn record_yield(&mut self, refuted: bool) {
+        self.yield_score -= self.yield_score / 16;
+        if refuted {
+            self.yield_score += YIELD_ONE / 16;
+        }
     }
 
     /// The general narrowing refuted a region of `open` open atoms: under an
