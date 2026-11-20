@@ -287,7 +287,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::TimeLimitRange { .. } => "time_limit_range",
         RunError::DeadlineTimer(_) => "deadline_timer",
         RunError::Observation(_) => "observation",
-        RunError::Projection(_) => "answer_projection",
+        RunError::AnswerProjection(_) => "answer_projection",
         RunError::JsonRecord(_) => "json_record",
         RunError::ObservationOutputLimit { .. } => "observation_output_limit",
         RunError::MixedStandardInput => "mixed_standard_input",
@@ -362,13 +362,13 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::RestrictionUniverse { .. } => "restriction_universe",
                 Incomplete::ClosedEnumerator => "closed_enumerator",
                 Incomplete::LateCertificate => "late_certificate",
-                Incomplete::RegionFilter => "region_filter",
+                Incomplete::ConstraintRefutation => "region_filter",
                 Incomplete::InvalidRegionConsequence => "invalid_region_consequence",
-                Incomplete::LateRegionFilter => "late_region_filter",
+                Incomplete::LateConstraintRefuter => "late_region_filter",
                 Incomplete::LateCandidateBounds => "late_candidate_bounds",
                 Incomplete::CandidateBoundPlan => "candidate_bound_plan",
                 Incomplete::CandidateBoundNotImproving => "candidate_bound_not_improving",
-                Incomplete::RegionFilterAlreadySet => "region_filter_already_set",
+                Incomplete::ConstraintRefuterAlreadySet => "region_filter_already_set",
                 Incomplete::LateLearnedStore => "late_learned_store",
                 Incomplete::LearnedStoreAlreadySet => "learned_store_already_set",
                 Incomplete::Certificate(_) => "certificate",
@@ -695,6 +695,20 @@ fn grounding(out: &mut Buffer, timings: Option<&crate::GroundingTimings>) -> Res
             out.text("null")?;
         }
     }
+    out.text("},\"operators\":{")?;
+    for (index, operator) in crate::GroundingOperator::ALL.into_iter().enumerate() {
+        if index != 0 {
+            out.text(",")?;
+        }
+        out.string(operator.label())?;
+        out.text(":")?;
+        optional_number(
+            out,
+            timings
+                .operator(operator)
+                .map(|duration| duration.as_nanos()),
+        )?;
+    }
     out.text("},\"overhead\":\"included\",\"relational_grounding\":null,\"kernel_time\":null}")
 }
 
@@ -707,7 +721,7 @@ fn optional_number(out: &mut Buffer, value: Option<u128>) -> Result<(), RunError
 
 fn write_projection(
     out: &mut Buffer,
-    projection: Option<&zetesis_solve::ProjectionStatistics>,
+    projection: Option<&zetesis_solve::ProjectiveStatistics>,
 ) -> Result<(), RunError> {
     let Some(projection) = projection else {
         return out.text("null");
@@ -752,7 +766,7 @@ fn write_optimization(
 
 // Borrow the retained semantic evidence; publication does not manufacture it.
 struct SummaryView<'a> {
-    projection: Option<&'a zetesis_solve::ProjectionStatistics>,
+    projection: Option<&'a zetesis_solve::ProjectiveStatistics>,
     completion: Option<Completion>,
     optimum_proved: bool,
     published_models: usize,
@@ -777,7 +791,7 @@ impl<'a> SummaryView<'a> {
             Ok(progress) => {
                 let semantic = progress.semantic();
                 Self {
-                    projection: semantic.and_then(crate::SemanticOutcome::projection),
+                    projection: semantic.and_then(crate::SemanticOutcome::projective_statistics),
                     completion: semantic.and_then(crate::SemanticOutcome::completion),
                     optimum_proved: semantic.is_some_and(crate::SemanticOutcome::optimum_proved),
                     published_models: progress.publication.models,
@@ -802,7 +816,7 @@ impl<'a> SummaryView<'a> {
                 Self {
                     projection: failure
                         .semantic()
-                        .and_then(crate::SemanticOutcome::projection),
+                        .and_then(crate::SemanticOutcome::projective_statistics),
                     completion: partial.and_then(|p| p.completion),
                     optimum_proved: failure
                         .semantic()
@@ -858,7 +872,7 @@ fn search_statistics(
     out.text(",\"candidate_regions\":")?;
     region_statistics(out, stats.regions.as_ref())?;
     out.text(",\"region_filter\":")?;
-    region_filter_statistics(out, stats.region_filter)?;
+    constraint_refutation_statistics(out, stats.constraint_refutation)?;
     out.text(",\"frozen_positive\":{\"attempts\":")?;
     out.text(&stats.reduct.frozen_positive_attempts.to_string())?;
     out.number_field("completed", stats.reduct.frozen_positive_completed)?;
@@ -899,9 +913,9 @@ fn search_statistics(
     out.text("}}}")
 }
 
-fn region_filter_statistics(
+fn constraint_refutation_statistics(
     out: &mut Buffer,
-    statistics: Option<zetesis_stable::RegionFilterStatistics>,
+    statistics: Option<zetesis_stable::ConstraintRefutationStatistics>,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");

@@ -25,6 +25,7 @@
 #[cfg(test)]
 mod tests;
 
+use std::cell::RefCell;
 use std::ops::Range;
 
 use themelios_program::program::DefaultNegation;
@@ -32,7 +33,7 @@ use zetesis_core::TemplateComponentsRef;
 
 use super::super::super::certain::{Certainty, Signature};
 use super::super::super::relations::Memory;
-use super::super::{Node, graph_nodes, lookup};
+use super::super::{Found, Node, graph_nodes};
 use super::{Producer, Registration, components, positive};
 use crate::formula_ir::{
     AggregateElementIr, AggregateIr, AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr, decided,
@@ -131,28 +132,49 @@ pub(super) struct Resolver<'a, 'source, 'view> {
     pub(super) nodes: &'a [Node<'source>],
     pub(super) view: TemplateComponentsRef<'view>,
     pub(super) limits: &'a FormulaLimits,
+    /// The predicates resolved so far; its bytes are the caller's scratch.
+    pub(super) found: RefCell<Found<'view>>,
 }
 
-impl Resolver<'_, '_, '_> {
+impl<'view> Resolver<'_, '_, 'view> {
+    pub(super) fn new<'a, 'source>(
+        nodes: &'a [Node<'source>],
+        view: TemplateComponentsRef<'view>,
+        limits: &'a FormulaLimits,
+    ) -> Resolver<'a, 'source, 'view> {
+        Resolver {
+            nodes,
+            view,
+            limits,
+            found: RefCell::new(Found::new()),
+        }
+    }
+
     /// The node of `pattern`'s predicate, or `None` when the graph does not
     /// name it. The pattern's read and the lookup charge their own units.
     pub(super) fn node(
         &self,
         pattern: Pattern,
+        memory: &mut Memory<'_>,
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         let predicate = pattern
             .get(self.view, self.limits, counters, location)?
             .predicate();
-        lookup(
+        self.found.borrow_mut().lookup(
             self.nodes.len(),
             |index| self.nodes[index].signature,
             predicate,
-            self.limits,
+            (memory, self.limits),
             counters,
             location,
         )
+    }
+
+    /// The bytes the resolved predicates hold.
+    pub(super) fn bytes(&self) -> usize {
+        self.found.borrow().bytes()
     }
 }
 
@@ -184,11 +206,7 @@ impl<'source> Registration<'source> {
         let mut memory = Memory::new(0, external + self.bytes as u128, limits, counters, location);
         memory.add(0)?;
         let nodes = graph_nodes(prepared, &mut memory, limits, counters, location)?;
-        let resolver = Resolver {
-            nodes: &nodes,
-            view,
-            limits,
-        };
+        let resolver = Resolver::new(&nodes, view, limits);
         let mut classified = self.classify(&resolver, &mut memory, counters)?;
         remove_readers(&mut classified, limits, counters, location)?;
         let elements =
@@ -261,7 +279,7 @@ impl<'source> Registration<'source> {
             )?;
             let mut head = None;
             for pattern in components::rule_heads(rule) {
-                let found = resolver.node(pattern, counters, rule.location)?;
+                let found = resolver.node(pattern, memory, counters, rule.location)?;
                 if definite {
                     head = found;
                 } else if let Some(found) = found {
@@ -271,7 +289,7 @@ impl<'source> Registration<'source> {
             if let Some(head) = head {
                 for pattern in atoms_read(rule) {
                     counters.work(limits, rule.location)?;
-                    match resolver.node(pattern, counters, rule.location)? {
+                    match resolver.node(pattern, memory, counters, rule.location)? {
                         Some(read) => {
                             memory.reserve(&mut reads, 1)?;
                             reads.push(read);
@@ -338,7 +356,7 @@ impl<'source> Registration<'source> {
                 unreachable!("an awaited occurrence is a negated flat atom");
             };
             if resolver
-                .node(*pattern, counters, rule.location)?
+                .node(*pattern, memory, counters, rule.location)?
                 .is_some_and(|read| certain[read])
             {
                 memory.reserve(&mut negations, 1)?;
@@ -411,7 +429,7 @@ impl<'source> Registration<'source> {
                         counters.work(limits, rule.location)?;
                         holds = match positive(literal) {
                             Some(pattern) => resolver
-                                .node(pattern, counters, rule.location)?
+                                .node(pattern, memory, counters, rule.location)?
                                 .is_some_and(|read| certain[read]),
                             None => decided(literal),
                         };

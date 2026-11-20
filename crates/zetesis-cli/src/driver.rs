@@ -76,7 +76,7 @@ pub enum RunError {
     /// Consumed core-answer accounting cannot represent another answer.
     HybridStatisticsOverflow,
     /// Fixed-domain projected enumeration failed with full membership retained.
-    Projection(zetesis_solve::ProjectionError),
+    AnswerProjection(zetesis_solve::ProjectiveError),
     /// Reading a bounded standard-input source failed before semantic admission.
     Input(io::Error),
     /// The requested process deadline cannot be represented by the host clock.
@@ -189,7 +189,7 @@ impl fmt::Display for RunError {
             Self::ConstraintFailureMissing => f.write_str("source region check stopped without its failure receipt"),
             Self::HybridStatisticsOverflow => f.write_str("hybrid answer accounting overflow"),
             Self::Executor(error) => error.fmt(f),
-            Self::Projection(error) => error.fmt(f),
+            Self::AnswerProjection(error) => error.fmt(f),
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
             Self::TimeLimitRange { seconds } => write!(f, "--time-limit {seconds}: time limit exceeds the platform clock range"),
             Self::DeadlineTimer(error) => write!(f, "--time-limit: the deadline timer could not be started: {error}"),
@@ -329,7 +329,7 @@ impl std::error::Error for RunError {
         match self {
             Self::Reconstruction(error) => Some(error),
             Self::Constraint(error) => Some(error),
-            Self::Projection(error) => Some(error),
+            Self::AnswerProjection(error) => Some(error),
             Self::Input(error) => Some(error),
             Self::BundleLoad(error) => Some(error),
             Self::CompletionPool(error) => Some(error),
@@ -840,7 +840,7 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::ConstraintFailureMissing => Self::ConstraintFailureMissing,
             SolveError::HybridStatisticsOverflow => Self::HybridStatisticsOverflow,
             SolveError::Executor(error) => Self::Executor(error),
-            SolveError::Projection(error) => Self::Projection(error),
+            SolveError::AnswerProjection(error) => Self::AnswerProjection(error),
             SolveError::CompletionPool(error) => Self::CompletionPool(error),
             SolveError::BackendUnavailable => Self::BackendUnavailable,
             SolveError::ModelStatisticsOverflow => Self::ModelStatisticsOverflow,

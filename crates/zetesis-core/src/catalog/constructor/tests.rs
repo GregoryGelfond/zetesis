@@ -1,5 +1,5 @@
 use super::*;
-use crate::atom_interner::{AtomInterner, Failure, Limits};
+use crate::atom_registry::{AtomRegistry, Failure, Limits};
 use crate::test_support::PERMIT;
 use crate::{Atom, Predicate, Value};
 
@@ -19,7 +19,7 @@ fn shape() -> ValueNodeRef<'static> {
 
 #[test]
 fn constructor_names_share_existing_canonical_text() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let atom = Atom::new(
         Predicate::new("shared", 2).unwrap(),
         vec![
@@ -58,7 +58,7 @@ fn constructor_names_share_existing_canonical_text() {
 
 #[test]
 fn declarations_preserve_constructor_shape_before_term_normalization() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     for expected in [
         ValueNodeRef::Function {
             name: "f",
@@ -90,13 +90,13 @@ fn declarations_preserve_constructor_shape_before_term_normalization() {
 
 #[test]
 fn declaration_resolution_rejects_foreign_empty_scope() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let declaration = owner
         .split()
         .1
         .declare_constructor_with(ValueNodeRef::Tuple { arity: 0 }, limits(), PERMIT)
         .unwrap();
-    let foreign = AtomInterner::new();
+    let foreign = AtomRegistry::new();
     assert_eq!(
         foreign.read().constructor(&declaration),
         Err(ReadError::ForeignCatalog)
@@ -105,7 +105,7 @@ fn declaration_resolution_rejects_foreign_empty_scope() {
 
 #[test]
 fn declaration_resolution_rejects_older_text_prefix() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let old = owner.publish_selection_with(&[], limits(), PERMIT).unwrap();
     let declaration = owner
         .split()
@@ -120,7 +120,7 @@ fn declaration_resolution_rejects_older_text_prefix() {
 
 #[test]
 fn every_declaration_work_cutoff_preserves_retry() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let mut work = 0;
     owner
         .split()
@@ -131,7 +131,7 @@ fn every_declaration_work_cutoff_preserves_retry() {
         })
         .unwrap();
     for cut in 0..work {
-        let mut owner = AtomInterner::new();
+        let mut owner = AtomRegistry::new();
         let mut visited = 0;
         let result = owner
             .split()
@@ -157,7 +157,7 @@ fn every_declaration_work_cutoff_preserves_retry() {
 
 #[test]
 fn unfunded_constructor_text_refuses_without_discovery() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let bytes = owner.storage_bytes();
     assert!(matches!(
         owner.split().1.declare_constructor_with(
@@ -182,7 +182,7 @@ fn unfunded_constructor_text_refuses_without_discovery() {
 
 #[test]
 fn replacing_a_sign_preserves_name_identity_and_arity() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let declaration = owner
         .split()
         .1
@@ -204,7 +204,7 @@ fn replacing_a_sign_preserves_name_identity_and_arity() {
 
 #[test]
 fn replacing_a_sign_preserves_text_prefix_validation() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let old = owner.publish_selection_with(&[], limits(), PERMIT).unwrap();
     let declaration = owner
         .split()
@@ -221,7 +221,7 @@ fn replacing_a_sign_preserves_text_prefix_validation() {
 
 #[test]
 fn replacing_a_sign_preserves_foreign_scope_refusal() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let declaration = owner
         .split()
         .1
@@ -229,7 +229,7 @@ fn replacing_a_sign_preserves_foreign_scope_refusal() {
         .unwrap()
         .with_sign(Sign::Positive)
         .unwrap();
-    let foreign = AtomInterner::new();
+    let foreign = AtomRegistry::new();
     assert_eq!(
         foreign.read().constructor(&declaration),
         Err(ReadError::ForeignCatalog)
@@ -238,7 +238,7 @@ fn replacing_a_sign_preserves_foreign_scope_refusal() {
 
 #[test]
 fn tuple_declarations_have_no_sign_override() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let tuple = owner
         .split()
         .1

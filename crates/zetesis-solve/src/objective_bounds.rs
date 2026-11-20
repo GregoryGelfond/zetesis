@@ -9,7 +9,7 @@ use zetesis_objective::Score;
 use zetesis_stable::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundError, ObjectiveBoundLimits, ObjectivePlan, ObjectivePlanLimits,
-    ObjectiveProjectionError,
+    ObjectiveReadSetError,
 };
 
 /// A single preparation shared by score reads and optional bound generation.
@@ -18,7 +18,7 @@ pub(crate) struct Preparation {
     plan: Option<ObjectivePlan>,
     work: u64,
     refusal: Option<ObjectiveBoundError>,
-    projection_refusal: Option<ObjectiveProjectionError>,
+    projection_refusal: Option<ObjectiveReadSetError>,
     choice_refusal: Option<ObjectiveBoundError>,
 }
 
@@ -44,7 +44,7 @@ impl Preparation {
             // debit from a global candidate-memory pool. Never retry the legacy
             // constructor here: exact detailed scoring retains the remaining
             // objective allowance after this single preparation attempt.
-            let attempt = ObjectivePlan::new_projected(
+            let attempt = ObjectivePlan::new_read_set(
                 source,
                 limits,
                 options.max_candidate_bytes as u128,
@@ -116,7 +116,7 @@ impl Preparation {
             observations.record(Event::ObjectiveUnavailable(error))?;
         }
         if let Some(error) = self.projection_refusal {
-            observations.record(Event::ObjectiveProjectionUnavailable(error))?;
+            observations.record(Event::ObjectiveReadSetUnavailable(error))?;
         }
         if let Some(error) = self.choice_refusal {
             observations.record(Event::ChoiceObjectiveBoundUnavailable(error))?;

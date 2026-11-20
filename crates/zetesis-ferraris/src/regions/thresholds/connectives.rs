@@ -51,7 +51,7 @@ use std::num::NonZeroUsize;
 
 use zetesis_algebra::Stop;
 
-use crate::regions::{Chain, Closure, Count, Meter, Narrower, Step, bit, chain_position};
+use crate::regions::{Chain, Count, Meter, Narrower, NarrowingState, Step, bit, chain_position};
 
 use super::{Adjacency, Row, State, reserve};
 
@@ -344,7 +344,7 @@ fn useful_bound(state: &State, value: bool, bound: i128) -> bool {
     }
 }
 
-impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+impl<W: Count, C: crate::regions::ReadingClass> NarrowingState<'_, W, C> {
     /// A processed true Boolean prefix supplies a lower bound to its native
     /// extension; a false Boolean extension supplies an exclusive upper bound
     /// to its native prefix. Each candidate is authenticated before transport.

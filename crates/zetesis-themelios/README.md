@@ -665,7 +665,7 @@ aggregate result dependencies remain outside the admitted profile. The
 and [expression](tests/integration/observation_expressions.rs) contracts retain source
 witnesses, complete results and located failures.
 
-`SourceMetadata::project_selection()` records authored projection declarations.
+`SourceMetadata::project_directives()` records authored projection declarations.
 Formula grounding completes `AdmittedFormula::projection()` as one immutable,
 sorted typed atom domain. Signatures select complete possible-support rows;
 conditional declarations select finite instances using the shared source

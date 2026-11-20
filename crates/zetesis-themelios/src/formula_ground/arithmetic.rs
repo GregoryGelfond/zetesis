@@ -28,7 +28,7 @@ use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
-use crate::formula_ir::{HeadIr, LiteralIr, Prepared, Projection, RuleIr};
+use crate::formula_ir::{AnonymousWitnesses, HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::family::{Evidence, Warnings};
 use crate::formula_support::{Computation, Counters, Ir, Join, Support};
 use crate::{FormulaFailure, FormulaLimits};
@@ -38,7 +38,7 @@ enum Continue<'a> {
     None,
     Head(&'a HeadIr),
     Consequent(&'a Consequent),
-    Projection(&'a Projection),
+    Anonymous(&'a AnonymousWitnesses),
 }
 
 struct Frame<'a, 'source> {
@@ -161,6 +161,10 @@ fn affected<'source>(
             && !constant_divisors::deferred(
                 rule,
                 prepared,
+                Context::new(&*computation, limits, counters, rule.location),
+            )?
+            && !divisors_exclude_zero(
+                rule,
                 Context::new(&*computation, limits, counters, rule.location),
             )?
             && !certified::family(
@@ -388,8 +392,8 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
                         )?;
                     }
                 }
-                LiteralIr::ProjectedAtom(_, projection) => {
-                    nested |= self.projection(projection, binding, location)?;
+                LiteralIr::AnonymousAtom(_, witnesses) => {
+                    nested |= self.anonymous(witnesses, binding, location)?;
                 }
                 LiteralIr::Atom(..)
                 | LiteralIr::PatternAtom(_)
@@ -405,15 +409,15 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         Ok(nested)
     }
 
-    fn projection(
+    fn anonymous(
         &mut self,
-        projection: &'source Projection,
+        witnesses: &'source AnonymousWitnesses,
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
-        match projection {
-            Projection::Arguments { .. } => Ok(false),
-            Projection::Witnesses {
+        match witnesses {
+            AnonymousWitnesses::Arguments { .. } => Ok(false),
+            AnonymousWitnesses::Witnesses {
                 bindings,
                 variables,
                 inputs,
@@ -440,16 +444,14 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
     ) -> Result<(), FormulaFailure> {
         match continuation {
             Continue::None | Continue::Consequent(Consequent::Guard(_)) => {}
-            Continue::Projection(projection) => {
-                self.projection(projection, binding, location)?;
+            Continue::Anonymous(witnesses) => {
+                self.anonymous(witnesses, binding, location)?;
             }
             Continue::Head(head) => self.head(head, binding, location)?,
             Continue::Consequent(Consequent::Atoms(_, alternatives)) => {
                 for alternative in alternatives {
                     let continuation = match &alternative.operand {
-                        ConsequentOperand::Projection(projection) => {
-                            Continue::Projection(projection)
-                        }
+                        ConsequentOperand::Anonymous(witnesses) => Continue::Anonymous(witnesses),
                         ConsequentOperand::Atom(_) => Continue::None,
                     };
                     self.local_fragment(
@@ -570,6 +572,117 @@ enum Syntax<'a> {
     Continued(Continue<'a>),
 }
 
+/// A Mod or Div divisor whose binder-range lower bound is a positive
+/// constant, or whose upper bound is a negative constant, never takes
+/// the value zero: every generated integer of that range sits strictly
+/// on one side of zero, or the range is empty. The family evidence scan
+/// has no zero-divisor to discover and must not walk the filter-only
+/// product of such a body.
+fn divisors_exclude_zero(
+    rule: &RuleIr,
+    mut context: Context<'_, &Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    let mut safe_slots = std::collections::BTreeSet::new();
+    for literal in &rule.body {
+        context
+            .work
+            .counters
+            .work(context.work.limits, context.work.location)?;
+        let LiteralIr::Range {
+            target,
+            lower,
+            upper,
+            binder: true,
+        } = literal
+        else {
+            continue;
+        };
+        if let Some(lo) = constant_number(lower, &mut context)?
+            && lo >= 1
+        {
+            safe_slots.insert(*target);
+        }
+        if let Some(hi) = constant_number(upper, &mut context)?
+            && hi <= -1
+        {
+            safe_slots.insert(*target);
+        }
+    }
+    let mut saw_divisor = false;
+    for literal in &rule.body {
+        context
+            .work
+            .counters
+            .work(context.work.limits, context.work.location)?;
+        let expressions: Box<dyn Iterator<Item = &crate::formula_ir::Expression>> = match literal {
+            LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
+                Box::new([comparison.left(), comparison.right()].into_iter())
+            }
+            LiteralIr::TupleCompare(left, _, right) => Box::new(left.iter().chain(right)),
+            LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => Box::new(guard.expressions()),
+            LiteralIr::Bind { value, .. } => Box::new(std::iter::once(value)),
+            LiteralIr::Range { lower, upper, .. } => Box::new([lower, upper].into_iter()),
+            _ => continue,
+        };
+        for expression in expressions {
+            if !divisors_of(expression, &safe_slots, &mut saw_divisor, &mut context)? {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(saw_divisor)
+}
+
+fn divisors_of(
+    expression: &crate::formula_ir::Expression,
+    safe_slots: &std::collections::BTreeSet<usize>,
+    saw_divisor: &mut bool,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    for node in &expression.nodes {
+        context
+            .work
+            .counters
+            .work(context.work.limits, context.work.location)?;
+        let crate::formula_ir::Operation::Binary(
+            themelios_program::term::BinaryOp::Div | themelios_program::term::BinaryOp::Mod,
+            _,
+            right,
+        ) = node
+        else {
+            continue;
+        };
+        *saw_divisor = true;
+        let Some(crate::formula_ir::Operation::Variable(slot)) = expression.nodes.get(*right)
+        else {
+            return Ok(false);
+        };
+        if !safe_slots.contains(slot) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn constant_number(
+    expression: &crate::formula_ir::Expression,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<Option<i32>, FormulaFailure> {
+    let [crate::formula_ir::Operation::Constant(value)] = expression.nodes.as_slice() else {
+        return Ok(None);
+    };
+    let term = context.computation.static_scalar(
+        *value,
+        context.work.limits,
+        context.work.counters,
+        context.work.location,
+    )?;
+    match term.descriptor() {
+        zetesis_core::ValueNodeRef::Number(number) => Ok(Some(number)),
+        _ => Ok(None),
+    }
+}
+
 fn contains_partial(
     rule: &RuleIr,
     limits: &FormulaLimits,
@@ -680,8 +793,8 @@ impl<'a> SyntaxScan<'a, '_> {
                         &conditional.consequent,
                     )))?;
                 }
-                LiteralIr::ProjectedAtom(_, projection) => {
-                    self.push(Syntax::Continued(Continue::Projection(projection)))?;
+                LiteralIr::AnonymousAtom(_, witnesses) => {
+                    self.push(Syntax::Continued(Continue::Anonymous(witnesses)))?;
                 }
                 _ => {}
             }
@@ -716,8 +829,8 @@ impl<'a> SyntaxScan<'a, '_> {
             Syntax::Continued(Continue::Consequent(Consequent::Atoms(_, alternatives))) => {
                 for alternative in alternatives {
                     self.push(Syntax::Body(&alternative.bindings))?;
-                    if let ConsequentOperand::Projection(projection) = &alternative.operand {
-                        self.push(Syntax::Continued(Continue::Projection(projection)))?;
+                    if let ConsequentOperand::Anonymous(witnesses) = &alternative.operand {
+                        self.push(Syntax::Continued(Continue::Anonymous(witnesses)))?;
                     }
                 }
             }
@@ -729,7 +842,10 @@ impl<'a> SyntaxScan<'a, '_> {
                     self.push(Syntax::Body(&alternative.bindings))?;
                 }
             }
-            Syntax::Continued(Continue::Projection(Projection::Witnesses { bindings, .. })) => {
+            Syntax::Continued(Continue::Anonymous(AnonymousWitnesses::Witnesses {
+                bindings,
+                ..
+            })) => {
                 self.push(Syntax::Body(bindings))?;
             }
             Syntax::Continued(_) => {}

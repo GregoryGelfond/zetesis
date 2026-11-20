@@ -238,10 +238,10 @@ mod tests {
                 limit: 7,
             },
         ));
-        let cleanup = Err(zetesis_stable::Incomplete::RegionFilter);
+        let cleanup = Err(zetesis_stable::Incomplete::ConstraintRefutation);
         assert_eq!(super::after_cleanup(Some(primary), cleanup), Some(primary));
         let secondary = Some(SearchState::Interrupted(Interruption::Countermodel(
-            zetesis_stable::Incomplete::RegionFilter,
+            zetesis_stable::Incomplete::ConstraintRefutation,
         )));
         assert_eq!(
             super::after_cleanup(Some(SearchState::RequestedModels), cleanup),

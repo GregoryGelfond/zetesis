@@ -49,7 +49,7 @@ fn assert_domains(
         .select(domains, Limits::default(), &Cancellation::default())
         .unwrap();
     let projected = table
-        .project_domains(domains, Limits::default(), &Cancellation::default())
+        .support_domains(domains, Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(selected.rows().collect::<Vec<_>>(), expected);
     assert_eq!(selected.words(), projected.words());
@@ -382,7 +382,7 @@ fn row_selection_omits_projected_domain_storage() {
         .select(&domains, Limits::default(), &Cancellation::default())
         .unwrap();
     let projected = table
-        .project_domains(&domains, Limits::default(), &Cancellation::default())
+        .support_domains(&domains, Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(selected.words(), projected.words());
     assert!(selected.statistics().retained_bytes < projected.statistics().retained_bytes);

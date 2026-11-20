@@ -9,8 +9,8 @@ use zetesis_core::TemplateTerm;
 use crate::diagnostic::unsupported;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 use crate::formula_ir::{
-    AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, Expression, LiteralIr,
-    Operation, Projection, Variables,
+    AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, AnonymousWitnesses, Compiler,
+    Expression, LiteralIr, Operation, Variables,
 };
 use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
 
@@ -107,7 +107,7 @@ impl Compiler<'_> {
                 if matches!(
                     literal,
                     LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
-                        | LiteralIr::ProjectedAtom(
+                        | LiteralIr::AnonymousAtom(
                             DefaultNegation::Not | DefaultNegation::NotNot,
                             _,
                         )
@@ -124,7 +124,7 @@ impl Compiler<'_> {
                     // pruning possible rows in the join; one that support
                     // completion decides omits its row after it. Grounding
                     // retains the original polarity of the others, including
-                    // the existential projection formula.
+                    // the existential witnesses formula.
                     // Range generators follow the checked plan; a previously
                     // bound range target remains a completed-row membership test.
                     // Universal conditions seed their local joins with this
@@ -297,17 +297,17 @@ impl Compiler<'_> {
             .any(|term| matches!(term, TemplateTerm::Variable(slot) if slot == variable)))
     }
 
-    fn projection_uses(
+    fn anonymous_uses(
         &mut self,
-        projection: &Projection,
+        witnesses: &AnonymousWitnesses,
         variable: usize,
     ) -> Result<bool, FormulaFailure> {
-        match projection {
-            Projection::Arguments { terms, .. } => {
+        match witnesses {
+            AnonymousWitnesses::Arguments { terms, .. } => {
                 self.scope_work(terms.len())?;
                 Ok(terms.contains(&Some(Term::Variable(variable))))
             }
-            Projection::Witnesses {
+            AnonymousWitnesses::Witnesses {
                 bindings, inputs, ..
             } => {
                 if variable >= *inputs {
@@ -373,9 +373,7 @@ impl Compiler<'_> {
                 )?;
                 pattern.slots().any(|slot| slot == variable)
             }
-            LiteralIr::ProjectedAtom(_, projection) => {
-                self.projection_uses(projection, variable)?
-            }
+            LiteralIr::AnonymousAtom(_, witnesses) => self.anonymous_uses(witnesses, variable)?,
             LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
                 self.expression_uses(comparison.left(), variable)?
                     || self.expression_uses(comparison.right(), variable)?
@@ -451,8 +449,8 @@ impl Compiler<'_> {
                 for alternative in alternatives {
                     uses |= match &alternative.operand {
                         ConsequentOperand::Atom(atom) => self.pattern_uses(*atom, variable)?,
-                        ConsequentOperand::Projection(projection) => {
-                            self.projection_uses(projection, variable)?
+                        ConsequentOperand::Anonymous(witnesses) => {
+                            self.anonymous_uses(witnesses, variable)?
                         }
                     };
                     for literal in &alternative.bindings {

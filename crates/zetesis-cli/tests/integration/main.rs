@@ -71,5 +71,6 @@ mod structural_values;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod testing_cancellation;
 mod testing_commands;
+mod thread_cap;
 mod upstream_sources;
 mod warning_diagnostics;

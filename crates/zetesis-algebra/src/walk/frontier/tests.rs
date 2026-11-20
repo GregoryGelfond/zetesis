@@ -224,3 +224,43 @@ fn release_drops_owned_storage_but_keeps_receipt_peaks() {
     assert_eq!(released.peak_capacity, populated.peak_capacity);
     assert_eq!(released.peak_retained_bytes, populated.peak_retained_bytes);
 }
+
+#[test]
+fn shedding_keeps_the_newest_payloads_and_records_the_exchanged_bytes() {
+    let frontier = TestFrontier::measured(1, packet(0)).unwrap();
+    let mut parent = frontier.take_local(0).unwrap();
+    for id in 1..=4 {
+        let children = [packet(10 * id), packet(10 * id + 1)];
+        frontier
+            .publish_split_shedding(
+                0,
+                parent,
+                reserve,
+                |_| (children, ()),
+                3,
+                |entry| {
+                    entry.bytes = Vec::new();
+                },
+            )
+            .unwrap();
+        parent = frontier.take_local(0).unwrap();
+    }
+    let queue = frontier.queue(0);
+    let ids: Vec<usize> = queue.iter().map(|entry| entry.id).collect();
+    assert_eq!(ids, vec![10, 20, 30, 40]);
+    // The window kept the newest three at publication, the taken entry
+    // included; the two older entries have no payload left.
+    assert!(queue.iter().take(2).all(|entry| entry.bytes.is_empty()));
+    assert!(queue.iter().skip(2).all(|entry| !entry.bytes.is_empty()));
+    let payload: usize = queue.iter().map(|entry| entry.bytes.capacity()).sum();
+    let capacity = queue.capacity();
+    drop(queue);
+    let statistics = frontier.statistics().unwrap();
+    let headers = size_of::<Vec<Mutex<VecDeque<Packet>>>>()
+        + frontier.queues.capacity() * size_of::<Mutex<VecDeque<Packet>>>();
+    assert_eq!(statistics.regions, 4);
+    assert_eq!(
+        statistics.retained_bytes,
+        (headers + capacity * size_of::<Packet>() + payload) as u128
+    );
+}

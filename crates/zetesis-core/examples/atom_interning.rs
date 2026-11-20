@@ -12,7 +12,7 @@ use std::{
 
 use zetesis_core::{
     Atom, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode,
-    atom_interner::{AtomInterner, Limits},
+    atom_registry::{AtomRegistry, Limits},
     catalog::AtomRef,
 };
 
@@ -167,7 +167,7 @@ enum QueryDoor {
 }
 
 struct Probe {
-    atoms: AtomInterner,
+    atoms: AtomRegistry,
     limits: Limits,
     round: usize,
     timed: bool,
@@ -301,7 +301,7 @@ impl Probe {
 fn run(rows: usize, timed: bool, out: &mut impl Write) -> Result<(), Box<dyn Error>> {
     let fixture = Fixture::new(rows)?;
     let mut probe = Probe {
-        atoms: AtomInterner::new(),
+        atoms: AtomRegistry::new(),
         limits: Limits::for_atoms(rows, CANONICAL_BYTES),
         round: 0,
         timed,

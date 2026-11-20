@@ -1,7 +1,7 @@
 //! Reconstruction composes existing owner receipts with one leased workspace.
 
 use crate::ProgramSite;
-use zetesis_core::atom_interner::{AtomInterner, Failure, Limits};
+use zetesis_core::atom_registry::{AtomRegistry, Failure, Limits};
 use zetesis_core::catalog::Error;
 
 use crate::formula::ceiling;
@@ -60,14 +60,14 @@ impl Work<'_> {
     /// the remaining named storage allowance, never an alternative term owner.
     pub(super) fn writer(
         &mut self,
-        base: &zetesis_core::atom_interner::ClosedCatalog,
-    ) -> Result<AtomInterner, FormulaFailure> {
+        base: &zetesis_core::atom_registry::ClosedCatalog,
+    ) -> Result<AtomRegistry, FormulaFailure> {
         self.permit()?;
         let outside = self.outside()?;
         let remaining = self.remaining(0)?;
         let atom_bound = self.limits.max_atom_storage_bytes < remaining;
         let remaining = remaining.min(self.limits.max_atom_storage_bytes);
-        AtomInterner::for_closed_catalog(base, remaining).map_err(|error| {
+        AtomRegistry::for_closed_catalog(base, remaining).map_err(|error| {
             let failure = Failure::<FormulaFailure>::Catalog(error);
             self.failure(failure, outside, atom_bound)
         })
@@ -77,9 +77,9 @@ impl Work<'_> {
     /// A refused proposed allocation is never reported as retained capacity.
     pub(super) fn atoms<T>(
         &mut self,
-        writer: &mut AtomInterner,
+        writer: &mut AtomRegistry,
         operation: impl FnOnce(
-            &mut AtomInterner,
+            &mut AtomRegistry,
             Limits,
             &mut Counters,
         ) -> Result<T, Failure<FormulaFailure>>,
@@ -135,7 +135,7 @@ impl Work<'_> {
         additional: usize,
         lease: &mut StorageLease,
         header_and_other_bytes: usize,
-        writer: &AtomInterner,
+        writer: &AtomRegistry,
     ) -> Result<(), FormulaFailure> {
         let external = self
             .external

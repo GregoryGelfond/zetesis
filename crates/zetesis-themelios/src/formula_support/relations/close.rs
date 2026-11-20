@@ -3,7 +3,7 @@
 use crate::ProgramSite;
 use zetesis_core::{
     TemplateComponents,
-    atom_interner::{self, ClosedCatalog},
+    atom_registry::{self, ClosedCatalog},
 };
 
 use super::{SupportCatalog, atom_failure, owner_limits};
@@ -142,7 +142,7 @@ impl SupportCatalog {
             Err(error) => {
                 let (error, peak) = error.into_parts();
                 let failure = match error {
-                    atom_interner::Failure::Bytes { required, .. } if atom_bound => {
+                    atom_registry::Failure::Bytes { required, .. } if atom_bound => {
                         FormulaFailure::Limit {
                             resource: FormulaResource::AtomStorageBytes,
                             observed: required,

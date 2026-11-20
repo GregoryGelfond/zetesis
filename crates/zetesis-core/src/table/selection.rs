@@ -241,9 +241,9 @@ impl<'owner, 'source> Table<'owner, 'source> {
                             permit(permitted, entry, work)?;
                         }
                         if initialized {
-                            intersect(&mut rows, self.support(entry), work)?;
+                            intersect(&mut rows, self.entry_support(entry), work)?;
                         } else {
-                            initialize(&mut rows, self.support(entry).iter().copied(), work)?;
+                            initialize(&mut rows, self.entry_support(entry).iter().copied(), work)?;
                         }
                     } else if initialized {
                         clear(&mut rows, work)?;
@@ -297,7 +297,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
                     permit(permitted, entry, work)?;
                 }
                 Words::<u32, _>::new(&mut *target)
-                    .union_assign(Words::new(self.support(entry)), || work.tick(1))?;
+                    .union_assign(Words::new(self.entry_support(entry)), || work.tick(1))?;
             }
         }
         Ok(())

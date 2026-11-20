@@ -138,9 +138,9 @@ fn binding_views_preserve_absence() {
 
 #[test]
 fn catalog_key_receipts_match_owned_lookup() {
-    use zetesis_core::atom_interner::{AtomInterner, Limits as AtomLimits};
+    use zetesis_core::atom_registry::{AtomRegistry, Limits as AtomLimits};
     let pattern = pattern(Sign::Positive);
-    let mut authority = AtomInterner::default();
+    let mut authority = AtomRegistry::default();
     let atom_limits = AtomLimits::for_atoms(64, 1024 * 1024);
     let declared = authority
         .declare_predicate_with(pattern.predicate(), atom_limits, || Ok::<_, ()>(()))

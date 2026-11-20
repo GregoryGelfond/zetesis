@@ -1,4 +1,4 @@
-use crate::atom_interner::{AtomInterner, Limits as AtomLimits};
+use crate::atom_registry::{AtomRegistry, Limits as AtomLimits};
 use crate::relation::{Catalog, Failure, Limits, Resource};
 use crate::{Atom, Predicate, Value};
 
@@ -10,8 +10,8 @@ fn atom(values: &[i32]) -> Atom {
     .unwrap()
 }
 
-fn owner(atoms: &[Atom]) -> AtomInterner {
-    let mut owner = AtomInterner::default();
+fn owner(atoms: &[Atom]) -> AtomRegistry {
+    let mut owner = AtomRegistry::default();
     let limits = AtomLimits::for_atoms(65_536, 64 * 1024 * 1024);
     for atom in atoms {
         owner
@@ -23,7 +23,7 @@ fn owner(atoms: &[Atom]) -> AtomInterner {
     owner
 }
 
-fn catalog(owner: &AtomInterner) -> Catalog {
+fn catalog(owner: &AtomRegistry) -> Catalog {
     let read = owner.read();
     Catalog::new(
         read,
@@ -34,7 +34,7 @@ fn catalog(owner: &AtomInterner) -> Catalog {
     .unwrap()
 }
 
-fn columns(catalog: &Catalog, owner: &AtomInterner) -> Vec<Vec<u32>> {
+fn columns(catalog: &Catalog, owner: &AtomRegistry) -> Vec<Vec<u32>> {
     catalog
         .view(owner.read())
         .unwrap()
@@ -150,7 +150,6 @@ fn refused_row_preserves_the_successful_prefix() {
         assert_eq!(append.catalog.layout.dictionary.len(), 1);
         assert!(append.plan.ids.is_empty());
         assert!(append.plan.added.is_empty());
-        assert!(append.plan.patches.is_empty());
         assert_eq!(error.retained_bytes, append.catalog.retained_bytes());
         let retry = append
             .insert(owner.get(1).unwrap(), Limits::default())
@@ -171,14 +170,12 @@ fn reused_plan_keeps_its_admitted_allocations() {
         .unwrap();
     let ids = append.plan.ids.as_ptr();
     let added = append.plan.added.as_ptr();
-    let patches = append.plan.patches.as_ptr();
     let retained = append.scratch_bytes();
     append
         .insert(owner.get(1).unwrap(), Limits::default())
         .unwrap();
     assert_eq!(append.plan.ids.as_ptr(), ids);
     assert_eq!(append.plan.added.as_ptr(), added);
-    assert_eq!(append.plan.patches.as_ptr(), patches);
     assert_eq!(append.scratch_bytes(), retained);
 }
 

@@ -1,12 +1,12 @@
 //! Completed necessary selection of one short, immutable indexed posting.
 //!
 //! The join owns one receipt per original positive occurrence. Its resolved
-//! relation and immutable row filter remain borrowed for that join's lifetime.
+//! relation and immutable row condition remain borrowed for that join's lifetime.
 //! Bits denote positions in the exact borrowed posting, never atom identities.
 //! Matching, scalar evaluation and positive-row evidence are not retained here.
 
 use super::{
-    Computation, Context, Counters, GroundingWork, Join, PatternOccurrence, Probe, RowFilter,
+    BindRestriction, Computation, Context, Counters, GroundingWork, Join, PatternOccurrence, Probe,
     delta, reserve_exact,
 };
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
@@ -154,7 +154,9 @@ impl<'a> Join<'a, '_> {
         context: Context<'_, &super::Computation<'_, '_>>,
     ) -> Result<(), FormulaFailure> {
         if self.plan.patterns.len() < 2
-            || !self.row_filter.is_some_and(RowFilter::immutable_selection)
+            || !self
+                .bind_restriction
+                .is_some_and(BindRestriction::immutable_selection)
         {
             return Ok(());
         }

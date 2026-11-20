@@ -1,6 +1,6 @@
 //! Deferred local coordinates for a finite source-identity batch.
 //!
-//! Push authenticates and appends one occurrence without searching or shifting
+//! Push authenticates and appends one occurrence without searching or growing
 //! an inverse. Finish consumes the private batch, sorts IDs using the existing
 //! metered constant-scratch heapsort, compacts duplicates, and only then builds
 //! the ordinary selection's inverse. No partially sorted/indexed selection is
@@ -80,18 +80,104 @@ impl SourceBatch {
         ceiling(bound.0, distinct as u128, bound.1 as u128, location)?;
         counters.work(limits, location)?;
         self.0.positions.truncate(distinct);
+        self.0
+            .grow(0, Context::new(computation, limits, counters, location))?;
+        Ok(self.0)
+    }
+}
+
+impl SourceBatch {
+    /// Merge this batch into an existing selection of the same source scope,
+    /// visiting the local coordinate of every distinct batch atom: existing
+    /// coordinates first, in increasing source order, then new ones as they
+    /// are appended. The sparse inverse places each new coordinate once.
+    ///
+    /// R pushed occurrences against N selected atoms cost O(R log R) sorting,
+    /// O(R) expected lookups and placements, and O(N + R) growth, all charged. Both buffers
+    /// are reserved before any coordinate is published; a refusal after
+    /// reservation publishes nothing, though the selection may keep capacity.
+    pub(crate) fn merge_into(
+        mut self,
+        selection: &mut SourceSelection,
+        bound: (FormulaResource, usize),
+        context: Context<'_, &Computation<'_, '_>>,
+        mut visit: impl FnMut(usize, &mut Counters) -> Result<(), FormulaFailure>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        counters.work(limits, location)?;
+        if !self.0.scope.same(&selection.scope) {
+            return Err(owner_failure(location));
+        }
+        sort::by(
+            &mut self.0.positions,
+            GroundingWork::new(limits, counters, location),
+            |left, right, _| Ok(left.cmp(right)),
+        )?;
+        // Visit already selected atoms, and compact the absent distinct ones.
+        let mut absent = 0;
+        for read in 0..self.0.positions.len() {
+            counters.work(limits, location)?;
+            let position = self.0.positions[read];
+            if absent != 0 && self.0.positions[absent - 1] == position {
+                continue;
+            }
+            let atom = SourceAtom {
+                scope: self.0.scope.clone(),
+                position,
+            };
+            if let Ok(local) = selection.search(&atom, limits, counters, location)? {
+                // Repeated present positions are adjacent after sorting.
+                if read == 0 || self.0.positions[read - 1] != position {
+                    visit(local, counters)?;
+                }
+            } else {
+                self.0.positions[absent] = position;
+                absent += 1;
+            }
+        }
+        self.0.positions.truncate(absent);
+        let before = selection.positions.len();
+        ceiling(
+            bound.0,
+            before as u128 + absent as u128,
+            bound.1 as u128,
+            location,
+        )?;
         reserve(
-            &mut self.0.inverse,
-            distinct,
-            &mut self.0.lease,
-            size_of::<SourceSelection>() + self.0.positions.capacity() * size_of::<usize>(),
+            &mut selection.positions,
+            absent,
+            &mut selection.lease,
+            size_of::<SourceSelection>() + selection.inverse.capacity() * size_of::<usize>(),
             Context::new(computation, limits, counters, location),
         )?;
-        for (local, &source) in self.0.positions.iter().enumerate() {
-            counters.work(limits, location)?;
-            self.0.inverse.push((source, local));
+        selection.grow(
+            absent,
+            Context::new(computation, limits, counters, location),
+        )?;
+        // Admit the placements, each by its probes of the table as it stands,
+        // before publishing any coordinate.
+        let mut probes = 0_u128;
+        for &position in &self.0.positions {
+            probes += selection.probe(position) as u128;
         }
-        Ok(self.0)
+        counters.charge_work(probes + absent as u128 + 1, limits, location)?;
+        // Publication: append coordinates, then place each in the inverse.
+        selection.positions.extend_from_slice(&self.0.positions);
+        for local in before..before + absent {
+            selection.place(local);
+        }
+        for local in before..before + absent {
+            visit(local, counters)?;
+        }
+        Ok(())
     }
 }
 

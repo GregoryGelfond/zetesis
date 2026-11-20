@@ -10,13 +10,13 @@ use crate::FormulaFailure;
 use crate::expansion::Budget;
 use crate::formula_ir::RuleIr;
 use crate::formula_support::{
-    Computation, Context, Ir, Join, StorageLease, Support, delta, projections, queries,
+    Computation, Context, Ir, Join, StorageLease, Support, delta, expression_memos, queries,
 };
 
 pub(in crate::formula_support) struct RoundPreparation<'rule, 'source> {
     rule: Ir<'rule, 'source, RuleIr>,
     support: &'rule Support<'source>,
-    values: projections::ProjectionValues<'rule>,
+    values: expression_memos::ExpressionMemoTable<'rule>,
     lease: StorageLease,
 }
 
@@ -45,14 +45,15 @@ impl<'rule, 'source> RoundPreparation<'rule, 'source> {
                 location: rule.location,
             });
         }
-        let projections::Projections::Local(values) = join.projections else {
+        let expression_memos::ExpressionMemos::Local(values) = join.expression_memos else {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
                 location: rule.location,
             });
         };
         let mut lease = computation.lease();
-        let header = size_of::<Option<Self>>() - size_of::<projections::ProjectionValues<'_>>();
+        let header =
+            size_of::<Option<Self>>() - size_of::<expression_memos::ExpressionMemoTable<'_>>();
         lease.observe(header, rule.location)?;
         computation.storage_observed(
             &lease,

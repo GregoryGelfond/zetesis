@@ -340,10 +340,10 @@ fn workspace_size_overflow_is_a_typed_failure() {
 #[test]
 fn canonical_frames_drive_both_query_strategies() {
     use std::convert::Infallible;
-    use zetesis_core::atom_interner::{AtomInterner, Limits as InternLimits};
+    use zetesis_core::atom_registry::{AtomRegistry, Limits as InternLimits};
 
     let success = || Ok::<(), Infallible>(());
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let atom = Atom::new(
         Predicate::new("binding", 1).unwrap(),
         vec![Value::Number(1)],

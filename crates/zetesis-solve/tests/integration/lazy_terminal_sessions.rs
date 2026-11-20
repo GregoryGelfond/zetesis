@@ -113,7 +113,7 @@ fn a_filtered_core_answer_is_never_extended() {
     let filter = outcome
         .countermodel_statistics()
         .unwrap()
-        .region_filter
+        .constraint_refutation
         .unwrap();
     assert!(filter.checks > 0);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));

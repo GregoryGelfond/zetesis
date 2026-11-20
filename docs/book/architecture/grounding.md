@@ -183,7 +183,7 @@ relation of a certain predicate a supported atom holds in every answer set and
 an unsupported one in none, so `not a` is false for a supported `a` and true
 otherwise, and `not not a` the reverse. A row of the rule under which such a
 literal is false derives no head, and a rule whose other literals are definite
-keeps its head predicate certain. The direct evaluation of a complete acyclic
+keeps its head predicate certain. The direct evaluation of a complete stratified
 normal source passes over the same rows, so the atoms it publishes are those
 of the completed support. In
 `c(1..3). e(1). d(X) :- c(X), not e(X). {p}. q :- d(2), p.` the support of `d`
@@ -1184,7 +1184,7 @@ O(D) scoped IDs and positions. Lookup takes O(log D) identity comparisons;
 inserting all D values can require O(D²) position shifts in the shared sorted
 coordinate index. Descriptor preparation, misses, lookup and insertion remain
 cumulative grounding work, while retained metadata uses `SupportBytes`. The
-[projection regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/tests.rs)
+[expression-memo regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/expression_memos/tests.rs)
 check value reuse, owner boundaries, arithmetic failures and inclusive limits.
 
 After source-family validation, a flat normal-rule body can establish finite
@@ -1322,7 +1322,7 @@ mask construction and all refused prefixes spend the same cumulative grounding
 work; tables, masks and lists share `SupportBytes`. Numerical work cutoffs can
 change, and optional preparation can itself refuse. These operations establish
 no runtime speedup or default-budget admission for an arbitrary program. The
-[computed-domain regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/domains/tests.rs)
+[computed-domain regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/expression_memos/domains/tests.rs)
 check exact selected bindings, typed equality, evidence coverage and refusal
 boundaries. The [Lean correspondence](../lean/correspondence.md) states the
 separate obligations connecting finite coverage, table selection and reduct
@@ -1389,7 +1389,7 @@ construction peak or process RSS. The [ownership chapter](ownership.md) relates
 these lifetimes to prepared views and execution state.
 
 The final formula catalog uses the shared core
-[`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs).
+[`AtomRegistry`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/registry.rs).
 It owns one canonical term/atom authority. Authenticated tuple queries reuse that
 store's exact identity index, then an integer-key inverse translates identity to
 discovery. A known same-authority atom ID avoids tuple lookup altogether. An
@@ -2431,16 +2431,20 @@ The catalog cannot grow while its snapshot is borrowed. Once a round finishes,
 the snapshot drops before new atoms are appended. A failed tuple or posting
 extension returns no usable support owner. The completed final snapshot supplies
 formula emission and objective eligibility. The core catalog uses the shared
-checked AVL implementation for row order, new dictionary-value placement and
-foreign-value lookup. Nodes contain only IDs and links; typed comparisons inspect
-their actual descriptor/text prefixes. An insertion resolves existing values
-through the inverse, and plans genuinely new dictionary leaves in a bounded
-metadata overlay. Repeated new values share the same tentative local ID.
-Row membership, dictionary representatives, inverse entries and columns publish
-together after all fallible checks. No historical sorted row or dictionary
-sequence is shifted. If a tuple
-introduces `a` new values into a dictionary of size `d`, tentative patches occupy
-O(a log d) cells; the checked overlay lookups can use O(a² log² d) metadata work.
+checked AVL implementation for row order only. Nodes contain only IDs and
+links; typed comparisons inspect their actual descriptor/text prefixes. An
+insertion resolves existing values through the inverse; a genuinely new value
+is appended to the dictionary and chained under its semantic content hash
+(`Hash for TermRef`, consistent with term equality), with no value order to
+search or rebalance. A value the read cannot name (uninterned or foreign) is
+found by hashing it once and comparing only the values in its hash chain, so
+its comparisons do not grow with the dictionary. Hashing reads every payload
+word once and is charged one unit per expanded node and per eight canonical
+bytes, at insertion and at each such lookup; the chain adds one `u32` link per
+value and a head table to the catalog's named bytes. Repeated new values share
+the same tentative local ID. Row membership, dictionary representatives,
+inverse and content entries and columns publish together after all fallible
+checks. No historical sorted row or dictionary sequence is shifted.
 Typed comparisons, node inspection, append copies and posting construction
 consume the grounding work budget. Inverse lookup uses fixed integer keys with
 expected constant-time hash lookup; internal hash probes are not individually

@@ -390,7 +390,9 @@ frozen-truth checks and target order retain their existing behavior.
 The knowledge of a region holds in every region inside it
 (`FormulaBounds.known_mono`), so a split hands each child a copy of its
 parent's knowledge and the child learns only what the split decided; the
-regions still share nothing. The readings are arrays over the DAG, and the
+regions still share nothing. A pending region far below its worker's newest
+entry gives its copy up and learns every decision afresh when visited
+([retained knowledge](ownership.md)). The readings are arrays over the DAG, and the
 regions partition the space exactly, so generation has the closure route's
 shape: data-parallel work inside a region and share-nothing regions beside
 one another. The node-sure, node-never, atom-sure, atom-never, seen and chain-witness masks

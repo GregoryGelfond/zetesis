@@ -15,7 +15,7 @@ mod terms;
 mod term_read;
 mod vocabulary;
 
-pub mod interner;
+pub mod registry;
 mod compare;
 
 use std::{cmp::Ordering, fmt, iter::FusedIterator, marker::PhantomData, slice, sync::Arc};

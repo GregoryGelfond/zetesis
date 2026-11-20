@@ -2,7 +2,7 @@
 
 use themelios_syntax::ast::{self, AstToken};
 use themelios_syntax::parse::Parse;
-use themelios_syntax::tree::{AstNode, SyntaxKind, SyntaxNode, WalkEvent};
+use themelios_syntax::tree::{AstNode, NodeOrToken, SyntaxKind, TextRange};
 
 use crate::diagnostic::unsupported;
 use crate::{AdmissionFailure, AdmissionOptions, InputLimit, ProfileFeature};
@@ -126,50 +126,71 @@ fn check_program_part(
     Ok(())
 }
 
+/// The node count and depth checks and the observation-only term kinds, over
+/// the tree in preorder. The walk reads the shared green tree in place and
+/// tracks each node's offset itself, so it creates no node cursor; a refused
+/// node's range is resolved only for its diagnostic.
 fn check_traversal(
     parsed: &Parse<ast::Program>,
     options: AdmissionOptions,
 ) -> Result<usize, AdmissionFailure> {
+    let root = parsed.syntax();
     let mut observation_depth = None;
     let mut count = 0;
-    let mut depth = 0;
-    for event in parsed.syntax().preorder() {
-        match event {
-            WalkEvent::Enter(node) => {
-                count += 1;
-                depth += 1;
-                if ast::ShowStatement::cast(node.clone()).is_some() {
-                    observation_depth = Some(depth);
+    let mut offset = root.text_range().start();
+    let mut node = (root.green(), offset);
+    // The children still to visit of each open node, outermost first.
+    let mut open = Vec::new();
+    loop {
+        let (green, start) = node;
+        count += 1;
+        let depth = open.len() + 1;
+        let kind = green.kind().0;
+        if kind == SyntaxKind::SHOW_STATEMENT as u16 {
+            observation_depth = Some(depth);
+        }
+        check_node(
+            kind,
+            TextRange::at(start, green.text_len()),
+            parsed,
+            options,
+            observation_depth.is_some(),
+            count,
+            depth,
+        )?;
+        open.push(green.children());
+        // Advance to the next node in preorder, leaving every finished node.
+        let next = loop {
+            let Some(children) = open.last_mut() else {
+                break None;
+            };
+            match children.next() {
+                Some(NodeOrToken::Node(child)) => break Some((child, offset)),
+                Some(NodeOrToken::Token(token)) => offset += token.text_len(),
+                None => {
+                    if observation_depth == Some(open.len()) {
+                        observation_depth = None;
+                    }
+                    open.pop();
                 }
-                check_node(
-                    &node,
-                    parsed,
-                    options,
-                    observation_depth.is_some(),
-                    count,
-                    depth,
-                )?;
             }
-            WalkEvent::Leave(_) => {
-                if observation_depth == Some(depth) {
-                    observation_depth = None;
-                }
-                depth -= 1;
-            }
+        };
+        match next {
+            Some(child) => node = child,
+            None => return Ok(count),
         }
     }
-    Ok(count)
 }
 
 fn check_node(
-    node: &SyntaxNode,
+    kind: u16,
+    range: TextRange,
     parsed: &Parse<ast::Program>,
     options: AdmissionOptions,
     observation: bool,
     count: usize,
     depth: usize,
 ) -> Result<(), AdmissionFailure> {
-    let location = parsed.location(node.text_range());
     for (resource, observed, limit) in [
         (InputLimit::SyntaxNodes, count, options.max_syntax_nodes),
         (InputLimit::SyntaxDepth, depth, options.max_syntax_depth),
@@ -179,17 +200,14 @@ fn check_node(
                 resource,
                 limit,
                 observed,
-                location: location.into(),
+                location: parsed.location(range).into(),
             });
         }
     }
     if !observation
-        && matches!(
-            node.kind(),
-            SyntaxKind::EXTERNAL_TERM | SyntaxKind::SPLICE_TERM
-        )
+        && (kind == SyntaxKind::EXTERNAL_TERM as u16 || kind == SyntaxKind::SPLICE_TERM as u16)
     {
-        return Err(unsupported(ProfileFeature::Term, location));
+        return Err(unsupported(ProfileFeature::Term, parsed.location(range)));
     }
     Ok(())
 }

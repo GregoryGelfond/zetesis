@@ -71,7 +71,10 @@ fn ground(
     observation: &Observation,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     prepare(source)?
-        .with_grounding_options(GroundingOptions { joins: strategy })
+        .with_grounding_options(GroundingOptions {
+            joins: strategy,
+            ..GroundingOptions::default()
+        })
         .with_domain_analysis(domains)
         .ground_with_observer(Some(observation))
 }
@@ -94,7 +97,7 @@ fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
         right.objectives().priorities()
     );
     assert_eq!(left.metadata(), right.metadata());
-    assert_eq!(left.projection(), right.projection());
+    assert_eq!(left.projective_domain(), right.projective_domain());
     assert_eq!(left.warnings(), right.warnings());
 }
 
@@ -649,11 +652,11 @@ fn objective_observations_preserve_scored_answers() {
                 let mut shown: Vec<_> = rendered.text().split_whitespace().collect();
                 shown.sort_unstable();
                 assert_eq!(shown, ["f(0)", "f(1)", "p(0)", "p(1)"]);
-                assert!(input.projection().is_explicit());
-                assert_eq!(input.projection().atoms().len(), 2);
+                assert!(input.projective_domain().is_explicit());
+                assert_eq!(input.projective_domain().atoms().len(), 2);
                 assert!(
                     input
-                        .projection()
+                        .projective_domain()
                         .atoms()
                         .iter()
                         .all(|atom| atom.predicate().name() == "p")

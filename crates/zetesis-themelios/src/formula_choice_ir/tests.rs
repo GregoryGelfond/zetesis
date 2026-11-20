@@ -53,7 +53,7 @@ fn model_count(source: &Program) -> usize {
     }
     .prepare(
         &std::sync::Arc::new(source.clone()),
-        crate::ProjectSelection::default(),
+        crate::ProjectDirectives::default(),
     )
     .unwrap();
     let compiled = crate::formula_ground::ground(

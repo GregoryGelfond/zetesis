@@ -56,6 +56,30 @@ fn json_attribution_preserves_typed_measurements() {
         }
         assert_work_fields(json, &measurement.work);
     }
+    let operators = view["operators"].as_object().unwrap();
+    assert_eq!(operators.len(), zetesis_cli::GroundingOperator::ALL.len());
+    let completion = typed
+        .get(GroundingPhase::SupportCompletion)
+        .unwrap()
+        .elapsed
+        .unwrap();
+    let mut inside = std::time::Duration::ZERO;
+    for operator in zetesis_cli::GroundingOperator::ALL {
+        let duration = typed.operator(operator).unwrap();
+        assert_eq!(
+            operators[operator.label()].as_u64().map(u128::from),
+            Some(duration.as_nanos())
+        );
+        inside += duration;
+    }
+    // Every operator runs inside support completion and they do not overlap.
+    assert!(inside <= completion);
+    assert!(
+        typed
+            .operator(zetesis_cli::GroundingOperator::SupportJoin)
+            .unwrap()
+            > std::time::Duration::ZERO
+    );
     assert!(
         std::str::from_utf8(&diagnostics)
             .unwrap()

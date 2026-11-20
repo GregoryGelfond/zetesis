@@ -45,13 +45,13 @@ fn closing_preserves_canonical_rows_without_discovering_them() {
         )
         .unwrap();
     let mut descendant =
-        zetesis_core::atom_interner::AtomInterner::for_closed_catalog(&closed.storage, usize::MAX)
+        zetesis_core::atom_registry::AtomRegistry::for_closed_catalog(&closed.storage, usize::MAX)
             .unwrap();
     assert_eq!(descendant.len(), 0);
     let entry = descendant
         .entry_atom_with(
             &atom,
-            zetesis_core::atom_interner::Limits {
+            zetesis_core::atom_registry::Limits {
                 max_atoms: 1,
                 max_bytes: usize::MAX as u128,
             },
@@ -61,7 +61,7 @@ fn closing_preserves_canonical_rows_without_discovering_them() {
     assert_eq!(
         entry
             .insert_with(
-                zetesis_core::atom_interner::Limits {
+                zetesis_core::atom_registry::Limits {
                     max_atoms: 1,
                     max_bytes: usize::MAX as u128
                 },

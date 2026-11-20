@@ -1,5 +1,4 @@
 //! Shared host scopes preserve attempts independently of application outcomes.
-
 use crate::support::sessions::config as cpu_config;
 use std::{sync::mpsc, thread, time::Duration};
 use zetesis_algebra::Cancellation;

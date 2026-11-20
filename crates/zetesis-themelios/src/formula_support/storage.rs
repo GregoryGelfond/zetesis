@@ -886,7 +886,7 @@ mod tests {
 
     #[test]
     fn scoped_reservation_charges_external_and_sibling_storage() {
-        let owner = zetesis_core::atom_interner::AtomInterner::new();
+        let owner = zetesis_core::atom_registry::AtomRegistry::new();
         let external = owner.storage_bytes();
         let mut counters = super::super::Counters::default();
         let mut lease = counters.lease();
