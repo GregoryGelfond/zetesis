@@ -1,6 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 pub(crate) mod arithmetic;
+mod algebra_rows;
 mod objectives;
 mod scoped_body;
 pub(crate) use scoped_body::SourceBodies;
@@ -1292,6 +1293,12 @@ impl<'source> Builder<'_, '_, 'source> {
         } else {
             None
         };
+        // Range-and-arithmetic rules can be enumerated by the shared columnar
+        // operators, which do not walk failed pairs. Domain-guarded rules and
+        // anything the compiler declines keep the existing Join cursor.
+        if guards.is_none() && algebra_rows::instantiate(self, rule, support)? {
+            return Ok(());
+        }
         let mut outer = Join::domain_rule(
             Ir::Source(rule),
             support,
