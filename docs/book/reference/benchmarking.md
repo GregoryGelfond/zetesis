@@ -57,7 +57,7 @@ inputs.
 
 | `--suite` | Workloads |
 | --- | --- |
-| `corpus` (the default) | All 109 maintained cases: the 94-case correctness catalog, integrated Family Crossing and the 14 [reconstructed Vaelii-shaped workloads](https://github.com/GregoryGelfond/zetesis/blob/main/examples/vaelii-reconstructed/README.md) |
+| `corpus` (the default) | All 117 maintained cases: the 94-case correctness catalog, integrated Family Crossing, 13 of the 14 [reconstructed Vaelii-shaped workloads](https://github.com/GregoryGelfond/zetesis/blob/main/examples/vaelii-reconstructed/README.md) and 9 [exact Vaelii test programs](https://github.com/GregoryGelfond/zetesis/blob/main/examples/vaelii-exact/README.md) |
 | `baseline` | SEND, queens variant 02 and task allocation |
 | `queens` | The six unchanged eight-queens encodings |
 | `series` | The maintained 22 generated, constant-amended and original workloads |
@@ -106,14 +106,18 @@ The original catalog and its correctness-gate population remain 94 cases.
 Historical 94-case performance reports keep that population; do not combine
 them with a separately timed Family Crossing run to claim a new 95-case total.
 Reports of the 95-case corpus likewise keep that population. A current
-whole-corpus comparison runs all 109 cases under one recorded plan.
+whole-corpus comparison runs all 117 cases under one recorded plan.
+Vaelii programs that exceed the corpus child timeout or capture limit (the
+exact 90-vertex cover and 13-pigeon pigeonhole, and reconstructed `sg1k`)
+stay in the separately selected `examples/vaelii-slow/manifest.json`
+supplement, run with `--workloads` and the supplement's larger limits.
 Existing caller time, solver, capture and decoding limits still apply, so a
 refused Family Crossing slot remains a visible non-pass in that population.
 
 Library callers use `performance::command::run` for the composed suite, or
 `performance::corpus::workloads` to prepare it without launching processes.
 The low-level `matrix::run` still uses the historical catalog directly.
-`performance::Limits` defaults to 109 case slots and 8 MiB of retained corpus
+`performance::Limits` defaults to 117 case slots and 8 MiB of retained corpus
 source (the source catalog's own default stays 4 MiB); an explicit caller case
 ceiling remains binding. The source catalog's independent default stays 94.
 

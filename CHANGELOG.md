@@ -39,9 +39,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
-- The maintained benchmark corpus adds 14 reconstructed Vaelii-shaped
+- The maintained benchmark corpus adds 13 of 14 reconstructed Vaelii-shaped
   Datalog workloads (`examples/vaelii-reconstructed`), labeled as
-  reconstructions, for 109 cases in all.
+  reconstructions, and 9 exact Vaelii test programs transcribed from
+  Vaelii's own ASP tests (`examples/vaelii-exact`), for 117 cases in all.
+  The exact programs too slow for the corpus timeout (a 90-vertex weighted
+  cover and 13-pigeon pigeonhole) and the reconstructed `sg1k`, whose answer
+  exceeds the corpus capture limit, stay in the separate
+  `examples/vaelii-slow` supplement.
 - Direct source evaluation admits stratified recursion: recursive
   Datalog-shaped closures, joins and arithmetic filters, including recursion
   that negates completed lower strata and negation over their completed

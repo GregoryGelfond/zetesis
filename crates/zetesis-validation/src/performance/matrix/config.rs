@@ -206,7 +206,7 @@ impl Plan {
     pub const fn memory_runs(&self) -> usize {
         self.memory_runs
     }
-    /// Run exactly `paths`, one through 109 distinct relative entry paths of
+    /// Run exactly `paths`, one through 117 distinct relative entry paths of
     /// the plan's suite, in the order given, instead of the whole suite.
     /// The ordinary matrix runner selects corpus cases. When
     /// [`super::super::command::run`] expands the corpus or series, paths name workload
@@ -248,7 +248,7 @@ impl Plan {
         reference: Option<ReferencePolicy>,
     ) -> Result<Vec<Slot>, Error> {
         if !(1..=MAX_CASES).contains(&cases) {
-            return Err(Error::Configuration("matrix cases must be 1..=109"));
+            return Err(Error::Configuration("matrix cases must be 1..=117"));
         }
         let width = self.profiles.len() + 1;
         let mut slots = Vec::with_capacity(
