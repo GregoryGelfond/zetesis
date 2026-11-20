@@ -411,3 +411,16 @@ fn parallel_equal_witnesses_expand_one_continuation() {
     assert_eq!(counts, serial_counts);
     assert_eq!(compiled_atoms(&parallel), compiled_atoms(&serial));
 }
+
+#[test]
+fn parallel_unbound_comparison_before_aggregate_bind() {
+    use crate::formula_support::with_source_workers;
+    use std::num::NonZeroUsize;
+    let source = "i(1..2).{p}.q(I,N):-i(I),N=#count{1:p},N<I,#count{I:p}>=N.";
+    let (serial, serial_counts) = compile(source, true);
+    let ((parallel, counts), tasks) =
+        with_source_workers(NonZeroUsize::new(14).unwrap(), || compile(source, true));
+    assert!(tasks > 0);
+    assert_eq!(counts, serial_counts);
+    assert_eq!(compiled_atoms(&parallel), compiled_atoms(&serial));
+}

@@ -378,7 +378,16 @@ fn literal_role(
         LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
             let (expressions, _) = comparison.operands();
             if comparison_leaves_with(expressions, || counters.work(limits, location))?.is_some() {
-                Ok(LiteralRole::WorkerPure)
+                // A total comparison still cannot run on a worker until every
+                // variable is bound by an earlier worker-pure literal. The
+                // compiler may place `N < I` before `N = #count{...}`; those
+                // compares join the residual suffix and are owner-replayed.
+                if expressions_are_bound(expressions, bound, variables, limits, counters, location)?
+                {
+                    Ok(LiteralRole::WorkerPure)
+                } else {
+                    Ok(LiteralRole::Residual)
+                }
             } else {
                 // Non-total leaves may construct terms; replay is not yet wired.
                 Ok(LiteralRole::Serial)
@@ -408,6 +417,27 @@ fn literal_role(
 
 /// A bind is worker-pure only when every node is numeric (no constructor) and
 /// every variable is already bound by a worker-pure literal.
+fn expressions_are_bound(
+    expressions: [&crate::formula_ir::Expression; 2],
+    bound: &[u64],
+    variables: usize,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    for expression in expressions {
+        for node in &expression.nodes {
+            counters.work(limits, location)?;
+            if let Operation::Variable(slot) = node
+                && (*slot >= variables || !bit_is_set(bound, *slot))
+            {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
 fn integer_bind(
     value: &crate::formula_ir::Expression,
     bound: &[u64],
