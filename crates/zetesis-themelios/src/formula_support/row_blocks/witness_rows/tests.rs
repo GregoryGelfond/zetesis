@@ -224,6 +224,7 @@ fn run_with_reader(
             &mut computation,
             &publication,
             &mut counters,
+            0,
         )
         .unwrap()
     };
@@ -483,7 +484,7 @@ fn staged_occurrences_are_authenticated_before_the_first_head_is_published() {
             )
         })
         .unwrap();
-    batch.suffixes.slice_mut()[0].source_index = usize::MAX;
+    batch.suffixes.poison_source_index(0);
     counters
         .absorb(u128::from(account.work), &limits, rule.location)
         .unwrap();
@@ -496,6 +497,7 @@ fn staged_occurrences_are_authenticated_before_the_first_head_is_published() {
             &mut computation,
             &limits,
             &mut counters,
+            0,
         )
     };
     assert!(matches!(
@@ -626,19 +628,126 @@ fn assert_cancelled_staging(
 }
 
 #[test]
-fn pending_reader_reuses_original_head_skips_without_changing_complete_publication() {
-    fn require_sync<T: Sync>() {}
-    require_sync::<crate::formula_support::SupportAppend<'_>>();
-    let pending = || Some(atom("out", &[1, 4]));
-    let (expected, completions) = original_heads(JOIN, pending());
-    for workers in [1, 2, 3, 7] {
-        let report = run_with_reader(JOIN, workers, pending(), true);
-        assert_eq!(report.heads, expected);
-        assert_eq!(completions, 2);
-        assert_eq!(report.completions, 2);
-        assert_eq!(report.published, 2);
-        if workers > 1 {
-            assert_ne!(report.workers[0], report.workers[1]);
+fn seeded_prefixes_preserve_first_row_order_and_heads() {
+    // Three generators and a decided default negation so the rule is Prime,
+    // expands after the first pattern, and has a short first probe no matter
+    // whether the unary or the 4-row binary leads. The large third atom
+    // supplies at least 56 tuples at d = 2 or d = 3.
+    let mut source = String::from("r(1). r(2). e(1,10). e(1,11). e(2,10). e(2,11).\n");
+    for y in 10..=11 {
+        for z in 1..=30 {
+            source.push_str(&format!("f({y},{z}). "));
         }
+        source.push('\n');
     }
+    source.push_str("p(X,Y,Z):-r(X),e(X,Y),f(Y,Z),not q(X).");
+    assert_prefix_depth_matches_serial(&source);
+}
+
+fn assert_prefix_depth_matches_serial(source: &str) {
+    let (expected, _) = original_heads(source, None);
+    let (program, mut catalog) = prepared_source(source);
+    let rule = program.rules_without_facts().last().unwrap();
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut budget = testing::budget();
+    let (relations, mut append) = catalog
+        .split(&limits, &mut counters, rule.location)
+        .unwrap();
+    let support = Support::indexed(&relations, &limits, &counters, rule.location).unwrap();
+    let mut cursor = {
+        let computation = Computation::new(&mut append, &support);
+        Join::variant_rule(
+            Ir::Source(rule),
+            delta::Variant::Full,
+            &support,
+            None,
+            &mut budget,
+            Context::new(&computation, &limits, &mut counters, rule.location),
+        )
+        .unwrap()
+    };
+    let base = {
+        let mut computation = Computation::new(&mut append, &support);
+        CursorRows::prepare(rule, &mut cursor, &mut computation, &limits, &mut counters)
+            .unwrap()
+            .expect("Prime comparison/negation body should be admitted")
+    };
+    assert!(
+        base.descriptor().prime,
+        "default negation must take the A′ path"
+    );
+    assert!(
+        base.descriptor().len() < super::super::prime::PRIME_GROUPS,
+        "the first probe must be short enough to deepen"
+    );
+    let plan = {
+        let computation = Computation::new(&mut append, &support);
+        WitnessPlan::new(
+            base.descriptor(),
+            &relations,
+            &support,
+            &computation,
+            &limits,
+            &mut counters,
+        )
+        .unwrap()
+    };
+    let prefixes = {
+        let mut computation = Computation::new(&mut append, &support);
+        super::super::prime::prefixes::adapt(
+            plan.rule(),
+            plan.join_plan(),
+            plan.first_rows(),
+            &support,
+            &mut budget,
+            Context::new(&mut computation, &limits, &mut counters, rule.location),
+        )
+        .unwrap()
+    };
+    assert!(prefixes.depth() >= 2 && prefixes.depth() <= 3);
+    assert!(prefixes.len() >= super::super::prime::PRIME_GROUPS);
+    let first = {
+        let mut local = Counters::default();
+        let mut walk = testing::budget();
+        execute_borrowed(
+            &plan,
+            0..plan.len(),
+            &append,
+            &limits,
+            &mut walk,
+            &mut local,
+        )
+        .unwrap()
+    };
+    let seeded = {
+        let mut local = Counters::default();
+        let mut walk = testing::budget();
+        execute_prefixed(
+            &plan,
+            &prefixes,
+            0..prefixes.len(),
+            &append,
+            &limits,
+            &mut walk,
+            &mut local,
+        )
+        .unwrap()
+    };
+    assert_eq!(seeded.len(), first.len());
+    let published = {
+        let mut computation = Computation::new(&mut append, &support);
+        publish(
+            &plan,
+            [&seeded],
+            &support,
+            &mut computation,
+            &limits,
+            &mut counters,
+            0,
+        )
+        .unwrap()
+    };
+    assert_eq!(pending_heads(&append), expected);
+    assert_eq!(published, expected.len());
 }

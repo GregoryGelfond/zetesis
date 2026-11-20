@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 
 use super::*;
 use crate::formula_ground::{Purpose, Schedule};
-use crate::formula_support::{Counters, SourceExecution, testing, with_source_workers};
+use crate::formula_support::{testing, with_source_workers, Counters, SourceExecution};
 use crate::{ExpansionLimits, FormulaLimits, FormulaResource, ProgramSite};
 use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Atom, ValueLimits};
@@ -182,6 +182,40 @@ fn wide_multiblock_bodies_keep_exact_balanced_nodes_and_source_roots() {
 }
 
 #[test]
+fn a_wide_first_probe_keeps_fourteen_emission_groups() {
+    let source = "p(1..80).q(1..80).h(X,Y):-p(X),q(Y).";
+    same(source);
+    let one = run(source, Some(1), &Bound::default());
+    let many = run(source, Some(14), &Bound::default());
+    assert_eq!(one.tasks, 14, "d = 1 positive-flat emission stays at TASKS");
+    assert_eq!(many.tasks, 14);
+}
+
+#[test]
+fn a_short_first_probe_deepens_emission_to_fifty_six_groups() {
+    // Three generators so the stream expands after the first pattern, and a
+    // short first probe no matter whether the unary or the 4-row binary leads.
+    // The large third atom supplies at least 56 tuples at d = 2 or d = 3.
+    let mut source = String::from("r(1). r(2). e(1,10). e(1,11). e(2,10). e(2,11).\n");
+    for y in 10..=11 {
+        for z in 1..=30 {
+            source.push_str(&format!("f({y},{z}). "));
+        }
+        source.push('\n');
+    }
+    source.push_str("h(X,Y,Z):-r(X),e(X,Y),f(Y,Z).");
+    same(&source);
+    let one = run(&source, Some(1), &Bound::default());
+    let many = run(&source, Some(14), &Bound::default());
+    assert_eq!(
+        one.tasks, 56,
+        "deepened emission uses PRIME_GROUPS; actual {}",
+        one.tasks
+    );
+    assert_eq!(many.tasks, one.tasks);
+}
+
+#[test]
 fn no_selected_descendant_publishes_no_vocabulary() {
     let source = "p(1;2;3).q(4;5).k(7;8).h(X,Y):-p(X),q(X),k(Y).";
     same(source);
@@ -260,7 +294,7 @@ fn cancellation_and_entry_refusal_keep_typed_failure_without_source_publication(
 
 #[test]
 fn actual_complete_preparation_preserves_original_and_every_frozen_truth() {
-    use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+    use zetesis_ferraris::{models, models_reduct, Interpretation, Limits};
     for (source, staged) in [
         ("{p(1);q(1);r(1)}.h(X):-p(X),q(X).h(X):-p(X),r(X).", false),
         ("{-p(1);q(1)}.-h(X,7,X):- -p(X),q(X).", false),

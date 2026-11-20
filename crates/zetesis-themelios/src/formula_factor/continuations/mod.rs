@@ -1,5 +1,7 @@
 //! Factor complete positive witness runs before expanding their common proposals.
 
+mod parallel;
+
 use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_ground::{Builder, FALSUM};
@@ -30,6 +32,26 @@ pub(crate) fn rule<'source>(
     else {
         return Ok(false);
     };
+    if let Some(executor) = builder.executor {
+        drop(rows);
+        if parallel::rule(builder, rule, join, support, executor)? {
+            return Ok(true);
+        }
+        let Some(restored) = Continuations::new(
+            join,
+            rule,
+            Context::new(
+                &*builder.computation,
+                builder.limits,
+                builder.counters,
+                rule.location,
+            ),
+        )?
+        else {
+            return Ok(false);
+        };
+        rows = restored;
+    }
     while rows.start(
         builder.budget,
         Context::new(

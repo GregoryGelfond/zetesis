@@ -9,9 +9,9 @@ use zetesis_test_support::thresholds::first_success;
 use zetesis_domain::numeric::Status;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaResource, GroundingObserver, GroundingOptions,
-    GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy, prepare_formula,
+    prepare_formula, AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation,
+    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaResource, GroundingObserver,
+    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy,
 };
 
 #[derive(Default)]
@@ -162,10 +162,23 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         // through existing membership; Table intersects both equalities. Both
         // still check the offered row, with no marginal c rows for the guard
         // to reject. The a/b prefixes and probes remain distinct above them.
+        //
+        // Unguarded Indexed emission deepens to d = 2: eight first rows are
+        // below PRIME_GROUPS, and the 64 a×b prefixes are not, so workers
+        // seed those tuples and walk c. That walk records 64×2 prefix rows
+        // plus the 16 complete c rows, and one probe per prefix after the
+        // initial scan. Domain narrowing leaves only 16 d = 2 tuples, so the
+        // guarded run — and Table, which declines this emission path — stay
+        // on the first-row walk below.
         let (c_rows, c_rejected) = (16, 0);
-        assert_eq!(before.join_rows, Some(8 + 8 * 8 + c_rows));
+        if strategy == JoinStrategy::Indexed {
+            assert_eq!(before.join_rows, Some(64 * 2 + c_rows));
+            assert_eq!(before.join_probes, Some(1 + 64));
+        } else {
+            assert_eq!(before.join_rows, Some(8 + 8 * 8 + c_rows));
+            assert_eq!(before.join_probes, Some(1 + 8 + 8 * 8));
+        }
         assert_eq!(after.join_rows, Some(8 + 4 * 8 + c_rows));
-        assert_eq!(before.join_probes, Some(1 + 8 + 8 * 8));
         assert_eq!(after.join_probes, Some(1 + 4 + 4 * 4));
         assert_eq!(after.domain_rejected_rows, Some(4 + 4 * 4 + c_rejected));
         assert_eq!(after.domain_guard_rows, after.join_rows);
@@ -255,12 +268,10 @@ fn producer_meets_prune_downstream_empty_joins() {
         let narrowed = ground(source, strategy, Some(DomainLimits::default()), &on).unwrap();
         equal(&complete, &narrowed);
         assert_eq!(on.status.get(), Some(Status::FixedPoint));
-        assert!(
-            narrowed
-                .atoms()
-                .iter()
-                .all(|atom| atom.predicate().name() != "q")
-        );
+        assert!(narrowed
+            .atoms()
+            .iter()
+            .all(|atom| atom.predicate().name() != "q"));
         let before = *off.rules.borrow().last().unwrap();
         let after = *on.rules.borrow().last().unwrap();
         assert!(after.domain_rejected_rows.unwrap() > 0);
@@ -654,13 +665,11 @@ fn objective_observations_preserve_scored_answers() {
                 assert_eq!(shown, ["f(0)", "f(1)", "p(0)", "p(1)"]);
                 assert!(input.projective_domain().is_explicit());
                 assert_eq!(input.projective_domain().atoms().len(), 2);
-                assert!(
-                    input
-                        .projective_domain()
-                        .atoms()
-                        .iter()
-                        .all(|atom| atom.predicate().name() == "p")
-                );
+                assert!(input
+                    .projective_domain()
+                    .atoms()
+                    .iter()
+                    .all(|atom| atom.predicate().name() == "p"));
             }
         }
     }

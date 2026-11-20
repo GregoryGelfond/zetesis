@@ -119,6 +119,20 @@ impl<'a, 'source> Cursor<'a, 'source> {
         targets: Range<usize>,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
+        Self::new_filtered(literals, values, support, plan, targets, context, |_| false)
+    }
+
+    /// Same as [`Self::new`], omitting residual generators whose body index
+    /// `skip` names. The `literals` pointer still covers the full body.
+    pub(crate) fn new_filtered(
+        literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
+        values: Binding<'static>,
+        support: &'a Support<'source>,
+        plan: Option<&'a crate::formula_assignment_plan::Plan>,
+        targets: Range<usize>,
+        context: Context<'_, &Computation<'_, '_>>,
+        skip: impl Fn(usize) -> bool,
+    ) -> Result<Self, FormulaFailure> {
         let literals = literals.into();
         let Context {
             computation,
@@ -160,6 +174,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
             literals,
             plan,
             &targets,
+            skip,
             Context::new(computation, limits, counters, location),
         )?;
         let other = cursor.bytes() - cursor.states.capacity() * size_of::<State<'source>>();
@@ -199,6 +214,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         literals: Ir<'a, 'source, [LiteralIr]>,
         plan: Option<&'a crate::formula_assignment_plan::Plan>,
         targets: &Range<usize>,
+        skip: impl Fn(usize) -> bool,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<(), FormulaFailure> {
         let Context {
@@ -213,6 +229,9 @@ impl<'a, 'source> Cursor<'a, 'source> {
         if let Some(plan) = plan {
             for step in &plan.steps {
                 counters.work(limits, location)?;
+                if skip(step.literal) {
+                    continue;
+                }
                 if targets.contains(&step.produced) {
                     self.generator(
                         Generator {
@@ -227,16 +246,19 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 }
             }
         } else {
-            for literal in literals.iter() {
+            for (index, literal) in literals.get().iter().enumerate() {
                 counters.work(limits, location)?;
+                if skip(index) {
+                    continue;
+                }
                 if matches!(
-                    literal.get(),
+                    literal,
                     LiteralIr::Bind { .. } | LiteralIr::Range { binder: true, .. }
-                ) && target(literal.get()).is_some_and(|target| targets.contains(&target))
+                ) && target(literal).is_some_and(|target| targets.contains(&target))
                 {
                     self.generator(
                         Generator {
-                            literal,
+                            literal: literals.map(|items| &items[index]),
                             required: None,
                         },
                         computation,
@@ -246,16 +268,19 @@ impl<'a, 'source> Cursor<'a, 'source> {
                     )?;
                 }
             }
-            for literal in literals.iter() {
+            for (index, literal) in literals.get().iter().enumerate() {
                 counters.work(limits, location)?;
-                if let LiteralIr::Aggregate(aggregate) = literal.get()
+                if skip(index) {
+                    continue;
+                }
+                if let LiteralIr::Aggregate(aggregate) = literal
                     && aggregate
                         .binding
                         .is_some_and(|target| targets.contains(&target))
                 {
                     self.generator(
                         Generator {
-                            literal,
+                            literal: literals.map(|items| &items[index]),
                             required: None,
                         },
                         computation,

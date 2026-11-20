@@ -15,6 +15,7 @@ mod tests;
 pub(crate) mod witness_rows;
 pub(crate) use objective_rows::try_numeric as parallel_numeric_rows;
 pub(crate) mod coordinator;
+pub(crate) mod prime;
 
 #[cfg(test)]
 use std::ops::Range;
@@ -68,6 +69,15 @@ fn checked_eligible(
 enum BodyKind {
     PositiveAtoms,
     ProducerLeaves,
+    /// Widened A′ admission: worker-pure comparisons, default negation,
+    /// structural patterns, and integer binds. Trailing residuals (`not not`,
+    /// term-minting binds, and any later comparisons) are skipped in the
+    /// Join walk and replayed by the owner after restore.
+    Prime,
+    /// Like Prime, but trailing aggregate literals are residuals. Used only
+    /// by formula-factor continuations, so support admission is unchanged.
+    /// Family evaluation stays in the owner's existing emit path.
+    Continuations,
 }
 
 fn checked_rule(
@@ -138,6 +148,12 @@ fn checked_body_kind(
     location: ProgramSite,
     kind: BodyKind,
 ) -> Result<bool, FormulaFailure> {
+    if kind == BodyKind::Prime {
+        return checked_prime_body(body, variables, computation, limits, counters, location);
+    }
+    if kind == BodyKind::Continuations {
+        return checked_continuation_body(body, variables, computation, limits, counters, location);
+    }
     for literal in body {
         counters.work(limits, location)?;
         match literal {
@@ -165,6 +181,62 @@ fn checked_body_kind(
         // Only source patterns are authenticated by this existing second pass.
         if let LiteralIr::Atom(_, pattern) = literal
             && !checked_pattern(*pattern, variables, computation, limits, counters, location)?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn checked_prime_body(
+    body: &[LiteralIr],
+    variables: usize,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    if prime::classify_body(body, variables, computation, limits, counters, location)?.is_none() {
+        return Ok(false);
+    }
+    checked_residual_patterns(body, variables, computation, limits, counters, location)
+}
+
+fn checked_continuation_body(
+    body: &[LiteralIr],
+    variables: usize,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    if prime::classify_continuation_body(body, variables, computation, limits, counters, location)?
+        .is_none()
+    {
+        return Ok(false);
+    }
+    checked_residual_patterns(body, variables, computation, limits, counters, location)
+}
+
+/// Trailing residuals are admitted: classify already declined a generating
+/// atom at or after the first residual.
+fn checked_residual_patterns(
+    body: &[LiteralIr],
+    variables: usize,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    for literal in body {
+        counters.work(limits, location)?;
+        let pattern = match literal {
+            LiteralIr::Atom(_, pattern) => Some(*pattern),
+            LiteralIr::PatternAtom(pattern) => Some(pattern.atom),
+            _ => None,
+        };
+        if let Some(pattern) = pattern
+            && !checked_pattern(pattern, variables, computation, limits, counters, location)?
         {
             return Ok(false);
         }
@@ -273,6 +345,8 @@ impl<'plan, 'source> RowPlan<'plan, 'source> {
             plan: &self.plan,
             relations: self.relations,
             rows: self.rows.slice(),
+            prime: false,
+            continuations: false,
         }
     }
 
