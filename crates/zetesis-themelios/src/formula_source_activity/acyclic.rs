@@ -248,6 +248,71 @@ impl SourceEligibility {
         if closed.is_some() {
             saturation_agrees(index, rule, support, context)?;
         }
+        // Bind-enumerable bodies keep exact activity on retained rows only.
+        // The compiler already applied every residual test, and it declines
+        // default negation, so decided-negation filtering is not required.
+        if let Some((template, width)) = crate::formula_ground::algebra_rows::compile(
+            rule,
+            context.computation,
+            context.limits,
+            context.counters,
+            support,
+        )? {
+            let bindings = crate::formula_ground::algebra_rows::enumerate(
+                &template,
+                context.limits,
+                context.counters,
+                rule.location,
+            )?;
+            let mut assignment = crate::formula_binding::Binding::new(
+                context.computation,
+                context.limits,
+                context.counters,
+                rule.location,
+            )?;
+            assignment.extend_scope(
+                rule.variables,
+                context.computation,
+                context.limits,
+                context.counters,
+                rule.location,
+            )?;
+            let mut buffer = vec![0i32; width];
+            for row in bindings.row_range() {
+                bindings.row_into(row, &mut buffer);
+                crate::formula_ground::algebra_rows::bind_row(
+                    context.computation,
+                    context.limits,
+                    context.counters,
+                    &mut assignment,
+                    &buffer,
+                    rule.location,
+                )?;
+                if let Some(batch) = closed.as_deref_mut() {
+                    let HeadIr::Normal(Some(head)) = &rule.head else {
+                        unreachable!("a closed component has a head")
+                    };
+                    let atom = context.atom(*head, &assignment)?;
+                    batch.push(
+                        &atom,
+                        context.computation,
+                        context.limits,
+                        context.counters,
+                        context.location,
+                    )?;
+                    continue;
+                }
+                let body = self.fold_activity(&rule.body, &assignment, true, context)?;
+                match &rule.head {
+                    HeadIr::Normal(Some(head)) => {
+                        self.retain(*head, &assignment, body, 0, context)?;
+                    }
+                    HeadIr::Normal(None) => consistent &= body != Activity::Required,
+                    _ => unreachable!("complete normal source certificate"),
+                }
+            }
+            return Ok(consistent);
+        }
         let mut join = Join::rule(
             rule,
             support,

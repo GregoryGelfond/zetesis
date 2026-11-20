@@ -1107,22 +1107,22 @@ fn derive_variants_with_executor<'source>(
                 location: _,
             },
     } = context;
-    // Range-and-arithmetic producers compile into the same columnar Template
-    // formula instantiation uses. Completing their heads from retained rows
-    // avoids walking failing pairs on the Join cursor. The compiler declines
-    // atoms, so domain-guarded and atom-bounded rules keep the existing path.
-    if guards.is_none()
-        && totality.is_none()
-        && derive_algebra_variants(
-            rule,
-            variants,
-            support,
-            computation,
-            limits,
-            budget,
-            counters,
-        )?
-    {
+    // Range-and-arithmetic and atom-bounded complete domains compile into
+    // the same columnar Template formula instantiation uses. Completing
+    // their heads from retained rows avoids walking failing pairs on the
+    // Join cursor. Guards and static totality are Join-cursor certificates;
+    // they must not suppress Bind when the compiler admits the body. The
+    // compiler still declines free cross-product atoms, constraints, and
+    // incomplete or recursive domains.
+    if derive_algebra_variants(
+        rule,
+        variants,
+        support,
+        computation,
+        limits,
+        budget,
+        counters,
+    )? {
         return Ok(());
     }
     // A body-less normal rule without variables has exactly one binding, the
