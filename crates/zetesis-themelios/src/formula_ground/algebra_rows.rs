@@ -15,7 +15,7 @@
 //! declines a missing or growing (recursive) domain. Rules the compiler
 //! declines keep the Join cursor.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::BinaryOp;
@@ -25,11 +25,12 @@ use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::{PredicateRef, TermKey};
 
 use super::Builder;
+use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
 use crate::formula_support::components::Scalar;
 use crate::formula_support::{Computation, Counters, Support};
-use crate::{FormulaFailure, FormulaLimits, ProgramSite};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
 
 /// Try to ground `rule` with the columnar operators.
 ///
@@ -193,6 +194,17 @@ pub(crate) fn compile(
         return Ok(None);
     };
     let width = rule.body_variables;
+    // A fact column whose slot never appears in a comparison is a free
+    // cross-product, the same class as a range sitting beside an atom.
+    // Those bodies stay on the Join cursor so join order and pairwise
+    // work remain visible. Every Guerin-style num(X), num(Y) slot is
+    // mentioned in a comparison and still compiles.
+    if !facts.is_empty() {
+        let compared = comparison_slots(rule);
+        if facts.keys().any(|slot| !compared.contains(slot)) {
+            return Ok(None);
+        }
+    }
     let mut intern = Intern {
         computation,
         limits,
@@ -201,6 +213,14 @@ pub(crate) fn compile(
     let mut template = Template::new(width);
     let mut saw_domain = width == 0 || !facts.is_empty();
     for (slot, values) in facts {
+        // AssignmentValues is the width of one domain, just as the Join
+        // cursor charges an inclusive range before walking it.
+        ceiling(
+            FormulaResource::AssignmentValues,
+            values.len() as u128,
+            intern.limits.max_assignment_values as u128,
+            rule.location,
+        )?;
         template = match template.with_facts(slot, values) {
             Ok(template) => template,
             Err(TemplateError::Slot | TemplateError::MissingHead) => return Ok(None),
@@ -368,6 +388,43 @@ struct Intern<'a, 'terms, 'source> {
     counters: &'a mut Counters,
 }
 
+fn comparison_slots(rule: &RuleIr) -> BTreeSet<usize> {
+    let mut slots = BTreeSet::new();
+    for literal in &rule.body {
+        let LiteralIr::Compare(comparison) = literal else {
+            continue;
+        };
+        expression_slots(comparison.left(), &mut slots);
+        expression_slots(comparison.right(), &mut slots);
+    }
+    slots
+}
+
+fn expression_slots(expression: &Expression, slots: &mut BTreeSet<usize>) {
+    for operation in &expression.nodes {
+        if let Operation::Variable(slot) = operation {
+            slots.insert(*slot);
+        }
+    }
+}
+
+fn charge_assignment_range(
+    lower: i32,
+    upper: i32,
+    limits: &FormulaLimits,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    let Some(range) = crate::integer_range::inclusive(Some(lower), Some(upper)) else {
+        return Ok(());
+    };
+    ceiling(
+        FormulaResource::AssignmentValues,
+        u128::from(crate::integer_range::width(&range)),
+        limits.max_assignment_values as u128,
+        location,
+    )
+}
+
 fn add_range(
     template: Template,
     target: usize,
@@ -380,6 +437,7 @@ fn add_range(
         return Ok(None);
     };
     if let Some(hi) = constant_i32(upper, intern, location)? {
+        charge_assignment_range(lo, hi, intern.limits, location)?;
         return Ok(Some(map_template(template.with_range(target, lo, hi))));
     }
     if let Some((parent, delta)) = affine(upper, intern, location)? {
