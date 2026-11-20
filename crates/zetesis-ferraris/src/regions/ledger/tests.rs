@@ -13,6 +13,7 @@ use crate::{
 use zetesis_algebra::{Cancellation, Stop};
 
 mod carrier;
+mod conflict;
 mod consolidation;
 mod early;
 mod eviction;
@@ -213,6 +214,7 @@ fn the_founded_output_limit_declines_a_wider_row() {
         &program.theory,
         LearningLimits {
             founded_outputs: 1,
+            conflict_attempts: 0,
             ..LearningLimits::default()
         },
     );

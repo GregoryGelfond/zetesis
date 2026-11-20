@@ -72,7 +72,7 @@ mod counters;
 mod extrema;
 mod founded;
 mod ledger;
-pub use ledger::{LearningLimits, LearningOwner, LearningStore};
+pub use ledger::{ConflictCore, LearningLimits, LearningOwner, LearningStore};
 mod generators;
 pub use generators::{
     GeneratorOrder, GeneratorOrderAttempt, GeneratorOrderError, GeneratorOrderLimits,
@@ -574,6 +574,21 @@ pub struct SupportExplanationStatistics {
     pub peak_bytes: u128,
 }
 
+/// Capture and retention counts of the refuted-region conflict source.
+/// Matching hits of those rows still use [`SupportExplanationStatistics`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ConflictLearningStatistics {
+    /// Refuted carrier regions for which a conflict capture was attempted.
+    pub attempts: u64,
+    /// Distinct conflict rows retained by the worker.
+    pub certified: u64,
+    /// Attempts that supplied no new bounded conflict row.
+    pub declined: u64,
+    /// Decided literals dropped by minimization, across attempts.
+    pub shrunk: u64,
+}
+
 /// The work one narrowing charged.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -587,6 +602,8 @@ pub struct NarrowingStatistics {
     pub founded_work: u64,
     /// Conditional support deductions, included in the total reading work.
     pub support_explanations: SupportExplanationStatistics,
+    /// Refuted-region conflict capture, not included in support explanations.
+    pub conflict_explanations: ConflictLearningStatistics,
     /// Propagation events: nodes and atoms learned and their neighbours
     /// revisited, atoms whose support was rechecked, and threshold rows whose
     /// residual divisibility or changed requirements were checked.
@@ -1636,6 +1653,8 @@ impl Narrower {
             learning: C::borrow_learning(&mut scratch.learning),
         };
         if closure.close(subject, self, region, work, statistics)? == Step::Contradiction {
+            drop(closure);
+            self.remember_refuted_conflict(subject, region, scratch, work, statistics)?;
             return Ok(Narrowing::Refuted);
         }
         // The atoms this closure learned decide the region; the region's own
@@ -1655,6 +1674,148 @@ impl Narrower {
         }
         region.snapshot_decided(&mut closure.known.seen);
         Ok(Narrowing::Fixed { changed })
+    }
+
+    /// Record a theory-class conflict row from a carrier region this closure
+    /// just refuted, when no founded or already-matching row explained it.
+    /// Restriction, bound and frozen subjects never reach this: they are not
+    /// carriers. Minimization probes set `skip_capture` and are ignored.
+    fn remember_refuted_conflict<C: ReadingClass, Q: Quota + ?Sized>(
+        &self,
+        subject: Context<'_, C>,
+        region: &Region,
+        scratch: &mut NarrowingScratch,
+        work: &mut Meter<'_, Q>,
+        statistics: &mut NarrowingStatistics,
+    ) -> Result<(), Failure<Q::Error>> {
+        if !scratch.common.matching || scratch.learning.skip_capture {
+            return Ok(());
+        }
+        if subject.learning().is_none() {
+            return Ok(());
+        }
+        if statistics.support_explanations.certified != 0
+            || statistics.support_explanations.refuted != 0
+        {
+            return Ok(());
+        }
+        if !scratch.learning.explanations.can_capture_conflict() {
+            return Ok(());
+        }
+        let mut decided: Vec<(usize, bool)> = region.decided().collect();
+        if decided.is_empty() {
+            return Ok(());
+        }
+        let core = subject
+            .learning()
+            .expect("carrier already checked")
+            .limits()
+            .conflict_core;
+        if core == ConflictCore::Minimized {
+            if let Some(original) = subject.original_subject() {
+                decided =
+                    self.minimize_conflict_core(original, decided, scratch, work, statistics)?;
+            }
+        }
+        scratch.learning.explanations.capture_conflict(
+            &decided,
+            work,
+            &mut statistics.conflict_explanations,
+        )
+    }
+
+    /// Drop decided literals that a fresh carrier narrowing still refutes
+    /// without. Each probe reuses this worker's scratch and ledger but does
+    /// not capture. A literal that a probe does not refute is kept. The
+    /// original set is returned if it is already a singleton.
+    fn minimize_conflict_core<Q: Quota + ?Sized>(
+        &self,
+        subject: OriginalSubject<'_>,
+        mut decided: Vec<(usize, bool)>,
+        scratch: &mut NarrowingScratch,
+        work: &mut Meter<'_, Q>,
+        statistics: &mut NarrowingStatistics,
+    ) -> Result<Vec<(usize, bool)>, Failure<Q::Error>> {
+        let atoms = subject.theory().atom_count();
+        let context = Context::from(subject);
+        let before = decided.len();
+        let mut index = 0;
+        scratch.learning.skip_capture = true;
+        let result = (|| {
+            while index < decided.len() && decided.len() > 1 {
+                work.poll().map_err(Failure::from)?;
+                let mut trial_set = decided.clone();
+                trial_set.remove(index);
+                let mut trial = Region::all_open(atoms);
+                for &(atom, value) in &trial_set {
+                    if value {
+                        if !trial.hold(atom) {
+                            return Err(Failure::from(Stop::InvalidProgram));
+                        }
+                    } else if !trial.cut(atom) {
+                        return Err(Failure::from(Stop::InvalidProgram));
+                    }
+                }
+                let mut knowledge = self.knowledge();
+                let refuted = match &mut knowledge.width {
+                    Width::Compact16(known) => {
+                        self.conflict_probe(context, &mut trial, known, scratch, work)?
+                    }
+                    Width::Compact32(known) => {
+                        self.conflict_probe(context, &mut trial, known, scratch, work)?
+                    }
+                    Width::Native(known) => {
+                        self.conflict_probe(context, &mut trial, known, scratch, work)?
+                    }
+                };
+                if refuted {
+                    decided.remove(index);
+                } else {
+                    index += 1;
+                }
+            }
+            Ok(())
+        })();
+        scratch.learning.skip_capture = false;
+        result?;
+        statistics.conflict_explanations.shrunk += (before - decided.len()) as u64;
+        Ok(decided)
+    }
+
+    /// One minimization probe: close the trial region under a fresh knowledge
+    /// without selecting a split and without capturing. Does not refund the
+    /// caller's meter.
+    fn conflict_probe<W: Count, C: ReadingClass, Q: Quota + ?Sized>(
+        &self,
+        subject: Context<'_, C>,
+        region: &mut Region,
+        known: &mut Known<W>,
+        scratch: &mut NarrowingScratch,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
+        scratch.common.prepare(subject.theory().atom_count());
+        scratch.common.founded.end_local();
+        if subject.producers().is_some() && subject.frozen().is_none() {
+            scratch.common.founded.forget_foreign(subject.theory());
+            scratch
+                .common
+                .founded
+                .begin_local(subject.theory(), known.founded_closed, work)?;
+        }
+        scratch.common.matching = subject.learning().is_some();
+        if let Some(owner) = subject.learning() {
+            scratch.learning.explanations.prepare(owner);
+            scratch.learning.explanations.begin_narrowing();
+            scratch.common.match_dirty = true;
+            scratch.learning.decided.clear();
+        }
+        let mut closure = NarrowingState {
+            known: known.borrow(),
+            lists: &mut scratch.common,
+            learning: C::borrow_learning(&mut scratch.learning),
+        };
+        let mut unused = NarrowingStatistics::default();
+        Ok(closure.close(subject, self, region, work, &mut unused)? == Step::Contradiction)
     }
 }
 
@@ -1838,6 +1999,10 @@ struct LearningScratch {
     decided: Vec<usize>,
     /// Row positions one matching step tests.
     match_rows: Vec<usize>,
+    /// When true, a contradicted carrier does not capture a founded or
+    /// conflict row. Minimization probes set this so trial regions do not
+    /// learn from their own refutation.
+    skip_capture: bool,
 }
 
 impl NarrowingScratch {
@@ -2493,7 +2658,7 @@ impl<W: Count, C: ReadingClass> NarrowingState<'_, W, C> {
         let Some(learning) = self.learning.state_mut() else {
             return Ok(());
         };
-        if !self.lists.matching || !learning.explanations.can_capture() {
+        if !self.lists.matching || learning.skip_capture || !learning.explanations.can_capture() {
             return Ok(());
         }
         // Prefer a direct contradiction. If none is present, capture one new

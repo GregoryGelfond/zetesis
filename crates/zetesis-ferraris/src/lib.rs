@@ -56,14 +56,14 @@ pub use reduct::FrozenReduct;
 pub use regions::ParityKnowledge;
 pub use regions::{
     ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ChoiceHeads,
-    ClosedQuery, Extraction, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
-    FrozenPreparationStatistics, FrozenSubject, GeneratorOrder, GeneratorOrderAttempt,
-    GeneratorOrderError, GeneratorOrderLimits, Knowledge, LearningAttempt, LearningLimits,
-    LearningOwner, LearningStore, NARROWING_BATCH, Narrower, NarrowingAttempt, NarrowingScratch,
-    NarrowingStatistics, OriginalSubject, ParityStatistics, ParitySystem, PreferenceAttempt,
-    PreparationAttempt, PreparationError, PreparationLimits, PreparationStatus, PreparationWork,
-    Producers, RegionLimits, RootImageStatistics, RootPreparation, SupportExplanationStatistics,
-    producers,
+    ClosedQuery, ConflictCore, ConflictLearningStatistics, Extraction, FrozenPreparation,
+    FrozenPreparationAttempt, FrozenPreparationLimits, FrozenPreparationStatistics, FrozenSubject,
+    GeneratorOrder, GeneratorOrderAttempt, GeneratorOrderError, GeneratorOrderLimits, Knowledge,
+    LearningAttempt, LearningLimits, LearningOwner, LearningStore, NARROWING_BATCH, Narrower,
+    NarrowingAttempt, NarrowingScratch, NarrowingStatistics, OriginalSubject, ParityStatistics,
+    ParitySystem, PreferenceAttempt, PreparationAttempt, PreparationError, PreparationLimits,
+    PreparationStatus, PreparationWork, Producers, RegionLimits, RootImageStatistics,
+    RootPreparation, SupportExplanationStatistics, producers,
 };
 pub use slate::{SlateId, SlateRef};
 pub use theory::{

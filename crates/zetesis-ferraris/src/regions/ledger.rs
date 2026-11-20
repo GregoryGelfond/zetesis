@@ -37,14 +37,30 @@ const SCAN_ROWS: usize = u64::BITS as usize;
 /// The largest tier [`LearningLimits::for_allowance`] derives.
 const MAX_TIER_ROWS: usize = 4_096;
 
+/// How a refuted region's decided literals are reduced to a core.
+///
+/// Both options are sound: each retained set is a conflict of the carrier's
+/// theory. [`Self::Full`] records every decided literal. [`Self::Minimized`]
+/// drops literals a fresh carrier narrowing still refutes without, at one
+/// probe per dropped or retained literal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConflictCore {
+    /// Every decided literal of the refuted region.
+    Full,
+    /// A subset still refuted by a fresh carrier narrowing of those literals.
+    Minimized,
+}
+
 /// Allowances for learned rows: per tier (one walk's or worker's ledger), per
 /// store, per source, and what and when a tier shares.
 ///
 /// The defaults are the limits the founded source has always had: 64 rows,
 /// 256 capture attempts, 131,072 capture reads over a tier's lifetime, 4,096
 /// reads and 65,536 bytes per capture, and rows of at most 16 conditions and
-/// 64 outputs. A tier shares rows of at most 8 conditions, or rows that have
-/// hit twice, and delivers every 4,096 regions its walk visits.
+/// 64 outputs. The conflict source starts with the same attempt cap and a
+/// condition cap of 16, and records a full decided-literal core. A tier shares
+/// rows of at most 8 conditions, or rows that have hit twice, and delivers
+/// every 4,096 regions its walk visits.
 /// [`LearningLimits::for_allowance`] raises the tier and store capacities
 /// with the memory allowance and never lowers any limit below these.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,6 +96,15 @@ pub struct LearningLimits {
     /// visited this many regions since the tier last delivered, as well as at
     /// the walk's end. Zero never triggers.
     pub publish_regions: u64,
+    /// Conflict-source capture attempts over a tier's lifetime.
+    pub conflict_attempts: usize,
+    /// Signed conditions one conflict row may require, after one decided
+    /// literal is taken as the output.
+    pub conflict_conditions: usize,
+    /// Conflict discovery, comparison and retention reads over a tier's life.
+    pub conflict_work: u64,
+    /// How a refuted region's decided literals are reduced to a core.
+    pub conflict_core: ConflictCore,
 }
 
 impl LearningLimits {
@@ -98,6 +123,10 @@ impl LearningLimits {
         share_conditions: 8,
         share_hits: 2,
         publish_regions: 4_096,
+        conflict_attempts: 256,
+        conflict_conditions: 16,
+        conflict_work: 131_072,
+        conflict_core: ConflictCore::Full,
     };
 
     /// The limits for a candidate-memory allowance of `bytes`: one tier row
@@ -315,12 +344,40 @@ impl Literals {
             outputs,
         })
     }
+
+    /// One decided literal becomes a negated output; the rest are conditions.
+    /// The set must be non-empty and no wider than `max_conditions` plus that
+    /// output. Literals are sorted and de-duplicated by atom.
+    fn from_conflict(
+        decided: &[(usize, bool)],
+        max_conditions: usize,
+        peak: &mut u128,
+    ) -> Result<Option<Self>, Stop> {
+        let mut literals = Vec::new();
+        literals
+            .try_reserve_exact(decided.len())
+            .map_err(|_| Stop::Allocation)?;
+        literals.extend_from_slice(decided);
+        literals.sort_unstable_by_key(|&(atom, _)| atom);
+        literals.dedup();
+        *peak = (*peak).max(literals.capacity() as u128 * size_of::<(usize, bool)>() as u128);
+        if literals.is_empty() || literals.len() - 1 > max_conditions {
+            return Ok(None);
+        }
+        let (atom, value) = literals.pop().expect("a non-empty conflict has an output");
+        Ok(Some(Self {
+            conditions: literals,
+            outputs: vec![(atom, !value)],
+        }))
+    }
 }
 
 /// Which source learned a row. The founded floor protects founded rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Source {
     Founded,
+    /// A core of a refuted carrier region, a row of the unrestricted theory.
+    Conflict,
 }
 
 /// A retained row with what eviction and sharing read about it.
@@ -394,6 +451,10 @@ pub(in crate::regions) struct Ledger {
     indexed_steps: u64,
     /// Founded rows held, which the founded floor protects.
     founded: usize,
+    /// Conflict-source capture attempts over the tier's life.
+    conflict_attempts: usize,
+    /// Conflict discovery, comparison and retention reads still allowed.
+    conflict_remaining: u64,
     /// Rows evicted over the tier's life.
     evicted: u64,
     /// The store this tier last read completely, and that store's retention
@@ -422,6 +483,8 @@ impl Default for Ledger {
             #[cfg(test)]
             indexed_steps: 0,
             founded: 0,
+            conflict_attempts: 0,
+            conflict_remaining: limits.conflict_work,
             evicted: 0,
             seeded_from: None,
         }
@@ -454,8 +517,10 @@ impl Ledger {
         self.seeded_from = None;
         self.owner = Some(owner.clone());
         self.attempts = 0;
+        self.conflict_attempts = 0;
         self.epoch = 0;
         self.remaining = owner.limits.founded_work;
+        self.conflict_remaining = owner.limits.conflict_work;
         self.sharing = owner.limits.share_work;
         self.stale = true;
         self.full = true;
@@ -617,6 +682,60 @@ impl Ledger {
         self.attempts < limits.founded_attempts
             && self.remaining != 0
             && (self.rows.len() < limits.tier_rows || self.can_evict())
+    }
+
+    pub(in crate::regions) fn can_capture_conflict(&self) -> bool {
+        let limits = self.limits();
+        self.conflict_attempts < limits.conflict_attempts
+            && self.conflict_remaining != 0
+            && (self.rows.len() < limits.tier_rows || self.can_evict())
+    }
+
+    /// Retain a theory-class row from a refuted carrier region's decided
+    /// literals, when the conflict source still has an attempt and the row
+    /// fits the condition cap. A set that is empty or too wide is declined.
+    pub(in crate::regions) fn capture_conflict<Q: Quota + ?Sized>(
+        &mut self,
+        decided: &[(usize, bool)],
+        work: &mut Meter<'_, Q>,
+        counts: &mut crate::regions::ConflictLearningStatistics,
+    ) -> Result<(), Failure<Q::Error>> {
+        if !self.can_capture_conflict() {
+            return Ok(());
+        }
+        let limits = self.limits();
+        self.conflict_attempts += 1;
+        counts.attempts += 1;
+        let mut temporary_peak = 0;
+        let Some(literals) =
+            Literals::from_conflict(decided, limits.conflict_conditions, &mut temporary_peak)?
+        else {
+            counts.declined += 1;
+            return Ok(());
+        };
+        let retained = self.retained_bytes();
+        let mut remaining = self.conflict_remaining;
+        let result = self.retain(
+            Proposed {
+                literals,
+                source: Source::Conflict,
+                hits: 0,
+                maximum_outputs: 1,
+            },
+            &mut remaining,
+            work,
+            &mut temporary_peak,
+        );
+        self.conflict_remaining = remaining;
+        self.peak_bytes = self
+            .peak_bytes
+            .max(retained + temporary_peak)
+            .max(self.retained_bytes());
+        match result? {
+            Retained::Added(_) => counts.certified += 1,
+            Retained::Subsumed(_) | Retained::Declined => counts.declined += 1,
+        }
+        Ok(())
     }
 
     /// Whether a full tier has a row eviction may take.
