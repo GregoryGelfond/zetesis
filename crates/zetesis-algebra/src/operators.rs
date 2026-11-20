@@ -10,8 +10,8 @@
 //! Columnar relations are the default representation. CPU kernels are written
 //! as simple loops over column slices so the compiler can auto-vectorize;
 //! hand-written SIMD is reserved for a later comparison that measurably beats
-//! that baseline. A GPU realization of the same relations is designed in
-//! [`gpu`], and ships later behind this API; the CPU path remains.
+//! that baseline. A GPU realization of the same relations is designed around
+//! [`ColumnLayout`], and ships later behind this API; the CPU path remains.
 
 mod arithmetic;
 mod enumerate;
@@ -38,7 +38,7 @@ pub use union::union;
 /// Named Bind / Filter / Project / Union / Least over columnar relations.
 ///
 /// The CPU implementation is [`Cpu`]. A later GPU backend implements the
-/// same trait over the layout in [`gpu`]; it is not a second semantics.
+/// same trait over [`ColumnLayout`]; it is not a second semantics.
 pub trait RelationalOps {
     /// Positive-body Bind, including the empty-body binding and any
     /// generating arithmetic scheduled on `template`.

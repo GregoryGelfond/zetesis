@@ -155,7 +155,7 @@ impl Atoms {
 
 impl Bindings {
     /// No rows, `width` slots. A width of zero is the empty-body binding's
-    /// carrier: one later [`Self::push_empty`] row has no columns.
+    /// carrier: one later empty-body row has no columns.
     #[must_use]
     pub fn empty(width: usize) -> Self {
         Self {
