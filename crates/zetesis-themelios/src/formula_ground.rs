@@ -1,6 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 pub(crate) mod arithmetic;
+pub(crate) mod algebra_join;
 pub(crate) mod algebra_rows;
 mod objectives;
 mod scoped_body;
