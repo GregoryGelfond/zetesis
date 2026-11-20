@@ -102,7 +102,7 @@ mod terminal_session;
 mod source_session;
 mod session;
 mod world_view;
-mod projection;
+mod projective;
 mod error;
 mod completion;
 mod countermodel;
@@ -125,8 +125,8 @@ pub use hybrid_session::HybridExecutionStatistics;
 pub use model_construction::{ModelConstructionStatistics, ModelConstructionStop};
 pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
-pub use policy::{GpuBatching, Grounder, OptimumSearch, Oracle};
-pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
+pub use policy::{GpuBatching, Grounder, LearningSwitch, OptimumSearch, Oracle};
+pub use projective::{ProjectiveError, ProjectiveLimits, ProjectiveResource, ProjectiveStatistics};
 pub use residual_handovers::sampling::{
     ResidualQuantiles, ResidualRunSamples, ResidualSampleGroup, ResidualSampleMetric,
     ResidualSamplePopulation,
@@ -148,7 +148,7 @@ pub use world_view::{
 pub use zetesis_backend::{Backend, GpuApi};
 pub use zetesis_stable::{BatchVerdict, QueryDivision};
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
-pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
+pub use zetesis_themelios::{GroundingOperator, GroundingOutcome, GroundingPhase, GroundingWork};
 
 mod measurements;
 pub use measurements::{MeasurementSpan, SolveMeasurements};

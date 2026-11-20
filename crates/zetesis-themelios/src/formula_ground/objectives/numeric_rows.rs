@@ -117,13 +117,12 @@ pub(super) fn scan<'source>(
                 Context::new(&mut *computation, limits, counters, location),
             )?;
         }
-        let value = field(
+        let weight = weight_descriptor(
             &objective.weight,
             &row.values,
             Context::new(&mut *computation, limits, counters, location),
         )?;
-        if let ValueNodeRef::Number(weight) = value_ref(computation, &value, location)?.descriptor()
-        {
+        if let ValueNodeRef::Number(weight) = weight {
             if objective.polarity.normalize(weight).is_none() {
                 if !row.passes {
                     continue;
@@ -138,6 +137,48 @@ pub(super) fn scan<'source>(
         }
     }
     Ok((numeric, bindings.take_family()))
+}
+
+/// The weight's value as [`field`] computes it, with the same charges. A term
+/// is read in place rather than through an owned key, so concurrent scans
+/// share no reference count.
+fn weight_descriptor<'read>(
+    weight: &ObjectiveField,
+    binding: &Binding,
+    context: Context<'_, &'read mut Computation<'_, '_>>,
+) -> Result<ValueNodeRef<'read>, FormulaFailure> {
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    match weight {
+        ObjectiveField::Term(crate::formula_support::components::Term::Variable(slot)) => {
+            counters.work(limits, location)?;
+            Ok(binding
+                .read(*slot, computation.read(), location)?
+                .descriptor())
+        }
+        ObjectiveField::Term(crate::formula_support::components::Term::Constant(value)) => {
+            counters.work(limits, location)?;
+            let value = computation.static_scalar(*value, limits, counters, location)?;
+            counters.work(limits, location)?;
+            Ok(value.descriptor())
+        }
+        ObjectiveField::Expression(_) => {
+            let key = field(
+                weight,
+                binding,
+                Context::new(&mut *computation, limits, counters, location),
+            )?;
+            let computation: &'read Computation<'_, '_> = computation;
+            Ok(value_ref(computation, &key, location)?.descriptor())
+        }
+    }
 }
 
 pub(super) fn field(

@@ -128,6 +128,11 @@ impl Resources {
             // every slot, and admits itself only when the batch size still fits.
             max_tight_batch_bytes: self.bytes(16) as u64,
             share_learned_rows: true,
+            learning: true,
+            conflict_core: zetesis_ferraris::ConflictCore::Full,
+            conflict_learning: crate::LearningSwitch::Enabled,
+            bound_learning: crate::LearningSwitch::Enabled,
+            scale_learning_attempts: crate::LearningSwitch::Enabled,
         }
     }
 
@@ -313,8 +318,8 @@ impl Resources {
     /// Explicit answer projection retains memory-bounded identity history and
     /// checked cumulative work without a selected operation ceiling.
     #[must_use]
-    pub fn projection_limits(self) -> crate::ProjectionLimits {
-        crate::ProjectionLimits {
+    pub fn projective_limits(self) -> crate::ProjectiveLimits {
+        crate::ProjectiveLimits {
             max_keys: self.cells(16, 32),
             max_bytes: self.bytes(16),
             max_work: u64::MAX,

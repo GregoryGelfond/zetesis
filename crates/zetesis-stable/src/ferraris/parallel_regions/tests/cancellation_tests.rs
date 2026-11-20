@@ -1,5 +1,4 @@
 //! Cancellation settles leases before the native iterator exposes its final receipt.
-
 use super::*;
 use crate::ferraris::{Proposer, StableModels};
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -357,3 +357,28 @@ fn single_generator_rules_retain_exact_serial_witnessed_emission() {
         }
     }
 }
+
+#[test]
+fn factored_head_blocks_replay_the_serial_emission() {
+    for source in [
+        // A body-only component beside fixed atoms and a comparison.
+        "p(1..40,1..2).{r(1..2)}.q(1..40).{s(1..40)}.h(X,Y):-p(X,A),r(A),q(Y),s(Y),X!=Y.",
+        // Several passing rows per component, and some heads without one.
+        "p(1..1400).{e(X,1..3)}:-p(X),X\\5!=0.h(X):-p(X),e(X,Y).",
+        // Two body-only components; a constant and a repeated head variable.
+        "p(1..1100).{e(X,1;X,2)}:-p(X).{f(1..2)}.{c(7,1..2)}.g(X,1,8):-p(X),X<50.\n         g(X,X,7):-p(X),e(X,Z),f(Z),c(7,W),f(W).",
+    ] {
+        same(source);
+    }
+}
+
+#[test]
+fn small_factored_heads_stay_on_the_serial_route() {
+    let source = "p(1..20,1..2).{r(1..2)}.q(1..20).h(X,Y):-p(X,A),r(A),q(Y),X!=Y.";
+    let expected = run(source, None, &Bound::default()).result.unwrap();
+    for workers in [1, 14] {
+        let actual = run(source, Some(workers), &Bound::default());
+        assert_eq!(actual.tasks, 0, "below the head-row threshold");
+        assert_eq!(actual.result.unwrap(), expected);
+    }
+}

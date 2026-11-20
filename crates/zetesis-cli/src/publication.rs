@@ -56,10 +56,10 @@ pub(crate) fn solve(
     if config.mode == PublicationMode::Count {
         request = request.counting();
     } else if input
-        .projection()
-        .is_some_and(zetesis_themelios::PreparedProjection::is_explicit)
+        .projective_domain()
+        .is_some_and(zetesis_themelios::ProjectiveDomain::is_explicit)
     {
-        request = request.projected(zetesis_solve::ProjectionLimits {
+        request = request.projected(zetesis_solve::ProjectiveLimits {
             max_keys: usize::try_from(config.solve.max_projection_entries).unwrap_or(usize::MAX),
             max_bytes: config.solve.max_projection_bytes,
             max_work: config.solve.max_search_work,
@@ -171,7 +171,7 @@ fn complete(
     let result = (|| {
         if let Some(projection) = progress
             .semantic()
-            .and_then(crate::SemanticOutcome::projection)
+            .and_then(crate::SemanticOutcome::projective_statistics)
         {
             diagnostics.information(format_args!(
                 "Projection: {} representatives, {} duplicate answers, complete={}",

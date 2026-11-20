@@ -197,13 +197,13 @@ fn sat_class(error: zetesis_stable::Incomplete) -> Class {
         | E::RestrictionUniverse { .. }
         | E::ClosedEnumerator
         | E::LateCertificate
-        | E::RegionFilter
+        | E::ConstraintRefutation
         | E::InvalidRegionConsequence
-        | E::LateRegionFilter
+        | E::LateConstraintRefuter
         | E::LateCandidateBounds
         | E::CandidateBoundPlan
         | E::CandidateBoundNotImproving
-        | E::RegionFilterAlreadySet
+        | E::ConstraintRefuterAlreadySet
         | E::LateLearnedStore
         | E::LearnedStoreAlreadySet
         | E::InvalidWitness => Class::Engine,

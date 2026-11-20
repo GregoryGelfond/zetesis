@@ -73,8 +73,10 @@ pub(crate) struct Constructor(usize);
 pub(crate) struct Predicate(usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Pattern(usize);
+/// The coordinate of one admitted template filter, a substituted comparison
+/// (`zetesis_core::Filter`, a scalar condition of `Lifted.Filter`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Filter(usize);
+pub(crate) struct FilterCoordinate(usize);
 
 /// Source-variable coordinates and compiled scalar occurrences. Equality here
 /// compares metadata positions; constant semantic equality requires resolution.
@@ -90,6 +92,9 @@ pub(crate) enum Term {
 pub(crate) struct Admission<'a> {
     catalog: &'a mut SupportCatalog,
     workspace: Workspace,
+    /// The predicate admitted last. Consecutive patterns of one predicate,
+    /// such as a block of fact rules, share its declaration and component.
+    last_predicate: Option<Predicate>,
     _header: StorageLease,
 }
 
@@ -123,6 +128,7 @@ impl SupportCatalog {
         let admission = Admission {
             catalog: self,
             workspace,
+            last_predicate: None,
             _header: header,
         };
         admission.check(limits, counters, location)?;

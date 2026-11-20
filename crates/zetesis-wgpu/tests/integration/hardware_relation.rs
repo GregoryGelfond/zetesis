@@ -7,7 +7,7 @@ use zetesis_algebra::{Cancellation, Stop};
 use zetesis_backend::GpuApi;
 use zetesis_core::{
     Atom, Predicate, Sign, Value, ValueLimits, ValueNode,
-    atom_interner::{AtomInterner, Limits as AtomLimits},
+    atom_registry::{AtomRegistry, Limits as AtomLimits},
     relation::{Catalog, Limits, Relation},
 };
 use zetesis_wgpu::{
@@ -195,7 +195,7 @@ fn compare_catalog_growth(executor: &mut GpuRelationExecutor) {
     const CANONICAL_BYTES: usize = 1 << 20;
     let predicate = Predicate::with_sign("row", 2, Sign::Negative).unwrap();
     let values = values();
-    let mut authority = AtomInterner::new();
+    let mut authority = AtomRegistry::new();
     let allowance = AtomLimits::for_atoms(65, CANONICAL_BYTES);
     let declaration = authority
         .declare_predicate_with(&predicate, allowance, || Ok::<_, ()>(()))

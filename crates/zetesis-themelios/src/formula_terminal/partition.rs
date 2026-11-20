@@ -129,7 +129,7 @@ fn prepare(
         || !program.objectives.is_empty()
         || !program.objective_declarations.is_empty()
         || !program.projection.is_empty()
-        || program.project_selection.is_explicit()
+        || program.project_directives.is_explicit()
     {
         return Ok(None);
     }

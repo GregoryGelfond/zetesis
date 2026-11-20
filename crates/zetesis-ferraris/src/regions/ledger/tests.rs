@@ -13,6 +13,8 @@ use crate::{
 use zetesis_algebra::{Cancellation, Stop};
 
 mod carrier;
+mod bound;
+mod conflict;
 mod consolidation;
 mod early;
 mod eviction;
@@ -197,13 +199,48 @@ fn small_allowances_keep_the_default_limits() {
         LearningLimits::for_allowance(64 << 20),
         LearningLimits::default()
     );
+    let mid = LearningLimits::for_allowance(256 << 20);
+    assert_eq!(
+        mid.founded_attempts,
+        LearningLimits::default().founded_attempts
+    );
+    assert_eq!(
+        mid.conflict_attempts,
+        LearningLimits::default().conflict_attempts
+    );
+    assert_eq!(mid.bound_attempts, LearningLimits::default().bound_attempts);
 }
 
 #[test]
 fn tier_rows_grow_with_the_allowance_up_to_their_ceiling() {
     let limits = LearningLimits::for_allowance(512 << 20);
     assert_eq!((limits.tier_rows, limits.store_rows), (512, 2048));
-    assert_eq!(LearningLimits::for_allowance(usize::MAX).tier_rows, 4096);
+    assert_eq!(
+        (
+            limits.founded_attempts,
+            limits.conflict_attempts,
+            limits.bound_attempts
+        ),
+        (512, 512, 512)
+    );
+    let ceiling = LearningLimits::for_allowance(usize::MAX);
+    assert_eq!(ceiling.tier_rows, 4096);
+    assert_eq!(
+        (
+            ceiling.founded_attempts,
+            ceiling.conflict_attempts,
+            ceiling.bound_attempts
+        ),
+        (4096, 4096, 4096)
+    );
+}
+
+#[test]
+fn disabled_limits_zero_every_capture_attempt_cap() {
+    let limits = LearningLimits::disabled();
+    assert_eq!(limits.founded_attempts, 0);
+    assert_eq!(limits.conflict_attempts, 0);
+    assert_eq!(limits.bound_attempts, 0);
 }
 
 #[test]
@@ -213,6 +250,7 @@ fn the_founded_output_limit_declines_a_wider_row() {
         &program.theory,
         LearningLimits {
             founded_outputs: 1,
+            conflict_attempts: 0,
             ..LearningLimits::default()
         },
     );

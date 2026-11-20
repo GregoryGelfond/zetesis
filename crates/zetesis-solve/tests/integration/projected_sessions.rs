@@ -6,8 +6,8 @@ use std::num::NonZeroUsize;
 use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_solve::{
-    AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectionError,
-    ProjectionLimits, ProjectionResource, Session, SolveConfig, SolveError, WorldViewLimits,
+    AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectiveError,
+    ProjectiveLimits, ProjectiveResource, Session, SolveConfig, SolveError, WorldViewLimits,
 };
 
 fn config() -> SolveConfig {
@@ -40,7 +40,7 @@ fn distinct_keys_retain_full_membership() {
         Cancellation::default(),
     )
     .selection(AnswerSelection::All)
-    .projected(ProjectionLimits::default())
+    .projected(ProjectiveLimits::default())
     .start()
     .unwrap();
     let mut keys = BTreeSet::new();
@@ -53,7 +53,7 @@ fn distinct_keys_retain_full_membership() {
         );
         assert!(answer.original().same_instance(full.original()));
         let key: Vec<_> = owner
-            .projection()
+            .projective_domain()
             .atoms()
             .iter()
             .filter(|atom| answer.interpretation().contains(*atom))
@@ -64,7 +64,7 @@ fn distinct_keys_retain_full_membership() {
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.verified_models(), 4);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
-    let projection = outcome.projection().unwrap();
+    let projection = outcome.projective_statistics().unwrap();
     assert_eq!((projection.representatives, projection.duplicates), (2, 2));
     assert!(projection.complete);
 }
@@ -77,26 +77,26 @@ fn world_view_collection_forces_full_identity() {
         config(),
         Cancellation::default(),
     )
-    .projected(ProjectionLimits {
+    .projected(ProjectiveLimits {
         max_keys: 0,
         ..Default::default()
     })
     .collect(WorldViewLimits::default())
     .unwrap();
     assert_eq!(family.len(), 4);
-    assert!(family.outcome().projection().is_none());
+    assert!(family.outcome().projective_statistics().is_none());
 }
 
 #[test]
 fn empty_projection_has_one_complete_class() {
     let owner = formula("{p;q}. #project absent/0.");
-    assert!(owner.projection().atoms().is_empty());
+    assert!(owner.projective_domain().atoms().is_empty());
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
         config(),
         Cancellation::default(),
     )
-    .projected(ProjectionLimits {
+    .projected(ProjectiveLimits {
         max_keys: 1,
         ..Default::default()
     })
@@ -104,7 +104,7 @@ fn empty_projection_has_one_complete_class() {
     .unwrap();
     assert_eq!(session.by_ref().map(Result::unwrap).count(), 1);
     let outcome = session.outcome().unwrap();
-    let projection = outcome.projection().unwrap();
+    let projection = outcome.projective_statistics().unwrap();
     assert_eq!(projection.duplicates, 3);
     assert!(projection.complete);
 }
@@ -117,7 +117,7 @@ fn objective_selection_precedes_projection() {
         config(),
         Cancellation::default(),
     )
-    .projected(ProjectionLimits::default())
+    .projected(ProjectiveLimits::default())
     .start()
     .unwrap();
     let answers: Vec<_> = session.by_ref().map(Result::unwrap).collect();
@@ -132,8 +132,8 @@ fn objective_selection_precedes_projection() {
     );
     let outcome = session.outcome().unwrap();
     assert!(outcome.optimum_proved());
-    assert!(outcome.projection().unwrap().complete);
-    assert_eq!(outcome.projection().unwrap().duplicates, 1);
+    assert!(outcome.projective_statistics().unwrap().complete);
+    assert_eq!(outcome.projective_statistics().unwrap().duplicates, 1);
 }
 
 #[test]
@@ -147,13 +147,13 @@ fn requested_count_counts_representatives() {
         },
         Cancellation::default(),
     )
-    .projected(ProjectionLimits::default())
+    .projected(ProjectiveLimits::default())
     .start()
     .unwrap();
     assert_eq!(session.by_ref().map(Result::unwrap).count(), 1);
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::RequestedModels));
-    assert!(!outcome.projection().unwrap().complete);
+    assert!(!outcome.projective_statistics().unwrap().complete);
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn projected_stops_preserve_established_optimum() {
             SolveConfig { models, ..config() },
             Cancellation::default(),
         )
-        .projected(ProjectionLimits {
+        .projected(ProjectiveLimits {
             max_keys: keys,
             ..Default::default()
         })
@@ -182,25 +182,25 @@ fn projected_stops_preserve_established_optimum() {
                 assert!(refused);
                 assert!(matches!(
                     *failure.cause,
-                    SolveError::Projection(ProjectionError::Limit {
-                        resource: ProjectionResource::Keys,
+                    SolveError::AnswerProjection(ProjectiveError::Limit {
+                        resource: ProjectiveResource::Keys,
                         ..
                     })
                 ));
                 let evidence = failure.semantic().unwrap();
                 assert!(evidence.optimum_proved());
                 assert_eq!(evidence.completion(), Some(Completion::Exhausted));
-                assert!(!evidence.projection().unwrap().complete);
+                assert!(!evidence.projective_statistics().unwrap().complete);
             }
         }
         let outcome = session.outcome().unwrap();
         assert!(outcome.optimum_proved());
         assert_eq!(outcome.completion(), Some(Completion::Exhausted));
         assert_eq!(
-            outcome.projection().unwrap().representatives,
+            outcome.projective_statistics().unwrap().representatives,
             usize::from(!refused)
         );
-        assert!(!outcome.projection().unwrap().complete);
+        assert!(!outcome.projective_statistics().unwrap().complete);
         assert!(session.next().is_none());
     }
 }
@@ -213,7 +213,7 @@ fn refused_key_preserves_verified_evidence() {
         config(),
         Cancellation::default(),
     )
-    .projected(ProjectionLimits {
+    .projected(ProjectiveLimits {
         max_keys: 0,
         ..Default::default()
     })
@@ -222,8 +222,8 @@ fn refused_key_preserves_verified_evidence() {
     let error = session.next().unwrap().unwrap_err();
     assert!(matches!(
         *error.cause,
-        SolveError::Projection(ProjectionError::Limit {
-            resource: ProjectionResource::Keys,
+        SolveError::AnswerProjection(ProjectiveError::Limit {
+            resource: ProjectiveResource::Keys,
             limit: 0,
             ..
         })
@@ -231,8 +231,8 @@ fn refused_key_preserves_verified_evidence() {
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
     assert!(outcome.verified_models() > 0);
-    assert_eq!(outcome.projection().unwrap().representatives, 0);
-    assert!(!outcome.projection().unwrap().complete);
+    assert_eq!(outcome.projective_statistics().unwrap().representatives, 0);
+    assert!(!outcome.projective_statistics().unwrap().complete);
 }
 
 #[test]
@@ -243,13 +243,13 @@ fn projection_requires_an_explicit_domain() {
         config(),
         Cancellation::default(),
     )
-    .projected(ProjectionLimits::default())
+    .projected(ProjectiveLimits::default())
     .start()
     .err()
     .unwrap();
     assert!(matches!(
         *error.cause,
-        SolveError::Projection(ProjectionError::MissingDeclaration)
+        SolveError::AnswerProjection(ProjectiveError::MissingDeclaration)
     ));
 }
 
@@ -264,7 +264,7 @@ fn refused_history_setup_retains_attempted_timing() {
         },
         Cancellation::default(),
     )
-    .projected(ProjectionLimits {
+    .projected(ProjectiveLimits {
         max_bytes: 0,
         ..Default::default()
     })
@@ -273,8 +273,8 @@ fn refused_history_setup_retains_attempted_timing() {
     .unwrap();
     assert!(matches!(
         *error.cause,
-        SolveError::Projection(ProjectionError::Limit {
-            resource: ProjectionResource::Bytes,
+        SolveError::AnswerProjection(ProjectiveError::Limit {
+            resource: ProjectiveResource::Bytes,
             limit: 0,
             ..
         })
@@ -300,7 +300,7 @@ fn cancellation_keeps_the_delivered_projected_prefix() {
         config(),
         cancellation.clone(),
     )
-    .projected(ProjectionLimits::default())
+    .projected(ProjectiveLimits::default())
     .start()
     .unwrap();
     let first = session.next().unwrap().unwrap();
@@ -310,8 +310,8 @@ fn cancellation_keeps_the_delivered_projected_prefix() {
     assert!(!matches!(session.next(), Some(Ok(_))));
     assert!(session.next().is_none());
     let outcome = session.outcome().unwrap();
-    assert!(!outcome.projection().unwrap().complete);
-    assert_eq!(outcome.projection().unwrap().representatives, 1);
+    assert!(!outcome.projective_statistics().unwrap().complete);
+    assert_eq!(outcome.projective_statistics().unwrap().representatives, 1);
     assert!(first.original().same_instance(outcome.original().unwrap()));
     assert!(!outcome.unsatisfiable());
 }
@@ -331,42 +331,42 @@ fn history_ceilings_are_inclusive() {
         let answers: Result<Vec<_>, _> = session.by_ref().collect();
         (answers, session.outcome().unwrap())
     };
-    let (_, baseline) = run(ProjectionLimits::default());
-    let stats = baseline.projection().unwrap();
+    let (_, baseline) = run(ProjectiveLimits::default());
+    let stats = baseline.projective_statistics().unwrap();
     for limits in [
-        ProjectionLimits {
+        ProjectiveLimits {
             max_keys: stats.representatives,
             ..Default::default()
         },
-        ProjectionLimits {
+        ProjectiveLimits {
             max_work: stats.work,
             ..Default::default()
         },
-        ProjectionLimits {
+        ProjectiveLimits {
             max_bytes: usize::try_from(stats.peak_bytes).unwrap(),
             ..Default::default()
         },
     ] {
         let (answers, outcome) = run(limits);
         assert_eq!(answers.unwrap().len(), 2);
-        assert!(outcome.projection().unwrap().complete);
+        assert!(outcome.projective_statistics().unwrap().complete);
     }
     for limits in [
-        ProjectionLimits {
+        ProjectiveLimits {
             max_keys: stats.representatives - 1,
             ..Default::default()
         },
-        ProjectionLimits {
+        ProjectiveLimits {
             max_work: stats.work - 1,
             ..Default::default()
         },
-        ProjectionLimits {
+        ProjectiveLimits {
             max_bytes: usize::try_from(stats.peak_bytes).unwrap() - 1,
             ..Default::default()
         },
     ] {
         let (answers, outcome) = run(limits);
         assert!(answers.is_err());
-        assert!(!outcome.projection().unwrap().complete);
+        assert!(!outcome.projective_statistics().unwrap().complete);
     }
 }

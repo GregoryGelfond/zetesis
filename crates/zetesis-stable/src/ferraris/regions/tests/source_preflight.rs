@@ -5,7 +5,7 @@ use std::cell::Cell;
 
 use super::*;
 use crate::budget::Quota;
-use crate::region_filter::{self, RegionFeasibility, Source, tests::injection};
+use crate::constraint_refutation::{self, RegionFeasibility, Source, tests::injection};
 use crate::streamed_constraints::ConstraintConsequence;
 use crate::subject::Pass;
 use zetesis_themelios::ProgramSite;
@@ -58,7 +58,7 @@ impl injection::Worker for SourceWorker<'_> {
         assert!(region.is_open(0));
         let site = ProgramSite::program();
         match self.0.reply {
-            Reply::Fail => Err(Incomplete::RegionFilter),
+            Reply::Fail => Err(Incomplete::ConstraintRefutation),
             Reply::Hold => Ok(ConstraintConsequence::Hold { atom: 0, site }),
             Reply::Cut => Ok(ConstraintConsequence::Cut { atom: 0, site }),
         }
@@ -113,7 +113,7 @@ struct Attempt {
     region: Region,
     work_calls: usize,
     decision_calls: usize,
-    source: crate::RegionFilterStatistics,
+    source: crate::ConstraintRefutationStatistics,
 }
 
 fn run(theory: &Theory, reply: Reply, mut counts: RegionCounts) -> Attempt {
@@ -129,13 +129,14 @@ fn run(theory: &Theory, reply: Reply, mut counts: RegionCounts) -> Attempt {
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
-    let filter = region_filter::Filter::new(Source::Fixture(Arc::new(SourceFixture {
-        theory: theory.clone(),
-        reply,
-    })));
+    let filter =
+        constraint_refutation::ConstraintRefuter::new(Source::Fixture(Arc::new(SourceFixture {
+            theory: theory.clone(),
+            reply,
+        })));
     let mut worker = None;
     let mut timings = None;
-    let mut check = region_filter::Check {
+    let mut check = constraint_refutation::Check {
         filter: &filter,
         worker: &mut worker,
         timings: &mut timings,
@@ -145,6 +146,7 @@ fn run(theory: &Theory, reply: Reply, mut counts: RegionCounts) -> Attempt {
             original: OriginalSubject::new(theory, None),
             narrower: &narrower,
             arithmetic: None,
+            bound_learning: None,
         },
         &Conditions::<(Theory, Narrower)>::default(),
         &mut entry,
@@ -185,7 +187,7 @@ fn late_cumulative_overflow_precedes_the_publication_debit_and_mutation() {
     // Measure the exact eager prefix through this same candidate route. The
     // intentional source failure stops before a propagation debit or ranking.
     let prefix = run(&theory, Reply::Fail, RegionCounts::default());
-    assert_eq!(prefix.result, Err(Incomplete::RegionFilter));
+    assert_eq!(prefix.result, Err(Incomplete::ConstraintRefutation));
     assert!(prefix.counts.work > 0);
     assert_eq!(prefix.counts.held, 0);
     assert_eq!(prefix.counts.cut, 0);

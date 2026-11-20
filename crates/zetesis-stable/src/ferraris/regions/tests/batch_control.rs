@@ -99,6 +99,7 @@ fn cancelled_narrowing<Q: Quota>(quota: Q, cancellation: &Cancellation) -> (Inco
             original: zetesis_ferraris::OriginalSubject::new(&theory, None),
             narrower: &narrower,
             arithmetic: None,
+            bound_learning: None,
         },
         &Conditions::<(Theory, Narrower)>::default(),
         &mut zetesis_algebra::region::Entry::new(

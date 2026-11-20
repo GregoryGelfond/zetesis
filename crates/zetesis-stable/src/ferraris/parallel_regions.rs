@@ -83,7 +83,8 @@ use zetesis_algebra::Meter;
 use zetesis_algebra::region::Region;
 use zetesis_algebra::walk::{self, Counting};
 use zetesis_ferraris::{
-    Interpretation, Narrower, NarrowingScratch, SupportExplanationStatistics, Theory,
+    BoundLearningStatistics, ConflictLearningStatistics, Interpretation, LearningOccupancy,
+    Narrower, NarrowingScratch, SupportExplanationStatistics, Theory,
 };
 
 use super::certified::{self, Certification};
@@ -210,7 +211,7 @@ struct Shared {
     /// What the walk reads of the original theory beyond the theory itself.
     parts: super::regions::OriginalParts,
     certificate: Option<Arc<Certification>>,
-    filter: Option<crate::region_filter::Filter>,
+    filter: Option<crate::constraint_refutation::ConstraintRefuter>,
     restrictions: RwLock<Conditions<Arc<(Theory, Narrower)>>>,
     /// One deque per worker and the walk's termination record. All entry
     /// preparation and evaluation happens outside the deque locks.
@@ -264,6 +265,18 @@ struct Live {
     support_explanation_work: AtomicU64,
     /// Maximum single worker ledger/capture capacity, saturated at `u64::MAX`.
     support_explanation_peak_bytes: AtomicU64,
+    conflict_explanation_attempts: AtomicU64,
+    conflict_explanation_certified: AtomicU64,
+    conflict_explanation_declined: AtomicU64,
+    conflict_explanation_shrunk: AtomicU64,
+    bound_explanation_attempts: AtomicU64,
+    bound_explanation_certified: AtomicU64,
+    bound_explanation_declined: AtomicU64,
+    bound_explanation_shrunk: AtomicU64,
+    learning_theory_rows: AtomicU64,
+    learning_bound_rows: AtomicU64,
+    learning_evicted: AtomicU64,
+    learning_peak_bytes: AtomicU64,
     countermodel_queries: AtomicU64,
     countermodels: AtomicU64,
     /// Queries whose pending regions were published.
@@ -449,6 +462,124 @@ impl Live {
         }
     }
 
+    fn add_conflict_explanations(
+        &self,
+        before: &ConflictLearningStatistics,
+        after: &ConflictLearningStatistics,
+    ) {
+        if before == after {
+            return;
+        }
+        Self::add(
+            &self.conflict_explanation_attempts,
+            after.attempts - before.attempts,
+        );
+        Self::add(
+            &self.conflict_explanation_certified,
+            after.certified - before.certified,
+        );
+        Self::add(
+            &self.conflict_explanation_declined,
+            after.declined - before.declined,
+        );
+        Self::add(
+            &self.conflict_explanation_shrunk,
+            after.shrunk - before.shrunk,
+        );
+    }
+
+    fn conflict_explanations(
+        &self,
+        coordinator: ConflictLearningStatistics,
+    ) -> ConflictLearningStatistics {
+        let mut stats = coordinator;
+        stats.attempts = stats
+            .attempts
+            .saturating_add(Self::read(&self.conflict_explanation_attempts));
+        stats.certified = stats
+            .certified
+            .saturating_add(Self::read(&self.conflict_explanation_certified));
+        stats.declined = stats
+            .declined
+            .saturating_add(Self::read(&self.conflict_explanation_declined));
+        stats.shrunk = stats
+            .shrunk
+            .saturating_add(Self::read(&self.conflict_explanation_shrunk));
+        stats
+    }
+
+    fn add_bound_explanations(
+        &self,
+        before: &BoundLearningStatistics,
+        after: &BoundLearningStatistics,
+    ) {
+        if before == after {
+            return;
+        }
+        Self::add(
+            &self.bound_explanation_attempts,
+            after.attempts - before.attempts,
+        );
+        Self::add(
+            &self.bound_explanation_certified,
+            after.certified - before.certified,
+        );
+        Self::add(
+            &self.bound_explanation_declined,
+            after.declined - before.declined,
+        );
+        Self::add(&self.bound_explanation_shrunk, after.shrunk - before.shrunk);
+    }
+
+    fn bound_explanations(&self, coordinator: BoundLearningStatistics) -> BoundLearningStatistics {
+        let mut stats = coordinator;
+        stats.attempts = stats
+            .attempts
+            .saturating_add(Self::read(&self.bound_explanation_attempts));
+        stats.certified = stats
+            .certified
+            .saturating_add(Self::read(&self.bound_explanation_certified));
+        stats.declined = stats
+            .declined
+            .saturating_add(Self::read(&self.bound_explanation_declined));
+        stats.shrunk = stats
+            .shrunk
+            .saturating_add(Self::read(&self.bound_explanation_shrunk));
+        stats
+    }
+
+    fn add_learning_occupancy(&self, before: &LearningOccupancy, after: &LearningOccupancy) {
+        if before == after && after.peak_bytes == 0 {
+            return;
+        }
+        self.learning_theory_rows
+            .fetch_max(after.theory_rows, Ordering::Relaxed);
+        self.learning_bound_rows
+            .fetch_max(after.bound_rows, Ordering::Relaxed);
+        Self::add(&self.learning_evicted, after.evicted - before.evicted);
+        self.learning_peak_bytes.fetch_max(
+            u64::try_from(after.peak_bytes).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+    }
+
+    fn learning_occupancy(&self, coordinator: LearningOccupancy) -> LearningOccupancy {
+        let mut occupancy = coordinator;
+        occupancy.theory_rows = occupancy
+            .theory_rows
+            .max(Self::read(&self.learning_theory_rows));
+        occupancy.bound_rows = occupancy
+            .bound_rows
+            .max(Self::read(&self.learning_bound_rows));
+        occupancy.evicted = occupancy
+            .evicted
+            .saturating_add(Self::read(&self.learning_evicted));
+        occupancy.peak_bytes = occupancy
+            .peak_bytes
+            .max(u128::from(Self::read(&self.learning_peak_bytes)));
+        occupancy
+    }
+
     /// Add what a worker measured since its last report.
     fn add_timings(&self, before: &SearchPhaseTimings, after: &SearchPhaseTimings) {
         for (live, (before, after)) in self.timings.iter().zip(phases(before).zip(phases(after))) {
@@ -509,12 +640,17 @@ impl Shared {
         reserve: impl FnOnce(&mut std::collections::VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
         let parent = pending.take().expect("publication has a pending parent");
-        match self
-            .frontier
-            .publish_split_with(index, parent, reserve, |parent| {
+        match self.frontier.publish_split_shedding(
+            index,
+            parent,
+            reserve,
+            |parent| {
                 let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
                 ([cut, held], ())
-            }) {
+            },
+            super::region_frontier::KEPT_KNOWLEDGE,
+            super::region_frontier::shed,
+        ) {
             Ok(()) => Ok(()),
             Err((error, parent)) => {
                 *pending = Some(parent);
@@ -771,15 +907,15 @@ impl ParallelRegions {
         })
     }
 
-    pub(crate) fn set_filter(
+    pub(crate) fn set_refuter(
         &mut self,
-        filter: crate::region_filter::Filter,
+        filter: crate::constraint_refutation::ConstraintRefuter,
     ) -> Result<(), Incomplete> {
         if !matches!(self.record, WalkRecord::NotBegun) {
-            return Err(Incomplete::LateRegionFilter);
+            return Err(Incomplete::LateConstraintRefuter);
         }
         Arc::get_mut(&mut self.shared)
-            .ok_or(Incomplete::LateRegionFilter)?
+            .ok_or(Incomplete::LateConstraintRefuter)?
             .filter = Some(filter);
         Ok(())
     }
@@ -819,7 +955,7 @@ impl ParallelRegions {
         statistics
     }
 
-    pub(crate) fn filter(&self) -> Option<&crate::region_filter::Filter> {
+    pub(crate) fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
         self.shared.filter.as_ref()
     }
 
@@ -927,6 +1063,12 @@ impl ParallelRegions {
                     .saturating_add(Live::read(&live.founded_work)),
                 support_explanations: live
                     .support_explanations(&self.statistics.counts.support_explanations),
+                conflict_explanations: live
+                    .conflict_explanations(self.statistics.counts.conflict_explanations),
+                bound_explanations: live
+                    .bound_explanations(self.statistics.counts.bound_explanations),
+                learning_occupancy: live
+                    .learning_occupancy(self.statistics.counts.learning_occupancy),
                 arithmetic: live.arithmetic(self.statistics.counts.arithmetic),
             },
             producers: self.statistics.producers,
@@ -1330,11 +1472,9 @@ impl ParallelRegions {
     ) -> Result<(), Incomplete> {
         self.engage_with(budget, |shared, slot, sender| {
             let original = Arc::clone(index);
-            std::thread::Builder::new()
-                .name("zetesis-region".into())
-                .spawn(move || {
-                    contain_worker(&shared, || worker(&shared, &original, slot, &sender))
-                })
+            zetesis_algebra::threads::spawn("zetesis-region", move || {
+                contain_worker(&shared, || worker(&shared, &original, slot, &sender))
+            })
         })
     }
 
@@ -1846,6 +1986,15 @@ fn publish_counts(shared: &Shared, before: &RegionCounts, after: &RegionCounts) 
     shared
         .live
         .add_support_explanations(&before.support_explanations, &after.support_explanations);
+    shared
+        .live
+        .add_conflict_explanations(&before.conflict_explanations, &after.conflict_explanations);
+    shared
+        .live
+        .add_bound_explanations(&before.bound_explanations, &after.bound_explanations);
+    shared
+        .live
+        .add_learning_occupancy(&before.learning_occupancy, &after.learning_occupancy);
 }
 
 /// What a worker takes: a region of the candidate tree, or a region of a
@@ -1903,7 +2052,7 @@ struct Workspaces<'a> {
     tier: super::learned::Tier,
     membership: crate::reduct::State,
     certificate: certified::Workspace,
-    filter: Option<crate::region_filter::Worker<'a>>,
+    filter: Option<crate::constraint_refutation::Worker<'a>>,
     retired_knowledge: Option<CandidateKnowledge>,
 }
 
@@ -1962,7 +2111,7 @@ fn step<'a>(
     let mut check = shared
         .filter
         .as_ref()
-        .map(|filter| crate::region_filter::Check {
+        .map(|filter| crate::constraint_refutation::Check {
             filter,
             worker: &mut workspaces.filter,
             timings: &mut report.statistics.phase_timings,

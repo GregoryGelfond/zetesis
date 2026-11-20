@@ -1,10 +1,10 @@
 //! Checked compiler metadata over already admitted scalar occurrences.
 
 use super::{
-    Admission, CatalogRead, Counters, Event, Filter, FilterRef, FormulaFailure, FormulaLimits,
-    FormulaResource, Pattern, PatternRef, Predicate, PredicateRef, ProgramSite, StorageLease,
-    TemplateCatalogFailure, TemplateComponentsRef, TemplateTerm, Term, atom_failure, ceiling,
-    failure, missing, owner_limits, read_failure, remaining_u128, size_of,
+    Admission, CatalogRead, Counters, Event, FilterCoordinate, FilterRef, FormulaFailure,
+    FormulaLimits, FormulaResource, Pattern, PatternRef, Predicate, PredicateRef, ProgramSite,
+    StorageLease, TemplateCatalogFailure, TemplateComponentsRef, TemplateTerm, Term, atom_failure,
+    ceiling, failure, missing, owner_limits, read_failure, remaining_u128, size_of,
 };
 
 impl Admission<'_> {
@@ -15,6 +15,18 @@ impl Admission<'_> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Predicate, FormulaFailure> {
+        if let Some(last) = self.last_predicate {
+            // One checked signature comparison (one step between canonical
+            // predicates of this owner) replaces declaration and a component.
+            let view = self
+                .catalog
+                .component_view(limits, counters, location)?
+                .ok_or_else(|| missing(location))?;
+            let previous = last.resolve(view).ok_or_else(|| missing(location))?;
+            if predicate.equals_ref_with(previous, || counters.work(limits, location))? {
+                return Ok(last);
+            }
+        }
         let outer = self.total(location)? as u128 - self.catalog.owner.storage_bytes();
         let checked = owner_limits(limits, outer, location)?;
         self.catalog.owner.restart_storage_peak();
@@ -25,7 +37,7 @@ impl Admission<'_> {
         let observed = self.owner_observed(outer, limits, counters, location);
         let declaration = result.map_err(|error| atom_failure(error, limits, outer, location))?;
         observed?;
-        self.append(
+        let admitted = self.append(
             limits,
             counters,
             location,
@@ -36,7 +48,9 @@ impl Admission<'_> {
                     })
                     .map(Predicate)
             },
-        )
+        )?;
+        self.last_predicate = Some(admitted);
+        Ok(admitted)
     }
 
     pub(crate) fn pattern(
@@ -128,7 +142,7 @@ impl Admission<'_> {
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
-    ) -> Result<Filter, FormulaFailure> {
+    ) -> Result<FilterCoordinate, FormulaFailure> {
         self.append(
             limits,
             counters,
@@ -142,7 +156,7 @@ impl Admission<'_> {
                 let filter = FilterRef::from_parts(equal, left, right);
                 components
                     .append_filter_with(read, filter, allowance, || counters.work(limits, location))
-                    .map(Filter)
+                    .map(FilterCoordinate)
             },
         )
     }
@@ -249,7 +263,7 @@ impl Pattern {
         self.resolve(view).ok_or_else(|| missing(location))
     }
 }
-impl Filter {
+impl FilterCoordinate {
     pub(crate) fn get<'a>(
         self,
         view: TemplateComponentsRef<'a>,

@@ -4,7 +4,7 @@ mod rows;
 pub(crate) use rows::{RowHead, project as row_column};
 
 use zetesis_core::PatternRef;
-use zetesis_core::atom_interner::PreparedPattern;
+use zetesis_core::atom_registry::PreparedPattern;
 
 use super::{AtomPattern, Binding, Computation, Counters, StorageLease};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
@@ -17,6 +17,8 @@ pub(super) struct Head<'source> {
 enum Pattern<'source> {
     Prepared(PreparedPattern<'source>),
     General(PatternRef<'source>),
+    /// A fact rule's head in the open head block: no per-rule preparation.
+    Block(PatternRef<'source>),
 }
 
 impl<'source> Head<'source> {
@@ -31,9 +33,13 @@ impl<'source> Head<'source> {
         let mut lease = computation.lease();
         lease.observe(size_of::<Self>(), location)?;
         computation.storage_observed(&lease, 0, size_of::<Self>(), limits, counters, location)?;
-        let pattern = computation
-            .prepare_pattern(pattern, limits, counters, location)?
-            .map_or(Pattern::General(pattern), Pattern::Prepared);
+        let pattern = if computation.in_head_block(pattern) {
+            Pattern::Block(pattern)
+        } else {
+            computation
+                .prepare_pattern(pattern, limits, counters, location)?
+                .map_or(Pattern::General(pattern), Pattern::Prepared)
+        };
         Ok(Self {
             pattern,
             _lease: lease,
@@ -54,6 +60,9 @@ impl<'source> Head<'source> {
             }
             Pattern::General(pattern) => {
                 computation.atom(*pattern, binding, limits, counters, location)?
+            }
+            Pattern::Block(pattern) => {
+                computation.head_block_atom(*pattern, binding, limits, counters, location)?
             }
         };
         computation.support(&atom, limits, counters, location)

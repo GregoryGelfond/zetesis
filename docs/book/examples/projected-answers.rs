@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use zetesis_algebra::Cancellation;
 use zetesis_solve::{
-    Backend, PreparedInput, ProjectionLimits, Session, SolveConfig, WorldViewLimits,
+    Backend, PreparedInput, ProjectiveLimits, Session, SolveConfig, WorldViewLimits,
 };
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(full.len(), 4);
 
     let mut projected = Session::builder(input, config, Cancellation::default())
-        .projected(ProjectionLimits::default())
+        .projected(ProjectiveLimits::default())
         .start()?;
     let mut keys = BTreeSet::new();
     for answer in projected.by_ref() {
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .any(|original| { original.interpretation() == answer.interpretation() })
         );
         let key: Vec<_> = owner
-            .projection()
+            .projective_domain()
             .atoms()
             .iter()
             .filter(|atom| answer.interpretation().contains(*atom))
@@ -50,7 +50,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     assert_eq!(keys.len(), 2);
     let outcome = projected.outcome().expect("finished enumeration");
-    let receipt = outcome.projection().expect("explicit projection");
+    let receipt = outcome
+        .projective_statistics()
+        .expect("explicit projection");
     assert_eq!(receipt.representatives, 2);
     assert_eq!(receipt.duplicates, 2);
     assert!(receipt.complete);

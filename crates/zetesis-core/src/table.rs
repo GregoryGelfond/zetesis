@@ -1,4 +1,4 @@
-//! Exact finite-table selection and projection over an immutable typed relation.
+//! Exact finite-table selection and domain support over an immutable typed relation.
 //!
 //! A surviving row is a tuple in the supplied table, not an ASP producer, a
 //! true atom, or an answer set. Source completeness and reduct membership remain
@@ -194,12 +194,12 @@ pub struct Table<'owner, 'source> {
     statistics: Statistics,
 }
 
-/// A complete finite-table projection for one supplied domain family.
+/// The complete finite-table domain support for one supplied domain family.
 ///
 /// Rows retain their original relation positions. A value is retained exactly
 /// when a surviving complete row carries it. Empty rows mean that this finite
 /// table/domain intersection is empty, not that an ASP program is inconsistent.
-pub struct Projection<'table, 'owner, 'source> {
+pub struct DomainSupport<'table, 'owner, 'source> {
     table: &'table Table<'owner, 'source>,
     rows: Words<u32>,
     supported: Vec<bool>,
@@ -213,7 +213,7 @@ struct RowValue<'source> {
 }
 
 impl<'owner, 'source> Table<'owner, 'source> {
-    /// Prepare a borrowed relation for repeated exact domain projection.
+    /// Prepare a borrowed relation for repeated exact domain support.
     ///
     /// # Errors
     /// Refuses malformed scope, finite limits, allocation failure or interrupted
@@ -230,7 +230,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
     /// let table = Table::prepare(&relation, &[0, 1], Limits::default(), &Cancellation::default())?;
     /// let first = [Value::Number(1), Value::Number(3)];
     /// let second = [Value::Number(2)];
-    /// let projected = table.project(&[&first, &second], Limits::default(), &Cancellation::default())?;
+    /// let projected = table.support(&[&first, &second], Limits::default(), &Cancellation::default())?;
     /// assert!(projected.contains(0));
     /// assert_eq!(projected.domain(0).unwrap().collect::<Vec<_>>(), vec![TermRef::from(&Value::Number(1))]);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -360,7 +360,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
     ///
     /// This ingress adapter borrows each owned value through [`TermRef`]; it
     /// neither copies values nor builds another dictionary. Canonical domain
-    /// references use [`Self::project_domains`]. Duplicates have set meaning;
+    /// references use [`Self::support_domains`]. Duplicates have set meaning;
     /// absent values have no support. Every call recomputes from the
     /// immutable base, including after domain widening. For K variables, D
     /// supplied domain values, V indexed entries, A allowed entries and W row
@@ -372,13 +372,13 @@ impl<'owner, 'source> Table<'owner, 'source> {
     /// # Errors
     /// Refuses a wrong domain count, finite limits, allocation failure or
     /// interrupted control. Existing projections and the table remain unchanged.
-    pub fn project(
+    pub fn support(
         &self,
         domains: &[&[Value]],
         limits: Limits,
         cancellation: &Cancellation,
-    ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
-        self.project_inner(
+    ) -> Result<DomainSupport<'_, 'owner, 'source>, Failure> {
+        self.support_inner(
             domains
                 .iter()
                 .map(|domain| Domain::Finite((*domain).into())),
@@ -389,7 +389,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
 
     /// Project borrowed finite, singleton or unrestricted domains.
     ///
-    /// This shares row restriction and value projection with [`Self::project`].
+    /// This shares row restriction and value projection with [`Self::support`].
     /// The result borrows the prepared table, not the supplied domain storage.
     /// An unrestricted variable permits every indexed value; a singleton needs
     /// one typed lookup and no union scratch. Finite lists retain set meaning.
@@ -397,28 +397,28 @@ impl<'owner, 'source> Table<'owner, 'source> {
     /// # Errors
     /// Refuses invalid domain count, finite limits, allocation failure or
     /// interrupted control without publishing a partial projection.
-    pub fn project_domains(
+    pub fn support_domains(
         &self,
         domains: &[Domain<'_>],
         limits: Limits,
         cancellation: &Cancellation,
-    ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
-        self.project_inner(domains.iter().copied(), limits, cancellation)
+    ) -> Result<DomainSupport<'_, 'owner, 'source>, Failure> {
+        self.support_inner(domains.iter().copied(), limits, cancellation)
     }
 
-    fn project_inner<'domain>(
+    fn support_inner<'domain>(
         &self,
         domains: impl ExactSizeIterator<Item = Domain<'domain>>,
         limits: Limits,
         cancellation: &Cancellation,
-    ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
+    ) -> Result<DomainSupport<'_, 'owner, 'source>, Failure> {
         let external = self.retained_inputs()?;
         let scratch_header = size_of::<Words<u32>>();
         let mut work = Work::new(
             limits,
             control(cancellation),
             external,
-            size_of::<Projection<'_, '_, '_>>() + scratch_header,
+            size_of::<DomainSupport<'_, '_, '_>>() + scratch_header,
         )
         .map_err(unmetered)?;
         let result = (|| {
@@ -430,11 +430,11 @@ impl<'owner, 'source> Table<'owner, 'source> {
             for (entry, allowed) in supported.iter_mut().enumerate() {
                 work.tick(1)?;
                 if *allowed {
-                    *allowed = intersects(&rows, self.support(entry), &mut work)?;
+                    *allowed = intersects(&rows, self.entry_support(entry), &mut work)?;
                 }
             }
             work.release_bytes(scratch_header);
-            Ok(Projection {
+            Ok(DomainSupport {
                 table: self,
                 rows,
                 supported,
@@ -519,7 +519,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
         Ok(())
     }
 
-    fn support(&self, entry: usize) -> &[u32] {
+    fn entry_support(&self, entry: usize) -> &[u32] {
         let start = entry * self.coherent.len();
         &self.supports[start..start + self.coherent.len()]
     }
@@ -543,7 +543,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
     }
 }
 
-impl<'table, 'owner, 'source> Projection<'table, 'owner, 'source> {
+impl<'table, 'owner, 'source> DomainSupport<'table, 'owner, 'source> {
     /// Prepared owner whose row positions and value references this result uses.
     #[must_use]
     pub const fn table(&self) -> &'table Table<'owner, 'source> {
@@ -574,7 +574,7 @@ impl<'table, 'owner, 'source> Projection<'table, 'owner, 'source> {
         })
     }
 
-    /// Projection work and retained result capacity, excluding prepared inputs.
+    /// Domain-support work and retained result capacity, excluding prepared inputs.
     #[must_use]
     pub const fn statistics(&self) -> Statistics {
         self.statistics

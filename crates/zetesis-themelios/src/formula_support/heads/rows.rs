@@ -4,7 +4,7 @@
 //! production and formula emission, with no claim about truth or exhaustiveness.
 
 use zetesis_core::TemplateTerm;
-use zetesis_core::atom_interner::{PreparedRows, RowColumn};
+use zetesis_core::atom_registry::{PreparedRows, RowColumn};
 
 use super::{AtomPattern, Computation, Counters, StorageLease};
 use crate::formula_support::witnesses::WitnessRow;

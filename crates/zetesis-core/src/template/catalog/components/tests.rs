@@ -1,7 +1,7 @@
 //! Independent components retain occurrences, not another payload authority.
 
 use super::*;
-use crate::atom_interner::{AtomInterner, Limits};
+use crate::atom_registry::{AtomRegistry, Limits};
 use crate::catalog::{Error, ReadError};
 use crate::test_support::PERMIT;
 use crate::{Atom, Predicate, Sign, Value};
@@ -13,8 +13,8 @@ fn limits() -> Limits {
         max_bytes: 4 * 1024 * 1024,
     }
 }
-fn owner() -> AtomInterner {
-    let mut owner = AtomInterner::new();
+fn owner() -> AtomRegistry {
+    let mut owner = AtomRegistry::new();
     let atom = Atom::new(
         Predicate::new("p", 1).unwrap(),
         vec![Value::String("shared".into())],
@@ -87,7 +87,7 @@ fn empty_components_still_require_their_vocabulary() {
 
 #[test]
 fn constructor_only_text_requires_a_covering_prefix() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let old = owner.publish_selection_with(&[], limits(), PERMIT).unwrap();
     let declaration = owner
         .split()
@@ -194,7 +194,7 @@ fn append_refuses_ingress_constants_and_poisons_binding() {
 
 fn append_all<E>(
     components: &mut TemplateComponents,
-    owner: &AtomInterner,
+    owner: &AtomRegistry,
     constructor: &DeclaredConstructor,
     mut before: impl FnMut() -> Result<(), E>,
 ) -> Result<(), TemplateCatalogFailure<E>> {
@@ -221,7 +221,7 @@ fn append_all<E>(
     Ok(())
 }
 
-fn constructor(owner: &mut AtomInterner) -> DeclaredConstructor {
+fn constructor(owner: &mut AtomRegistry) -> DeclaredConstructor {
     owner
         .split()
         .1
@@ -486,7 +486,7 @@ fn constructor_recovery_refuses_an_absent_occurrence() {
 
 #[test]
 fn standalone_predicates_preserve_signed_occurrences_without_atoms() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let old = owner.publish_selection_with(&[], limits(), PERMIT).unwrap();
     let input = Predicate::with_sign("projection", 7, Sign::Negative).unwrap();
     let predicate = owner
@@ -521,7 +521,7 @@ fn standalone_predicates_preserve_signed_occurrences_without_atoms() {
 
 #[test]
 fn standalone_predicate_refusal_preserves_actual_receipt_and_poison() {
-    let mut owner = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
     let declared = owner
         .declare_predicate_with(&Predicate::new("p", 0).unwrap(), limits(), PERMIT)
         .unwrap();
@@ -547,8 +547,8 @@ fn standalone_predicate_refusal_preserves_actual_receipt_and_poison() {
 
 #[test]
 fn standalone_predicate_cannot_adopt_a_foreign_declaration() {
-    let mut owner = AtomInterner::new();
-    let mut foreign = AtomInterner::new();
+    let mut owner = AtomRegistry::new();
+    let mut foreign = AtomRegistry::new();
     let input = Predicate::new("equal_spelling", 0).unwrap();
     owner
         .declare_predicate_with(&input, limits(), PERMIT)

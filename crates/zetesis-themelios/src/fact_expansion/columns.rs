@@ -11,7 +11,11 @@ use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
 use crate::{ExpansionFailure, ExpansionResource, ProfileFeature, ProgramSite, compile};
 
-#[derive(Debug)]
+/// The segments a recycled column keeps room for: a plain argument's one and
+/// a short pool's few. A larger column releases its storage with its values.
+const RETAINED_SEGMENTS: usize = 8;
+
+#[derive(Debug, Default)]
 pub(super) struct Column {
     segments: Vec<Segment>,
     segment: usize,
@@ -59,26 +63,26 @@ impl Column {
                 .sum::<usize>()
     }
 
+    /// Check one argument into this column, replacing what it held and
+    /// keeping its storage; returns the argument's scalar payload bytes.
     pub(super) fn prepare(
+        &mut self,
         term: &SourceTerm,
         budget: &mut Budget,
         location: ProgramSite,
-    ) -> Result<(Self, u128), ExpansionFailure> {
-        let mut column = Self {
-            segments: Vec::new(),
-            segment: 0,
-            offset: 0,
-        };
+    ) -> Result<u128, ExpansionFailure> {
+        let column = self;
+        column.segments.clear();
+        column.segment = 0;
+        column.offset = 0;
         let mut payload = 0_u128;
-        let mut pending = Vec::new();
-        reserve(&mut pending, 1, budget, location)?;
-        pending.push(term);
+        let mut pending = Pending::new(term);
         while let Some(term) = pending.pop() {
             budget.poll(location)?;
             let segment = match term {
                 SourceTerm::Pool(items) => {
-                    reserve(&mut pending, items.len(), budget, location)?;
-                    pending.extend(items.iter().rev());
+                    reserve(&mut pending.rest, items.len(), budget, location)?;
+                    pending.rest.extend(items.iter().rev());
                     continue;
                 }
                 SourceTerm::Interval { lower, upper } => {
@@ -102,7 +106,15 @@ impl Column {
             reserve(&mut column.segments, 1, budget, location)?;
             column.segments.push(segment);
         }
-        Ok((column, payload))
+        Ok(payload)
+    }
+
+    /// Drop the column's values, keeping a small column's storage for reuse.
+    pub(super) fn recycle(&mut self) {
+        self.segments.clear();
+        self.segments.shrink_to(RETAINED_SEGMENTS);
+        self.segment = 0;
+        self.offset = 0;
     }
 
     /// The segments in emission order, independent of the copy-preflight position.
@@ -141,19 +153,17 @@ pub(super) fn size(
     budget: &Budget,
     location: ProgramSite,
 ) -> Result<(u128, u128), ExpansionFailure> {
-    let mut pending = Vec::new();
-    reserve(&mut pending, 1, budget, location)?;
-    pending.push(term);
+    let mut pending = Pending::new(term);
     let mut size = 0_u128;
     let mut bytes = 0_u128;
     while let Some(term) = pending.pop() {
         budget.poll(location)?;
         match term {
             SourceTerm::Pool(items) => {
-                reserve(&mut pending, items.len(), budget, location)?;
+                reserve(&mut pending.rest, items.len(), budget, location)?;
                 // Validation historically visits pool leaves in reverse order;
                 // emission has its own forward order in Column::prepare.
-                pending.extend(items);
+                pending.rest.extend(items);
             }
             SourceTerm::Interval { lower, upper } => {
                 let range = interval(lower, upper, location)?;
@@ -177,6 +187,27 @@ pub(super) fn size(
         }
     }
     Ok((size, bytes))
+}
+
+/// A column's traversal stack. The root term is held apart, so a plain scalar
+/// argument, the common case, is visited without allocating a stack; only a
+/// pool's items are pushed.
+struct Pending<'a> {
+    root: Option<&'a SourceTerm>,
+    rest: Vec<&'a SourceTerm>,
+}
+
+impl<'a> Pending<'a> {
+    fn new(root: &'a SourceTerm) -> Self {
+        Self {
+            root: Some(root),
+            rest: Vec::new(),
+        }
+    }
+
+    fn pop(&mut self) -> Option<&'a SourceTerm> {
+        self.root.take().or_else(|| self.rest.pop())
+    }
 }
 
 fn interval(

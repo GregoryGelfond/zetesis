@@ -393,6 +393,42 @@ impl Store {
         Ok(id)
     }
 
+    /// Find a signed predicate by content without admitting text or a
+    /// signature. Same-vocabulary predicates reuse their identity.
+    pub(crate) fn find_predicate_with<E>(
+        &self,
+        predicate: PredicateRef<'_>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<PredicateId>, Failure<E>> {
+        let mut work = Work::new(&mut before);
+        work.step()?;
+        if let Some((read, id)) = predicate.canonical() {
+            work.step()?;
+            if read.vocabulary_belongs_to(self) {
+                return Ok(Some(id));
+            }
+        }
+        work.step()?;
+        let Some(name) = self.find_text_with(predicate.name(), &mut work)? else {
+            return Ok(None);
+        };
+        let signature = Signature {
+            name,
+            sign: predicate.sign(),
+            arity: predicate.arity(),
+        };
+        let hash = work.key_hash(signature, &[])?;
+        Ok(self
+            .vocabulary
+            .indexes()
+            .predicates
+            .find_with(hash, &mut work, |id, work| {
+                work.step()?;
+                Ok(self.signature(PredicateId(id)) == signature)
+            })?
+            .map(PredicateId))
+    }
+
     pub(super) fn intern_atom_with<E>(
         &mut self,
         predicate: PredicateId,
@@ -589,6 +625,67 @@ impl Store {
         Ok(self.tail.columns.len())
     }
 
+    /// Reserve room for `rows` more atoms of one predicate before any is
+    /// published: its column block (created when absent), the atom locators
+    /// and the atom index's links, at the capacities one-at-a-time growth
+    /// would reach. Each growth admits its moved cells once. Returns the
+    /// predicate's column block and where the reservation started, for
+    /// [`Self::trim_atom_rows_with`].
+    pub(crate) fn reserve_atom_rows_with<E>(
+        &mut self,
+        predicate: PredicateId,
+        arity: usize,
+        (location, rows): (usize, usize),
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<(usize, RowsStart), Failure<E>> {
+        let mut work = Work::new(&mut before);
+        work.step()?;
+        self.budget.check()?;
+        if self.signature(predicate).arity != arity {
+            return Err(Fault::Shape.into());
+        }
+        let block = self.column_block(predicate, arity, Some(location), &mut work)?;
+        let columns = &self.tail.columns[block];
+        let start = RowsStart {
+            columns: columns
+                .arguments
+                .first()
+                .map_or((columns.rows, 0), |column| {
+                    (column.len(), column.capacity())
+                }),
+            locators: (self.tail.atoms.len(), self.tail.atoms.capacity()),
+            links: (0, 0),
+        };
+        for column in &mut self.tail.columns[block].arguments {
+            work.reserve_rows(column, rows, &mut self.budget)?;
+        }
+        work.reserve_rows(&mut self.tail.atoms, rows, &mut self.budget)?;
+        let links = self
+            .atoms
+            .reserve_rows_with(rows, &mut self.budget, &mut work)?;
+        Ok((block, RowsStart { links, ..start }))
+    }
+
+    /// Give back the room [`Self::reserve_atom_rows_with`] took for rows that
+    /// were found rather than published, leaving the capacities publishing
+    /// the new rows one at a time would have left.
+    pub(crate) fn trim_atom_rows_with<E>(
+        &mut self,
+        block: usize,
+        start: RowsStart,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<(), Failure<E>> {
+        let mut work = Work::new(&mut before);
+        work.step()?;
+        let columns = self.tail.columns.get_mut(block).ok_or(Fault::Shape)?;
+        for column in &mut columns.arguments {
+            work.trim_rows(column, start.columns, &mut self.budget)?;
+        }
+        work.trim_rows(&mut self.tail.atoms, start.locators, &mut self.budget)?;
+        self.atoms
+            .trim_rows_with(start.links, &mut self.budget, &mut work)
+    }
+
     fn column_block<E>(
         &mut self,
         predicate: PredicateId,
@@ -716,3 +813,11 @@ fn node_key<E>(
 
 #[cfg(test)]
 mod tests;
+
+/// Lengths and capacities a batch row reservation started from.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RowsStart {
+    columns: (usize, usize),
+    locators: (usize, usize),
+    links: (usize, usize),
+}

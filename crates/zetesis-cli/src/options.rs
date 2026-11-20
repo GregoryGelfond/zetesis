@@ -110,8 +110,9 @@ pub struct Options {
     /// Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.
     ///
     /// Zero requests an immediate stop. No deadline is imposed when omitted.
-    /// A timer thread marks the deadline and checked work boundaries observe
-    /// the mark as they observe cancellation, without reading the clock. Blocking source I/O,
+    /// Checked work boundaries observe the deadline as they observe
+    /// cancellation, reading the clock once every 64 polls on each thread; no
+    /// thread is started for it. Blocking source I/O,
     /// frontend operations and a running GPU kernel cannot be preempted.
     /// Library callers supply their own Cancellation instead of this process option.
     #[arg(long, value_name = "DURATION", value_parser = values::seconds)]
@@ -134,10 +135,98 @@ pub struct Options {
     pub models: usize,
     /// Host threads; auto uses available parallelism, falling back to one.
     ///
+    /// A hard cap: at most this many solver threads run at once, the main
+    /// thread included, across grounding, search and completion. A GPU
+    /// backend may add its device-discovery thread and the driver's threads.
+    ///
     /// The shared policy assigns worker and scratch capacity within the memory
     /// allowance. Parallel answer order can vary; the answer-set family does not.
     #[arg(long = "threads", visible_alias = "workers", value_name = "auto|N", value_parser = zetesis_backend::parse_threads, default_value = "auto")]
     pub workers: NonZeroUsize,
+    /// Disable every learned-row source. Answers are unchanged; only pruning
+    /// is lost. Measurement use.
+    #[arg(
+        long = "disable-learning",
+        hide = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0,
+        value_parser = parse_hidden_disable
+    )]
+    pub disable_learning: HiddenDisable,
+    /// How a refuted region's decided literals are reduced to a core.
+    /// Measurement use; the default records a full decided-literal core.
+    #[arg(
+        long = "learning-conflict-core",
+        value_parser = conflict_core_parser(),
+        default_value = "full",
+        hide = true
+    )]
+    pub learning_conflict_core: zetesis_ferraris::ConflictCore,
+    /// Disable the refuted-region conflict source. Measurement use.
+    #[arg(
+        long = "disable-conflict-learning",
+        hide = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0,
+        value_parser = parse_hidden_disable
+    )]
+    pub disable_conflict_learning: HiddenDisable,
+    /// Disable the objective-bound source. Measurement use.
+    #[arg(
+        long = "disable-bound-learning",
+        hide = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0,
+        value_parser = parse_hidden_disable
+    )]
+    pub disable_bound_learning: HiddenDisable,
+    /// Keep attempt caps at the default 256 even when the memory allowance
+    /// would raise them. Tier and store row caps still follow the allowance.
+    /// Measurement use.
+    #[arg(
+        long = "no-learning-attempt-scaling",
+        hide = true,
+        default_value = "false",
+        default_missing_value = "true",
+        num_args = 0,
+        value_parser = parse_hidden_disable
+    )]
+    pub no_learning_attempt_scaling: HiddenDisable,
+}
+
+/// Presence of a hidden measurement disable flag. The flag takes no value:
+/// omitted leaves the ordinary policy in force, and present turns it off.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HiddenDisable {
+    set: bool,
+}
+
+impl HiddenDisable {
+    /// The flag was not given.
+    pub const UNSET: Self = Self { set: false };
+
+    /// Whether the flag was present.
+    #[must_use]
+    pub const fn is_set(self) -> bool {
+        self.set
+    }
+}
+
+impl std::fmt::Display for HiddenDisable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.set { "true" } else { "false" })
+    }
+}
+
+fn parse_hidden_disable(value: &str) -> Result<HiddenDisable, String> {
+    match value {
+        "true" => Ok(HiddenDisable { set: true }),
+        "false" => Ok(HiddenDisable { set: false }),
+        other => Err(format!("unexpected value {other}")),
+    }
 }
 
 /// The full help's account of `--backend`: every value with its meaning, in the
@@ -277,6 +366,23 @@ impl From<&Options> for crate::SolveConfig {
             oracle: options.oracle,
             stats: options.stats,
             models: options.models,
+            learning: !options.disable_learning.is_set(),
+            conflict_core: options.learning_conflict_core,
+            conflict_learning: if options.disable_conflict_learning.is_set() {
+                zetesis_solve::LearningSwitch::Disabled
+            } else {
+                zetesis_solve::LearningSwitch::Enabled
+            },
+            bound_learning: if options.disable_bound_learning.is_set() {
+                zetesis_solve::LearningSwitch::Disabled
+            } else {
+                zetesis_solve::LearningSwitch::Enabled
+            },
+            scale_learning_attempts: if options.no_learning_attempt_scaling.is_set() {
+                zetesis_solve::LearningSwitch::Disabled
+            } else {
+                zetesis_solve::LearningSwitch::Enabled
+            },
             ..options.resources().solve_config()
         }
     }
@@ -318,6 +424,21 @@ fn formula_joins_parser() -> impl TypedValueParser<Value = zetesis_themelios::Jo
             JoinStrategy::Table,
             PossibleValue::new("table")
                 .help("Reuse finite-table masks over completed possible support."),
+        ),
+    ])
+}
+
+fn conflict_core_parser() -> impl TypedValueParser<Value = zetesis_ferraris::ConflictCore> {
+    use zetesis_ferraris::ConflictCore;
+    policy_parser([
+        (
+            ConflictCore::Full,
+            PossibleValue::new("full").help("Record every decided literal of a refuted region."),
+        ),
+        (
+            ConflictCore::Minimized,
+            PossibleValue::new("minimized")
+                .help("Drop decided literals a fresh carrier narrowing still refutes without."),
         ),
     ])
 }

@@ -28,7 +28,7 @@ use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
-use crate::formula_ir::{HeadIr, LiteralIr, Prepared, Projection, RuleIr};
+use crate::formula_ir::{AnonymousWitnesses, HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::family::{Evidence, Warnings};
 use crate::formula_support::{Computation, Counters, Ir, Join, Support};
 use crate::{FormulaFailure, FormulaLimits};
@@ -38,7 +38,7 @@ enum Continue<'a> {
     None,
     Head(&'a HeadIr),
     Consequent(&'a Consequent),
-    Projection(&'a Projection),
+    Anonymous(&'a AnonymousWitnesses),
 }
 
 struct Frame<'a, 'source> {
@@ -388,8 +388,8 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
                         )?;
                     }
                 }
-                LiteralIr::ProjectedAtom(_, projection) => {
-                    nested |= self.projection(projection, binding, location)?;
+                LiteralIr::AnonymousAtom(_, witnesses) => {
+                    nested |= self.anonymous(witnesses, binding, location)?;
                 }
                 LiteralIr::Atom(..)
                 | LiteralIr::PatternAtom(_)
@@ -405,15 +405,15 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         Ok(nested)
     }
 
-    fn projection(
+    fn anonymous(
         &mut self,
-        projection: &'source Projection,
+        witnesses: &'source AnonymousWitnesses,
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
-        match projection {
-            Projection::Arguments { .. } => Ok(false),
-            Projection::Witnesses {
+        match witnesses {
+            AnonymousWitnesses::Arguments { .. } => Ok(false),
+            AnonymousWitnesses::Witnesses {
                 bindings,
                 variables,
                 inputs,
@@ -440,16 +440,14 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
     ) -> Result<(), FormulaFailure> {
         match continuation {
             Continue::None | Continue::Consequent(Consequent::Guard(_)) => {}
-            Continue::Projection(projection) => {
-                self.projection(projection, binding, location)?;
+            Continue::Anonymous(witnesses) => {
+                self.anonymous(witnesses, binding, location)?;
             }
             Continue::Head(head) => self.head(head, binding, location)?,
             Continue::Consequent(Consequent::Atoms(_, alternatives)) => {
                 for alternative in alternatives {
                     let continuation = match &alternative.operand {
-                        ConsequentOperand::Projection(projection) => {
-                            Continue::Projection(projection)
-                        }
+                        ConsequentOperand::Anonymous(witnesses) => Continue::Anonymous(witnesses),
                         ConsequentOperand::Atom(_) => Continue::None,
                     };
                     self.local_fragment(
@@ -680,8 +678,8 @@ impl<'a> SyntaxScan<'a, '_> {
                         &conditional.consequent,
                     )))?;
                 }
-                LiteralIr::ProjectedAtom(_, projection) => {
-                    self.push(Syntax::Continued(Continue::Projection(projection)))?;
+                LiteralIr::AnonymousAtom(_, witnesses) => {
+                    self.push(Syntax::Continued(Continue::Anonymous(witnesses)))?;
                 }
                 _ => {}
             }
@@ -716,8 +714,8 @@ impl<'a> SyntaxScan<'a, '_> {
             Syntax::Continued(Continue::Consequent(Consequent::Atoms(_, alternatives))) => {
                 for alternative in alternatives {
                     self.push(Syntax::Body(&alternative.bindings))?;
-                    if let ConsequentOperand::Projection(projection) = &alternative.operand {
-                        self.push(Syntax::Continued(Continue::Projection(projection)))?;
+                    if let ConsequentOperand::Anonymous(witnesses) = &alternative.operand {
+                        self.push(Syntax::Continued(Continue::Anonymous(witnesses)))?;
                     }
                 }
             }
@@ -729,7 +727,10 @@ impl<'a> SyntaxScan<'a, '_> {
                     self.push(Syntax::Body(&alternative.bindings))?;
                 }
             }
-            Syntax::Continued(Continue::Projection(Projection::Witnesses { bindings, .. })) => {
+            Syntax::Continued(Continue::Anonymous(AnonymousWitnesses::Witnesses {
+                bindings,
+                ..
+            })) => {
                 self.push(Syntax::Body(bindings))?;
             }
             Syntax::Continued(_) => {}

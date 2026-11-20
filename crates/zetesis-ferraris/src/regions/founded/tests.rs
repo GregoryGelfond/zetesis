@@ -25,7 +25,7 @@ impl Scratch {
         )
         .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-        self.projected = Some(Projection {
+        self.projected = Some(FoundedIncidences {
             parents: index.parents.clone(),
             heads: projected_heads::original_rows(owner, producers),
             seed_start: initial.len(),

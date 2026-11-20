@@ -12,8 +12,37 @@ use zetesis_themelios::SourceBundle;
 /// and coverage are printed independently; this is not clingo's numeric exit-code protocol.
 /// Standard output is explicitly flushed before returning. A flush failure is
 /// an output error, independently of any established semantic outcome.
+///
+/// With `ZETESIS_THREAD_AUDIT` set, the most solver threads live at once, the
+/// main thread included, are reported on standard error as
+/// `zetesis-thread-audit: peak=<n>` on exit; `--threads` bounds that count.
 #[must_use]
 pub fn entry() -> ExitCode {
+    let status = run();
+    if std::env::var_os("ZETESIS_THREAD_AUDIT").is_some() {
+        let _ = writeln!(
+            io::stderr(),
+            "zetesis-thread-audit: peak={}{}",
+            zetesis_algebra::threads::peak(),
+            os_threads().map_or_else(String::new, |live| format!(" os_live={live}")),
+        );
+    }
+    status
+}
+
+/// The process's live threads as the operating system counts them, where
+/// that is readable without unsafe code.
+fn os_threads() -> Option<usize> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("Threads:"))?
+        .trim()
+        .parse()
+        .ok()
+}
+
+fn run() -> ExitCode {
     let arguments: Vec<std::ffi::OsString> = std::env::args_os().collect();
     let mut invocation = match Invocation::try_parse_from(arguments.iter().cloned()) {
         Ok(invocation) => invocation,

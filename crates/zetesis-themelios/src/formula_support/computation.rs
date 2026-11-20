@@ -10,7 +10,7 @@ mod borrowed_tests;
 
 use crate::ProgramSite;
 use zetesis_core::ValueNodeRef;
-use zetesis_core::atom_interner::{AssignedFailure, TermLookup};
+use zetesis_core::atom_registry::{AssignedFailure, TermLookup};
 use zetesis_core::catalog::{
     AssignmentError, AssignmentFailure, AssignmentSlice, CatalogRead, Error, TermKey, TermRef,
 };
@@ -437,7 +437,7 @@ fn constructed_lookup(
     counters.record(Event::SupportPeakBytes(outer + lookup.storage_peak()));
     result.map_err(|error| match error {
         AssignedFailure::Assignment(error) => crate::formula_binding::assignment(error, location),
-        AssignedFailure::Interner(error) => {
+        AssignedFailure::Registry(error) => {
             super::relations::atom_failure(error, limits, outer, location)
         }
     })

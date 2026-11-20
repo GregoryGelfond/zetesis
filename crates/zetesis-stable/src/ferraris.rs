@@ -163,7 +163,7 @@ pub struct Statistics {
     /// The region proposer's statistics, on an enumeration's receipt.
     pub regions: Option<RegionSearchStatistics>,
     /// Original-region callback attempts; source work is accounted by its owner.
-    pub region_filter: Option<crate::RegionFilterStatistics>,
+    pub constraint_refutation: Option<crate::ConstraintRefutationStatistics>,
     /// Actual reduct-query work and storage, including failures.
     pub reduct: crate::ReductStatistics,
 }
@@ -848,33 +848,33 @@ impl StableModels {
     /// checks apply to the admitted source and internal test fixtures.
     fn set_filter_source(
         &mut self,
-        source: crate::region_filter::Source,
+        source: crate::constraint_refutation::Source,
     ) -> Result<(), Incomplete> {
         if self.terminal {
             return Err(Incomplete::ClosedEnumerator);
         }
         if self.started() {
-            return Err(Incomplete::LateRegionFilter);
+            return Err(Incomplete::LateConstraintRefuter);
         }
-        if self.proposer.filter().is_some() {
-            return Err(Incomplete::RegionFilterAlreadySet);
+        if self.proposer.refuter().is_some() {
+            return Err(Incomplete::ConstraintRefuterAlreadySet);
         }
-        let filter = crate::region_filter::Filter::new(source);
+        let filter = crate::constraint_refutation::ConstraintRefuter::new(source);
         match &mut self.proposer {
             Proposer::Refuted(root) => root.filter = Some(filter),
-            Proposer::Regions(regions) => regions.set_filter(filter),
-            Proposer::Proposals(proposals) => proposals.set_filter(filter),
-            Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
+            Proposer::Regions(regions) => regions.set_refuter(filter),
+            Proposer::Proposals(proposals) => proposals.set_refuter(filter),
+            Proposer::Parallel(parallel) => parallel.set_refuter(filter)?,
         }
         Ok(())
     }
 
     #[cfg(test)]
-    pub(crate) fn set_region_filter(
+    pub(crate) fn set_constraint_refuter(
         &mut self,
-        source: std::sync::Arc<dyn crate::region_filter::tests::injection::Source>,
+        source: std::sync::Arc<dyn crate::constraint_refutation::tests::injection::Source>,
     ) -> Result<(), Incomplete> {
-        self.set_filter_source(crate::region_filter::Source::Fixture(source))
+        self.set_filter_source(crate::constraint_refutation::Source::Fixture(source))
     }
 
     /// Check an admitted hybrid program's streamed integrity constraints over
@@ -891,7 +891,7 @@ impl StableModels {
         &mut self,
         constraints: std::sync::Arc<crate::StreamedConstraints>,
     ) -> Result<(), Incomplete> {
-        self.set_filter_source(crate::region_filter::Source::Streamed(constraints))
+        self.set_filter_source(crate::constraint_refutation::Source::Streamed(constraints))
     }
 
     /// Share learned rows through `store` with every other stream given the
@@ -1050,10 +1050,10 @@ impl StableModels {
                 ..self.statistics
             },
         };
-        statistics.region_filter = self
+        statistics.constraint_refutation = self
             .proposer
-            .filter()
-            .map(crate::region_filter::Filter::statistics);
+            .refuter()
+            .map(crate::constraint_refutation::ConstraintRefuter::statistics);
         statistics
     }
 
@@ -1221,7 +1221,7 @@ enum Proposal {
 struct RefutedRoot {
     parts: Option<regions::OriginalParts>,
     statistics: RegionSearchStatistics,
-    filter: Option<crate::region_filter::Filter>,
+    filter: Option<crate::constraint_refutation::ConstraintRefuter>,
 }
 
 impl RefutedRoot {
@@ -1238,12 +1238,12 @@ impl Proposer {
         matches!(self, Self::Refuted(_))
     }
 
-    fn filter(&self) -> Option<&crate::region_filter::Filter> {
+    fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
         match self {
             Self::Refuted(root) => root.filter.as_ref(),
-            Self::Regions(regions) => regions.filter(),
-            Self::Proposals(proposals) => proposals.filter(),
-            Self::Parallel(parallel) => parallel.filter(),
+            Self::Regions(regions) => regions.refuter(),
+            Self::Proposals(proposals) => proposals.refuter(),
+            Self::Parallel(parallel) => parallel.refuter(),
         }
     }
 

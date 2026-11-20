@@ -79,6 +79,7 @@ impl<'registration, 'source> Inventory<'registration, 'source> {
         let mut reads = Vec::new();
         let mut writes = Vec::new();
         memory.reserve(&mut footprints, registration.producers.len())?;
+        let found = std::cell::RefCell::new(super::Found::new());
         for (index, producer) in registration.producers.iter().enumerate() {
             counters.work(limits, location)?;
             let rule = &registration.rules[index];
@@ -89,7 +90,7 @@ impl<'registration, 'source> Inventory<'registration, 'source> {
                 producer,
                 rule,
                 &schedule.nodes,
-                view,
+                (view, &found),
                 (&mut reads, &mut writes, &mut memory),
                 (limits, counters, rule.location),
             )?;
@@ -139,6 +140,7 @@ impl<'registration, 'source> Inventory<'registration, 'source> {
             });
         }
         memory.release((reads.capacity() + writes.capacity()) * size_of::<usize>());
+        found.into_inner().release(&mut memory);
         Ok(Some(Self {
             schedule,
             footprints,

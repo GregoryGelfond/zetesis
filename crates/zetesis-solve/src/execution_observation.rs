@@ -2,7 +2,7 @@
 
 use crate::{Grounder, Oracle, SolveError};
 use std::{error::Error, num::NonZeroUsize};
-use zetesis_themelios::objective_bound::{ObjectiveBoundError, ObjectiveProjectionError};
+use zetesis_themelios::objective_bound::{ObjectiveBoundError, ObjectiveReadSetError};
 
 /// How a hybrid base divides its eligible integrity constraints: the templates
 /// it streams and checks during search, and those it grounded in its core
@@ -79,7 +79,8 @@ pub enum ExecutionObservation<'a> {
     /// has run, in wall time since it began, for longer than starting them
     /// costs; a walk that ends sooner starts none.
     ParallelRegions {
-        /// Requested worker population.
+        /// Walker threads the walk may start: the requested threads less
+        /// the coordinating thread, which runs the walk itself.
         workers: NonZeroUsize,
     },
     /// Bounded workers propose formula leaves, then join before an independent
@@ -102,7 +103,7 @@ pub enum ExecutionObservation<'a> {
         adapter: zetesis_wgpu::AdapterMetadata<'a>,
         /// Exact gate evaluator compiled into this executor. This records the
         /// selected implementation, not a device submission or completed check.
-        projection: zetesis_wgpu::GateProjection,
+        node_kernel: zetesis_wgpu::BinaryNodeKernel,
         /// Requested materialization policy.
         grounder: Grounder,
         /// Configured candidate batch size: a fixed ceiling, or the adaptive
@@ -157,7 +158,7 @@ pub enum ExecutionObservation<'a> {
     ObjectiveUnavailable(ObjectiveBoundError),
     /// Authenticated objective projection declined; its performed work remains
     /// charged and detailed scoring uses the remaining objective allowance.
-    ObjectiveProjectionUnavailable(ObjectiveProjectionError),
+    ObjectiveReadSetUnavailable(ObjectiveReadSetError),
     /// Required-choice strengthening declined; the exact objective plan remains usable.
     ChoiceObjectiveBoundUnavailable(ObjectiveBoundError),
     /// Optional objective-bound construction was refused; exact search remains.

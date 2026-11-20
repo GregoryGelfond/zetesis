@@ -51,7 +51,9 @@ The pseudocode below exposes those compositions before discussing scheduling.
 model. Names such as `FoldDAG` and `RootValues` describe operations in the Rust
 implementation; they do not assert that all stages already share an executable
 combinator API. Relations, atom sets, truth arrays and completion evidence remain
-different types of value.
+different types of value. The [grounding name map](../vocabulary.md#grounding-semantic-names-and-concrete-realizations)
+locates the fused cursors, deferred gates and shared execution primitives; it
+does not claim that matching names establish a machine-level refinement.
 
 | ASP operation | Execution interpretation | Where to read the implementation |
 | --- | --- | --- |

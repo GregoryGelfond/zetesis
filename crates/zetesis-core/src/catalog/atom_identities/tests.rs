@@ -168,18 +168,18 @@ fn a_prune_returns_the_owner_tables_excess_capacity() {
 mod shared_base {
     use super::*;
     use crate::Model;
-    use crate::catalog::interner::{AtomInterner, ClosedCatalog, Limits as InternerLimits};
+    use crate::catalog::registry::{AtomRegistry, ClosedCatalog, Limits as RegistryLimits};
     use crate::test_support::PERMIT;
 
-    fn limits() -> InternerLimits {
-        InternerLimits::for_atoms(64, 1 << 20)
+    fn limits() -> RegistryLimits {
+        RegistryLimits::for_atoms(64, 1 << 20)
     }
 
     fn number(name: &str, value: i32) -> Atom {
         Atom::new(Predicate::new(name, 1).unwrap(), vec![Value::Number(value)]).unwrap()
     }
 
-    fn insert(owner: &mut AtomInterner, atom: &Atom) {
+    fn insert(owner: &mut AtomRegistry, atom: &Atom) {
         owner
             .entry_atom_with(atom, limits(), PERMIT)
             .unwrap()
@@ -193,7 +193,7 @@ mod shared_base {
     /// the base's frozen vocabulary, so the rows it can append, such as `q(1)`,
     /// combine the predicates and terms already there.
     fn closed_base() -> (ClosedCatalog, AtomCatalog, Model) {
-        let mut source = AtomInterner::new();
+        let mut source = AtomRegistry::new();
         for value in 0..3 {
             insert(&mut source, &number("p", value));
         }
@@ -209,7 +209,7 @@ mod shared_base {
     /// A descendant of `base` that discovers `model`'s atoms and appends
     /// `q(value)` for each of `appended`, published as an answer is.
     fn descendant(base: &ClosedCatalog, model: &Model, appended: &[i32]) -> AtomCatalog {
-        let mut writer = AtomInterner::for_closed_catalog(base, usize::MAX).unwrap();
+        let mut writer = AtomRegistry::for_closed_catalog(base, usize::MAX).unwrap();
         writer
             .discover_model_with(base, model, limits(), PERMIT)
             .unwrap();

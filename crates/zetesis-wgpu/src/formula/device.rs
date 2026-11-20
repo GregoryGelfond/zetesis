@@ -3,7 +3,7 @@
 use super::packing::{self, Plan};
 use super::preparation::{Preparation, PreparedGraph};
 use super::transport::Resident;
-use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
+use super::{BinaryNodeKernel, FormulaBatchStats, FormulaCheck, FormulaLimits, GpuFormulaProfile};
 use crate::runtime::{ErrorScopes, Observation, Scopes};
 use crate::timing::{BatchTiming, ComputeTimer};
 use crate::{CheckedSlate, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
@@ -59,7 +59,7 @@ impl GpuFormulaOracle {
     /// Returns typed adapter, capacity, allocation, validation or device failure.
     /// Selection follows the hard API and physical-device policy.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
-        Self::new_selected_with_projection(options, selection, GateProjection::default())
+        Self::new_selected_with_node_kernel(options, selection, BinaryNodeKernel::default())
     }
 
     /// Select a native device and request optional compute-pass timestamps.
@@ -132,13 +132,13 @@ impl GpuFormulaOracle {
     ///
     /// # Errors
     /// Returns typed adapter, capacity, allocation, validation or device failure.
-    pub fn new_selected_with_projection(
+    pub fn new_selected_with_node_kernel(
         options: GpuOptions,
         selection: GpuSelection,
-        projection: GateProjection,
+        node_kernel: BinaryNodeKernel,
     ) -> Result<Self, GpuError> {
         Ok(Self::with_profile(
-            GpuFormulaProfile::new_selected_with_projection(options, selection, projection)?,
+            GpuFormulaProfile::new_selected_with_node_kernel(options, selection, node_kernel)?,
         ))
     }
 
@@ -152,7 +152,7 @@ impl GpuFormulaOracle {
     /// Refuses an active or invalidated context, unsupported granted limits,
     /// allocation and shader validation failure. No adapter selection occurs.
     pub fn from_context(context: &crate::GpuContext) -> Result<Self, GpuError> {
-        Self::from_context_with_projection(context, GateProjection::default())
+        Self::from_context_with_node_kernel(context, BinaryNodeKernel::default())
     }
 
     /// Compile the selected implementation's shader on an existing shared context.
@@ -160,12 +160,12 @@ impl GpuFormulaOracle {
     /// # Errors
     /// Reports the same context, capability and compilation failures as
     /// [`Self::from_context`].
-    pub fn from_context_with_projection(
+    pub fn from_context_with_node_kernel(
         context: &crate::GpuContext,
-        projection: GateProjection,
+        node_kernel: BinaryNodeKernel,
     ) -> Result<Self, GpuError> {
         Ok(Self::with_profile(
-            GpuFormulaProfile::from_context_with_projection(context, projection)?,
+            GpuFormulaProfile::from_context_with_node_kernel(context, node_kernel)?,
         ))
     }
 
@@ -217,8 +217,8 @@ impl GpuFormulaOracle {
 
     /// Selected gate implementation; constant-time observation without I/O.
     #[must_use]
-    pub const fn projection(&self) -> GateProjection {
-        self.profile.projection()
+    pub const fn node_kernel(&self) -> BinaryNodeKernel {
+        self.profile.node_kernel()
     }
     /// Identity of the actual selected native adapter.
     #[must_use]

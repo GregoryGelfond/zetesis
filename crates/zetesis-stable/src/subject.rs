@@ -67,6 +67,9 @@ impl SubjectAttempt {
                 support_work: charges.support_work,
                 founded_work: charges.founded_work,
                 support_explanations: charges.support_explanations,
+                conflict_explanations: charges.conflict_explanations,
+                bound_explanations: charges.bound_explanations,
+                learning_occupancy: charges.learning_occupancy,
                 ..RegionCounts::default()
             },
         }

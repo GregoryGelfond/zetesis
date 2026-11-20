@@ -94,7 +94,7 @@ impl Compiler<'_> {
                         literal,
                         LiteralIr::Bind { .. }
                             | LiteralIr::Atom(..)
-                            | LiteralIr::ProjectedAtom(..)
+                            | LiteralIr::AnonymousAtom(..)
                             | LiteralIr::PatternAtom(_)
                             | LiteralIr::ArgumentCheck { .. }
                             | LiteralIr::Range { .. }

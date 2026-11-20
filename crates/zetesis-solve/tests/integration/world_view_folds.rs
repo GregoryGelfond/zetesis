@@ -7,7 +7,7 @@ use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Sign};
 use zetesis_reference_support::{canonical, formula, prepared};
 use zetesis_solve::{
-    AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectionLimits,
+    AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectiveLimits,
     QueryAnswer, Session, SessionBuilder, SolveConfig, WorldView, WorldViewDecision,
     WorldViewDecisionError, WorldViewLimits, WorldViewVerdict,
 };
@@ -351,7 +351,7 @@ fn a_projection_request_does_not_narrow_the_folded_family() {
     // Projected on p, the family {}, {p,q}, {p,r} keeps one of the last two.
     let owner = formula("{p}. 1 {q;r} 1 :- p. #project p/0.");
     let decision = request(&owner)
-        .projected(ProjectionLimits::default())
+        .projected(ProjectiveLimits::default())
         .brave()
         .unwrap();
     assert_eq!(

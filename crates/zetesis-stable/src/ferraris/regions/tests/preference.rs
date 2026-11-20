@@ -104,6 +104,7 @@ fn closed_with(
             original: OriginalSubject::new(original, None).with_choices(choices),
             narrower: &narrower,
             arithmetic: None,
+            bound_learning: None,
         },
         conditions,
         &mut entry,
@@ -536,6 +537,7 @@ fn a_walk_without_an_order_reads_what_the_region_shortened() {
         original: OriginalSubject::new(&original, None).with_choices(&choices),
         narrower: &narrower,
         arithmetic: None,
+        bound_learning: None,
     };
     let cancellation = Cancellation::default();
     let free = Conditions::default();

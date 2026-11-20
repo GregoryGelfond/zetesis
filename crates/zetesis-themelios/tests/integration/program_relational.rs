@@ -144,7 +144,7 @@ fn excluded_directives_do_not_consume_semantic_budgets() {
     options.expansion = resource_limits::expansion(ExpansionResource::MetadataStatements, 0);
     let input = prepare(Arc::clone(&program), options).unwrap();
     assert!(std::ptr::eq(input.original_program(), program.as_ref()));
-    assert!(!input.metadata().project_selection().is_explicit());
+    assert!(!input.metadata().project_directives().is_explicit());
     assert_eq!(family(&exhaustive_models(&input)), expected());
 }
 

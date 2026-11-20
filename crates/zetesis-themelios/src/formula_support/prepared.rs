@@ -4,9 +4,10 @@ mod pattern_rows;
 pub(super) use pattern_rows::PatternRows;
 
 use super::{
-    CompletedQueries, CompletedSupport, Completion, Computation, Context, Counters, Evaluation,
-    FilteredRows, Join, RowFilter, order,
-    projections::{ProjectionValues, Projections, needs_totality},
+    BindRestriction, CompletedQueries, CompletedSupport, Completion, Computation, Context,
+    Counters, Evaluation, Join, RestrictedRows,
+    expression_memos::{ExpressionMemoTable, ExpressionMemos, needs_totality},
+    order,
 };
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
@@ -20,7 +21,7 @@ pub(crate) struct PreparedRule<'source> {
     pub(super) rule: &'source RuleIr,
     completion: &'source Completion,
     pub(super) plan: order::Plan<'source>,
-    pub(super) total: Option<ProjectionValues<'source>>,
+    pub(super) total: Option<ExpressionMemoTable<'source>>,
     pub(super) multiples: Option<super::multiples::Prepared<'source>>,
     pub(super) pattern_rows: Option<PatternRows<'source>>,
 }
@@ -129,16 +130,16 @@ impl<'source> PreparedRule<'source> {
         // before any candidate filter is attached. An arithmetic decline is a
         // stable absence of this optional optimization, not a cached failure.
         let total = if needs_totality(&rule.body) {
-            let mut projections =
-                Projections::new(&Context::new(&computation, limits, counters, rule.location))?;
-            if projections.total_body(
+            let mut expression_memos =
+                ExpressionMemos::new(&Context::new(&computation, limits, counters, rule.location))?;
+            if expression_memos.total_body(
                 rule,
                 queries.support(),
                 &mut Evaluation::default(),
                 Context::new(&mut computation, limits, counters, rule.location),
             )? {
-                let Projections::Local(values) = projections else {
-                    unreachable!("fresh preparation owns its projections");
+                let ExpressionMemos::Local(values) = expression_memos else {
+                    unreachable!("fresh preparation owns its expression_memos");
                 };
                 Some(values.retain_in_rule(rule.location)?)
             } else {
@@ -187,12 +188,12 @@ impl<'source> PreparedRule<'source> {
     pub(crate) fn rows<'a, 'queries>(
         &'a self,
         queries: &'a CompletedQueries<'queries>,
-        filter: Option<&'a dyn RowFilter>,
+        filter: Option<&'a dyn BindRestriction>,
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-    ) -> Result<FilteredRows<'a, 'queries>, FormulaFailure>
+    ) -> Result<RestrictedRows<'a, 'queries>, FormulaFailure>
     where
         'source: 'queries,
     {

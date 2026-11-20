@@ -3171,6 +3171,21 @@
       "name": "Zetesis.ConstructorPatterns.failure_preserves_binding"
     },
     {
+      "file": "Zetesis/ContentOrderInterning.lean",
+      "line": 28,
+      "name": "Zetesis.ContentOrderInterning.id_injective_of_law"
+    },
+    {
+      "file": "Zetesis/ContentOrderInterning.lean",
+      "line": 47,
+      "name": "Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare"
+    },
+    {
+      "file": "Zetesis/ContentOrderInterning.lean",
+      "line": 65,
+      "name": "Zetesis.ContentOrderInterning.freeze_establishes_law"
+    },
+    {
       "file": "Zetesis/Core.lean",
       "line": 22,
       "name": "Zetesis.sub_refl"
@@ -11801,6 +11816,7 @@
     "Zetesis/ConsequentAlternatives.lean",
     "Zetesis/ConstrainedPositive.lean",
     "Zetesis/ConstructorPatterns.lean",
+    "Zetesis/ContentOrderInterning.lean",
     "Zetesis/Core.lean",
     "Zetesis/CountEligibility.lean",
     "Zetesis/CountHeadActivity.lean",
@@ -11981,8 +11997,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "24e4a1e3acde2b502c2245ecb67b7a7c2106995c337f442b8e1159ecc9859c80",
-    "Zetesis.lean": "1f6e7bfc7da6d0569a28dfacaaedc04507b040f7d7b6fa251a0623d77d4f2e22",
+    "Audit.lean": "ce5b10a5944691d2f6097605867ac7984e9cd05eee62957969f67ac0467b7abf",
+    "Zetesis.lean": "eae6c7fcff502b42da6fbe8f23d5c96c301f28f75ba5efcbe18c382b6e9feb77",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -12032,6 +12048,7 @@
     "Zetesis/ConsequentAlternatives.lean": "f056a33623c406de8644d47c55912ac300f855a9d9ff0afef23bdbfaff2cc306",
     "Zetesis/ConstrainedPositive.lean": "d129f55437d51a995981c55ac67ee8dc7c01495ffd907f864cf4fb707b433167",
     "Zetesis/ConstructorPatterns.lean": "9760a578639689c713f59d3fc8492e8c5aca2cdfb0c31598eca318e38bbfeeb2",
+    "Zetesis/ContentOrderInterning.lean": "7ddfdf7652280692a66dff7db4fe619e20740b61ee13fd976017e51bfe314d9c",
     "Zetesis/Core.lean": "77182e54d0d8ea63987ddc057a2928dfe06bc675c1fe07af469cfe1082931c41",
     "Zetesis/CountEligibility.lean": "d9457fe5dd6ec6a259e8bbe990aa1ae6de25c99ccf9727a5df575c02df83785b",
     "Zetesis/CountHeadActivity.lean": "245128dd761e2643d9b2dca4af1c36220923f6f5ae0f24d0bd5dc9a2accae4a7",

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::FormulaResource;
-use crate::formula_support::projections::Projections;
+use crate::formula_support::expression_memos::ExpressionMemos;
 
 struct RoundRun {
     rows: Vec<Vec<Value>>,
@@ -42,11 +42,11 @@ fn run_variants(source: &str, reuse: bool) -> RoundRun {
                     Context::new(computation, &limits, counters, rule.location),
                 )
                 .unwrap();
-                let Projections::Prepared(values) = &join.projections else {
+                let ExpressionMemos::Prepared(values) = &join.expression_memos else {
                     panic!("later cursors must borrow the one retained map");
                 };
                 // Observe identity without retaining a typed pointer whose
-                // ProjectionValues lifetime would extend this cursor borrow.
+                // ExpressionMemoTable lifetime would extend this cursor borrow.
                 // The address is compared only, never used to access storage.
                 let address = std::ptr::from_ref(*values).addr();
                 if let Some(previous) = map {
@@ -318,7 +318,10 @@ fn each_variant_rechecks_its_own_divisor_readiness() {
                 Context::new(computation, &limits, counters, rule.location),
             )
             .unwrap();
-        assert!(matches!(second.projections, Projections::Prepared(_)));
+        assert!(matches!(
+            second.expression_memos,
+            ExpressionMemos::Prepared(_)
+        ));
         assert_eq!(second.plan.patterns[0].source, target);
         assert!(
             !second
@@ -487,7 +490,8 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
             crate::formula_support::advance_round(
                 &mut append,
                 None,
-                GroundingWork::new(&limits, counters, rule.location)
+                GroundingWork::new(&limits, counters, rule.location),
+                None,
             )
             .unwrap()
         );

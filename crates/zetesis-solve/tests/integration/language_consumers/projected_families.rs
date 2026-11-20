@@ -5,7 +5,7 @@ use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionResources, GpuApi, PreparedInput,
-    ProjectionLimits, Session, SolveConfig, WorldViewLimits,
+    ProjectiveLimits, Session, SolveConfig, WorldViewLimits,
 };
 
 pub(super) fn check(
@@ -15,7 +15,7 @@ pub(super) fn check(
 ) {
     // The fixed facts place the changing bit beyond a packed-word boundary.
     let owner = formula("d(1..70).{p;q}.#project d/1.#project p:not absent.#minimize{1@1:not q}.");
-    assert_eq!(owner.projection().atoms().len(), 71);
+    assert_eq!(owner.projective_domain().atoms().len(), 71);
     let full = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {
@@ -36,7 +36,7 @@ pub(super) fn check(
         .collect();
     let key = |answer: &zetesis_solve::AnswerSet| {
         owner
-            .projection()
+            .projective_domain()
             .atoms()
             .iter()
             .map(|atom| answer.interpretation().contains(atom))
@@ -50,7 +50,7 @@ pub(super) fn check(
     )
     .resources(resources)
     .selection(selection)
-    .projected(ProjectionLimits::default())
+    .projected(ProjectiveLimits::default())
     .start()
     .unwrap();
     let mut actual = BTreeSet::new();
@@ -64,7 +64,7 @@ pub(super) fn check(
     assert_eq!(actual, expected);
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
-    let projection = outcome.projection().unwrap();
+    let projection = outcome.projective_statistics().unwrap();
     assert!(projection.complete);
     assert_eq!(projection.representatives, expected.len());
     assert_eq!(

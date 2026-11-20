@@ -51,8 +51,8 @@ pub use discovery::GpuDiscovery;
 pub use kernel::{GpuKernelOptions, GpuPropagation, GpuWorkgroupSize, GpuWorkgroupSizing};
 
 pub use formula::{
-    FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict,
-    GateProjection, GpuFormulaOracle, GpuFormulaProfile, PreparedFormulaSubmission, ResidualReason,
+    BinaryNodeKernel, FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics,
+    FormulaVerdict, GpuFormulaOracle, GpuFormulaProfile, PreparedFormulaSubmission, ResidualReason,
 };
 
 pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};

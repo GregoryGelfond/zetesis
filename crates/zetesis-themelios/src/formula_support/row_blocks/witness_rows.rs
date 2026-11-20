@@ -16,7 +16,7 @@ mod tests;
 use std::ops::Range;
 
 #[cfg(test)]
-use zetesis_core::atom_interner::TermLookup;
+use zetesis_core::atom_registry::TermLookup;
 use zetesis_core::relation::Row;
 
 use super::{

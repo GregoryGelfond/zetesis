@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod tests;
 
-use zetesis_core::atom_interner::RowColumn;
+use zetesis_core::atom_registry::RowColumn;
 
 use super::{
     Binding, Buffer, Computation, Context, FormulaFailure, GroundingWork, StorageLease,

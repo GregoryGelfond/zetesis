@@ -389,3 +389,41 @@ fn refused_argument_scratch_does_not_mutate_components() {
         .pattern(predicate, &arguments, &limits, &mut counters, location())
         .unwrap();
 }
+
+#[test]
+fn consecutive_admissions_of_one_predicate_share_its_component() {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut catalog = SupportCatalog::default();
+    let mut admission = catalog
+        .component_admission(&limits, &mut counters, location())
+        .unwrap();
+    let mut admit = |name: &str, arity: usize, sign: Sign, counters: &mut Counters| {
+        admission
+            .predicate(
+                (&zetesis_core::Predicate::with_sign(name, arity, sign).unwrap()).into(),
+                &limits,
+                counters,
+                location(),
+            )
+            .unwrap()
+    };
+    let first = admit("edge", 2, Sign::Positive, &mut counters);
+    let before = counters.accounting.work;
+    assert_eq!(admit("edge", 2, Sign::Positive, &mut counters), first);
+    let shared = counters.accounting.work - before;
+    // Another name, arity or sign is a new component, as is a return to an
+    // earlier predicate after another: only the last one is shared.
+    let other = admit("edge", 2, Sign::Negative, &mut counters);
+    assert_ne!(other, first);
+    assert_ne!(admit("edge", 3, Sign::Negative, &mut counters), other);
+    let before = counters.accounting.work;
+    let again = admit("edge", 2, Sign::Positive, &mut counters);
+    assert_ne!(again, first);
+    assert!(counters.accounting.work - before > shared);
+    let view = catalog
+        .component_view(&limits, &mut counters, location())
+        .unwrap()
+        .unwrap();
+    assert_eq!(first.resolve(view), again.resolve(view));
+}

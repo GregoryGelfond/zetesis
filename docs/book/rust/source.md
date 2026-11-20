@@ -600,7 +600,7 @@ These are the same typed, cumulative source limits; refusal does not silently
 disable family retention or publish an incomplete stage.
 
 Choose positive joins separately through the preparation's
-`with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` method.
+`with_grounding_options(GroundingOptions { joins: JoinStrategy::Table, ..Default::default() })` method.
 The default `Indexed` strategy probes existing value postings. After a flat
 constraint establishes finite arithmetic totality, a computed equality may
 supply a necessary input domain to the shared table selector under either
@@ -972,7 +972,7 @@ the root's meaning. Some generated roots have different evidence needs from writ
 rules, so consumers must not assume that one root always corresponds to one
 written statement. The admitted owner also retains objectives, observations and
 the completed projection domain separately from theory roots. Authored
-`project_selection()` metadata is a declaration plan; the admitted owner's
+`project_directives()` metadata is a declaration plan; the admitted owner's
 `projection()` supplies the fixed typed domain for
 [projected enumeration](sessions.md#projected-enumeration).
 
