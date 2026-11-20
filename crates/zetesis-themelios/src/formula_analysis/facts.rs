@@ -7,7 +7,7 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::ops::Range;
 
 use themelios_program::program::{
@@ -70,15 +70,25 @@ pub(super) struct Fact {
     others: Vec<usize>,
 }
 
-/// Borrows source atoms and scalar leaves. No owned value or row is reconstructed.
+/// Reads the arena through [`Leaves`], retained with the summary.
+/// Constructing a reader allocates and charges nothing.
 pub(super) struct Reader<'a> {
     families: &'a Families,
-    inputs: Vec<Input<'a>>,
+    leaves: &'a Leaves,
 }
 
-struct Input<'a> {
-    atom: &'a Atom,
-    symbols: Vec<&'a Symbol>,
+/// What readers need of each family's source carrier, copied once when the
+/// summary is collected and retained with it: its scalar leaves in source leaf
+/// order, and its signed name, shared by families of one predicate. Readers
+/// index these; nothing is rebuilt or charged again per read.
+pub(super) struct Leaves {
+    /// Distinct leaf values, each copied once.
+    symbols: Vec<Symbol>,
+    /// Every family's leaves in order, as positions in `symbols`.
+    order: Vec<usize>,
+    names: Vec<(Sign, Name)>,
+    /// Per family: its first entry in `order` and its entry in `names`.
+    families: Vec<(usize, usize)>,
 }
 
 /// Preparation reserves with typed limits; already-admitted public inspection
@@ -159,12 +169,14 @@ impl Families {
     ) -> Result<usize, FormulaFailure> {
         let family = self.sources.len();
         let mut scalar = 0;
+        // One traversal stack serves every column of the family.
+        let mut pending = Vec::new();
         let mut rows = 0;
         for arguments in atom.alternatives() {
             let first_column = self.columns.len();
             let first_segment = self.segments.len();
             for term in arguments {
-                self.record_column(term, &mut scalar, allocation)?;
+                self.record_column(term, &mut scalar, &mut pending, allocation)?;
             }
             if self.columns[first_column..]
                 .iter()
@@ -208,22 +220,22 @@ impl Families {
     }
 
     /// One column preserves source leaf order; empty intervals add no segment.
-    fn record_column(
+    fn record_column<'a>(
         &mut self,
-        term: &Term,
+        term: &'a Term,
         scalar: &mut usize,
+        pending: &mut Vec<&'a Term>,
         allocation: &mut Checked<'_>,
     ) -> Result<(), FormulaFailure> {
         let start = self.segments.len();
         let mut width = 0;
-        let mut pending = Vec::new();
-        allocation.reserve(&mut pending, 1)?;
+        allocation.reserve(pending, 1)?;
         pending.push(term);
         while let Some(term) = pending.pop() {
             allocation.budget.poll(allocation.site)?;
             let (value, count) = match term {
                 Term::Pool(items) => {
-                    allocation.reserve(&mut pending, items.len())?;
+                    allocation.reserve(pending, items.len())?;
                     pending.extend(items.iter().rev());
                     continue;
                 }
@@ -278,25 +290,30 @@ impl Families {
             .map(|(product, _)| Position { product, row: 0 })
     }
 
-    pub(super) fn read<'a, A: Allocation>(
-        &'a self,
-        source: &'a Program,
-        allocation: &mut A,
-    ) -> Result<Reader<'a>, A::Failure> {
+    /// Copy every family's scalar leaves and signed name once. The source
+    /// statements are indexed once, as each family's owner names its position;
+    /// leaf storage is reserved exactly after a counting pass, and each copy's
+    /// payload is charged as it is retained.
+    pub(super) fn leaves(
+        &self,
+        source: &Program,
+        allocation: &mut Checked<'_>,
+    ) -> Result<Leaves, FormulaFailure> {
         allocation.poll()?;
+        let mut leaves = Leaves {
+            symbols: Vec::new(),
+            order: Vec::new(),
+            names: Vec::new(),
+            families: Vec::new(),
+        };
         if self.sources.is_empty() {
-            return Ok(Reader {
-                families: self,
-                inputs: Vec::new(),
-            });
+            return Ok(leaves);
         }
         let mut originals = Vec::new();
-        for statement in source.statements() {
-            allocation.reserve(&mut originals, 1)?;
-            originals.push(statement);
-        }
-        let mut inputs = Vec::new();
-        allocation.reserve(&mut inputs, self.sources.len())?;
+        allocation.reserve(&mut originals, source.statements().count())?;
+        originals.extend(source.statements());
+        let mut atoms = Vec::new();
+        allocation.reserve(&mut atoms, self.sources.len())?;
         for family in &self.sources {
             allocation.poll()?;
             let statement = family.normalized.as_ref().map_or_else(
@@ -308,37 +325,106 @@ impl Families {
                         .expect("one normalized family carrier")
                 },
             );
-            let atom = crate::fact_expansion::fact_atom(statement.get())
-                .expect("validated fact recipe carrier");
-            let mut symbols = Vec::new();
-            let mut pending = Vec::new();
-            for arguments in atom.alternatives() {
-                for term in arguments {
-                    allocation.reserve(&mut pending, 1)?;
-                    pending.push(term);
-                    while let Some(term) = pending.pop() {
-                        match term {
-                            Term::Pool(items) => {
-                                allocation.reserve(&mut pending, items.len())?;
-                                pending.extend(items.iter().rev());
-                            }
-                            Term::Symbolic(symbol) => {
-                                allocation.reserve(&mut symbols, 1)?;
-                                symbols.push(symbol);
-                            }
-                            Term::Interval { .. } => {}
-                            _ => unreachable!("validated fact source recipe"),
-                        }
+            atoms.push(
+                crate::fact_expansion::fact_atom(statement.get())
+                    .expect("validated fact recipe carrier"),
+            );
+        }
+        drop(originals);
+        // Counting pass: every leaf, and each distinct value's position in
+        // first-occurrence order, so both buffers are reserved exactly.
+        let mut pending = Vec::new();
+        let mut count = 0_usize;
+        // Distinct values are found by hash: one probe per leaf, with no
+        // ordered comparisons. Positions are first-occurrence order, as before.
+        let mut distinct = HashMap::<&Symbol, usize>::new();
+        for atom in &atoms {
+            each_leaf(atom, &mut pending, allocation, |symbol, allocation| {
+                count += 1;
+                let next = distinct.len();
+                if let std::collections::hash_map::Entry::Vacant(entry) = distinct.entry(symbol) {
+                    // The distinct value's copy and its transient index entry.
+                    allocation.budget.charge(
+                        ExpansionResource::ScalarBytes,
+                        crate::structural_value::symbol_bytes(symbol)
+                            + size_of::<(&Symbol, usize)>() as u128,
+                        allocation.site,
+                    )?;
+                    entry.insert(next);
+                }
+                Ok(())
+            })?;
+        }
+        let (budget, site) = (&mut *allocation.budget, allocation.site);
+        crate::formula_pattern::reserve(&mut leaves.order, count, budget, site)?;
+        crate::formula_pattern::reserve(&mut leaves.symbols, distinct.len(), budget, site)?;
+        crate::formula_pattern::reserve(&mut leaves.families, atoms.len(), budget, site)?;
+        let mut names = HashMap::<(Sign, &Name), usize>::new();
+        for atom in &atoms {
+            let name = if let Some(&name) = names.get(&(atom.sign, &atom.name)) {
+                name
+            } else {
+                let name = leaves.names.len();
+                allocation.budget.charge(
+                    ExpansionResource::ScalarBytes,
+                    (size_of::<((Sign, &Name), usize)>() + size_of::<(Sign, Name)>()) as u128
+                        + atom.name.as_str().len() as u128,
+                    allocation.site,
+                )?;
+                allocation.reserve(&mut leaves.names, 1)?;
+                leaves.names.push((atom.sign, atom.name.clone()));
+                names.insert((atom.sign, &atom.name), name);
+                name
+            };
+            leaves.families.push((leaves.order.len(), name));
+            each_leaf(atom, &mut pending, allocation, |symbol, _| {
+                let index = distinct[symbol];
+                if index == leaves.symbols.len() {
+                    leaves.symbols.push(symbol.clone());
+                }
+                leaves.order.push(index);
+                Ok(())
+            })?;
+        }
+        Ok(leaves)
+    }
+
+    /// A reader over the retained leaves; it allocates and charges nothing.
+    pub(super) fn reader<'a>(&'a self, leaves: &'a Leaves) -> Reader<'a> {
+        Reader {
+            families: self,
+            leaves,
+        }
+    }
+}
+
+/// Visit `atom`'s scalar leaves in source leaf order, the order in which
+/// `record_column` numbered them; one traversal stack serves every family.
+fn each_leaf<'a>(
+    atom: &'a Atom,
+    pending: &mut Vec<&'a Term>,
+    allocation: &mut Checked<'_>,
+    mut leaf: impl FnMut(&'a Symbol, &mut Checked<'_>) -> Result<(), FormulaFailure>,
+) -> Result<(), FormulaFailure> {
+    allocation.poll()?;
+    for arguments in atom.alternatives() {
+        for term in arguments {
+            allocation.reserve(pending, 1)?;
+            pending.push(term);
+            while let Some(term) = pending.pop() {
+                match term {
+                    Term::Pool(items) => {
+                        allocation.reserve(pending, items.len())?;
+                        pending.extend(items.iter().rev());
                     }
+                    Term::Symbolic(symbol) => leaf(symbol, allocation)?,
+                    Term::Interval { .. } => {}
+                    _ => unreachable!("validated fact source recipe"),
                 }
             }
-            inputs.push(Input { atom, symbols });
         }
-        Ok(Reader {
-            families: self,
-            inputs,
-        })
     }
+    Ok(())
 }
 
 impl Reader<'_> {
@@ -346,45 +432,49 @@ impl Reader<'_> {
         &self,
         allocation: &mut Checked<'_>,
     ) -> Result<Vec<Fact>, FormulaFailure> {
-        let mut map = BTreeMap::<Key<'_, '_>, Fact>::new();
+        // Rows in source order, stably sorted: each run of equal rows keeps
+        // its first occurrence, as the canonical fact's position.
+        let mut rows = Vec::new();
+        crate::formula_pattern::reserve(
+            &mut rows,
+            self.families.rows(),
+            allocation.budget,
+            allocation.site,
+        )?;
         for (product, plan) in self.families.products.iter().enumerate() {
             for row in 0..plan.rows {
                 allocation
                     .budget
                     .charge(ExpansionResource::TermWork, 1, allocation.site)?;
-                // As for Owners, this names BTreeMap payload, not allocator bookkeeping.
-                allocation.budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    size_of::<(Key<'_, '_>, Fact)>() as u128,
-                    allocation.site,
-                )?;
-                let position = Position { product, row };
-                match map.entry(Key {
-                    reader: self,
-                    position,
-                }) {
-                    std::collections::btree_map::Entry::Vacant(entry) => {
-                        entry.insert(Fact {
-                            position,
-                            others: Vec::new(),
-                        });
-                    }
-                    std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        let fact = entry.get_mut();
-                        let first = self.families.products[fact.position.product].family;
-                        if plan.family != first && fact.others.last() != Some(&plan.family) {
-                            allocation.reserve(&mut fact.others, 1)?;
-                            fact.others.push(plan.family);
-                        }
-                    }
-                }
+                rows.push(Position { product, row });
             }
         }
-        let mut facts = Vec::new();
-        allocation.reserve(&mut facts, map.len())?;
-        for fact in map.into_values() {
+        rows.sort_by(|left, right| self.compare(*left, *right));
+        let mut count = 0_usize;
+        for (index, position) in rows.iter().enumerate() {
             allocation.poll()?;
-            facts.push(fact);
+            if index == 0 || self.compare(rows[index - 1], *position) != Ordering::Equal {
+                count += 1;
+            }
+        }
+        let mut facts = Vec::<Fact>::new();
+        allocation.reserve(&mut facts, count)?;
+        for (index, position) in rows.iter().enumerate() {
+            allocation.poll()?;
+            if index == 0 || self.compare(rows[index - 1], *position) != Ordering::Equal {
+                facts.push(Fact {
+                    position: *position,
+                    others: Vec::new(),
+                });
+                continue;
+            }
+            let fact = facts.last_mut().expect("a run has its first row");
+            let family = self.families.products[position.product].family;
+            let first = self.families.products[fact.position.product].family;
+            if family != first && fact.others.last() != Some(&family) {
+                allocation.reserve(&mut fact.others, 1)?;
+                fact.others.push(family);
+            }
         }
         Ok(facts)
     }
@@ -393,13 +483,16 @@ impl Reader<'_> {
         &self.families.products[position.product]
     }
 
-    fn input(&self, position: Position) -> &Input<'_> {
-        &self.inputs[self.product(position).family]
+    /// The signed name of the family at `position`.
+    fn name(&self, position: Position) -> (Sign, &Name) {
+        let (_, name) = self.leaves.families[self.product(position).family];
+        let (sign, name) = &self.leaves.names[name];
+        (*sign, name)
     }
 
     pub(super) fn signature(&self, position: Position) -> (Sign, &Name, usize) {
-        let atom = self.input(position).atom;
-        (atom.sign, &atom.name, self.product(position).columns.len())
+        let (sign, name) = self.name(position);
+        (sign, name, self.product(position).columns.len())
     }
 
     fn symbols(&self, position: Position) -> impl Iterator<Item = Scalar<'_>> {
@@ -413,7 +506,8 @@ impl Reader<'_> {
                 let segment = &segments[index];
                 match segment.value {
                     SegmentValue::Symbol(index) => {
-                        Scalar::Symbol(self.input(position).symbols[index])
+                        let (first, _) = self.leaves.families[self.product(position).family];
+                        Scalar::Symbol(&self.leaves.symbols[self.leaves.order[first + index]])
                     }
                     SegmentValue::Integers(first) => {
                         let start = if index == 0 {
@@ -432,12 +526,11 @@ impl Reader<'_> {
     }
 
     fn compare(&self, left: Position, right: Position) -> Ordering {
-        let left_atom = self.input(left).atom;
-        let right_atom = self.input(right).atom;
-        left_atom
-            .sign
-            .cmp(&right_atom.sign)
-            .then_with(|| left_atom.name.cmp(&right_atom.name))
+        let (left_sign, left_name) = self.name(left);
+        let (right_sign, right_name) = self.name(right);
+        left_sign
+            .cmp(&right_sign)
+            .then_with(|| left_name.cmp(right_name))
             .then_with(|| self.symbols(left).cmp(self.symbols(right)))
     }
 
@@ -446,10 +539,10 @@ impl Reader<'_> {
     }
 
     pub(super) fn atom_at(&self, position: Position) -> Atom {
-        let source = self.input(position).atom;
+        let (sign, name) = self.name(position);
         Atom {
-            sign: source.sign,
-            name: source.name.clone(),
+            sign,
+            name: name.clone(),
             arguments: Arguments::Single(
                 self.symbols(position)
                     .map(|value| Term::Symbolic(value.owned()))
@@ -498,7 +591,7 @@ impl Reader<'_> {
     }
 
     pub(super) fn name_bytes(&self, fact: &Fact) -> usize {
-        self.input(fact.position).atom.name.as_str().len()
+        self.name(fact.position).1.as_str().len()
     }
 
     /// A fact is `Statement::Rule` with a positive atom literal and empty body.
@@ -518,11 +611,10 @@ impl Reader<'_> {
         let LiteralInner::Atom(atom) = &literal.inner else {
             return Ordering::Less;
         };
-        let source = self.input(fact.position).atom;
-        let order = source
-            .sign
+        let (sign, name) = self.name(fact.position);
+        let order = sign
             .cmp(&atom.get().sign)
-            .then_with(|| source.name.cmp(&atom.get().name));
+            .then_with(|| name.cmp(&atom.get().name));
         if order != Ordering::Equal {
             return order;
         }
@@ -556,27 +648,6 @@ impl Reader<'_> {
 
 fn statement(atom: Atom, provenance: Provenance) -> WithProvenance<Statement> {
     WithProvenance::new(Statement::Rule(Rule::new(atom, Body::new([]))), provenance)
-}
-
-struct Key<'r, 's> {
-    reader: &'r Reader<'s>,
-    position: Position,
-}
-impl PartialEq for Key<'_, '_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
-}
-impl Eq for Key<'_, '_> {}
-impl PartialOrd for Key<'_, '_> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for Key<'_, '_> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.reader.compare(self.position, other.position)
-    }
 }
 
 enum Scalar<'a> {

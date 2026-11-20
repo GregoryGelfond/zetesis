@@ -138,7 +138,7 @@ fn complete_scored_families(api: GpuApi) {
                 let filters = outcome
                     .countermodel_statistics()
                     .unwrap()
-                    .region_filter
+                    .constraint_refutation
                     .unwrap();
                 assert!((1..=u64::try_from(workers).unwrap()).contains(&filters.preparations));
                 assert!(filters.checks > filters.preparations);
@@ -207,7 +207,7 @@ fn rejected_cheapest_answer(api: GpuApi, resources: &ExecutionResources) {
         let filter = outcome
             .countermodel_statistics()
             .unwrap()
-            .region_filter
+            .constraint_refutation
             .unwrap();
         assert!(filter.checks > 0);
     }
@@ -254,7 +254,7 @@ fn source_failure(api: GpuApi) {
         let filter = outcome
             .countermodel_statistics()
             .unwrap()
-            .region_filter
+            .constraint_refutation
             .unwrap();
         assert_eq!(filter.failed, 1);
         assert_eq!(outcome.formula_execution().unwrap().gpu_candidates, 0);
@@ -351,7 +351,7 @@ fn terminal_families(api: GpuApi) {
         let filter = outcome
             .countermodel_statistics()
             .unwrap()
-            .region_filter
+            .constraint_refutation
             .unwrap();
         assert!(filter.checks > 0);
         assert_eq!(

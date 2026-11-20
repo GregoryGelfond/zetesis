@@ -10,14 +10,14 @@ use themelios_program::symbol::Signature;
 
 use super::{Context, signature};
 use crate::formula_conditional_ir::{Alternative, Consequent, ConsequentOperand};
-use crate::formula_ir::{AggregateElementIr, AggregateKey, LiteralIr, Projection};
+use crate::formula_ir::{AggregateElementIr, AggregateKey, AnonymousWitnesses, LiteralIr};
 use crate::{ExpansionResource, FormulaFailure};
 
 enum Frame<'a> {
     Literals(&'a [LiteralIr]),
     Elements(&'a [AggregateElementIr]),
     Alternatives(&'a [Alternative]),
-    Projection(&'a Projection),
+    Anonymous(&'a AnonymousWitnesses),
     Atom(Pattern),
     Predicate(Predicate),
 }
@@ -82,21 +82,21 @@ impl Context<'_, '_, '_> {
                     }
                     match &alternative.operand {
                         ConsequentOperand::Atom(atom) => add(Frame::Atom(*atom))?,
-                        ConsequentOperand::Projection(projection) => {
-                            add(Frame::Projection(projection))?;
+                        ConsequentOperand::Anonymous(witnesses) => {
+                            add(Frame::Anonymous(witnesses))?;
                         }
                     }
                     add(Frame::Literals(&alternative.bindings))?;
                 }
-                Frame::Projection(projection) => {
-                    if let Projection::Witnesses { bindings, .. } = projection {
+                Frame::Anonymous(witnesses) => {
+                    if let AnonymousWitnesses::Witnesses { bindings, .. } = witnesses {
                         add(Frame::Literals(bindings))?;
                     }
-                    match projection {
-                        Projection::Arguments { predicate, .. } => {
+                    match witnesses {
+                        AnonymousWitnesses::Arguments { predicate, .. } => {
                             add(Frame::Predicate(*predicate))?;
                         }
-                        Projection::Witnesses { atom, .. } => add(Frame::Atom(*atom))?,
+                        AnonymousWitnesses::Witnesses { atom, .. } => add(Frame::Atom(*atom))?,
                     }
                 }
                 Frame::Atom(pattern) => {
@@ -149,8 +149,8 @@ fn literal_dependencies<'a>(
         LiteralIr::PatternAtom(pattern) => {
             add(Frame::Atom(pattern.atom))?;
         }
-        LiteralIr::ProjectedAtom(_, projection) => {
-            add(Frame::Projection(projection))?;
+        LiteralIr::AnonymousAtom(_, witnesses) => {
+            add(Frame::Anonymous(witnesses))?;
         }
         LiteralIr::Aggregate(aggregate) => {
             add(Frame::Elements(&aggregate.elements))?;

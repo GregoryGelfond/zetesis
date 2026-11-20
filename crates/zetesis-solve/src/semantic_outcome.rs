@@ -25,7 +25,7 @@ pub enum AnswerSelection {
 /// Neither missing coverage nor a zero publication count establishes UNSAT.
 #[derive(Clone, Debug)]
 pub struct SemanticOutcome {
-    pub(crate) projection: Option<crate::ProjectionStatistics>,
+    pub(crate) projection: Option<crate::ProjectiveStatistics>,
     pub(crate) original: Option<crate::Original>,
     pub(crate) selection: Option<AnswerSelection>,
     pub(crate) verified: u64,
@@ -88,7 +88,7 @@ impl SemanticOutcome {
     /// Absence denotes full answer identity. Full-model search coverage and
     /// optimum evidence remain independent of projected-stream completion.
     #[must_use]
-    pub const fn projection(&self) -> Option<&crate::ProjectionStatistics> {
+    pub const fn projective_statistics(&self) -> Option<&crate::ProjectiveStatistics> {
         self.projection.as_ref()
     }
 

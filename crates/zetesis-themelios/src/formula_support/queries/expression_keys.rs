@@ -482,14 +482,14 @@ impl IntegerIndex {
                 push(&mut selected, position, context)?;
             }
         }
-        sort::by(
+        sort::by_key(
             selected.slice_mut(),
             GroundingWork::new(
                 context.work.limits,
                 context.work.counters,
                 context.work.location,
             ),
-            |left, right, _| Ok(left.cmp(right)),
+            |&position| position,
         )?;
         Ok(selected)
     }
@@ -651,14 +651,14 @@ fn keys(
         )?;
         push(&mut entries, (value, position), context)?;
     }
-    sort::by(
+    sort::by_key(
         entries.slice_mut(),
         GroundingWork::new(
             context.work.limits,
             context.work.counters,
             context.work.location,
         ),
-        |left, right, _| Ok(left.cmp(right)),
+        |&entry| entry,
     )?;
     Ok(Some(entries))
 }

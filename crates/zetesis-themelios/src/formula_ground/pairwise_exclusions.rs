@@ -67,7 +67,7 @@ impl Pending {
                 | LiteralIr::Bind { .. }
                 | LiteralIr::Range { .. } => {}
                 LiteralIr::Atom(..)
-                | LiteralIr::ProjectedAtom(..)
+                | LiteralIr::AnonymousAtom(..)
                 | LiteralIr::Conditional(_)
                 | LiteralIr::Aggregate(_) => return Ok(None),
             }

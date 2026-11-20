@@ -215,6 +215,7 @@ fn native_parallel_statistics_do_not_claim_scalar_execution() {
     for workers in [4, 14] {
         let mut configured = options();
         configured.workers = NonZeroUsize::new(workers).unwrap();
+        // The coordinator is one of the threads; the rest walk.
         let actual = cli_solve("{a;b}.", &configured);
         let mut bounded = zetesis_cli::PublicationConfig::from(&configured);
         bounded.solve.max_completion_scratch_bytes = 0;
@@ -232,7 +233,7 @@ fn native_parallel_statistics_do_not_claim_scalar_execution() {
         assert!(
             actual
                 .2
-                .contains(&format!("Parallel regions: up to {workers} workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after\n"))
+                .contains(&format!("Parallel regions: up to {} workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after\n", workers - 1))
         );
         assert!(
             actual

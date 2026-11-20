@@ -5,7 +5,7 @@ use super::{
     ValueNodeRef,
 };
 use crate::formula_support::components::{
-    self, Constructor, Filter, Pattern, Predicate, Scalar, Term,
+    self, Constructor, FilterCoordinate, Pattern, Predicate, Scalar, Term,
 };
 use zetesis_core::catalog::PredicateRef;
 use zetesis_core::{FilterRef, PatternRef, TemplateComponentsRef, TemplateTerm};
@@ -43,7 +43,7 @@ impl<'source> Computation<'_, 'source> {
 
     pub(crate) fn static_filter(
         &self,
-        filter: Filter,
+        filter: FilterCoordinate,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,

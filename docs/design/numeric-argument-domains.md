@@ -58,7 +58,7 @@ records the starting point; the shared engine described below now adds argument 
    transfers every operator: sums and differences exactly; products and quotients by corners; division and remainder,
    declining when the divisor's range contains zero or `MIN / -1` is possible; fixed nonnegative powers; bitwise
    operations to the full i32 range. Its only dependency is themelios's `BinaryOp` and `UnaryOp`.
-3. **Totality hulls** (`formula_support/projections/totality/numeric.rs`). Per rule and per completed support
+3. **Totality hulls** (`formula_support/expression_memos/totality/numeric.rs`). Per rule and per completed support
    snapshot, a variable's hull is the numeric range of its full positive column (`column_range`). An expression is
    total when every intermediate is defined on the hulls. The certificate enables computed keys and prefix pruning on
    completed support only.
@@ -184,8 +184,8 @@ One case for every construct of the prepared IR that binds a slot or puts a valu
 | Construct | Transfer | Widens |
 |---|---|---|
 | `Atom(None, pattern)`, positive | Each variable position meets its slot's domain with the argument's value. A constant position filters rows only. | — |
-| `Atom` or `ProjectedAtom` under `not` or `not not` | Dropped: it binds nothing, and dropping a condition only enlarges the possible values. | — |
-| `ProjectedAtom(None, projection)` | As `Atom` for the arguments it binds; witness slots are local. | — |
+| `Atom` or `AnonymousAtom` under `not` or `not not` | Dropped: it binds nothing, and dropping a condition only enlarges the possible values. | — |
+| `AnonymousAtom(None, projection)` | As `Atom` for the arguments it binds; witness slots are local. | — |
 | `PatternAtom` | A slot bound inside a function term is ⊤ (`Unknown`, `Mixed`, `Unbounded`). | that slot |
 | `Bind`, arithmetic | Interval: the `Range` transfer over the operands' domains, for operators whose laws are proved (Lean). A declined transfer or an unproved operator gives `Integer` and `Unbounded`: a defined result is an i32, and an undefined one produces no head or refuses the program. Finite component: `Unknown`; arithmetic image sets have no consumer in this slice. | the target slot |
 | `Bind`, copy `Y = X` / constant / constructor `Y = f(X)` | X's whole value / a point, or `Mixed` with the symbol in the set / ⊤. | the target slot, for a constructor |
@@ -281,8 +281,8 @@ Separated comparison verdicts remain diagnostic only. Planned (1b) and Stage 3 c
 Stage 2 continues to use its existing checked index and residual filtering contract.
 
 Computed keys become the one-column case of Stage 2's expression keys. Today they invert one-variable expressions under
-the totality certificate (`Projections::total_body`, `formula_support/projections/totality.rs`) and a cover built from
-every distinct input of the column (`formula_support/projections/domains.rs`). Stage 2 has one index structure and one
+the totality certificate (`ExpressionMemos::total_body`, `formula_support/expression_memos/totality.rs`) and a cover built from
+every distinct input of the column (`formula_support/expression_memos/domains.rs`). Stage 2 has one index structure and one
 fallback rule: an ordinary posting key first, then an exact expression key, then a covering range probe whose superset
 the residual comparison filters. An available computed-domain selection keeps precedence over this fallback because
 it can combine restrictions on several columns. The computed-key path is retired once Stage 2's acceptance shows
@@ -386,7 +386,7 @@ cover later rounds' rows. A static certificate's premise covers every complete b
 - pruning a false plan-decided prefix removes only rows whose completions are excluded.
 
 The [grounding chapter](../book/architecture/grounding.md), the correspondence and the comment in
-`formula_support/projections/totality.rs` gain the static certificate as the second premise source. Reach in the
+`formula_support/expression_memos/totality.rs` gain the static certificate as the second premise source. Reach in the
 maintained programs is one rule, prime-sieve's composite rule, on both formula sub-routes. Its `N \ D` is a remainder
 by a variable divisor whose domain excludes zero. `RemainderIntervals` now proves the general interval law and
 checked-scalar fault conditions; Rust/source correspondence and measured acceptance remain open. Range

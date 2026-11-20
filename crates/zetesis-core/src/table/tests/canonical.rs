@@ -49,7 +49,7 @@ fn foreign_finite_domains_preserve_source_occurrences() {
         .unwrap();
     assert_eq!(selected.rows().collect::<Vec<_>>(), vec![1, 2, 4]);
     let projected = table
-        .project_domains(&domains, Limits::default(), &Cancellation::default())
+        .support_domains(&domains, Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(projected.words(), selected.words());
     let actual: Vec<_> = projected.domain(0).unwrap().collect();
@@ -76,7 +76,7 @@ fn projected_values_borrow_the_relation_dictionary() {
         Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
     let domain = [foreign.atoms().at(0).unwrap().values().at(0).unwrap()];
     let projection = table
-        .project_domains(
+        .support_domains(
             &[Domain::Finite(domain.as_slice().into())],
             Limits::default(),
             &Cancellation::default(),

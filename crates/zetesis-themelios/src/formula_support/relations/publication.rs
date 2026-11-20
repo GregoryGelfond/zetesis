@@ -36,7 +36,7 @@ impl SupportCatalog {
             outer + self.owner.storage_peak_bytes(),
         ));
         result.map_err(|error| match error {
-            zetesis_core::atom_interner::Failure::Bytes { required, .. } if atom_bound => {
+            zetesis_core::atom_registry::Failure::Bytes { required, .. } if atom_bound => {
                 FormulaFailure::Limit {
                     resource: FormulaResource::AtomStorageBytes,
                     observed: required,

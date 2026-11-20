@@ -155,7 +155,7 @@ impl<'source> Support<'source> {
 fn distinct(
     rows: &RelationRows<'_>,
     column: usize,
-    postings: &std::collections::BTreeMap<u32, Vec<usize>>,
+    postings: &crate::formula_support::relations::ColumnPostings,
     context: &mut Context<'_, &Computation<'_, '_>>,
 ) -> Result<Hull, FormulaFailure> {
     let mut hull = Hull::Empty;

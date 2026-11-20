@@ -167,8 +167,8 @@ fn maximal_memory_retains_checked_coordinate_extents() {
 
 #[test]
 fn answer_projection_uses_memory_and_checked_work() {
-    let small = Resources::new(64 * 1024 * 1024, NonZeroUsize::MIN).projection_limits();
-    let large = Resources::new(128 * 1024 * 1024, NonZeroUsize::MIN).projection_limits();
+    let small = Resources::new(64 * 1024 * 1024, NonZeroUsize::MIN).projective_limits();
+    let large = Resources::new(128 * 1024 * 1024, NonZeroUsize::MIN).projective_limits();
     assert_eq!(large.max_keys, 2 * small.max_keys);
     assert_eq!(large.max_bytes, 2 * small.max_bytes);
     assert_eq!(large.max_work, u64::MAX);

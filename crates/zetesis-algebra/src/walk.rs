@@ -126,6 +126,9 @@ impl RegionStatistics {
     }
 }
 
+/// A retained-state window and the operation that sheds state beyond it.
+type Recompute<S> = (usize, fn(&mut S));
+
 /// The coverage tree of a root region, walked depth first. Each region
 /// carries the caller's state `S`, what the narrowing knows about the
 /// region; a split clones it into both children, so that a child starts
@@ -142,6 +145,9 @@ pub struct Walk<S = ()> {
     /// The caller narrowed the root before the traversal began, so it is
     /// not narrowed again.
     narrowed_root: bool,
+    /// Keep the state of at most this many pending entries below the newest;
+    /// older entries' state is shed by the given operation.
+    recompute: Option<Recompute<S>>,
     statistics: RegionStatistics,
 }
 
@@ -161,6 +167,18 @@ impl<S> Walk<S> {
         Self::with_entry(Entry::new(root, state), counting)
     }
 
+    /// Retain the state of at most `window` pending entries below the newest:
+    /// at each split, the entries that fall further below have their state
+    /// replaced by `shed`, which must leave a state the caller's narrowing
+    /// accepts for any region and recomputes from that region's decisions.
+    /// Regions, their order and the visited family are unchanged; only
+    /// retained state and the later narrowing work change.
+    #[must_use]
+    pub fn with_recomputation(mut self, window: usize, shed: fn(&mut S)) -> Self {
+        self.recompute = Some((window, shed));
+        self
+    }
+
     /// Begin with an owned pending entry, retaining its knowledge and preference.
     #[must_use]
     pub fn with_entry(root: Entry<S>, counting: Counting) -> Self {
@@ -170,6 +188,7 @@ impl<S> Walk<S> {
             held_first: false,
             root: true,
             narrowed_root: false,
+            recompute: None,
             statistics: self::RegionStatistics::default(),
         }
     }
@@ -182,6 +201,7 @@ impl<S> Walk<S> {
     pub fn with_narrowed_root(root: Entry<S>, counting: Counting) -> Self {
         Self {
             narrowed_root: true,
+            recompute: None,
             ..Self::with_entry(root, counting)
         }
     }
@@ -396,6 +416,15 @@ impl<S> Walk<S> {
             };
             self.regions.push(second);
             self.regions.push(first);
+            if let Some((window, shed)) = self.recompute
+                && let Some(end) = self.regions.len().checked_sub(window)
+            {
+                // Two entries were pushed, so at most the two positions below
+                // the window are newly outside it; older ones are shed already.
+                for entry in &mut self.regions[end.saturating_sub(2)..end] {
+                    shed(&mut entry.state);
+                }
+            }
         }
     }
 }

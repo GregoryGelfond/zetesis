@@ -154,6 +154,15 @@ impl CandidateKnowledge {
         self.bound_generation = source.bound_generation;
     }
 
+    /// Replace this pending region's knowledge by the root's empty state.
+    /// The region's first narrowing then creates every slot afresh and learns
+    /// all of the region's decisions, as it does for the root: the root's
+    /// knowledge encloses every region. Only retained storage and that
+    /// narrowing's work change.
+    pub(super) fn shed(&mut self) {
+        *self = Self::default();
+    }
+
     /// First inspection creates only this system's empty inline state. The
     /// runtime initializes its payload under the same search Meter.
     pub(super) fn parity(&mut self, system: &ParitySystem) -> &mut ParityKnowledge {

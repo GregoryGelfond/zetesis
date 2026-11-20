@@ -15,7 +15,7 @@ mod terms;
 mod term_read;
 mod vocabulary;
 
-pub mod interner;
+pub mod registry;
 mod compare;
 
 use std::{cmp::Ordering, fmt, iter::FusedIterator, marker::PhantomData, slice, sync::Arc};
@@ -399,6 +399,12 @@ impl<'a> Atoms<'a> {
             positions,
         }
     }
+    /// The canonical prefix and the identity at each occurrence position, for
+    /// an operation that reads rows by their columns instead of through views.
+    pub(crate) fn rows(self) -> (storage::Read<'a>, &'a [storage::AtomId]) {
+        (self.snapshot, self.positions)
+    }
+
     /// Number of original occurrences, including repeated logical atoms.
     #[must_use]
     pub fn len(self) -> usize {

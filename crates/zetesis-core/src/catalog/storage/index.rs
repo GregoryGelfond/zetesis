@@ -1,13 +1,16 @@
 //! Collision-exact candidate chains. Only IDs, links and hash filters are owned;
 //! equality is always checked against the authoritative storage by the caller.
 
-use std::{collections::HashMap, mem::size_of};
+use std::{collections::HashMap, hash::BuildHasherDefault, mem::size_of};
+
+use crate::word_mix::Prehashed;
 
 use super::{Failure, Fault, budget::Budget, control::Work};
 
 #[derive(Debug, Default)]
 pub(super) struct Index {
-    heads: HashMap<u64, u32>,
+    /// Keyed by semantic hashes, placed as they are.
+    heads: HashMap<u64, u32, BuildHasherDefault<Prehashed>>,
     next: Vec<Option<u32>>,
 }
 
@@ -49,6 +52,29 @@ impl Index {
             budget.observed(before, self.bytes())?;
         }
         Ok(())
+    }
+
+    /// Room for `rows` more consecutive IDs' links. Hash heads still grow
+    /// one at a time: their capacity follows the table's own policy.
+    pub(super) fn reserve_rows_with<E>(
+        &mut self,
+        rows: usize,
+        budget: &mut Budget,
+        work: &mut Work<'_, E>,
+    ) -> Result<(usize, usize), Failure<E>> {
+        let start = (self.next.len(), self.next.capacity());
+        work.reserve_rows(&mut self.next, rows, budget)?;
+        Ok(start)
+    }
+
+    /// Give back link room a batch reserved for rows it did not publish.
+    pub(super) fn trim_rows_with<E>(
+        &mut self,
+        start: (usize, usize),
+        budget: &mut Budget,
+        work: &mut Work<'_, E>,
+    ) -> Result<(), Failure<E>> {
+        work.trim_rows(&mut self.next, start, budget)
     }
 
     // Caller has reserved both components and publishes IDs consecutively.

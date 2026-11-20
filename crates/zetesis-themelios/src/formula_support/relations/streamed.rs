@@ -23,24 +23,16 @@ pub(crate) struct StreamedRows {
 
 impl CatalogRows {
     /// Named capacity of the relation and its postings: the catalog object and
-    /// metadata, each posting map's entries and each posting list's capacity.
-    /// Map node overhead is excluded.
+    /// metadata, and each column's postings.
     fn retained_bytes(&self) -> usize {
         self.catalog.retained_bytes() - size_of::<Catalog>()
             + size_of::<Self>()
-            + self.columns.capacity()
-                * size_of::<Option<std::collections::BTreeMap<u32, Vec<usize>>>>()
+            + self.columns.capacity() * size_of::<Option<super::ColumnPostings>>()
             + self
                 .columns
                 .iter()
                 .flatten()
-                .map(|postings| {
-                    postings.len() * size_of::<(u32, Vec<usize>)>()
-                        + postings
-                            .values()
-                            .map(|rows| rows.capacity() * size_of::<usize>())
-                            .sum::<usize>()
-                })
+                .map(super::ColumnPostings::bytes)
                 .sum::<usize>()
     }
 
@@ -49,7 +41,7 @@ impl CatalogRows {
         self.columns
             .iter()
             .flatten()
-            .map(|postings| postings.values().map(Vec::len).sum::<usize>())
+            .map(super::ColumnPostings::entries)
             .sum()
     }
 }
@@ -129,6 +121,8 @@ impl StreamedRows {
             components: closed.components.as_ref(),
             // A streamed constraint proposes no assignment and emits no body.
             certainty: None,
+            fact_rows: &[],
+            head_rows: &[],
             read: closed.storage.read(),
             entries: self.entries,
             bytes,

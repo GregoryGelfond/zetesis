@@ -521,7 +521,7 @@ fn unrestricted_scoring_spends_one_cumulative_budget() {
     .unwrap();
     // Derive the exact boundary from the same source-backed constructor used
     // by the session, then admit preparation and precisely one complete score.
-    let plan = zetesis_themelios::objective_bound::ObjectivePlan::new_projected(
+    let plan = zetesis_themelios::objective_bound::ObjectivePlan::new_read_set(
         owner.objective_source(),
         zetesis_themelios::objective_bound::ObjectivePlanLimits::default(),
         config().max_candidate_bytes as u128,

@@ -166,6 +166,7 @@ impl PreparedFormula {
     #[must_use]
     pub const fn with_grounding_options(mut self, options: crate::GroundingOptions) -> Self {
         self.preparation.options.joins = options.joins;
+        self.preparation.options.workers = options.workers;
         self
     }
 
@@ -191,11 +192,14 @@ impl PreparedFormula {
         self
     }
 
-    /// Admit and evaluate a complete signed acyclic normal source once, before
-    /// formula construction. Complete support and original arithmetic admission
-    /// still run. Inapplicable sources retain the ordinary ground/query door and
-    /// all accepted classification charges. Objectives, projections, recursive
-    /// components and non-flat source bodies use that ordinary door.
+    /// Admit and evaluate a complete signed stratified normal source once,
+    /// before formula construction: recursive only through certain
+    /// components, never through negation. Complete support and original arithmetic
+    /// admission still run. Inapplicable sources retain the ordinary
+    /// ground/query door and all accepted classification charges. Objectives,
+    /// projections, recursion through default negation or aggregates,
+    /// aggregates other than certain assignments and non-flat source bodies
+    /// use that ordinary door.
     ///
     /// # Errors
     /// Returns the original typed admission, arithmetic, control or resource
@@ -521,7 +525,7 @@ impl PreparedFormulaBundle {
         }
     }
 
-    /// Admit and evaluate the complete signed acyclic normal source bundle.
+    /// Admit and evaluate the complete signed stratified normal source bundle.
     /// Inapplicability retains the same original bundle and cumulative budgets.
     ///
     /// # Errors
@@ -635,6 +639,7 @@ impl PreparedFormulaBundle {
     #[must_use]
     pub const fn with_grounding_options(mut self, options: crate::GroundingOptions) -> Self {
         self.preparation.options.joins = options.joins;
+        self.preparation.options.workers = options.workers;
         self
     }
 

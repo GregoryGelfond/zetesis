@@ -335,8 +335,8 @@ enum SortOrder {
 }
 
 fn sort<E>(
-    values: &mut Vec<usize>,
-    scratch: &mut Vec<usize>,
+    values: &mut [usize],
+    scratch: &mut [usize],
     atoms: Source<'_>,
     order: SortOrder,
     before: &mut impl FnMut() -> Result<(), E>,

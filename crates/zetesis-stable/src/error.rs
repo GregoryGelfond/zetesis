@@ -57,11 +57,11 @@ pub enum Incomplete {
     /// The streamed constraints' region check stopped. Its typed receipt is
     /// retained by [`crate::StreamedConstraints::take_failure`]; this never
     /// means exhaustion.
-    RegionFilter,
+    ConstraintRefutation,
     /// A region check returned a decision for an atom that is not open.
     InvalidRegionConsequence,
     /// Streamed constraints cannot be installed after candidate traversal began.
-    LateRegionFilter,
+    LateConstraintRefuter,
     /// Candidate bounds cannot be declared after candidate traversal began:
     /// the producers' frontier order is fixed for the whole stream.
     LateCandidateBounds,
@@ -72,7 +72,7 @@ pub enum Incomplete {
     /// bound's, so it could readmit candidates that bound pruned.
     CandidateBoundNotImproving,
     /// Installed streamed constraints cannot be replaced.
-    RegionFilterAlreadySet,
+    ConstraintRefuterAlreadySet,
     /// A learned-row store cannot be installed after candidate traversal
     /// began.
     LateLearnedStore,
@@ -118,13 +118,13 @@ impl Refusal for Incomplete {
             | Self::RestrictionUniverse { .. }
             | Self::ClosedEnumerator
             | Self::LateCertificate
-            | Self::RegionFilter
+            | Self::ConstraintRefutation
             | Self::InvalidRegionConsequence
-            | Self::LateRegionFilter
+            | Self::LateConstraintRefuter
             | Self::LateCandidateBounds
             | Self::CandidateBoundPlan
             | Self::CandidateBoundNotImproving
-            | Self::RegionFilterAlreadySet
+            | Self::ConstraintRefuterAlreadySet
             | Self::LateLearnedStore
             | Self::LearnedStoreAlreadySet
             | Self::InvalidWitness
@@ -179,13 +179,13 @@ impl fmt::Display for Incomplete {
             Self::LateCertificate => {
                 f.write_str("certificate configuration requires an unstarted candidate stream")
             }
-            Self::RegionFilter => {
+            Self::ConstraintRefutation => {
                 f.write_str("candidate-region filter failed; inspect its receipt")
             }
             Self::InvalidRegionConsequence => {
                 f.write_str("candidate-region consequence does not decide an open atom")
             }
-            Self::LateRegionFilter => {
+            Self::LateConstraintRefuter => {
                 f.write_str("candidate-region filtering requires an unstarted stream")
             }
             Self::LateCandidateBounds => {
@@ -197,7 +197,7 @@ impl fmt::Display for Incomplete {
             Self::CandidateBoundNotImproving => {
                 f.write_str("a candidate bound's score must strictly improve on the active bound's")
             }
-            Self::RegionFilterAlreadySet => {
+            Self::ConstraintRefuterAlreadySet => {
                 f.write_str("candidate-region filter is already installed")
             }
             Self::LateLearnedStore => {

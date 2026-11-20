@@ -5,7 +5,7 @@ mod plan;
 
 use std::fmt;
 use zetesis_algebra::{Cancellation, Stop};
-use zetesis_core::atom_interner::{AtomInterner, ClosedCatalog};
+use zetesis_core::atom_registry::{AtomRegistry, ClosedCatalog};
 use zetesis_core::{Model, ModelFailure, UnificationError};
 
 use super::{TerminalFormula, storage::Work};
@@ -378,7 +378,7 @@ fn extend<'a>(
     publish(&mut writer, &mut work)
 }
 
-fn publish(writer: &mut AtomInterner, work: &mut Work<'_>) -> Result<Model, ReconstructionError> {
+fn publish(writer: &mut AtomRegistry, work: &mut Work<'_>) -> Result<Model, ReconstructionError> {
     let limits = work.limits;
     let location = work.location;
     work.atoms(writer, |writer, bound, counters| {

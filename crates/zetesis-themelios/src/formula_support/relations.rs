@@ -1,12 +1,11 @@
 //! One atom owner and immutable column views between support-growth rounds.
 
-use std::collections::{BTreeMap, btree_map::Entry};
 use std::mem::size_of;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ProgramSite;
 use zetesis_algebra::words::Words;
-use zetesis_core::atom_interner::{self, AtomAppender, AtomInterner};
+use zetesis_core::atom_registry::{self, AtomAppender, AtomRegistry};
 use zetesis_core::catalog::{AtomRef, Atoms, CatalogRead, PredicateRef, TermRef};
 use zetesis_core::relation::{Catalog, CatalogFailure, Failure, Limits, Relation, Resource, Row};
 #[cfg(test)]
@@ -22,11 +21,13 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 mod append;
 mod close;
+mod postings;
 mod publication;
 mod streamed;
 pub(super) use append::SupportAppend;
-pub(crate) use append::{SourceAtom, SourceScope};
+pub(crate) use append::{FactRows, SourceAtom, SourceScope};
 pub(crate) use close::ClosedSource;
+pub(crate) use postings::ColumnPostings;
 pub(crate) use streamed::StreamedRows;
 
 #[cfg(test)]
@@ -35,13 +36,13 @@ mod tests;
 struct CatalogRows {
     catalog: Catalog,
     /// One posting map per column a join can bind; `None` keeps no postings.
-    columns: Vec<Option<BTreeMap<u32, Vec<usize>>>>,
+    columns: Vec<Option<ColumnPostings>>,
     old_rows: usize,
 }
 
 /// A column's postings, or the absence of any for a column no join binds.
 pub(super) enum Postings<'a> {
-    Indexed(&'a BTreeMap<u32, Vec<usize>>),
+    Indexed(&'a ColumnPostings),
     Unindexed,
 }
 
@@ -91,7 +92,7 @@ impl KeyIdentifiers {
 /// Canonical payload has one evolving authority. Relations and pending rounds
 /// retain only metadata scoped to that authority; discovery positions never escape.
 pub(crate) struct SupportCatalog {
-    pub(super) owner: AtomInterner,
+    pub(super) owner: AtomRegistry,
     pub(super) components: Option<TemplateComponents>,
     scope: SourceScope,
     rows: Vec<CatalogRows>,
@@ -107,6 +108,14 @@ pub(crate) struct SupportCatalog {
     /// The certain predicates; absent until support completion installs them,
     /// and when it finds none.
     certainty: Option<super::certain::Certainty>,
+    /// Each fact row's atom position, in item order, as support's first
+    /// round interned it; reserved before that round, which alone appends.
+    fact_rows: Vec<usize>,
+    fact_rows_open: bool,
+    /// Without fact blocks: each fact rule's index and its head's atom
+    /// position, in rule order, for the rules support's first round admitted
+    /// in a head block; reserved before that round, which alone appends.
+    head_rows: Vec<(usize, usize)>,
     entries: usize,
     index_bytes: usize,
     prepared_bytes: usize,
@@ -115,7 +124,7 @@ pub(crate) struct SupportCatalog {
 impl Default for SupportCatalog {
     fn default() -> Self {
         Self {
-            owner: AtomInterner::new(),
+            owner: AtomRegistry::new(),
             components: None,
             scope: SourceScope::new(),
             rows: Vec::new(),
@@ -124,8 +133,11 @@ impl Default for SupportCatalog {
             growth: AtomicUsize::new(0),
             demand: None,
             certainty: None,
+            fact_rows: Vec::new(),
+            fact_rows_open: false,
+            head_rows: Vec::new(),
             entries: 0,
-            index_bytes: size_of::<Self>() - size_of::<AtomInterner>()
+            index_bytes: size_of::<Self>() - size_of::<AtomRegistry>()
                 + SourceScope::shared_bytes(),
             prepared_bytes: 0,
         }
@@ -138,7 +150,7 @@ impl SupportCatalog {
     }
 
     #[cfg(test)]
-    pub(super) fn owner(&self) -> &AtomInterner {
+    pub(super) fn owner(&self) -> &AtomRegistry {
         &self.owner
     }
     pub(super) fn prepared_bytes(&mut self, bytes: usize) {
@@ -181,6 +193,69 @@ impl SupportCatalog {
         .add(0)
     }
 
+    /// Reserve one cell per fact row for the first round to record its atom
+    /// in, admitted with the catalog's bytes before allocation. One unit.
+    pub(super) fn open_fact_rows(
+        &mut self,
+        rows: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        counters.work(limits, location)?;
+        let bytes = rows
+            .checked_mul(size_of::<usize>())
+            .and_then(|added| added.checked_add(self.bytes(location).ok()?))
+            .ok_or_else(|| failure(Failure::Overflow, location))?;
+        Memory::new(
+            bytes,
+            counters.accounting.workspace.bytes() as u128,
+            limits,
+            counters,
+            location,
+        )
+        .add(0)?;
+        self.fact_rows
+            .try_reserve_exact(rows)
+            .map_err(|_| failure(Failure::Allocation, location))?;
+        self.fact_rows_open = true;
+        Ok(())
+    }
+
+    /// Reserve a cell per fact rule for the first round to record its head
+    /// atom in, as [`Self::open_fact_rows`] does for fact rows. One unit.
+    pub(super) fn open_head_rows(
+        &mut self,
+        rules: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        counters.work(limits, location)?;
+        let bytes = rules
+            .checked_mul(size_of::<(usize, usize)>())
+            .and_then(|added| added.checked_add(self.bytes(location).ok()?))
+            .ok_or_else(|| failure(Failure::Overflow, location))?;
+        Memory::new(
+            bytes,
+            counters.accounting.workspace.bytes() as u128,
+            limits,
+            counters,
+            location,
+        )
+        .add(0)?;
+        self.head_rows
+            .try_reserve_exact(rules)
+            .map_err(|_| failure(Failure::Allocation, location))?;
+        self.fact_rows_open = true;
+        Ok(())
+    }
+
+    /// The first round has recorded every fact row: later snapshots read them.
+    pub(super) fn close_fact_rows(&mut self) {
+        self.fact_rows_open = false;
+    }
+
     pub(in crate::formula_support) fn bytes(
         &self,
         location: ProgramSite,
@@ -188,6 +263,10 @@ impl SupportCatalog {
         usize::try_from(self.owner.storage_bytes())
             .ok()
             .and_then(|owner| owner.checked_add(self.index_bytes))
+            .and_then(|bytes| bytes.checked_add(self.fact_rows.capacity() * size_of::<usize>()))
+            .and_then(|bytes| {
+                bytes.checked_add(self.head_rows.capacity() * size_of::<(usize, usize)>())
+            })
             .and_then(|bytes| bytes.checked_add(self.prepared_bytes))
             .and_then(|bytes| bytes.checked_add(self.component_bytes().ok()?))
             .and_then(|bytes| bytes.checked_add(self.pending.capacity() * size_of::<usize>()))
@@ -236,10 +315,23 @@ impl SupportCatalog {
         let supported_bytes = self.supported.capacity() * size_of::<u64>();
         let (committed, appender) = self.owner.split();
         let growth = &self.growth;
+        // The open first round records fact rows; every later snapshot reads them.
+        let (fact_rows, record): (&[usize], _) = if self.fact_rows_open {
+            (&[], Some(&mut self.fact_rows))
+        } else {
+            (&self.fact_rows, None)
+        };
+        let (head_rows, heads): (&[(usize, usize)], _) = if self.fact_rows_open {
+            (&[], Some(&mut self.head_rows))
+        } else {
+            (&self.head_rows, None)
+        };
         let relations = SnapshotSource {
             sources: &self.rows,
             components: self.components.as_ref(),
             certainty: self.certainty.as_ref(),
+            fact_rows,
+            head_rows,
             read: committed.read(),
             entries: self.entries,
             bytes,
@@ -248,7 +340,7 @@ impl SupportCatalog {
         .build(limits, counters, location)?;
         let append = SupportAppend::new(
             appender,
-            &mut self.pending,
+            (&mut self.pending, record, heads),
             &mut self.supported,
             &self.scope,
             growth,
@@ -352,6 +444,8 @@ impl SupportCatalog {
             sources: &self.rows,
             components: self.components.as_ref(),
             certainty: self.certainty.as_ref(),
+            fact_rows: &self.fact_rows,
+            head_rows: &self.head_rows,
             read: self.owner.read(),
             entries: self.entries,
             bytes: self.bytes(location)?,
@@ -379,6 +473,8 @@ struct SnapshotSource<'a> {
     sources: &'a [CatalogRows],
     components: Option<&'a TemplateComponents>,
     certainty: Option<&'a super::certain::Certainty>,
+    fact_rows: &'a [usize],
+    head_rows: &'a [(usize, usize)],
     read: CatalogRead<'a>,
     entries: usize,
     bytes: usize,
@@ -429,6 +525,8 @@ impl<'a> SnapshotSource<'a> {
             rows,
             components,
             certainty: self.certainty,
+            fact_rows: self.fact_rows,
+            head_rows: self.head_rows,
             read: Some(self.read),
             entries: self.entries,
             bytes: memory.bytes,
@@ -495,14 +593,14 @@ pub(crate) fn owner_limits(
     limits: &FormulaLimits,
     outer: u128,
     location: ProgramSite,
-) -> Result<atom_interner::Limits, FormulaFailure> {
+) -> Result<atom_registry::Limits, FormulaFailure> {
     ceiling(
         FormulaResource::SupportBytes,
         outer,
         limits.max_support_bytes as u128,
         location,
     )?;
-    Ok(atom_interner::Limits {
+    Ok(atom_registry::Limits {
         max_atoms: limits.theory.max_atoms,
         max_bytes: limits.max_support_bytes as u128 - outer,
     })
@@ -513,30 +611,30 @@ fn record_owner_peak(peak: u128, outer: u128, counters: &Counters) {
 }
 
 pub(crate) fn atom_failure(
-    error: atom_interner::Failure<FormulaFailure>,
+    error: atom_registry::Failure<FormulaFailure>,
     limits: &FormulaLimits,
     outer: u128,
     location: ProgramSite,
 ) -> FormulaFailure {
     match error {
-        atom_interner::Failure::Stopped(error) => error,
-        atom_interner::Failure::Catalog(error) => FormulaFailure::AtomCatalog { error, location },
-        atom_interner::Failure::Allocation(error) => {
+        atom_registry::Failure::Stopped(error) => error,
+        atom_registry::Failure::Catalog(error) => FormulaFailure::AtomCatalog { error, location },
+        atom_registry::Failure::Allocation(error) => {
             FormulaFailure::AtomAllocation { error, location }
         }
-        atom_interner::Failure::Atoms { required, limit } => FormulaFailure::Limit {
+        atom_registry::Failure::Atoms { required, limit } => FormulaFailure::Limit {
             resource: FormulaResource::Atoms,
             observed: required as u128,
             limit: limit as u128,
             location,
         },
-        atom_interner::Failure::Bytes { required, .. } => FormulaFailure::Limit {
+        atom_registry::Failure::Bytes { required, .. } => FormulaFailure::Limit {
             resource: FormulaResource::SupportBytes,
             observed: required.saturating_add(outer),
             limit: limits.max_support_bytes as u128,
             location,
         },
-        atom_interner::Failure::Overflow => failure(Failure::Overflow, location),
+        atom_registry::Failure::Overflow => failure(Failure::Overflow, location),
     }
 }
 
@@ -557,7 +655,7 @@ impl CatalogRows {
             .map_err(|_| failure(Failure::Owner, location))?;
         let outer_bytes = memory.outside(0)?;
         counters.poll(location)?;
-        let catalog = Catalog::new(
+        let catalog = Catalog::interned(
             read,
             declared,
             relation_limits(limits, counters, predicate.arity(), memory.remaining()?),
@@ -582,7 +680,7 @@ impl CatalogRows {
                 (Some(_), Some(demanded)) => demanded[column],
                 (Some(_), None) => false,
             };
-            columns.push(indexed.then(BTreeMap::new));
+            columns.push(indexed.then(ColumnPostings::default));
         }
         Ok(Self {
             catalog,
@@ -603,7 +701,7 @@ impl CatalogRows {
     /// caller has already charged entry to its first pending row.
     fn append_run(
         &mut self,
-        owner: &AtomInterner,
+        owner: &AtomRegistry,
         pending: &[usize],
         predicate: PredicateRef<'_>,
         entries: &mut usize,
@@ -693,7 +791,7 @@ impl CatalogRows {
     // These IDs are lent by the same catalog's completed row transaction.
     // Consume them before the next insertion can replace its plan.
     fn append_postings(
-        columns: &mut [Option<BTreeMap<u32, Vec<usize>>>],
+        columns: &mut [Option<ColumnPostings>],
         ids: &[u32],
         row: usize,
         memory: &mut Memory<'_>,
@@ -705,19 +803,7 @@ impl CatalogRows {
             .filter_map(|(column, postings)| postings.as_mut().map(|postings| (column, postings)))
         {
             counters.work(memory.limits, memory.location)?;
-            let id = ids[column];
-            let posting = match postings.entry(id) {
-                Entry::Occupied(entry) => entry.into_mut(),
-                Entry::Vacant(entry) => {
-                    memory.add(size_of::<(u32, Vec<usize>)>())?;
-                    entry.insert(Vec::new())
-                }
-            };
-            if posting.len() == posting.capacity() {
-                counters.charge_work(posting.len() as u128, memory.limits, memory.location)?;
-            }
-            memory.reserve(posting, 1)?;
-            posting.push(row);
+            postings.push(ids[column], row, memory, counters)?;
             counters.record(Event::SupportIndexEntry);
         }
         Ok(())
@@ -757,6 +843,12 @@ pub(crate) struct Relations<'source> {
     components: Option<TemplateComponentsRef<'source>>,
     /// The certain predicates of the source this support completes.
     certainty: Option<&'source super::certain::Certainty>,
+    /// Each fact row's atom position, in item order; empty when support
+    /// completion recorded none.
+    fact_rows: &'source [usize],
+    /// Each fact rule's index and head atom position, in rule order, for the
+    /// rules support completion recorded; empty when it recorded none.
+    head_rows: &'source [(usize, usize)],
     read: Option<CatalogRead<'source>>,
     growth: Option<&'source AtomicUsize>,
     pub(super) entries: usize,
@@ -765,7 +857,7 @@ pub(crate) struct Relations<'source> {
 
 pub(super) struct RelationRows<'source> {
     pub(super) relation: Relation<'source>,
-    columns: &'source [Option<BTreeMap<u32, Vec<usize>>>],
+    columns: &'source [Option<ColumnPostings>],
     catalog: &'source Catalog,
     old_rows: usize,
     pub(super) atoms: Atoms<'source>,
@@ -804,6 +896,14 @@ impl<'source> Relations<'source> {
     /// found any ([`super::certain`]).
     pub(crate) fn certainty(&self) -> Option<&'source super::certain::Certainty> {
         self.certainty
+    }
+
+    pub(super) fn fact_rows(&self) -> &'source [usize] {
+        self.fact_rows
+    }
+
+    pub(super) fn head_rows(&self) -> &'source [(usize, usize)] {
+        self.head_rows
     }
 
     pub(super) fn components(&self) -> Option<TemplateComponentsRef<'source>> {
@@ -1090,9 +1190,7 @@ impl<'source> Relations<'source> {
             return Ok(None);
         };
         Ok(Some(equality.map_or(&[][..], |equality| {
-            postings
-                .get(&equality.value_id())
-                .map_or(&[][..], Vec::as_slice)
+            postings.get(equality.value_id())
         })))
     }
 
@@ -1175,9 +1273,7 @@ impl<'source> Relations<'source> {
                 if let Some(equality) = equality {
                     match rows.postings(equality.column()) {
                         Postings::Indexed(postings) => {
-                            let posting = postings
-                                .get(&equality.value_id())
-                                .map_or(&[][..], Vec::as_slice);
+                            let posting = postings.get(equality.value_id());
                             if selected.is_none_or(|previous| posting.len() < previous.len()) {
                                 selected = Some(posting);
                             }
@@ -1362,6 +1458,31 @@ impl<'limits> Memory<'limits> {
             return Ok(());
         }
         let proposed = needed.max(values.capacity().saturating_mul(2));
+        self.grow(values, proposed)
+    }
+
+    /// Room for `additional` more cells at the capacity that reserving them
+    /// one at a time would reach, in one growth.
+    pub(super) fn reserve_rows<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+    ) -> Result<(), FormulaFailure> {
+        let needed = values
+            .len()
+            .checked_add(additional)
+            .ok_or_else(|| failure(Failure::Overflow, self.location))?;
+        let mut proposed = values.capacity();
+        if needed <= proposed {
+            return Ok(());
+        }
+        while proposed < needed {
+            proposed = proposed.saturating_mul(2).max(proposed + 1);
+        }
+        self.grow(values, proposed)
+    }
+
+    fn grow<T>(&mut self, values: &mut Vec<T>, proposed: usize) -> Result<(), FormulaFailure> {
         // Growth admits old and replacement buffers simultaneously. Retained
         // bytes become only the final capacity after the allocation succeeds.
         let replacement = proposed

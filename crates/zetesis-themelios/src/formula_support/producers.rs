@@ -290,13 +290,14 @@ impl<'source> ProducerPlan<'source> {
         memory.reserve(&mut inputs, input_count)?;
         memory.reserve(&mut input_predicates, input_count)?;
         let nodes = graph_nodes(prepared, &mut memory, limits, counters, location)?;
+        let mut found = Found::new();
         for rule in prepared.rules_without_facts() {
             counters.work(limits, rule.location)?;
             let HeadIr::Normal(Some(head)) = &rule.head else {
                 rules.push(None);
                 continue;
             };
-            let head = find(
+            let head = found.find(
                 nodes.len(),
                 |index| nodes[index].signature,
                 head.get(
@@ -306,7 +307,7 @@ impl<'source> ProducerPlan<'source> {
                     rule.location,
                 )?
                 .predicate(),
-                limits,
+                (&mut memory, limits),
                 counters,
                 rule.location,
             )?;
@@ -321,7 +322,7 @@ impl<'source> ProducerPlan<'source> {
                 let LiteralIr::Atom(_, atom) = literal else {
                     return Err(invalid(Failure::Owner, rule.location));
                 };
-                let body = find(
+                let body = found.find(
                     nodes.len(),
                     |index| nodes[index].signature,
                     atom.get(
@@ -331,7 +332,7 @@ impl<'source> ProducerPlan<'source> {
                         rule.location,
                     )?
                     .predicate(),
-                    limits,
+                    (&mut memory, limits),
                     counters,
                     rule.location,
                 )?;
@@ -349,6 +350,7 @@ impl<'source> ProducerPlan<'source> {
             }
             rules.push(Some(start..inputs.len()));
         }
+        found.release(&mut memory);
         let wake = Wake::prepare(
             &nodes,
             (&rules, &input_predicates),
@@ -473,6 +475,79 @@ fn graph_nodes<'source>(
         }
     }
     Ok(nodes)
+}
+
+/// Each canonical predicate the rules name, by its vocabulary position, with
+/// its node or its absence: a predicate pays one search however many rules
+/// name it. A read, with its confirmation by canonical identity, is one unit
+/// and reads no name. The table grows to the largest position named, one unit
+/// per cell, under the caller's memory, which releases [`Self::bytes`].
+pub(super) struct Found<'p> {
+    nodes: Vec<Option<Entry<'p>>>,
+}
+
+type Entry<'p> = (PredicateRef<'p>, Option<usize>);
+
+impl<'p> Found<'p> {
+    pub(super) const fn new() -> Self {
+        Self { nodes: Vec::new() }
+    }
+
+    pub(super) fn bytes(&self) -> usize {
+        self.nodes.capacity() * size_of::<Option<Entry<'p>>>()
+    }
+
+    /// The node of `predicate`, or `None` when absent; searched for once and
+    /// then recorded.
+    pub(super) fn lookup<'source>(
+        &mut self,
+        count: usize,
+        signature_at: impl Fn(usize) -> &'source Signature,
+        predicate: PredicateRef<'p>,
+        (memory, limits): (&mut Memory<'_>, &FormulaLimits),
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<usize>, FormulaFailure> {
+        counters.work(limits, location)?;
+        let position = predicate.canonical_position();
+        if let Some(Some((known, index))) = position.and_then(|position| self.nodes.get(position))
+            && known.same_canonical(predicate) == Some(true)
+        {
+            return Ok(*index);
+        }
+        let index = lookup(count, signature_at, predicate, limits, counters, location)?;
+        let Some(position) = position else {
+            return Ok(index);
+        };
+        if position >= self.nodes.len() {
+            let grow = position + 1 - self.nodes.len();
+            memory.reserve(&mut self.nodes, grow)?;
+            for _ in 0..grow {
+                counters.work(limits, location)?;
+            }
+            self.nodes.resize(position + 1, None);
+        }
+        self.nodes[position] = Some((predicate, index));
+        Ok(index)
+    }
+
+    /// The node of `predicate`, which must be present.
+    pub(super) fn find<'source>(
+        &mut self,
+        count: usize,
+        signature_at: impl Fn(usize) -> &'source Signature,
+        predicate: PredicateRef<'p>,
+        work: (&mut Memory<'_>, &FormulaLimits),
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        self.lookup(count, signature_at, predicate, work, counters, location)?
+            .ok_or_else(|| invalid(Failure::Owner, location))
+    }
+
+    pub(super) fn release(self, memory: &mut Memory<'_>) {
+        memory.release(self.bytes());
+    }
 }
 
 fn find<'source>(

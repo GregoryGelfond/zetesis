@@ -347,9 +347,9 @@ before it; `FactTables::default()` is no facts.
 
 **Representation (A).** A `relation::Catalog` per fact predicate over a program-owned closed atom store, with an
 occurrence list in program order. Every part exists in `zetesis-core` and the formula route already runs the pattern: a
-writer over the program's vocabulary (as `AtomInterner::for_program` builds one), the consuming close
-(`AtomInterner::into_closed_with`), and descendants that start empty over the closed base without copying
-(`AtomInterner::for_closed_catalog`). Each component has a reader: row membership gives admission's deduplication and
+writer over the program's vocabulary (as `AtomRegistry::for_program` builds one), the consuming close
+(`AtomRegistry::into_closed_with`), and descendants that start empty over the closed base without copying
+(`AtomRegistry::for_closed_catalog`). Each component has a reader: row membership gives admission's deduplication and
 the restrictions reader's uniqueness; the column reader seeds argument bounds once before variable propagation, with
 repeated values coalesced by the existing finite-domain set; equality-identifier columns remain available to
 subsequent consumers. Ground-head coordinates are retained per original occurrence. Ordered runs expose canonical
@@ -385,7 +385,7 @@ remaining templates' reducts. Bootstrap records the same heads in the same seque
 templates, and the closure, its round history, the agreement and the constraint verdict are identical.
 
 **The workspace descends from the fact store.** `bind_program` builds the workspace's authority as a descendant of the
-program's fact store through an explicit, additive `Program::fact_catalog()` and `AtomInterner::for_closed_catalog`.
+program's fact store through an explicit, additive `Program::fact_catalog()` and `AtomRegistry::for_closed_catalog`.
 
 - Presence in the base supplies no truth, and the descendant has a fresh atom scope and empty discovery.
 - What the oracle reads is a discovery position, and descent assigns positions in today's order: for a fact predicate

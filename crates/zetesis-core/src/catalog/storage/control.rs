@@ -104,6 +104,48 @@ impl<'a, E> Work<'a, E> {
         budget::reserve(values, additional, budget).map_err(Failure::Storage)
     }
 
+    /// [`Self::reserve`] at the capacity one-at-a-time growth would reach,
+    /// moving the live cells once.
+    pub(super) fn reserve_rows<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+        budget: &mut Budget,
+    ) -> Result<(), Failure<E>> {
+        self.step()?;
+        let needed = values
+            .len()
+            .checked_add(additional)
+            .ok_or(Fault::Overflow)?;
+        if needed > values.capacity() {
+            self.steps(values.len())?;
+        }
+        budget::reserve_rows(values, additional, budget).map_err(Failure::Storage)
+    }
+
+    /// Give back room [`Self::reserve_rows`] took for cells never pushed:
+    /// shrink to the capacity one-at-a-time growth from `(len, capacity)`
+    /// reaches for the cells actually pushed, moving the live cells once.
+    pub(super) fn trim_rows<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        (len, capacity): (usize, usize),
+        budget: &mut Budget,
+    ) -> Result<(), Failure<E>> {
+        self.step()?;
+        let pushed = values.len().checked_sub(len).ok_or(Fault::Shape)?;
+        let target = budget::chain_capacity(len, capacity, pushed).map_err(Failure::Storage)?;
+        if values.capacity() > target {
+            self.steps(values.len())?;
+            let before = budget::capacity(values);
+            values.shrink_to(target);
+            budget
+                .observed(before, budget::capacity(values))
+                .map_err(Failure::Storage)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn reserve_text(
         &mut self,
         text: &mut String,

@@ -2,6 +2,7 @@
 use crate::ProgramSite;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
+use crate::formula_support::buffer::Buffer;
 use crate::formula_support::{Computation, Counters, StorageLease};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 use std::cmp::Ordering;
@@ -128,6 +129,18 @@ impl TermSelection {
             .map_err(|error| crate::formula_binding::failure(error, location))
     }
 
+    /// The selected values in the order they were first inserted, for a
+    /// reduction whose result does not depend on the order of its distinct
+    /// inputs. No comparison is made.
+    pub(crate) fn unordered(self) -> Binding<'static> {
+        self.values
+    }
+
+    /// The selected values in ascending order: a stable merge sort of their
+    /// slots by the semantic comparison (`tuples` selects the aggregate tuple
+    /// order), which costs fewer comparisons than slots when the values were
+    /// inserted in order, then one cycle walk that moves each value once.
+    /// Two slot buffers live for the sort.
     pub(crate) fn ordered(
         mut self,
         tuples: bool,
@@ -137,95 +150,48 @@ impl TermSelection {
         location: ProgramSite,
     ) -> Result<Binding<'static>, FormulaFailure> {
         let len = self.values.len();
-        for root in (0..len / 2).rev() {
-            self.sift(
-                root,
-                len,
-                tuples,
-                Context::new(computation, limits, counters, location),
-            )?;
+        if len < 2 {
+            return Ok(self.values);
         }
-        for end in (1..len).rev() {
-            self.values.swap(0, end, limits, counters, location)?;
-            self.sift(
-                0,
-                end,
-                tuples,
-                Context::new(computation, limits, counters, location),
-            )?;
+        let mut order = Buffer::new(computation, limits, counters, location)?;
+        let mut scratch = Buffer::new(computation, limits, counters, location)?;
+        order.resize(len, 0, computation, limits, counters, location)?;
+        scratch.resize(len, 0, computation, limits, counters, location)?;
+        for (slot, cell) in order.slice_mut().iter_mut().enumerate() {
+            *cell = slot;
+        }
+        let read = computation.read();
+        let values = &self.values;
+        zetesis_core::checked_sort::sort(
+            order.slice_mut(),
+            scratch.slice_mut(),
+            |cells, left, right, permit| {
+                let left = values.read(cells[left], read, location)?;
+                let right = values.read(cells[right], read, location)?;
+                if tuples {
+                    tuple_order(left, right, permit)
+                } else {
+                    left.compare_ref_with(right, permit)
+                }
+            },
+            &mut || counters.work(limits, location),
+        )?;
+        // Slot `target` receives the value at `order[target]`. Each cycle of
+        // the permutation is walked once; a visited slot points to itself.
+        let order = order.slice_mut();
+        for start in 0..len {
+            let mut target = start;
+            while order[target] != target {
+                let source = std::mem::replace(&mut order[target], target);
+                if source == start {
+                    break;
+                }
+                self.values
+                    .swap(target, source, limits, counters, location)?;
+                target = source;
+            }
         }
         Ok(self.values)
-    }
-    fn sift(
-        &mut self,
-        mut root: usize,
-        end: usize,
-        tuples: bool,
-        context: Context<'_, &Computation<'_, '_>>,
-    ) -> Result<(), FormulaFailure> {
-        let Context {
-            computation,
-            work:
-                GroundingWork {
-                    limits,
-                    counters,
-                    location,
-                },
-        } = context;
-        while root < end / 2 {
-            let mut child = root * 2 + 1;
-            if child + 1 < end
-                && self
-                    .compare(
-                        child,
-                        child + 1,
-                        tuples,
-                        Context::new(computation, limits, counters, location),
-                    )?
-                    .is_lt()
-            {
-                child += 1;
-            }
-            if !self
-                .compare(
-                    root,
-                    child,
-                    tuples,
-                    Context::new(computation, limits, counters, location),
-                )?
-                .is_lt()
-            {
-                break;
-            }
-            self.values.swap(root, child, limits, counters, location)?;
-            root = child;
-        }
-        Ok(())
-    }
-    fn compare(
-        &self,
-        left: usize,
-        right: usize,
-        tuples: bool,
-        context: Context<'_, &Computation<'_, '_>>,
-    ) -> Result<Ordering, FormulaFailure> {
-        let Context {
-            computation,
-            work:
-                GroundingWork {
-                    limits,
-                    counters,
-                    location,
-                },
-        } = context;
-        let read = computation.read();
-        let left = self.values.read(left, read, location)?;
-        let right = self.values.read(right, read, location)?;
-        if tuples {
-            tuple_order(left, right, limits, counters, location)
-        } else {
-            left.compare_ref_with(right, || counters.work(limits, location))
-        }
     }
 }
 
@@ -234,16 +200,14 @@ impl TermSelection {
 fn tuple_order(
     left: TermRef<'_>,
     right: TermRef<'_>,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: ProgramSite,
+    permit: &mut impl FnMut() -> Result<(), FormulaFailure>,
 ) -> Result<Ordering, FormulaFailure> {
     let mut column = 0;
     loop {
-        counters.work(limits, location)?;
+        permit()?;
         match (left.child(column), right.child(column)) {
             (Some(left), Some(right)) => {
-                let order = left.compare_ref_with(right, || counters.work(limits, location))?;
+                let order = left.compare_ref_with(right, &mut *permit)?;
                 if !order.is_eq() {
                     return Ok(order);
                 }

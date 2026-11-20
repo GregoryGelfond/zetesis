@@ -3,7 +3,7 @@
 use std::convert::Infallible;
 
 use crate::support::canonical::before;
-use zetesis_core::catalog::interner::{AtomInterner, Failure, Limits};
+use zetesis_core::catalog::registry::{AtomRegistry, Failure, Limits};
 use zetesis_core::catalog::{AtomCatalog, AtomRef};
 use zetesis_core::{Atom, Model, ModelError, ModelFailure, Predicate, Value};
 use zetesis_test_support::programs::unary;
@@ -12,8 +12,8 @@ fn limits() -> Limits {
     Limits::for_atoms(32, 16 * 1024 * 1024)
 }
 
-fn owner() -> AtomInterner {
-    let mut owner = AtomInterner::new();
+fn owner() -> AtomRegistry {
+    let mut owner = AtomRegistry::new();
     for number in [2, 1, 3] {
         let atom = unary("p", number);
         owner

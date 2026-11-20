@@ -1,9 +1,10 @@
 //! Fixed-space aggregation of optional formula-grounding observations.
 
+use std::cell::{Cell, RefCell};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
+use zetesis_themelios::{GroundingOperator, GroundingOutcome, GroundingPhase, GroundingWork};
 
 /// Host intervals and work for all attempted occurrences of one grounding phase.
 /// Counts include failed and unwinding attempts; they are not semantic verdicts.
@@ -48,10 +49,11 @@ impl Default for GroundingMeasurement {
 /// An unrequested frontend domain-analysis phase is absent. When requested by a
 /// library preparation, its actual work is aggregated through the same observer;
 /// a completed optional attempt need not have reached an analysis fixed point.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GroundingTimings {
     invalid: bool,
     measurements: [Option<GroundingMeasurement>; GroundingPhase::ALL.len()],
+    operators: [Option<Duration>; GroundingOperator::ALL.len()],
 }
 
 impl GroundingTimings {
@@ -62,6 +64,74 @@ impl GroundingTimings {
         (!self.invalid)
             .then(|| self.measurements[phase_index(phase)].as_ref())
             .flatten()
+    }
+}
+
+impl Default for GroundingTimings {
+    fn default() -> Self {
+        Self {
+            invalid: false,
+            measurements: [None; GroundingPhase::ALL.len()],
+            operators: [Some(Duration::ZERO); GroundingOperator::ALL.len()],
+        }
+    }
+}
+
+impl GroundingTimings {
+    /// Summed host intervals of one operator inside the recorded phases, on
+    /// the coordinating thread, so a parallel operator counts its wall time.
+    /// `None` on overflow or unavailable bookkeeping; zero when never entered.
+    #[must_use]
+    pub fn operator(&self, operator: GroundingOperator) -> Option<Duration> {
+        (!self.invalid)
+            .then(|| self.operators[operator_index(operator)])
+            .flatten()
+    }
+}
+
+fn operator_index(operator: GroundingOperator) -> usize {
+    GroundingOperator::ALL
+        .iter()
+        .position(|&entry| entry == operator)
+        .expect("frontend operator catalog covers its variants")
+}
+
+/// Times the operators of one observed attempt. Operators are sequential on
+/// the coordinating thread; their totals are folded into the recorder at each
+/// phase exit.
+pub(crate) struct Operators {
+    active: Cell<Option<(GroundingOperator, Instant)>>,
+    totals: RefCell<[Option<Duration>; GroundingOperator::ALL.len()]>,
+}
+
+impl Operators {
+    pub(crate) fn new() -> Self {
+        Self {
+            active: Cell::new(None),
+            totals: RefCell::new([Some(Duration::ZERO); GroundingOperator::ALL.len()]),
+        }
+    }
+
+    fn take(&self) -> [Option<Duration>; GroundingOperator::ALL.len()] {
+        self.totals
+            .replace([Some(Duration::ZERO); GroundingOperator::ALL.len()])
+    }
+}
+
+impl zetesis_themelios::OperatorObserver for Operators {
+    fn operator_enter(&self, operator: GroundingOperator) {
+        let previous = self.active.replace(Some((operator, Instant::now())));
+        assert!(
+            previous.is_none(),
+            "frontend grounding operators must not nest"
+        );
+    }
+
+    fn operator_exit(&self, operator: GroundingOperator) {
+        let (entered, started) = self.active.take().expect("operator exit follows its entry");
+        assert_eq!(entered, operator, "operator exit identifies its entry");
+        let total = &mut self.totals.borrow_mut()[operator_index(operator)];
+        *total = total.and_then(|value| value.checked_add(started.elapsed()));
     }
 }
 
@@ -113,11 +183,21 @@ impl Recorder {
         phase: GroundingPhase,
         outcome: GroundingOutcome,
         work: &GroundingWork,
+        operators: Option<&Operators>,
     ) {
         let elapsed = attempt.finish(phase);
-        self.lock_timings().measurements[phase_index(phase)]
+        let operators = operators.map(Operators::take);
+        let mut timings = self.lock_timings();
+        timings.measurements[phase_index(phase)]
             .get_or_insert_default()
             .record(elapsed, outcome, work);
+        for (total, add) in timings
+            .operators
+            .iter_mut()
+            .zip(operators.into_iter().flatten())
+        {
+            *total = total.and_then(|value| add.and_then(|add| value.checked_add(add)));
+        }
     }
 
     fn lock_timings(&self) -> MutexGuard<'_, GroundingTimings> {

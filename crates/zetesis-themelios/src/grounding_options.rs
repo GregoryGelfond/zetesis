@@ -28,6 +28,10 @@ pub enum JoinStrategy {
 pub struct GroundingOptions {
     /// Positive-join execution strategy; independent of formula/reduct solving.
     pub joins: JoinStrategy,
+    /// Host threads for eager support grounding. `None` uses the available
+    /// parallelism; one thread grounds serially without a pool. Task geometry
+    /// and charged work do not depend on this count, only wall time does.
+    pub workers: Option<std::num::NonZeroUsize>,
 }
 
 /// Logical bounds on an optional conservative domain-analysis attempt.
@@ -41,4 +45,5 @@ pub use zetesis_domain::{Limits as DomainLimits, Stop as DomainStop};
 pub(crate) struct Execution {
     pub joins: JoinStrategy,
     pub domains: Option<DomainLimits>,
+    pub workers: Option<std::num::NonZeroUsize>,
 }

@@ -49,7 +49,10 @@ fn ground(
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )?
-    .with_grounding_options(GroundingOptions { joins })
+    .with_grounding_options(GroundingOptions {
+        joins,
+        ..GroundingOptions::default()
+    })
     .ground_with_observer(observer)
 }
 

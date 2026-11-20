@@ -210,7 +210,7 @@ struct Shared {
     /// What the walk reads of the original theory beyond the theory itself.
     parts: super::regions::OriginalParts,
     certificate: Option<Arc<Certification>>,
-    filter: Option<crate::region_filter::Filter>,
+    filter: Option<crate::constraint_refutation::ConstraintRefuter>,
     restrictions: RwLock<Conditions<Arc<(Theory, Narrower)>>>,
     /// One deque per worker and the walk's termination record. All entry
     /// preparation and evaluation happens outside the deque locks.
@@ -509,12 +509,17 @@ impl Shared {
         reserve: impl FnOnce(&mut std::collections::VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
         let parent = pending.take().expect("publication has a pending parent");
-        match self
-            .frontier
-            .publish_split_with(index, parent, reserve, |parent| {
+        match self.frontier.publish_split_shedding(
+            index,
+            parent,
+            reserve,
+            |parent| {
                 let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
                 ([cut, held], ())
-            }) {
+            },
+            super::region_frontier::KEPT_KNOWLEDGE,
+            super::region_frontier::shed,
+        ) {
             Ok(()) => Ok(()),
             Err((error, parent)) => {
                 *pending = Some(parent);
@@ -771,15 +776,15 @@ impl ParallelRegions {
         })
     }
 
-    pub(crate) fn set_filter(
+    pub(crate) fn set_refuter(
         &mut self,
-        filter: crate::region_filter::Filter,
+        filter: crate::constraint_refutation::ConstraintRefuter,
     ) -> Result<(), Incomplete> {
         if !matches!(self.record, WalkRecord::NotBegun) {
-            return Err(Incomplete::LateRegionFilter);
+            return Err(Incomplete::LateConstraintRefuter);
         }
         Arc::get_mut(&mut self.shared)
-            .ok_or(Incomplete::LateRegionFilter)?
+            .ok_or(Incomplete::LateConstraintRefuter)?
             .filter = Some(filter);
         Ok(())
     }
@@ -819,7 +824,7 @@ impl ParallelRegions {
         statistics
     }
 
-    pub(crate) fn filter(&self) -> Option<&crate::region_filter::Filter> {
+    pub(crate) fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
         self.shared.filter.as_ref()
     }
 
@@ -1330,11 +1335,9 @@ impl ParallelRegions {
     ) -> Result<(), Incomplete> {
         self.engage_with(budget, |shared, slot, sender| {
             let original = Arc::clone(index);
-            std::thread::Builder::new()
-                .name("zetesis-region".into())
-                .spawn(move || {
-                    contain_worker(&shared, || worker(&shared, &original, slot, &sender))
-                })
+            zetesis_algebra::threads::spawn("zetesis-region", move || {
+                contain_worker(&shared, || worker(&shared, &original, slot, &sender))
+            })
         })
     }
 
@@ -1903,7 +1906,7 @@ struct Workspaces<'a> {
     tier: super::learned::Tier,
     membership: crate::reduct::State,
     certificate: certified::Workspace,
-    filter: Option<crate::region_filter::Worker<'a>>,
+    filter: Option<crate::constraint_refutation::Worker<'a>>,
     retired_knowledge: Option<CandidateKnowledge>,
 }
 
@@ -1962,7 +1965,7 @@ fn step<'a>(
     let mut check = shared
         .filter
         .as_ref()
-        .map(|filter| crate::region_filter::Check {
+        .map(|filter| crate::constraint_refutation::Check {
             filter,
             worker: &mut workspaces.filter,
             timings: &mut report.statistics.phase_timings,

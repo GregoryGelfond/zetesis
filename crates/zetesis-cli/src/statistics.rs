@@ -416,7 +416,7 @@ fn countermodel(
     stats: &zetesis_stable::Statistics,
     membership: &str,
 ) -> io::Result<()> {
-    if let Some(filter) = stats.region_filter {
+    if let Some(filter) = stats.constraint_refutation {
         writeln!(
             sink,
             "  candidate region checks: preparations={}; checks={}; refuted={}; failed={}; overflowed={}; source work accounted separately; frozen reduct excluded",

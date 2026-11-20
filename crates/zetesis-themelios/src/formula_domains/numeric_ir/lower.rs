@@ -14,7 +14,9 @@ use zetesis_domain::{Widening, numeric};
 
 use crate::ProgramSite;
 use crate::formula_facts::ColumnSegment;
-use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, Prepared, Projection, RuleIr};
+use crate::formula_ir::{
+    AnonymousWitnesses, Expression, HeadIr, LiteralIr, Operation, Prepared, RuleIr,
+};
 use crate::formula_support::components::{Pattern, Scalar, Term};
 
 use super::census::{Occurrence, Query, Requests};
@@ -471,7 +473,7 @@ impl<'prepared> Lowering<'_, 'prepared> {
                 }
                 LiteralIr::Atom(..)
                 | LiteralIr::PatternAtom(_)
-                | LiteralIr::ProjectedAtom(..)
+                | LiteralIr::AnonymousAtom(..)
                 | LiteralIr::TupleCompare(..)
                 | LiteralIr::Guard(_)
                 | LiteralIr::HeadGuard(_)
@@ -504,8 +506,8 @@ impl<'prepared> Lowering<'_, 'prepared> {
                         .ok_or(Error::InvalidInput)?;
                     self.positive(atom, visible, &mut rule.bindings, input)?;
                 }
-                LiteralIr::ProjectedAtom(DefaultNegation::None, projection) => match projection {
-                    Projection::Arguments { predicate, terms } => {
+                LiteralIr::AnonymousAtom(DefaultNegation::None, witnesses) => match witnesses {
+                    AnonymousWitnesses::Arguments { predicate, terms } => {
                         let predicate = predicate
                             .resolve(self.components)
                             .ok_or(Error::InvalidInput)?;
@@ -523,13 +525,13 @@ impl<'prepared> Lowering<'_, 'prepared> {
                             }
                         }
                     }
-                    Projection::Witnesses { atom, inputs, .. } => {
+                    AnonymousWitnesses::Witnesses { atom, inputs, .. } => {
                         let atom = atom.resolve(self.components).ok_or(Error::InvalidInput)?;
                         self.positive(atom, visible.min(*inputs), &mut rule.bindings, input)?;
                     }
                 },
                 LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
-                | LiteralIr::ProjectedAtom(DefaultNegation::Not | DefaultNegation::NotNot, _)
+                | LiteralIr::AnonymousAtom(DefaultNegation::Not | DefaultNegation::NotNot, _)
                 | LiteralIr::Compare(_)
                 | LiteralIr::ArgumentCheck(_)
                 | LiteralIr::TupleCompare(..)

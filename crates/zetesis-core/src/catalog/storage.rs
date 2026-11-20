@@ -33,11 +33,12 @@ use rows::{RowBase, RowView};
 
 use budget::Budget;
 use index::Index;
-pub(crate) use intern::PreparedAtom;
+pub(crate) use intern::{PreparedAtom, RowsStart};
 pub(crate) use lookup::TermLookup;
 pub(crate) use read::{AtomScope, Read, VocabularyScope};
-pub(super) use segments::{Atom, Predicate, Term};
+pub(crate) use segments::Atom;
 use segments::{Counts, RowSegment, VocabularySegment};
+pub(super) use segments::{Predicate, Term};
 pub(crate) use vocabulary::FrozenVocabulary;
 use vocabulary::{Vocabulary, VocabularyData};
 
@@ -54,14 +55,36 @@ impl TermId {
     pub(crate) fn position(self) -> usize {
         self.0 as usize
     }
+    /// The identity word an interned relation uses as its equality ID.
+    pub(crate) const fn word(self) -> u32 {
+        self.0
+    }
+    /// The identity a published equality word denotes; meaningful only in
+    /// the vocabulary that assigned it.
+    pub(crate) const fn from_word(word: u32) -> Self {
+        Self(word)
+    }
+    /// The identity at a position below the prefix's term count.
+    pub(crate) fn from_position(position: usize) -> Self {
+        Self(u32::try_from(position).expect("admitted term identities fit u32"))
+    }
 }
 identifier!(PredicateId);
 impl PredicateId {
     pub(crate) fn position(self) -> usize {
         self.0 as usize
     }
+    /// The identity at a position below the prefix's predicate count.
+    pub(crate) fn from_position(position: usize) -> Self {
+        Self(u32::try_from(position).expect("admitted predicate identities fit u32"))
+    }
 }
 identifier!(AtomId);
+impl AtomId {
+    pub(crate) fn word(self) -> u32 {
+        self.0
+    }
+}
 
 /// A typed refusal; previously published snapshots remain valid.
 #[derive(Clone, Debug, PartialEq, Eq)]

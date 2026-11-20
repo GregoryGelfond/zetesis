@@ -11,10 +11,12 @@ mod producer;
 mod tests;
 
 use super::{
-    BodyKind, Buffer, Computation, Context, Counters, Join, RuleIr, StorageLease, checked_eligible,
-    checked_rule, order, relations, selected_rows,
+    BodyKind, Buffer, Computation, Context, Counters, Join, RuleIr, StorageLease, checked_rule,
+    order, relations, selected_rows,
 };
-use crate::formula_support::{Comparisons, Coverage, Traversal, projections, scalar_selection};
+use crate::formula_support::{
+    Comparisons, Coverage, Traversal, expression_memos, scalar_selection,
+};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -111,7 +113,13 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
                 return Ok(None);
             }
         } else if !initial(cursor, Coverage::Selected, limits, counters, rule.location)?
-            || !checked_eligible(rule, computation, limits, counters)?
+            || !checked_rule(
+                rule,
+                computation,
+                limits,
+                counters,
+                support_body(computation),
+            )?
         {
             return Ok(None);
         }
@@ -158,6 +166,17 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
     }
 }
 
+/// A support producer's workers evaluate total comparison leaves in their own
+/// traversal, as a source-activity producer's do; table joins keep the
+/// positive-atom body their row blocks were admitted for.
+fn support_body(computation: &Computation<'_, '_>) -> BodyKind {
+    if computation.query_support().strategy() == crate::JoinStrategy::Table {
+        BodyKind::PositiveAtoms
+    } else {
+        BodyKind::ProducerLeaves
+    }
+}
+
 /// Each gate is charged before its read. Unsupported retained preparation is
 /// declined, never discarded or rebuilt without its original authority.
 pub(super) fn initial(
@@ -198,7 +217,7 @@ fn initial_kind(
     require!(cursor.multiples.is_none());
     require!(cursor.range_selection.is_none());
     require!(cursor.checked_guard.is_none());
-    require!(cursor.row_filter.is_none());
+    require!(cursor.bind_restriction.is_none());
     require!(cursor.anchor.is_none());
     require!(cursor.positive_prefix.is_none());
     require!(cursor.pattern_rows.is_none());
@@ -215,8 +234,8 @@ fn initial_kind(
         scalar_selection::Preparation::Ready { .. }
     ));
     require!(matches!(
-        cursor.projections,
-        projections::Projections::Local(_)
+        cursor.expression_memos,
+        expression_memos::ExpressionMemos::Local(_)
     ));
     for position in &cursor.positions {
         require!(*position == 0);

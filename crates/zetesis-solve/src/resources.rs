@@ -313,8 +313,8 @@ impl Resources {
     /// Explicit answer projection retains memory-bounded identity history and
     /// checked cumulative work without a selected operation ceiling.
     #[must_use]
-    pub fn projection_limits(self) -> crate::ProjectionLimits {
-        crate::ProjectionLimits {
+    pub fn projective_limits(self) -> crate::ProjectiveLimits {
+        crate::ProjectiveLimits {
             max_keys: self.cells(16, 32),
             max_bytes: self.bytes(16),
             max_work: u64::MAX,

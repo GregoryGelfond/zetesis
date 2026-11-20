@@ -27,16 +27,16 @@ mod argument_unification;
 mod admission;
 mod model;
 pub mod catalog;
+pub mod intern;
 pub mod retention;
 pub mod table;
 mod identity;
-mod ordered_index;
 mod atom_lookup;
-mod checked_sort;
+pub mod checked_sort;
 mod word_mix;
 #[cfg(test)]
 mod test_support;
-pub use catalog::interner as atom_interner;
+pub use catalog::registry as atom_registry;
 pub mod relation;
 
 pub use admission::AdmissionLimits;
