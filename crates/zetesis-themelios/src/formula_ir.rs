@@ -728,6 +728,7 @@ fn plan_constraint_replacements(
 struct Parts {
     items: crate::formula_facts::Items,
     fact_scratch: facts::Scratch,
+    fact_buffer: crate::fact_expansion::Facts,
     fact_families: crate::formula_analysis::Families,
     projection: Vec<RuleIr>,
     analyzed: Vec<WithProvenance<Statement>>,
@@ -1108,11 +1109,15 @@ impl Compiler<'_> {
             parts.analyzed.extend(observation);
             return Ok(());
         }
-        if let Some(facts) = if generated_fact(statement.get()) {
-            None
-        } else {
-            fact_expansion::facts(statement, self.budget, self.location)?
-        } {
+        if !generated_fact(statement.get())
+            && fact_expansion::facts_into(
+                statement,
+                self.budget,
+                self.location,
+                &mut parts.fact_buffer,
+            )?
+        {
+            let facts = &parts.fact_buffer;
             self.budget.charge(
                 ExpansionResource::Origins,
                 (facts.len() as u128).saturating_mul(origins.len() as u128),
@@ -1120,7 +1125,7 @@ impl Compiler<'_> {
             )?;
             #[cfg(test)]
             if facts::testing::facts_as_rules() {
-                let mut facts = facts.into_rows();
+                let mut facts = std::mem::take(&mut parts.fact_buffer).into_rows();
                 while let Some(head) = facts.next(self.budget, self.location)? {
                     parts.analyzed.push(crate::formula_analysis::fact(
                         &head,
@@ -1132,7 +1137,7 @@ impl Compiler<'_> {
                 }
                 return Ok(());
             }
-            self.facts(&facts, &origins, &mut parts.items, &mut parts.fact_scratch)?;
+            self.facts(facts, &origins, &mut parts.items, &mut parts.fact_scratch)?;
             if facts.len() != 0 {
                 let family = parts.fact_families.record(
                     fact_expansion::fact_atom(statement.get()).expect("accepted fact family"),

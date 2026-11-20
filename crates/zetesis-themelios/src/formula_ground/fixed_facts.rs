@@ -261,7 +261,7 @@ impl Builder<'_, '_, '_> {
     /// The caller already named and validated this occurrence normally. An
     /// atom is fixed when it is an explicit fact or its predicate is certain;
     /// either lookup runs once for the atom.
-    pub(super) fn fixed_body_atom(
+    pub(crate) fn fixed_body_atom(
         &mut self,
         node: usize,
         location: ProgramSite,

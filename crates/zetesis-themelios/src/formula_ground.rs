@@ -797,7 +797,7 @@ struct Emission<A = AtomCatalog> {
 
 pub(super) struct Builder<'a, 'terms, 'source> {
     pub(super) computation: &'a mut Computation<'terms, 'source>,
-    executor: Option<&'a formula_support::Executor>,
+    pub(super) executor: Option<&'a formula_support::Executor>,
     purpose: Purpose,
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
@@ -1764,7 +1764,7 @@ impl<'source> Builder<'_, '_, 'source> {
         self.atom_identity(&atom, location)
     }
 
-    fn matched_atom(
+    pub(super) fn matched_atom(
         &mut self,
         row: zetesis_core::relation::Row<'_, '_>,
         location: ProgramSite,

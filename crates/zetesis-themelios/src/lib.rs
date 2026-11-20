@@ -155,7 +155,8 @@ mod test_support;
 mod word_hash;
 pub use formula_keys::KeyAnalysis;
 pub use grounding_observer::{
-    DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
+    DomainObservation, GroundingObserver, GroundingOperator, GroundingOutcome, GroundingPhase,
+    GroundingWork, OperatorObserver,
 };
 pub use grounding_options::{DomainLimits, DomainStop, GroundingOptions, JoinStrategy};
 pub use metadata::{

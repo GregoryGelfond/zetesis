@@ -95,7 +95,7 @@ use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Prepared};
 use crate::grounding_observer::{Event, Work};
-use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
+use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, GroundingOperator};
 use rows::{Advance, Frame, Ownership, Staged};
 
 pub(crate) use accounting::{Accounting, AccountingBaseline};
@@ -780,48 +780,37 @@ fn complete_with_executor(
             }
             counters.work(limits, fallback)?;
             counters.record(Event::SupportSnapshotPreparation);
-            let (relations, mut delta) = catalog.split(limits, counters, fallback)?;
+            let (relations, mut delta) = counters
+                .operator(GroundingOperator::SupportIndex, |counters| {
+                    catalog.split(limits, counters, fallback)
+                })?;
             let kept = std::mem::take(&mut retained);
-            let support = Support::indexed_retaining(&relations, kept, limits, counters, fallback)?;
-            counters.observe_work(Event::SupportProductionWork, |counters| {
-                while let Some((index, scheduled)) = next_producer(
-                    selected,
-                    (&mut facts, &mut heads),
-                    (&producers, &mut delta, &support),
-                    (limits, counters, fallback),
-                )? {
-                    let rules = prepared.rules_without_facts();
-                    let first = (&mut facts, &mut heads);
-                    enter_rule(
-                        index,
-                        first,
-                        rules,
-                        (&mut delta, &support),
-                        (limits, counters),
-                    )?;
-                    let rule = &prepared.rules_without_facts()[index];
-                    counters.work(limits, rule.location)?;
-                    counters.record(Event::SupportProducerVisit);
-                    let mut variants = if scheduled {
-                        counters.record(Event::SupportRichTraversal);
-                        delta::traversal(rule, &support, true)
-                    } else {
-                        producers.variants(index, rule, &support, rounds == 1, limits, counters)?
-                    };
-                    let round = (&mut delta, &support, domains);
-                    produce(
-                        (index, rule),
-                        &mut variants,
-                        round,
-                        budget,
-                        (limits, counters),
-                        executor,
-                    )?;
-                    if !scheduled {
-                        selected = schedule.next(limits, counters, fallback)?;
+            let support = counters.operator(GroundingOperator::SupportIndex, |counters| {
+                Support::indexed_retaining(&relations, kept, limits, counters, fallback)
+            })?;
+            counters.operator(GroundingOperator::SupportJoin, |counters| {
+                counters.observe_work(Event::SupportProductionWork, |counters| {
+                    while let Some((index, scheduled)) = next_producer(
+                        selected,
+                        (&mut facts, &mut heads),
+                        (&producers, &mut delta, &support),
+                        (limits, counters, fallback),
+                    )? {
+                        visit_producer(
+                            (index, scheduled, rounds),
+                            (&mut facts, &mut heads),
+                            prepared,
+                            (&producers, &mut delta, &support, domains),
+                            budget,
+                            (limits, counters),
+                            executor,
+                        )?;
+                        if !scheduled {
+                            selected = schedule.next(limits, counters, fallback)?;
+                        }
                     }
-                }
-                Ok::<_, FormulaFailure>(())
+                    Ok::<_, FormulaFailure>(())
+                })
             })?;
             // No join remains live. Release its query descriptor before the
             // pending selection borrows the catalog's semantic ordering index.
@@ -847,8 +836,50 @@ fn complete_with_executor(
                 GroundingWork::new(limits, counters, fallback),
             );
         }
-        catalog.publish(limits, counters, fallback)?;
+        counters.operator(GroundingOperator::SupportPublish, |counters| {
+            catalog.publish(limits, counters, fallback)
+        })?;
     }
+}
+
+/// Run one selected producer of the round: admit the first round's facts or
+/// heads before it, then derive its variants into the round's pending atoms.
+fn visit_producer<'source>(
+    (index, scheduled, rounds): (usize, bool, u64),
+    first: (
+        &mut Option<facts::FirstRound<'_>>,
+        &mut Option<head_run::HeadRun>,
+    ),
+    prepared: &'source Prepared,
+    (producers, delta, support, domains): (
+        &producers::Producers<'_>,
+        &mut SupportAppend<'source>,
+        &Support<'source>,
+        Option<&crate::formula_domains::Domains<'_>>,
+    ),
+    budget: &mut Budget,
+    (limits, counters): (&FormulaLimits, &mut Counters),
+    executor: Option<&Executor>,
+) -> Result<(), FormulaFailure> {
+    let rules = prepared.rules_without_facts();
+    enter_rule(index, first, rules, (delta, support), (limits, counters))?;
+    let rule = &rules[index];
+    counters.work(limits, rule.location)?;
+    counters.record(Event::SupportProducerVisit);
+    let mut variants = if scheduled {
+        counters.record(Event::SupportRichTraversal);
+        delta::traversal(rule, support, true)
+    } else {
+        producers.variants(index, rule, support, rounds == 1, limits, counters)?
+    };
+    produce(
+        (index, rule),
+        &mut variants,
+        (delta, support, domains),
+        budget,
+        (limits, counters),
+        executor,
+    )
 }
 
 /// What the first round admits beside its producers. Rules alone are
@@ -977,14 +1008,18 @@ fn advance_round(
     if delta.is_empty() {
         return Ok(false);
     }
-    counters.observe_work(Event::SupportOrderWork, |counters| {
-        delta.order(limits, counters, location, executor)
+    counters.operator(GroundingOperator::SupportDedup, |counters| {
+        counters.observe_work(Event::SupportOrderWork, |counters| {
+            delta.order(limits, counters, location, executor)
+        })
     })?;
     #[cfg(test)]
     facts::rounds::record(delta.atoms());
     if let Some(producers) = producers {
-        counters.observe_work(Event::SupportWakeWork, |counters| {
-            producers.advance(delta.atoms(), limits, counters, location)
+        counters.operator(GroundingOperator::SupportWake, |counters| {
+            counters.observe_work(Event::SupportWakeWork, |counters| {
+                producers.advance(delta.atoms(), limits, counters, location)
+            })
         })?;
     }
     Ok(true)
@@ -1008,7 +1043,9 @@ fn finish(
     drop(producers);
     drop(retained);
     catalog.release_preparation();
-    catalog.publish(limits, counters, location)?;
+    counters.operator(GroundingOperator::SupportPublish, |counters| {
+        catalog.publish(limits, counters, location)
+    })?;
     Ok(CompletedCatalog {
         catalog,
         completion: Completion(std::sync::Arc::new(())),
@@ -2376,18 +2413,19 @@ impl<'a, 'source> Join<'a, 'source> {
         } = work;
         for slot in 0..fixed.len().min(self.values.len()) {
             counters.work(limits, location)?;
-            let value = fixed
+            let present = fixed
                 .slots()
-                .key(slot)
+                .is_bound(slot)
                 .map_err(|error| crate::formula_binding::assignment(error, location))?;
-            if expected.is_some_and(|expected| expected[slot] != value.is_some()) {
+            if expected.is_some_and(|expected| expected[slot] != present) {
                 return Err(FormulaFailure::SupportRelation {
                     error: zetesis_core::relation::Failure::Owner,
                     location,
                 });
             }
-            if let Some(value) = value {
-                self.values.set(slot, &value, limits, counters, location)?;
+            if present {
+                self.values
+                    .copy_present(slot, fixed.slots(), slot, limits, counters, location)?;
             }
         }
         let mut used_cursor = 0;
@@ -2402,6 +2440,98 @@ impl<'a, 'source> Join<'a, 'source> {
             }
         }
         Ok(())
+    }
+    /// Return a join that [`ComponentPlans`] lent to its state just after it
+    /// was lent, for another fixed binding of the same component. The lease,
+    /// buffers and evaluation scratch stay, so successive head rows take no
+    /// new storage handle or vocabulary witness. Every reset cell is charged
+    /// as constructing it was, and the borrowed plan replaces any plan a
+    /// scalar selection installed.
+    pub(in crate::formula_support) fn rebind(
+        &mut self,
+        plan: &'a order::Plan<'a>,
+        fixed: &Binding<'_>,
+        used: &[usize],
+        expected: Option<&[bool]>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        self.plan = JoinPlan::Borrowed(plan);
+        self.scalar_selection = scalar_selection::Preparation::Pending;
+        self.comparisons = Comparisons::Deferred;
+        self.pending_comparisons = Comparisons::Deferred;
+        self.source_evidence = false;
+        self.certified_total = false;
+        self.expression_keys = None;
+        self.multiples = None;
+        self.range_selection = None;
+        self.family = family::Evidence::default();
+        self.delta = self.plan.pivot;
+        self.failure = None;
+        self.evaluation.clear_zero_divisor();
+        self.pending = None;
+        self.pending_head = None;
+        self.anchor = None;
+        self.positive_prefix = None;
+        self.structural_query = None;
+        self.held = None;
+        self.depth = 0;
+        self.traversal = Traversal::Searching;
+        self.pattern_captures.clear();
+        self.probe_selections.clear();
+        if let Some(witnesses) = self.witnesses.as_mut() {
+            witnesses.clear();
+        }
+        for slot in 0..self.values.len() {
+            self.values.clear(slot, limits, counters, location)?;
+        }
+        for slot in &mut self.slots {
+            counters.work(limits, location)?;
+            *slot = Slot::Relational;
+        }
+        for verdict in &mut self.verdicts {
+            counters.work(limits, location)?;
+            *verdict = true;
+        }
+        for position in &mut self.positions {
+            counters.work(limits, location)?;
+            *position = 0;
+        }
+        for probe in &mut self.probes {
+            counters.work(limits, location)?;
+            *probe = None;
+        }
+        for resolution in &mut self.resolutions {
+            counters.work(limits, location)?;
+            *resolution = Resolution::Unresolved;
+        }
+        for changes in &mut self.changes {
+            counters.work(limits, location)?;
+            changes.clear();
+        }
+        for target in self
+            .literals
+            .get()
+            .iter()
+            .filter_map(crate::formula_binding_cursor::target)
+        {
+            self.slots[target] = Slot::Generated;
+        }
+        self.lease.observe(self.storage_bytes(), location)?;
+        self.fix_component(
+            fixed,
+            used,
+            expected,
+            Context::new(computation, limits, counters, location),
+        )
     }
     /// Share the existing final Builder's family stages. This is installed
     /// before traversal; the query borrow keeps the exact Support alive.

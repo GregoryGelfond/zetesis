@@ -7,6 +7,7 @@
 
 mod arithmetic;
 mod continuations;
+mod parallel;
 mod plan;
 pub(super) use continuations::rule as continuations;
 #[cfg(test)]
@@ -54,6 +55,12 @@ pub(super) fn rule<'source>(
     #[cfg(test)]
     if components.arithmetic {
         arithmetic::testing::record(arithmetic::testing::Point::Certified);
+    }
+    if let Some(head) = head
+        && !components.arithmetic
+        && parallel::rule(builder, rule, support, head, &components)?
+    {
+        return Ok(true);
     }
     let mut prepared = None;
     if let Some(head) = head {

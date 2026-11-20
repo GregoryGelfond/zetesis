@@ -73,3 +73,29 @@ fn symbol_depth_refusal_retains_only_the_opening_prefix() {
     assert!(refused.text.is_empty());
     assert_eq!(refused.work, 0);
 }
+
+#[test]
+fn an_expired_deadline_stops_the_view_at_a_work_boundary() {
+    use std::time::{Duration, Instant};
+    let at = Instant::now() + Duration::from_millis(30);
+    let cancellation = Cancellation::with_deadline(at).unwrap();
+    let mut buffer = Buffer::new(ViewLimits::default(), &cancellation);
+    buffer.step(1).unwrap();
+    while Instant::now() < at {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    // Inside a work interval the view reads control flags only.
+    buffer.step(1).unwrap();
+    let interval = zetesis_algebra::POLL_INTERVAL;
+    let stopped = loop {
+        match buffer.step(1) {
+            Ok(()) => assert!(
+                buffer.work <= 64 * interval,
+                "the view must observe its deadline at a coarse boundary"
+            ),
+            Err(error) => break error,
+        }
+    };
+    assert_eq!(stopped, ViewError::Stopped(Stop::Deadline));
+    assert_eq!(buffer.work % interval, 0);
+}

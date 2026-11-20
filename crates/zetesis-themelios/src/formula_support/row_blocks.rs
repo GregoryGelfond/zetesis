@@ -7,6 +7,7 @@
 //! Publication remains ordered and single-owner. The coordinator owns execution
 //! policy; the original binding-transport prototype remains a test fixture.
 
+pub(crate) mod component_rows;
 pub(crate) mod cursor_rows;
 mod objective_rows;
 #[cfg(test)]
@@ -53,6 +54,7 @@ pub(super) fn eligible(rule: &RuleIr) -> bool {
 /// Resolve every admitted flat pattern through the same source authority as
 /// matching. Unsupported syntax declines; a malformed/foreign coordinate keeps
 /// its ordinary typed source error rather than being disguised as a fallback.
+#[cfg(test)]
 fn checked_eligible(
     rule: &RuleIr,
     computation: &Computation<'_, '_>,

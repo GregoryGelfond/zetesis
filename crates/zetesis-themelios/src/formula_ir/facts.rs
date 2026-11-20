@@ -174,6 +174,13 @@ impl LeasedReserve for ArenaGrowth<'_, '_> {
         additional: usize,
         lease: &mut StorageLease,
     ) -> Result<(), FormulaFailure> {
+        // Room already reserved changes no byte the lease holds: the support
+        // peak it would record and the ceiling it would check are those its
+        // last growth recorded and checked, or another owner's since. A run
+        // of one-row facts thus touches the lease only when a buffer grows.
+        if values.capacity() - values.len() >= additional {
+            return Ok(());
+        }
         let previous = lease.bytes();
         let others = previous
             .checked_sub(values.capacity() * size_of::<T>())
