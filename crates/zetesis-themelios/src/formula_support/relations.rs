@@ -920,6 +920,13 @@ impl<'source> Relations<'source> {
     pub(crate) fn components(&self) -> Option<TemplateComponentsRef<'source>> {
         self.components
     }
+
+    /// The catalog prefix this snapshot was taken against, when the source
+    /// attached one. Used to reborrow interned terms by `TermKey` across
+    /// support rounds without retaining a `TermRef`.
+    pub(crate) fn catalog_read(&self) -> Option<CatalogRead<'source>> {
+        self.read
+    }
     pub(super) fn current_bytes(&self) -> usize {
         self.bytes
             + self
@@ -1018,8 +1025,20 @@ impl<'source> Relations<'source> {
         &self,
         predicate: impl Into<PredicateRef<'predicate>>,
     ) -> impl Iterator<Item = Row<'_, '_>> {
-        self.find(predicate.into()).into_iter().flat_map(|rows| {
-            (0..rows.relation.row_count()).map(|row| rows.relation.row(row).expect("bounded row"))
+        self.rows_from(predicate, 0)
+    }
+
+    /// Rows of `predicate` starting at `from`, in snapshot order. Used to
+    /// intern only the suffix of an already-cached body.
+    pub(crate) fn rows_from<'predicate>(
+        &self,
+        predicate: impl Into<PredicateRef<'predicate>>,
+        from: usize,
+    ) -> impl Iterator<Item = Row<'_, '_>> {
+        self.find(predicate.into()).into_iter().flat_map(move |rows| {
+            let count = rows.relation.row_count();
+            let start = from.min(count);
+            (start..count).map(|row| rows.relation.row(row).expect("bounded row"))
         })
     }
     #[cfg(test)]

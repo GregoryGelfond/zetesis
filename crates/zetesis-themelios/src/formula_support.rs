@@ -752,6 +752,9 @@ fn complete_with_executor(
     )?;
     #[cfg(test)]
     postings::begin_support();
+    // Persist interned ID columns for the hook across support rounds,
+    // and drop them when this completion ends (PRIOR-ART.md).
+    let _intern_cache = crate::formula_ground::algebra_join::InternCacheGuard::new();
     let mut rounds = 0_u64;
     // Rows are only appended, so each round extends the kept certificates.
     let mut retained = queries::Retained::default();

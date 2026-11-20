@@ -16,12 +16,13 @@
 //! `Binding::set_term_with` as the Join cursor does when it binds a
 //! support atom.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_algebra::{Atoms, Bindings, JoinMethod, JoinStats, join};
 use zetesis_core::TemplateTerm;
-use zetesis_core::catalog::{PredicateRef, TermRef};
+use zetesis_core::catalog::{CatalogRead, PredicateRef, TermKey, TermRef};
 
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
@@ -35,6 +36,63 @@ fn method() -> JoinMethod {
     match option_env!("ZETESIS_JOIN_METHOD") {
         Some("hash") => JoinMethod::Hash,
         _ => JoinMethod::SortedMerge,
+    }
+}
+
+/// Persistent interned snapshot columns and transferable term keys for one
+/// support-completion run. See `grounding-joins/PRIOR-ART.md`: Soufflé, FVLog,
+/// and the Vaelii redesign all keep ordinals with the relation and intern only
+/// new rows. `TermRef` cannot be stored here, because `Support` is recreated
+/// each round; `TermKey` is reborrowed through the current `CatalogRead`.
+struct InternCache {
+    keys: HashMap<i32, TermKey>,
+    bodies: HashMap<usize, CachedBody>,
+}
+
+struct CachedBody {
+    rows: usize,
+    columns: Vec<Vec<i32>>,
+}
+
+impl InternCache {
+    fn new() -> Self {
+        Self {
+            keys: HashMap::new(),
+            bodies: HashMap::new(),
+        }
+    }
+
+    fn clear(&mut self) {
+        self.keys.clear();
+        self.bodies.clear();
+    }
+}
+
+thread_local! {
+    static INTERN: RefCell<InternCache> = RefCell::new(InternCache::new());
+}
+
+/// Clear the support-run intern cache. Installed around
+/// `complete_with_executor` so a later program in the same thread cannot
+/// reborrow a foreign `TermKey`.
+pub(crate) fn reset_intern_cache() {
+    INTERN.with(|cell| cell.borrow_mut().clear());
+}
+
+/// Reset on construction and on drop so both early returns and panics leave
+/// a clean cache.
+pub(crate) struct InternCacheGuard;
+
+impl InternCacheGuard {
+    pub(crate) fn new() -> Self {
+        reset_intern_cache();
+        Self
+    }
+}
+
+impl Drop for InternCacheGuard {
+    fn drop(&mut self) {
+        reset_intern_cache();
     }
 }
 
@@ -198,7 +256,7 @@ pub(crate) fn evaluate<'a>(
         return Ok(None);
     }
     let mut account = |amount: u64| charge(counters, limits, location, amount);
-    let mut terms = TermMap::default();
+    let mut terms = TermMap::for_support(support);
     let recursive = recursive_atoms(rule, support, &plan.atoms);
     let Some(projected) = semi_naive(&plan, &recursive, support, &mut terms, &mut account)? else {
         return Ok(None);
@@ -353,11 +411,11 @@ pub(crate) fn prepare<'a>(
     if !plan.negated.is_empty() && !allow_negation {
         return None;
     }
-    let mut terms = TermMap::default();
+    let mut terms = TermMap::for_support(support);
     let mut raw = Vec::with_capacity(plan.atoms.len());
     let mut old_rows = Vec::with_capacity(plan.atoms.len());
     for atom in &plan.atoms {
-        raw.push(load_raw(support, atom, &mut terms)?);
+        raw.push(load_raw(support, atom.predicate, atom.arity, &mut terms)?);
         old_rows.push(support.old_rows(atom.predicate));
     }
     let recursive = recursive_atoms(rule, support, &plan.atoms);
@@ -447,11 +505,30 @@ fn concat_bindings(
 
 fn load_raw<'a>(
     support: &'a Support<'_>,
-    atom: &PlannedAtom<'a>,
+    predicate: PredicateRef<'_>,
+    arity: usize,
     terms: &mut TermMap<'a>,
 ) -> Option<Vec<Vec<i32>>> {
-    let mut columns = vec![Vec::new(); atom.arity];
-    for row in support.rows(atom.predicate) {
+    let count = support.row_count(predicate);
+    let position = predicate.canonical_position();
+    let (from, mut columns) = position
+        .and_then(|position| {
+            INTERN.with(|cell| {
+                let intern = cell.borrow();
+                intern.bodies.get(&position).and_then(|cached| {
+                    if cached.rows <= count && cached.columns.len() == arity {
+                        Some((cached.rows, cached.columns.clone()))
+                    } else {
+                        None
+                    }
+                })
+            })
+        })
+        .unwrap_or_else(|| (0, vec![Vec::with_capacity(count); arity]));
+    if from == 0 && columns.iter().any(|column| !column.is_empty()) {
+        columns = vec![Vec::with_capacity(count); arity];
+    }
+    for row in support.rows_from(predicate, from) {
         for (column, values) in columns.iter_mut().enumerate() {
             let key = terms.insert(row.value(column)?)?;
             values.push(key);
@@ -462,6 +539,17 @@ fn load_raw<'a>(
         .any(|column| column.len() != columns[0].len())
     {
         return None;
+    }
+    if let Some(position) = position {
+        INTERN.with(|cell| {
+            cell.borrow_mut().bodies.insert(
+                position,
+                CachedBody {
+                    rows: columns.first().map_or(0, Vec::len),
+                    columns: columns.clone(),
+                },
+            );
+        });
     }
     Some(columns)
 }
@@ -692,13 +780,26 @@ fn join_atoms<'a>(
 
 /// Interned catalog identities used as join keys, with a resolver for emit
 /// and for ordered residual comparisons (identity order is not term order).
-#[derive(Default)]
+///
+/// `resolved` holds `TermRef`s for this visit only. Keys that were interned
+/// in an earlier visit of the same support run are reborrowed lazily through
+/// `CatalogRead::term` from the transferable `TermKey` cache, so prepare does
+/// not reconstruct payloads for the whole snapshot.
 struct TermMap<'a> {
     witness: Option<TermRef<'a>>,
-    by_key: HashMap<i32, TermRef<'a>>,
+    read: Option<CatalogRead<'a>>,
+    resolved: RefCell<HashMap<i32, TermRef<'a>>>,
 }
 
 impl<'a> TermMap<'a> {
+    fn for_support(support: &'a Support<'_>) -> Self {
+        Self {
+            witness: None,
+            read: support.catalog_read(),
+            resolved: RefCell::new(HashMap::new()),
+        }
+    }
+
     fn insert(&mut self, term: TermRef<'a>) -> Option<i32> {
         let key = term_key(term)?;
         if let Some(witness) = self.witness {
@@ -708,12 +809,46 @@ impl<'a> TermMap<'a> {
         } else {
             self.witness = Some(term);
         }
-        self.by_key.entry(key).or_insert(term);
+        self.resolved.get_mut().entry(key).or_insert(term);
+        if let Some(read) = self.read {
+            match read.term_key(term) {
+                Ok(tk) => {
+                    INTERN.with(|cell| {
+                        cell.borrow_mut().keys.insert(key, tk);
+                    });
+                }
+                Err(_) => {
+                    // A foreign key means the cache still holds a previous
+                    // program's vocabulary. Drop it; this visit keeps the
+                    // TermRef in `resolved` and later visits start clean.
+                    reset_intern_cache();
+                    if let Ok(tk) = read.term_key(term) {
+                        INTERN.with(|cell| {
+                            cell.borrow_mut().keys.insert(key, tk);
+                        });
+                    }
+                }
+            }
+        }
         Some(key)
     }
 
     fn get(&self, key: i32) -> Option<TermRef<'a>> {
-        self.by_key.get(&key).copied()
+        if let Some(term) = self.resolved.borrow().get(&key).copied() {
+            return Some(term);
+        }
+        let term = self.reborrow(key)?;
+        self.resolved.borrow_mut().insert(key, term);
+        Some(term)
+    }
+
+    fn reborrow(&self, key: i32) -> Option<TermRef<'a>> {
+        let read = self.read?;
+        INTERN.with(|cell| {
+            let intern = cell.borrow();
+            let key = intern.keys.get(&key)?;
+            read.term(key).ok()
+        })
     }
 
     /// Dense semantic ranks for the keys that appear in `columns`.
@@ -963,22 +1098,11 @@ fn term_table<'a>(
     arity: usize,
     terms: &mut TermMap<'a>,
 ) -> Option<Atoms> {
-    let mut columns = vec![Vec::new(); arity];
-    for (index, row) in support.rows(predicate).enumerate() {
-        if index < from_row {
-            continue;
-        }
-        if until_row.is_some_and(|end| index >= end) {
-            break;
-        }
-        for (column, values) in columns.iter_mut().enumerate() {
-            let key = terms.insert(row.value(column)?)?;
-            values.push(key);
-        }
-    }
+    let raw = load_raw(support, predicate, arity, terms)?;
+    let columns = slice_raw(&raw, from_row, until_row);
     if columns
         .iter()
-        .any(|column| column.len() != columns[0].len())
+        .any(|column| column.len() != columns.first().map_or(0, Vec::len))
     {
         return None;
     }
