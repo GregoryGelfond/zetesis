@@ -875,9 +875,7 @@ impl Ledger {
         self.rows.len() > self.founded || self.founded > self.limits().founded_floor
     }
 
-    /// Discovery, subsumption and conversion share the optional capture allowance.
-    /// Its exhaustion declines retention; a real quota stop still propagates.
-
+    /// Whether a bound-class capture still has an attempt and a row slot.
     pub(in crate::regions) fn can_capture_bound(&self) -> bool {
         let limits = self.limits();
         self.bound_attempts < limits.bound_attempts

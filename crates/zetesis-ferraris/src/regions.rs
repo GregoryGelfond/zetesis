@@ -1771,11 +1771,10 @@ impl Narrower {
             .expect("carrier already checked")
             .limits()
             .conflict_core;
-        if core == ConflictCore::Minimized {
-            if let Some(original) = subject.original_subject() {
-                decided =
-                    self.minimize_conflict_core(original, decided, scratch, work, statistics)?;
-            }
+        if core == ConflictCore::Minimized
+            && let Some(original) = subject.original_subject()
+        {
+            decided = self.minimize_conflict_core(original, decided, scratch, work, statistics)?;
         }
         let owner = subject.learning().expect("carrier already checked");
         if owner.is_bound() {
