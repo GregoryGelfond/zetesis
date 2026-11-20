@@ -633,29 +633,7 @@ impl SmallScratch {
             policy.learn_up_to
         };
         if open <= learn_up_to && open >= policy.learn_from {
-            self.offered += 1;
-            if self.offered <= u64::try_from(policy.learn_after).unwrap_or(u64::MAX) {
-                return Ok(SmallNarrowing::Declined);
-            }
-            let Some(shape) = self.shape(theory, producers) else {
-                return Ok(SmallNarrowing::Declined);
-            };
-            let (atoms, amo, nodes) = (shape.atoms, shape.amo_atoms, shape.kinds.len());
-            self.statistics.atoms = u64::try_from(atoms).unwrap_or(u64::MAX);
-            self.statistics.amo_atoms = u64::try_from(amo).unwrap_or(u64::MAX);
-            self.statistics.nodes = u64::try_from(nodes).unwrap_or(u64::MAX);
-            if policy.matching > 0
-                && amo.saturating_mul(100) >= policy.matching.saturating_mul(atoms)
-            {
-                self.statistics.shape_declined += 1;
-                return Ok(SmallNarrowing::Declined);
-            }
-            if policy.density > 0 && nodes > policy.density.saturating_mul(atoms.max(1)) {
-                self.statistics.shape_declined += 1;
-                return Ok(SmallNarrowing::Declined);
-            }
-            if !self.gate_admits(policy.gate) {
-                self.statistics.gated += 1;
+            if !self.learn_admits(theory, producers, &policy) {
                 return Ok(SmallNarrowing::Declined);
             }
             self.guard(restrictions);
@@ -689,6 +667,44 @@ impl SmallScratch {
             return verdict;
         }
         Ok(SmallNarrowing::Declined)
+    }
+
+    /// Whether the learned search may read the next offered region: past
+    /// the deferral, outside dense and matching-shaped theories, and through
+    /// the yield gate.
+    fn learn_admits(
+        &mut self,
+        theory: &Theory,
+        producers: Option<&Producers>,
+        policy: &SmallPolicy,
+    ) -> bool {
+        self.offered += 1;
+        if self.offered <= u64::try_from(policy.learn_after).unwrap_or(u64::MAX) {
+            return false;
+        }
+        // The density reads only the theory's sizes: a dense theory is
+        // declined before its shape is read.
+        let nodes = theory.view().len();
+        if policy.density > 0 && nodes > policy.density.saturating_mul(theory.atom_count().max(1)) {
+            self.statistics.shape_declined += 1;
+            return false;
+        }
+        let Some(shape) = self.shape(theory, producers) else {
+            return false;
+        };
+        let (atoms, amo) = (shape.atoms, shape.amo_atoms);
+        self.statistics.atoms = u64::try_from(atoms).unwrap_or(u64::MAX);
+        self.statistics.amo_atoms = u64::try_from(amo).unwrap_or(u64::MAX);
+        self.statistics.nodes = u64::try_from(nodes).unwrap_or(u64::MAX);
+        if policy.matching > 0 && amo.saturating_mul(100) >= policy.matching.saturating_mul(atoms) {
+            self.statistics.shape_declined += 1;
+            return false;
+        }
+        if !self.gate_admits(policy.gate) {
+            self.statistics.gated += 1;
+            return false;
+        }
+        true
     }
 
     /// Whether the yield gate lets the learned search read this region.
