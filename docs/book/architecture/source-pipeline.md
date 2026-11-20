@@ -6,8 +6,9 @@
 returns templates for lazy or eager normal-rule execution. Formula preparation
 returns scoped instructions; grounding consumes them to construct a finite
 Ferraris theory. Automatic CPU solving can instead certify and directly evaluate
-a complete acyclic normal source, retaining its original program and canonical
-interpretation without a formula graph. None of these preparation paths searches
+a complete stratified normal source, retaining its original program and canonical
+interpretation without a formula graph. Such a source is acyclic, or recursive
+only through [definite-closed components](#direct-evaluation-of-definite-recursion). None of these preparation paths searches
 candidate regions.
 
 This chapter maps the implementation for readers extending the source language.
@@ -19,6 +20,39 @@ head at a time in source order. Formula admission consumes that head directly. C
 validation and logical expansion limits precede emission. This removes temporary
 range columns and per-statement template vectors, without changing duplicates,
 provenance or arithmetic diagnostics.
+
+## Direct evaluation of definite recursion
+
+Datalog-shaped programs (closures, joins and arithmetic filters, possibly with
+negation over completed lower strata) take the direct route. A dependency
+component is *definite-closed* when neither its rules nor the rules of any
+component it reads contain a default-negated literal. Its bodies are flat
+positive atoms and comparisons, so its predicates are certain in the sense of
+[completed possible support](grounding.md#completed-possible-support): their
+rules form a definite program whose least model is exactly their completed
+support ([`CertainAtoms.derived_stable`](../lean/theorems.md)). A
+definite-closed component may therefore be recursive.
+
+The plan ranks components as before. A rank that is not definite-closed still
+requires strictly lower body ranks and is folded once against the completed
+lower activity. A definite-closed rank re-joins each rule once over completed
+support, which also repeats the original key validation, and stages every
+passing row's head as required without folding its body; same-rank atoms are
+never read before they are published. Its heads are collected in a deferred
+source batch and merged into the local selection when the rank ends, by one
+sorted linear merge rather than one shifting insertion per atom. Recursion
+through a component that is not definite-closed, a negative cycle or an
+aggregate cycle declines the class, retaining the ordinary grounding door and
+every accepted charge.
+
+The resulting rank structure is a stratification in the sense of
+[`StratifiedEvaluation`](../lean/theorems.md): positive dependencies stay
+within a rank and frozen gates read lower ranks. Strict ranks use the one-pass
+scan of `AcyclicEvaluation`; definite-closed ranks use the complete positive
+closure that support completion has already computed. Constraints and
+opposite classical signs then decide membership, as before. Component
+recognition, the support fixed point and the Rust execution remain separate
+correspondence obligations, as for the acyclic class.
 
 ## Follow the owned objects
 

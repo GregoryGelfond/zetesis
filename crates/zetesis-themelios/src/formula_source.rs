@@ -1,4 +1,5 @@
-//! Exact finite source evaluation for a complete signed acyclic normal program.
+//! Exact finite source evaluation for a complete signed stratified normal
+//! program: acyclic, or recursive only through definite-closed components.
 //!
 //! The result is a source subject, not a replacement formula theory. Complete
 //! support and original-family arithmetic admission precede the one dependency
@@ -20,7 +21,7 @@ use zetesis_core::AtomCatalog;
 /// original preparation, including all accepted classification charges.
 #[derive(Debug)]
 pub enum SourceAdmission<P> {
-    /// A complete signed acyclic normal source, evaluated exactly once.
+    /// A complete signed stratified normal source, evaluated exactly once.
     Admitted(AcyclicSource),
     /// The original preparation still owns its ordinary grounding/query door.
     NotApplicable(P),
@@ -42,7 +43,9 @@ struct Admitted {
     evaluation: Evaluated,
 }
 
-/// Immutable exact interpretation of one admitted acyclic source program.
+/// Immutable exact interpretation of one admitted source program. The type
+/// keeps its established name; its class also admits recursion through
+/// definite-closed components.
 /// Clones share its original identity and canonical typed atom payload. No
 /// Boolean theory is synthesized and no formula-query contract is changed.
 #[derive(Clone)]

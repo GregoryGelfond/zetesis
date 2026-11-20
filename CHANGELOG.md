@@ -6,6 +6,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Join ordering defers an independent generator while a remaining connected
+  generator binds one of its variables, instead of first joining it with the
+  whole prefix because it decides a comparison. Arithmetic joins such as
+  `a(C,P) :- edge(C,P), val(C,X), val(P,Y), X > Y + K.` no longer enumerate the
+  product of the two value relations. The set of complete bindings is unchanged.
 - Source preparation can execute eligible join rows in a source-owned CPU pool,
   retaining ordered canonical construction, provenance and complete enumeration.
   The current development configuration requests 14 source workers, separately
@@ -20,6 +25,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- Direct source evaluation admits recursion through definite-closed components:
+  recursive Datalog-shaped closures, joins and arithmetic filters, including
+  negation over their completed relations from later strata, are evaluated
+  from completed support without formula construction. Recursion through
+  default negation or aggregates keeps the ordinary grounding door. See
+  [direct evaluation of definite recursion](docs/book/architecture/source-pipeline.md#direct-evaluation-of-definite-recursion).
 - `GpuFormulaOracle::from_source_with_kernel` accepts explicit kernel options
   while preserving the supplied device source and context. Existing default
   primitive constructors retain Dense propagation. The current development solve

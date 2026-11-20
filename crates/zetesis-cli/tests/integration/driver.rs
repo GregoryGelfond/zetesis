@@ -171,7 +171,9 @@ fn rule_excerpts_complete_with_known_results() {
     // is a held gate atom and no other is derivable: one seed decides
     // the reachable excerpt, where the symbolic carrier alone offered
     // sixteen, and the disconnected one is refuted before any seed, since a
-    // constraint on an unreachable vertex fires under every seed.
+    // constraint on an unreachable vertex fires under every seed. Seeds
+    // belong to the formula route; the automatic route evaluates these
+    // definite closures directly and must agree on the models.
     for (source, models, seeds) in [
         (
             include_str!("../fixtures/correctness/excerpts/shortest-path-reachable.lp"),
@@ -191,9 +193,12 @@ fn rule_excerpts_complete_with_known_results() {
             1,
         ),
     ] {
-        let (report, _) = solve(source, &["--models", "0"]);
+        let (report, _) = solve(source, &["--models", "0", "--grounder", "eager"]);
         assert_eq!((report.models, report.checked), (models, seeds), "{source}");
         assert_eq!(report.completion, Completion::Exhausted);
+        let (direct, _) = solve(source, &["--models", "0"]);
+        assert_eq!(direct.models, models, "{source}");
+        assert_eq!(direct.completion, Completion::Exhausted);
     }
 }
 

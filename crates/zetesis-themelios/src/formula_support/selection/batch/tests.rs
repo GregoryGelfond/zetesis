@@ -186,3 +186,84 @@ fn cancelled_finish_does_not_publish_a_selection() {
         ));
     });
 }
+
+#[test]
+fn merging_keeps_existing_coordinates_and_appends_new_ones() {
+    // The selection already holds p(2) and p(0); the batch names p(3), p(2),
+    // p(1) and p(0) with repeats. Existing atoms keep their coordinates and
+    // are visited once each; p(1) and p(3) follow in increasing source order.
+    with_batch(|batch, sources, computation, counters| {
+        let limits = FormulaLimits::default();
+        let mut selection =
+            SourceSelection::new(computation, &limits, counters, location()).unwrap();
+        for index in [2, 0] {
+            selection
+                .insert(
+                    &sources[index],
+                    (FormulaResource::Atoms, 4),
+                    computation,
+                    &limits,
+                    counters,
+                    location(),
+                )
+                .unwrap();
+        }
+        let mut visited = Vec::new();
+        batch
+            .merge_into(
+                &mut selection,
+                (FormulaResource::Atoms, 4),
+                Context::new(&*computation, &limits, counters, location()),
+                |local, _| {
+                    visited.push(local);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        visited.sort_unstable();
+        assert_eq!(visited, [0, 1, 2, 3]);
+        let expected = [Some(1), Some(2), Some(0), Some(3)];
+        for (source, expected) in sources.iter().zip(expected) {
+            assert_eq!(
+                selection
+                    .position(source, &limits, counters, location())
+                    .unwrap(),
+                expected
+            );
+        }
+    });
+}
+
+#[test]
+fn merging_counts_distinct_new_identities_against_the_atom_limit() {
+    with_batch(|batch, sources, computation, counters| {
+        let limits = FormulaLimits::default();
+        let mut selection =
+            SourceSelection::new(computation, &limits, counters, location()).unwrap();
+        selection
+            .insert(
+                &sources[0],
+                (FormulaResource::Atoms, 3),
+                computation,
+                &limits,
+                counters,
+                location(),
+            )
+            .unwrap();
+        assert!(matches!(
+            batch.merge_into(
+                &mut selection,
+                (FormulaResource::Atoms, 3),
+                Context::new(&*computation, &limits, counters, location()),
+                |_, _| Ok(()),
+            ),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Atoms,
+                observed: 4,
+                limit: 3,
+                ..
+            })
+        ));
+        assert_eq!(selection.len(), 1);
+    });
+}
