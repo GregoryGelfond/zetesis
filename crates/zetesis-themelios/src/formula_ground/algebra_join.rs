@@ -29,14 +29,10 @@ use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
 use crate::formula_support::{Computation, Counters, Support};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
-/// Default realization is sorted merge. A measurement binary may be built
-/// with `ZETESIS_JOIN_METHOD=hash` at compile time to compare the hash
-/// join; both methods must produce the same bindings, in the same lex order.
+/// Realized as a sorted merge. Hash join was measured earlier and is not
+/// selected here; both methods agree on a lex-TermId binding table.
 fn method() -> JoinMethod {
-    match option_env!("ZETESIS_JOIN_METHOD") {
-        Some("hash") => JoinMethod::Hash,
-        _ => JoinMethod::SortedMerge,
-    }
+    JoinMethod::SortedMerge
 }
 
 /// Persistent interned snapshot columns and transferable term keys for one
@@ -1030,18 +1026,6 @@ struct Negated<'a> {
     occurrence: usize,
     predicate: PredicateRef<'a>,
     slots: Vec<usize>,
-}
-
-#[allow(dead_code)]
-pub(crate) fn negated_occurrences(rule: &RuleIr) -> Vec<usize> {
-    rule.body
-        .iter()
-        .enumerate()
-        .filter_map(|(occurrence, literal)| match literal {
-            LiteralIr::Atom(DefaultNegation::Not, _) => Some(occurrence),
-            _ => None,
-        })
-        .collect()
 }
 
 fn plan<'a>(rule: &'a RuleIr, support: &'a Support<'_>) -> Option<Plan<'a>> {
