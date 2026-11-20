@@ -128,7 +128,8 @@ pub(super) fn multiples_count(divisor: i32, lo: i32, hi: i32) -> u64 {
         return 0;
     }
     let span = i64::from(hi) - i64::from(first);
-    (span as u64) / (step as u64) + 1
+    // first <= hi and step > 0, so both quantities are non-negative.
+    span.cast_unsigned() / u64::from(step.cast_unsigned()) + 1
 }
 
 /// Whether `value` is a multiple of `divisor` in `lo..=hi`, matching

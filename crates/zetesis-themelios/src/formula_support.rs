@@ -1247,7 +1247,7 @@ fn derive_algebra_variants<'source>(
         counters,
     };
     let mut enumerated = false;
-    while let Some(_) = next {
+    while next.is_some() {
         if !enumerated {
             let bindings = crate::formula_ground::algebra_rows::enumerate(
                 &template,

@@ -97,7 +97,7 @@ fn admissible(rule: &RuleIr) -> bool {
 fn complete_atom_domains(
     rule: &RuleIr,
     support: &Support<'_>,
-) -> Result<Option<BTreeMap<usize, Vec<i32>>>, FormulaFailure> {
+) -> Option<BTreeMap<usize, Vec<i32>>> {
     let mut facts: BTreeMap<usize, Vec<i32>> = BTreeMap::new();
     let mut needed = false;
     for literal in &rule.body {
@@ -107,39 +107,35 @@ fn complete_atom_domains(
         }
     }
     if !needed {
-        return Ok(Some(facts));
+        return Some(facts);
     }
-    let Some(view) = support.components() else {
-        return Ok(None);
-    };
+    let view = support.components()?;
     let head = match &rule.head {
-        HeadIr::Normal(Some(pattern)) => pattern.resolve(view).map(|pattern| pattern.predicate()),
+        HeadIr::Normal(Some(pattern)) => pattern
+            .resolve(view)
+            .map(zetesis_core::PatternRef::predicate),
         _ => None,
     };
     for literal in &rule.body {
         let LiteralIr::Atom(DefaultNegation::None, pattern) = literal else {
             continue;
         };
-        let Some(pattern) = pattern.resolve(view) else {
-            return Ok(None);
-        };
+        let pattern = pattern.resolve(view)?;
         if pattern.predicate().arity() != 1 {
-            return Ok(None);
+            return None;
         }
         let Some(TemplateTerm::Variable(slot)) = pattern.terms().at(0) else {
-            return Ok(None);
+            return None;
         };
         let predicate = pattern.predicate();
         if head.is_some_and(|head| same_predicate(head, predicate)) {
             // A recursive domain is still growing; delta variants stay on Join.
-            return Ok(None);
+            return None;
         }
         if !published(support, predicate) {
-            return Ok(None);
+            return None;
         }
-        let Some(values) = numeric_column(support, predicate) else {
-            return Ok(None);
-        };
+        let values = numeric_column(support, predicate)?;
         match facts.entry(slot) {
             std::collections::btree_map::Entry::Vacant(entry) => {
                 entry.insert(values);
@@ -149,7 +145,7 @@ fn complete_atom_domains(
             }
         }
     }
-    Ok(Some(facts))
+    Some(facts)
 }
 
 fn published(support: &Support<'_>, predicate: PredicateRef<'_>) -> bool {
@@ -190,7 +186,7 @@ pub(crate) fn compile(
     }
     // Load atom domains before any scalar work so a declined incomplete
     // domain charges nothing and leaves the Join cursor's accounting intact.
-    let Some(facts) = complete_atom_domains(rule, support)? else {
+    let Some(facts) = complete_atom_domains(rule, support) else {
         return Ok(None);
     };
     let width = rule.body_variables;
@@ -298,7 +294,7 @@ pub(crate) fn enumerate(
     rows(template, &Atoms::empty(1), &mut account, &mut stats)
 }
 
-/// Intern each slot of a retained row and assign it, charging GeneratedValues
+/// Intern each slot of a retained row and assign it, charging `GeneratedValues`
 /// for every numeric identity the way the Join cursor does.
 pub(crate) fn bind_row(
     computation: &mut Computation<'_, '_>,

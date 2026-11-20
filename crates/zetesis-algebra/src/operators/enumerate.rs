@@ -604,7 +604,7 @@ fn range_len_excluding_zero(lo: i32, hi: i32) -> u64 {
     if lo > hi {
         return 0;
     }
-    let mut count = (i64::from(hi) - i64::from(lo) + 1) as u64;
+    let mut count = (i64::from(hi) - i64::from(lo) + 1).cast_unsigned();
     if lo <= 0 && hi >= 0 {
         count = count.saturating_sub(1);
     }
@@ -616,7 +616,7 @@ fn divisor_estimate(value: i32) -> u64 {
         return 4;
     };
     // At most four signed images of each factor up to sqrt(|value|).
-    let root = (abs as u64).isqrt() + 1;
+    let root = u64::from(abs.cast_unsigned()).isqrt() + 1;
     root.saturating_mul(4)
 }
 
