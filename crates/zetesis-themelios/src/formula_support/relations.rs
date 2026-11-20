@@ -1,6 +1,5 @@
 //! One atom owner and immutable column views between support-growth rounds.
 
-use std::collections::{BTreeMap, btree_map::Entry};
 use std::mem::size_of;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -22,11 +21,13 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 mod append;
 mod close;
+mod postings;
 mod publication;
 mod streamed;
 pub(super) use append::SupportAppend;
 pub(crate) use append::{FactRows, SourceAtom, SourceScope};
 pub(crate) use close::ClosedSource;
+pub(crate) use postings::ColumnPostings;
 pub(crate) use streamed::StreamedRows;
 
 #[cfg(test)]
@@ -35,13 +36,13 @@ mod tests;
 struct CatalogRows {
     catalog: Catalog,
     /// One posting map per column a join can bind; `None` keeps no postings.
-    columns: Vec<Option<BTreeMap<u32, Vec<usize>>>>,
+    columns: Vec<Option<ColumnPostings>>,
     old_rows: usize,
 }
 
 /// A column's postings, or the absence of any for a column no join binds.
 pub(super) enum Postings<'a> {
-    Indexed(&'a BTreeMap<u32, Vec<usize>>),
+    Indexed(&'a ColumnPostings),
     Unindexed,
 }
 
@@ -679,7 +680,7 @@ impl CatalogRows {
                 (Some(_), Some(demanded)) => demanded[column],
                 (Some(_), None) => false,
             };
-            columns.push(indexed.then(BTreeMap::new));
+            columns.push(indexed.then(ColumnPostings::default));
         }
         Ok(Self {
             catalog,
@@ -790,7 +791,7 @@ impl CatalogRows {
     // These IDs are lent by the same catalog's completed row transaction.
     // Consume them before the next insertion can replace its plan.
     fn append_postings(
-        columns: &mut [Option<BTreeMap<u32, Vec<usize>>>],
+        columns: &mut [Option<ColumnPostings>],
         ids: &[u32],
         row: usize,
         memory: &mut Memory<'_>,
@@ -802,19 +803,7 @@ impl CatalogRows {
             .filter_map(|(column, postings)| postings.as_mut().map(|postings| (column, postings)))
         {
             counters.work(memory.limits, memory.location)?;
-            let id = ids[column];
-            let posting = match postings.entry(id) {
-                Entry::Occupied(entry) => entry.into_mut(),
-                Entry::Vacant(entry) => {
-                    memory.add(size_of::<(u32, Vec<usize>)>())?;
-                    entry.insert(Vec::new())
-                }
-            };
-            if posting.len() == posting.capacity() {
-                counters.charge_work(posting.len() as u128, memory.limits, memory.location)?;
-            }
-            memory.reserve(posting, 1)?;
-            posting.push(row);
+            postings.push(ids[column], row, memory, counters)?;
             counters.record(Event::SupportIndexEntry);
         }
         Ok(())
@@ -868,7 +857,7 @@ pub(crate) struct Relations<'source> {
 
 pub(super) struct RelationRows<'source> {
     pub(super) relation: Relation<'source>,
-    columns: &'source [Option<BTreeMap<u32, Vec<usize>>>],
+    columns: &'source [Option<ColumnPostings>],
     catalog: &'source Catalog,
     old_rows: usize,
     pub(super) atoms: Atoms<'source>,
@@ -1201,9 +1190,7 @@ impl<'source> Relations<'source> {
             return Ok(None);
         };
         Ok(Some(equality.map_or(&[][..], |equality| {
-            postings
-                .get(&equality.value_id())
-                .map_or(&[][..], Vec::as_slice)
+            postings.get(equality.value_id())
         })))
     }
 
@@ -1286,9 +1273,7 @@ impl<'source> Relations<'source> {
                 if let Some(equality) = equality {
                     match rows.postings(equality.column()) {
                         Postings::Indexed(postings) => {
-                            let posting = postings
-                                .get(&equality.value_id())
-                                .map_or(&[][..], Vec::as_slice);
+                            let posting = postings.get(equality.value_id());
                             if selected.is_none_or(|previous| posting.len() < previous.len()) {
                                 selected = Some(posting);
                             }
