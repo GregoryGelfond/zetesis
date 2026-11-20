@@ -6,8 +6,10 @@
 //! generator applies (t116u: that schedule visited far fewer candidates than
 //! the filter-only product in the algebra tests, with identical bindings),
 //! and emitted through the ordinary `Builder::rule` path so only retained
-//! rows become formula nodes. Rules the compiler declines keep the Join
-//! cursor.
+//! rows become formula nodes. The same compilation is used during support
+//! completion to derive heads, so a producer of this class does not walk
+//! failing pairs on the Join cursor. Rules the compiler declines keep the
+//! Join cursor.
 
 use themelios_program::program::Relation;
 use themelios_program::term::BinaryOp;
@@ -19,7 +21,7 @@ use super::Builder;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
 use crate::formula_support::components::Scalar;
-use crate::formula_support::{Counters, Support};
+use crate::formula_support::{Computation, Counters, Support};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
 /// Try to ground `rule` with the columnar operators.
@@ -32,112 +34,60 @@ pub(super) fn instantiate<'source>(
     rule: &'source RuleIr,
     support: &Support<'source>,
 ) -> Result<bool, FormulaFailure> {
-    let Some((template, width)) = compile(rule, builder)? else {
+    let Some((template, width)) =
+        compile(rule, builder.computation, builder.limits, builder.counters)?
+    else {
         return Ok(false);
     };
-    let mut stats = EnumerationStats::default();
-    let bindings = enumerate(builder, rule, &template, &mut stats)?;
+    let bindings = enumerate(&template, builder.limits, builder.counters, rule.location)?;
     emit(builder, rule, support, &bindings, width)?;
-    let _ = (width, stats);
     Ok(true)
 }
 
-fn enumerate(
-    builder: &mut Builder<'_, '_, '_>,
-    rule: &RuleIr,
-    template: &Template,
-    stats: &mut EnumerationStats,
-) -> Result<Bindings, FormulaFailure> {
-    let location = rule.location;
-    let limits = builder.limits;
-    let counters = &mut *builder.counters;
-    let mut account = |amount: u64| charge(counters, limits, location, amount);
-    rows(template, &Atoms::empty(1), &mut account, stats)
-}
-
-fn emit<'source>(
-    builder: &mut Builder<'_, '_, 'source>,
-    rule: &'source RuleIr,
-    support: &Support<'source>,
-    bindings: &Bindings,
-    width: usize,
-) -> Result<(), FormulaFailure> {
-    let location = rule.location;
-    let mut assignment = Binding::new(
-        builder.computation,
-        builder.limits,
-        builder.counters,
-        location,
-    )?;
-    assignment.extend_scope(
-        rule.variables,
-        builder.computation,
-        builder.limits,
-        builder.counters,
-        location,
-    )?;
-    let mut buffer = vec![0i32; width];
-    for row in bindings.row_range() {
-        bindings.row_into(row, &mut buffer);
-        bind_row(builder, &mut assignment, &buffer, location)?;
-        builder.rule(rule, &assignment, support, None, None)?;
-    }
-    Ok(())
-}
-
-fn bind_row(
-    builder: &mut Builder<'_, '_, '_>,
-    assignment: &mut Binding<'static>,
-    row: &[i32],
-    location: ProgramSite,
-) -> Result<(), FormulaFailure> {
-    for (slot, value) in row.iter().enumerate() {
-        let key = intern_number(builder, *value, location)?;
-        assignment.set(slot, &key, builder.limits, builder.counters, location)?;
-    }
-    Ok(())
-}
-
-fn intern_number(
-    builder: &mut Builder<'_, '_, '_>,
-    value: i32,
-    location: ProgramSite,
-) -> Result<TermKey, FormulaFailure> {
-    let key = builder
-        .computation
-        .number(value, builder.limits, builder.counters, location)?;
-    // The join cursor records each generated numeric identity in the
-    // GeneratedValues population before it is assigned. Keep that charge so
-    // later rules, including constraints that still use the cursor, accumulate
-    // against the same ceiling.
-    builder
-        .counters
-        .generated(&key, builder.computation, builder.limits, location)?;
-    Ok(key)
-}
-
-fn charge(
-    counters: &mut Counters,
-    limits: &FormulaLimits,
-    location: ProgramSite,
-    amount: u64,
-) -> Result<(), FormulaFailure> {
-    let mut remaining = amount;
-    while remaining > 0 {
-        counters.work(limits, location)?;
-        remaining -= 1;
-    }
-    Ok(())
-}
-
-fn compile(
-    rule: &RuleIr,
-    builder: &mut Builder<'_, '_, '_>,
-) -> Result<Option<(Template, usize)>, FormulaFailure> {
+fn admissible(rule: &RuleIr) -> bool {
     if !matches!(rule.head, HeadIr::Normal(_)) || rule.variables != rule.body_variables {
+        return false;
+    }
+    let mut saw_domain = rule.body_variables == 0;
+    for literal in &rule.body {
+        match literal {
+            LiteralIr::Range { binder: true, .. } => saw_domain = true,
+            LiteralIr::Compare(_) => {}
+            LiteralIr::Atom(..)
+            | LiteralIr::PatternAtom(_)
+            | LiteralIr::AnonymousAtom(..)
+            | LiteralIr::ArgumentCheck(_)
+            | LiteralIr::TupleCompare(..)
+            | LiteralIr::Guard(_)
+            | LiteralIr::HeadGuard(_)
+            | LiteralIr::Conditional(_)
+            | LiteralIr::Aggregate(_)
+            | LiteralIr::Bind { .. }
+            | LiteralIr::Range { binder: false, .. } => return false,
+        }
+    }
+    saw_domain
+}
+
+/// Compile a range-and-arithmetic rule into the shared Template.
+///
+/// Returns `Ok(None)` when the compiler declines the body or head. Failures
+/// are catalog or resource refusals from reading static scalars.
+pub(crate) fn compile(
+    rule: &RuleIr,
+    computation: &mut Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<Option<(Template, usize)>, FormulaFailure> {
+    if !admissible(rule) {
         return Ok(None);
     }
     let width = rule.body_variables;
+    let mut intern = Intern {
+        computation,
+        limits,
+        counters,
+    };
     let mut template = Template::new(width);
     let mut saw_domain = width == 0;
     for literal in &rule.body {
@@ -149,7 +99,7 @@ fn compile(
                 binder: true,
             } => {
                 let Some(template_next) =
-                    add_range(template, *target, lower, upper, builder, rule.location)?
+                    add_range(template, *target, lower, upper, &mut intern, rule.location)?
                 else {
                     return Ok(None);
                 };
@@ -162,7 +112,7 @@ fn compile(
                     comparison.left(),
                     comparison.relation(),
                     comparison.right(),
-                    builder,
+                    &mut intern,
                     rule.location,
                 )?
                 else {
@@ -198,21 +148,124 @@ fn compile(
     Ok(Some((template, width)))
 }
 
+/// Enumerate `template` under the generating schedule, charging one unit of
+/// formula work per operator step.
+pub(crate) fn enumerate(
+    template: &Template,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Bindings, FormulaFailure> {
+    let mut stats = EnumerationStats::default();
+    let mut account = |amount: u64| charge(counters, limits, location, amount);
+    rows(template, &Atoms::empty(1), &mut account, &mut stats)
+}
+
+/// Intern each slot of a retained row and assign it, charging GeneratedValues
+/// for every numeric identity the way the Join cursor does.
+pub(crate) fn bind_row(
+    computation: &mut Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    assignment: &mut Binding<'static>,
+    row: &[i32],
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    for (slot, value) in row.iter().enumerate() {
+        let key = intern_number(computation, limits, counters, *value, location)?;
+        assignment.set(slot, &key, limits, counters, location)?;
+    }
+    Ok(())
+}
+
+fn emit<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
+    rule: &'source RuleIr,
+    support: &Support<'source>,
+    bindings: &Bindings,
+    width: usize,
+) -> Result<(), FormulaFailure> {
+    let location = rule.location;
+    let mut assignment = Binding::new(
+        builder.computation,
+        builder.limits,
+        builder.counters,
+        location,
+    )?;
+    assignment.extend_scope(
+        rule.variables,
+        builder.computation,
+        builder.limits,
+        builder.counters,
+        location,
+    )?;
+    let mut buffer = vec![0i32; width];
+    for row in bindings.row_range() {
+        bindings.row_into(row, &mut buffer);
+        bind_row(
+            builder.computation,
+            builder.limits,
+            builder.counters,
+            &mut assignment,
+            &buffer,
+            location,
+        )?;
+        builder.rule(rule, &assignment, support, None, None)?;
+    }
+    Ok(())
+}
+
+fn intern_number(
+    computation: &mut Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    value: i32,
+    location: ProgramSite,
+) -> Result<TermKey, FormulaFailure> {
+    let key = computation.number(value, limits, counters, location)?;
+    // The join cursor records each generated numeric identity in the
+    // GeneratedValues population before it is assigned. Keep that charge so
+    // later rules, including constraints that still use the cursor, accumulate
+    // against the same ceiling.
+    counters.generated(&key, computation, limits, location)?;
+    Ok(key)
+}
+
+fn charge(
+    counters: &mut Counters,
+    limits: &FormulaLimits,
+    location: ProgramSite,
+    amount: u64,
+) -> Result<(), FormulaFailure> {
+    let mut remaining = amount;
+    while remaining > 0 {
+        counters.work(limits, location)?;
+        remaining -= 1;
+    }
+    Ok(())
+}
+
+struct Intern<'a, 'terms, 'source> {
+    computation: &'a mut Computation<'terms, 'source>,
+    limits: &'a FormulaLimits,
+    counters: &'a mut Counters,
+}
+
 fn add_range(
     template: Template,
     target: usize,
     lower: &Expression,
     upper: &Expression,
-    builder: &mut Builder<'_, '_, '_>,
+    intern: &mut Intern<'_, '_, '_>,
     location: ProgramSite,
 ) -> Result<Option<Template>, FormulaFailure> {
-    let Some(lo) = constant_i32(lower, builder, location)? else {
+    let Some(lo) = constant_i32(lower, intern, location)? else {
         return Ok(None);
     };
-    if let Some(hi) = constant_i32(upper, builder, location)? {
+    if let Some(hi) = constant_i32(upper, intern, location)? {
         return Ok(Some(map_template(template.with_range(target, lo, hi))));
     }
-    if let Some((parent, delta)) = affine(upper, builder, location)? {
+    if let Some((parent, delta)) = affine(upper, intern, location)? {
         return Ok(Some(map_template(
             template.with_dependent_range(target, lo, parent, delta),
         )));
@@ -225,28 +278,28 @@ fn add_comparison(
     left: &Expression,
     relation: Relation,
     right: &Expression,
-    builder: &mut Builder<'_, '_, '_>,
+    intern: &mut Intern<'_, '_, '_>,
     location: ProgramSite,
 ) -> Result<Option<Template>, FormulaFailure> {
     if relation == Relation::Eq {
-        if let Some(template) = arithmetic(template.clone(), left, right, builder, location)? {
+        if let Some(template) = arithmetic(template.clone(), left, right, intern, location)? {
             return Ok(Some(template));
         }
-        if let Some(template) = arithmetic(template.clone(), right, left, builder, location)? {
+        if let Some(template) = arithmetic(template.clone(), right, left, intern, location)? {
             return Ok(Some(template));
         }
     }
-    slot_relation(template, left, relation, right, builder, location)
+    slot_relation(template, left, relation, right, intern, location)
 }
 
 fn arithmetic(
     template: Template,
     expression: &Expression,
     other: &Expression,
-    builder: &mut Builder<'_, '_, '_>,
+    intern: &mut Intern<'_, '_, '_>,
     location: ProgramSite,
 ) -> Result<Option<Template>, FormulaFailure> {
-    if constant_i32(other, builder, location)? == Some(0)
+    if constant_i32(other, intern, location)? == Some(0)
         && let Some((dividend, divisor)) = remainder_of(expression)
     {
         return Ok(Some(map_template(
@@ -277,7 +330,7 @@ fn slot_relation(
     left: &Expression,
     relation: Relation,
     right: &Expression,
-    builder: &mut Builder<'_, '_, '_>,
+    intern: &mut Intern<'_, '_, '_>,
     location: ProgramSite,
 ) -> Result<Option<Template>, FormulaFailure> {
     let Some(left) = slot(left) else {
@@ -293,7 +346,7 @@ fn slot_relation(
             Relation::Ge => template.with_ge(left, right),
         })));
     }
-    if let Some(value) = constant_i32(right, builder, location)?
+    if let Some(value) = constant_i32(right, intern, location)?
         && relation == Relation::Eq
     {
         return Ok(Some(map_template(template.with_eq_const(left, value))));
@@ -341,18 +394,18 @@ fn slot(expression: &Expression) -> Option<usize> {
 
 fn constant_i32(
     expression: &Expression,
-    builder: &mut Builder<'_, '_, '_>,
+    intern: &mut Intern<'_, '_, '_>,
     location: ProgramSite,
 ) -> Result<Option<i32>, FormulaFailure> {
     let [Operation::Constant(value)] = expression.nodes.as_slice() else {
         return Ok(None);
     };
-    read_scalar(*value, builder, location)
+    read_scalar(*value, intern, location)
 }
 
 fn affine(
     expression: &Expression,
-    builder: &mut Builder<'_, '_, '_>,
+    intern: &mut Intern<'_, '_, '_>,
     location: ProgramSite,
 ) -> Result<Option<(usize, i32)>, FormulaFailure> {
     if let Some(slot) = slot(expression) {
@@ -372,7 +425,7 @@ fn affine(
         ] if *operator == BinaryOp::Add => (*parent, *value, *operator),
         _ => return Ok(None),
     };
-    let Some(delta) = read_scalar(constant, builder, location)? else {
+    let Some(delta) = read_scalar(constant, intern, location)? else {
         return Ok(None);
     };
     let delta = match operator {
@@ -388,13 +441,13 @@ fn affine(
 
 fn read_scalar(
     value: Scalar,
-    builder: &mut Builder<'_, '_, '_>,
+    intern: &mut Intern<'_, '_, '_>,
     location: ProgramSite,
 ) -> Result<Option<i32>, FormulaFailure> {
     let value =
-        builder
+        intern
             .computation
-            .static_scalar(value, builder.limits, builder.counters, location)?;
+            .static_scalar(value, intern.limits, intern.counters, location)?;
     Ok(match value.descriptor() {
         ValueNodeRef::Number(number) => Some(number),
         _ => None,

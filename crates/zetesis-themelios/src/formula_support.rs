@@ -1107,6 +1107,23 @@ fn derive_variants_with_executor<'source>(
                 location: _,
             },
     } = context;
+    // Range-and-arithmetic producers compile into the same columnar Template
+    // formula instantiation uses. Completing their heads from retained rows
+    // avoids walking failing pairs on the Join cursor. The compiler declines
+    // atoms, so domain-guarded and atom-bounded rules keep the existing path.
+    if guards.is_none()
+        && totality.is_none()
+        && derive_algebra_variants(
+            rule,
+            variants,
+            computation,
+            limits,
+            budget,
+            counters,
+        )?
+    {
+        return Ok(());
+    }
     // A body-less normal rule without variables has exactly one binding, the
     // empty one, under every variant: no join, selection or witness cursor
     // has anything to visit. Its head is derived from that binding as the
@@ -1193,6 +1210,79 @@ fn derive_variants_with_executor<'source>(
         }
     }
     Ok(())
+}
+
+/// Derive a range-and-arithmetic producer's heads with the columnar operators.
+///
+/// Returns `Ok(true)` when the rule compiled and every variant of this visit
+/// was consumed. A producer without atom inputs has at most a single full
+/// variant, and only in the first round; later visits compile the same way
+/// and emit nothing because no variant remains. Rules the compiler declines
+/// stay on the Join cursor.
+fn derive_algebra_variants<'source>(
+    rule: &'source crate::formula_ir::RuleIr,
+    variants: &mut delta::Variants<'_, '_>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    let Some((template, width)) =
+        crate::formula_ground::algebra_rows::compile(rule, computation, limits, counters)?
+    else {
+        return Ok(false);
+    };
+    let HeadIr::Normal(Some(head)) = &rule.head else {
+        return Ok(false);
+    };
+    let mut next = variants.next(limits, counters)?;
+    let mut derivation = Derivation {
+        normal_head: None,
+        computation,
+        limits,
+        budget,
+        counters,
+    };
+    let mut enumerated = false;
+    while let Some(variant) = next {
+        if matches!(variant, delta::Variant::Full) && !enumerated {
+            let bindings = crate::formula_ground::algebra_rows::enumerate(
+                &template,
+                limits,
+                derivation.counters,
+                rule.location,
+            )?;
+            let mut assignment = Binding::new(
+                derivation.computation,
+                limits,
+                derivation.counters,
+                rule.location,
+            )?;
+            assignment.extend_scope(
+                rule.variables,
+                derivation.computation,
+                limits,
+                derivation.counters,
+                rule.location,
+            )?;
+            let mut buffer = vec![0i32; width];
+            for row in bindings.row_range() {
+                bindings.row_into(row, &mut buffer);
+                crate::formula_ground::algebra_rows::bind_row(
+                    derivation.computation,
+                    limits,
+                    derivation.counters,
+                    &mut assignment,
+                    &buffer,
+                    rule.location,
+                )?;
+                derivation.normal_head(*head, &assignment, rule.location)?;
+            }
+            enumerated = true;
+        }
+        next = variants.next(limits, derivation.counters)?;
+    }
+    Ok(true)
 }
 
 /// Derive the heads of every complete row of `outer`, a join of the rule at
