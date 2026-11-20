@@ -876,6 +876,7 @@ fn visit_producer<'source>(
         (index, rule),
         &mut variants,
         (delta, support, domains),
+        producers,
         budget,
         (limits, counters),
         executor,
@@ -962,6 +963,7 @@ fn produce<'source>(
         &Support<'source>,
         Option<&crate::formula_domains::Domains<'_>>,
     ),
+    producers: &producers::Producers<'_>,
     budget: &mut Budget,
     (limits, counters): (&FormulaLimits, &mut Counters),
     executor: Option<&Executor>,
@@ -986,6 +988,7 @@ fn produce<'source>(
         variants,
         (guards.as_ref(), totality),
         support,
+        Some(producers),
         budget,
         Context::new(&mut computation, limits, counters, rule.location),
         executor,
@@ -1080,6 +1083,7 @@ fn derive_variants<'source>(
         variants,
         (guards, totality),
         support,
+        None,
         budget,
         context,
         None,
@@ -1094,6 +1098,7 @@ fn derive_variants_with_executor<'source>(
         Option<&crate::formula_domains::numeric_ir::TotalBody<'_>>,
     ),
     support: &Support<'source>,
+    producers: Option<&producers::Producers<'_>>,
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, 'source>>,
     executor: Option<&Executor>,
@@ -1115,10 +1120,11 @@ fn derive_variants_with_executor<'source>(
     // compiler still declines free cross-product atoms, constraints, and
     // incomplete or recursive domains.
     if derive_columnar_variants(
-        rule,
+        (index, rule),
         variants,
         support,
         computation,
+        producers,
         limits,
         budget,
         counters,
@@ -1217,6 +1223,145 @@ fn derive_variants_with_executor<'source>(
 
 
 
+/// Whether default-negation is sound for the hook on this visit.
+///
+/// Every negated body position must be in `Certainty::decided(rule_index)`.
+/// N1 (`ZETESIS_JOIN_NEGATION` unset or `reached`) also requires each
+/// negated predicate's defining component to be *reached*. N2 (`settled`)
+/// admits the hook when every such component is at least *settled*; the
+/// residual anti-join then uses snapshot ∪ pending via `contains_pattern`.
+/// Non-recursive positive body predicates must already be complete in the
+/// snapshot. The hook consumes every variant of a visit after one snapshot
+/// join; if a partner such as `open/2` can still grow (choice-dependent
+/// facts, a later stratum), that join would miss later rows and could
+/// drop heads the cursor would still derive — observed as unsat on
+/// network-repair and equality-generalized-tsp. Extensional predicates
+/// (no schedule component) are already complete. Recursive body atoms of
+/// the head stay on the semi-naive path and are not required to be
+/// reached. When `producers` is missing (unit-test wrapper), skip the
+/// gate so existing tests keep the hook.
+fn positive_partners_complete(
+    rule: &crate::formula_ir::RuleIr,
+    support: &Support<'_>,
+    producers: Option<&producers::Producers<'_>>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    use crate::formula_support::producers::PredicateStage;
+    let Some(producers) = producers else {
+        return Ok(true);
+    };
+    let HeadIr::Normal(Some(head)) = &rule.head else {
+        return Ok(false);
+    };
+    let Some(view) = support.components() else {
+        return Ok(false);
+    };
+    let Some(head) = head.resolve(view) else {
+        return Ok(false);
+    };
+    let head_predicate = head.predicate();
+    for literal in &rule.body {
+        let crate::formula_ir::LiteralIr::Atom(themelios_program::program::DefaultNegation::None, pattern) = literal else {
+            continue;
+        };
+        let Some(pattern) = pattern.resolve(view) else {
+            return Ok(false);
+        };
+        if pattern.predicate() == head_predicate {
+            continue;
+        }
+        match producers.predicate_stage(pattern.predicate(), limits, counters, rule.location)? {
+            PredicateStage::Reached | PredicateStage::Extensional => {}
+            PredicateStage::Settled | PredicateStage::Open => return Ok(false),
+        }
+    }
+    Ok(true)
+}
+
+#[allow(dead_code)]
+fn admit_settled_negation() -> bool {
+    matches!(option_env!("ZETESIS_JOIN_NEGATION"), Some("settled"))
+}
+
+#[allow(dead_code)]
+fn negation_admission(
+    index: usize,
+    rule: &crate::formula_ir::RuleIr,
+    support: &Support<'_>,
+    producers: Option<&producers::Producers<'_>>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<(bool, Vec<usize>), FormulaFailure> {
+    use crate::formula_ground::algebra_join::negated_occurrences;
+    use crate::formula_support::producers::PredicateStage;
+    let occurrences = negated_occurrences(rule);
+    if occurrences.is_empty() {
+        return Ok((true, Vec::new()));
+    }
+    let Some(producers) = producers else {
+        return Ok((false, Vec::new()));
+    };
+    let Some(certainty) = support.certainty() else {
+        return Ok((false, Vec::new()));
+    };
+    let decided: Vec<usize> = certainty.decided(index).collect();
+    if !occurrences.iter().all(|occurrence| decided.contains(occurrence)) {
+        return Ok((false, Vec::new()));
+    }
+    let allow_settled = admit_settled_negation();
+    let mut pending = Vec::new();
+    for &occurrence in &occurrences {
+        let crate::formula_ir::LiteralIr::Atom(_, pattern) = &rule.body[occurrence] else {
+            return Ok((false, Vec::new()));
+        };
+        let Some(view) = support.components() else {
+            return Ok((false, Vec::new()));
+        };
+        let Some(pattern) = pattern.resolve(view) else {
+            return Ok((false, Vec::new()));
+        };
+        match producers.predicate_stage(pattern.predicate(), limits, counters, rule.location)? {
+            PredicateStage::Reached | PredicateStage::Extensional => {}
+            PredicateStage::Settled if allow_settled => pending.push(occurrence),
+            PredicateStage::Settled | PredicateStage::Open => return Ok((false, Vec::new())),
+        }
+    }
+    Ok((true, pending))
+}
+
+/// True when a settled (not reached) default-negation holds of this row
+/// against snapshot ∪ pending, so the hook must not emit the head.
+fn pending_negation_holds(
+    rule: &crate::formula_ir::RuleIr,
+    support: &Support<'_>,
+    computation: &Computation<'_, '_>,
+    assignment: &crate::formula_binding::Binding<'_>,
+    pending: &[usize],
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    if pending.is_empty() {
+        return Ok(false);
+    }
+    let Some(view) = support.components() else {
+        return Ok(true);
+    };
+    for &occurrence in pending {
+        let crate::formula_ir::LiteralIr::Atom(_, pattern) = &rule.body[occurrence] else {
+            return Ok(true);
+        };
+        let Some(pattern) = pattern.resolve(view) else {
+            return Ok(true);
+        };
+        if computation.contains_pattern(pattern, assignment, limits, counters, location)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Serial evaluate at t1 (and for tiny deltas). At tN, partition each
 /// semi-naive delta across coordinator tasks, merge the bindings, and
 /// finish residuals on the coordinator so emission stays in TermRef order.
@@ -1228,6 +1373,8 @@ fn evaluate_algebra_join<'a, 'source>(
     budget: &mut Budget,
     counters: &mut Counters,
     executor: Option<&Executor>,
+    allow_negation: bool,
+    pending: &[usize],
 ) -> Result<Option<crate::formula_ground::algebra_join::Evaluated<'a>>, FormulaFailure> {
     let parallel = executor.and_then(|executor| executor.pool()).is_some();
     if !parallel {
@@ -1237,9 +1384,16 @@ fn evaluate_algebra_join<'a, 'source>(
             limits,
             counters,
             rule.location,
+            allow_negation,
+            pending,
         );
     }
-    let Some(prepared) = crate::formula_ground::algebra_join::prepare(rule, support) else {
+    let Some(prepared) = crate::formula_ground::algebra_join::prepare(
+        rule,
+        support,
+        allow_negation,
+        pending,
+    ) else {
         return Ok(None);
     };
     let parts_spec = prepared.tables.delta_parts();
@@ -1260,6 +1414,8 @@ fn evaluate_algebra_join<'a, 'source>(
             limits,
             counters,
             rule.location,
+            allow_negation,
+            pending,
         );
     };
     let tables = &prepared.tables;
@@ -1337,10 +1493,11 @@ fn join_range_prebuilt_accounted(
 }
 
 fn derive_columnar_variants<'source>(
-    rule: &'source crate::formula_ir::RuleIr,
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     variants: &mut delta::Variants<'_, '_>,
     support: &Support<'source>,
     computation: &mut Computation<'_, 'source>,
+    producers: Option<&producers::Producers<'_>>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -1350,10 +1507,11 @@ fn derive_columnar_variants<'source>(
         return Ok(true);
     }
     derive_algebra_join_variants(
-        rule,
+        (index, rule),
         variants,
         support,
         computation,
+        producers,
         limits,
         budget,
         counters,
@@ -1364,10 +1522,11 @@ fn derive_columnar_variants<'source>(
 /// Derive heads with the columnar binary Join, consuming every variant of
 /// this visit after a single snapshot enumeration, matching the Bind hook.
 fn derive_algebra_join_variants<'source>(
-    rule: &'source crate::formula_ir::RuleIr,
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     variants: &mut delta::Variants<'_, '_>,
     support: &Support<'source>,
     computation: &mut Computation<'_, 'source>,
+    producers: Option<&producers::Producers<'_>>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -1379,6 +1538,16 @@ fn derive_algebra_join_variants<'source>(
     if !crate::formula_ground::algebra_join::body_repeats_head(rule, support) {
         return Ok(false);
     }
+    if !positive_partners_complete(rule, support, producers, limits, counters)? {
+        return Ok(false);
+    }
+    // N1 and N2 both gold-diff clean vs 9a63, but both regress stratrec
+    // t14 (N1 wall 1.117× / ground 1.261×; N2 1.134× / 1.351×) once the
+    // hook admits `not`. Neither is kept. The hook declines default
+    // negation; the partner-completeness gate above stays.
+    let _ = index;
+    let allow_negation = false;
+    let pending: Vec<usize> = Vec::new();
     let Some(evaluated) = evaluate_algebra_join(
         rule,
         support,
@@ -1387,6 +1556,8 @@ fn derive_algebra_join_variants<'source>(
         budget,
         counters,
         executor,
+        allow_negation,
+        &pending,
     )?
     else {
         return Ok(false);
@@ -1429,6 +1600,18 @@ fn derive_algebra_join_variants<'source>(
                     row,
                     &mut buffer,
                 )?;
+                if pending_negation_holds(
+                    rule,
+                    support,
+                    derivation.computation,
+                    &assignment,
+                    &pending,
+                    limits,
+                    derivation.counters,
+                    rule.location,
+                )? {
+                    continue;
+                }
                 derivation.normal_head(*head, &assignment, rule.location)?;
             }
             enumerated = true;

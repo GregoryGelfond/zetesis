@@ -185,16 +185,16 @@ pub(crate) fn evaluate<'a>(
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
+    allow_negation: bool,
+    pending: &[usize],
 ) -> Result<Option<Evaluated<'a>>, FormulaFailure> {
     let Some(plan) = plan(rule, support) else {
         return Ok(None);
     };
-    // Admit `not` only when every negated body position is already
-    // decided for this rule. An empty lower-stratum snapshot is not
-    // evidence of completeness (`old_rows == row_count == 0` on a
-    // relation that later grows) and would emit unblocked descendants
-    // of blocked parents, as observed on stratrec10k.
-    if !plan.negated.is_empty() {
+    // `allow_negation` is computed by the hook from decided() plus the
+    // defining component's reached (N1) or settled (N2) stage. Without
+    // that gate, an empty snapshot is not evidence of completeness.
+    if !plan.negated.is_empty() && !allow_negation {
         return Ok(None);
     }
     let mut account = |amount: u64| charge(counters, limits, location, amount);
@@ -203,7 +203,14 @@ pub(crate) fn evaluate<'a>(
     let Some(projected) = semi_naive(&plan, &recursive, support, &mut terms, &mut account)? else {
         return Ok(None);
     };
-    let Some(filtered) = apply_residuals(&projected, &plan, support, &mut terms, &mut account)?
+    let Some(filtered) = apply_residuals(
+        &projected,
+        &plan,
+        support,
+        &mut terms,
+        pending,
+        &mut account,
+    )?
     else {
         return Ok(None);
     };
@@ -253,6 +260,10 @@ pub(crate) struct PreparedJoin<'a> {
     pub tables: JoinTables,
     plan: Plan<'a>,
     terms: TermMap<'a>,
+    /// Negated body occurrences whose anti-join must include this
+    /// round's pending atoms (`contains_pattern`); skipped in the
+    /// snapshot residual and filtered after bind.
+    pending: Vec<usize>,
 }
 
 impl JoinTables {
@@ -332,9 +343,14 @@ impl JoinTables {
 
 /// Load interned snapshot columns on the coordinator. Declines the same
 /// bodies as [`evaluate`].
-pub(crate) fn prepare<'a>(rule: &'a RuleIr, support: &'a Support<'_>) -> Option<PreparedJoin<'a>> {
+pub(crate) fn prepare<'a>(
+    rule: &'a RuleIr,
+    support: &'a Support<'_>,
+    allow_negation: bool,
+    pending: &[usize],
+) -> Option<PreparedJoin<'a>> {
     let plan = plan(rule, support)?;
-    if !plan.negated.is_empty() {
+    if !plan.negated.is_empty() && !allow_negation {
         return None;
     }
     let mut terms = TermMap::default();
@@ -356,6 +372,7 @@ pub(crate) fn prepare<'a>(rule: &'a RuleIr, support: &'a Support<'_>) -> Option<
         tables,
         plan,
         terms,
+        pending: pending.to_vec(),
     })
 }
 
@@ -375,9 +392,19 @@ pub(crate) fn finish<'a>(
         return Ok(None);
     };
     let PreparedJoin {
-        plan, mut terms, ..
+        plan,
+        mut terms,
+        pending,
+        ..
     } = prepared;
-    let Some(filtered) = apply_residuals(&projected, &plan, support, &mut terms, &mut account)?
+    let Some(filtered) = apply_residuals(
+        &projected,
+        &plan,
+        support,
+        &mut terms,
+        &pending,
+        &mut account,
+    )?
     else {
         return Ok(None);
     };
@@ -751,8 +778,21 @@ struct Compare {
 }
 
 struct Negated<'a> {
+    occurrence: usize,
     predicate: PredicateRef<'a>,
     slots: Vec<usize>,
+}
+
+#[allow(dead_code)]
+pub(crate) fn negated_occurrences(rule: &RuleIr) -> Vec<usize> {
+    rule.body
+        .iter()
+        .enumerate()
+        .filter_map(|(occurrence, literal)| match literal {
+            LiteralIr::Atom(DefaultNegation::Not, _) => Some(occurrence),
+            _ => None,
+        })
+        .collect()
 }
 
 fn plan<'a>(rule: &'a RuleIr, support: &'a Support<'_>) -> Option<Plan<'a>> {
@@ -783,7 +823,7 @@ fn body_parts<'a>(
     let mut atoms = Vec::new();
     let mut compares = Vec::new();
     let mut negated = Vec::new();
-    for literal in &rule.body {
+    for (occurrence, literal) in rule.body.iter().enumerate() {
         match literal {
             LiteralIr::Atom(DefaultNegation::None, pattern) => {
                 let pattern = pattern.resolve(view)?;
@@ -816,6 +856,7 @@ fn body_parts<'a>(
                     }
                 }
                 negated.push(Negated {
+                    occurrence,
                     predicate: pattern.predicate(),
                     slots,
                 });
@@ -1007,6 +1048,7 @@ fn apply_residuals<'a>(
     plan: &Plan<'_>,
     support: &'a Support<'_>,
     terms: &mut TermMap<'a>,
+    pending: &[usize],
     account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
 ) -> Result<Option<Bindings>, FormulaFailure> {
     let mut rows = bindings.to_rows();
@@ -1025,6 +1067,14 @@ fn apply_residuals<'a>(
         return Ok(None);
     }
     for negated in &plan.negated {
+        if pending
+            .iter()
+            .any(|&occurrence| occurrence == negated.occurrence)
+        {
+            // Settled, not reached: snapshot is incomplete. The hook
+            // anti-joins against snapshot ∪ pending after bind.
+            continue;
+        }
         let Some(table) = term_table(
             support,
             negated.predicate,

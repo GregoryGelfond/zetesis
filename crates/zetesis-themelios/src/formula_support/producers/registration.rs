@@ -34,6 +34,7 @@
 
 mod certain;
 mod components;
+pub(in crate::formula_support) use components::PredicateStage;
 #[cfg(test)]
 mod tests;
 
@@ -372,6 +373,19 @@ impl<'source> Registration<'source> {
         self.schedule
             .as_ref()
             .is_some_and(|schedule| schedule.pending())
+    }
+
+    pub(in crate::formula_support) fn predicate_stage(
+        &self,
+        predicate: zetesis_core::catalog::PredicateRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<components::PredicateStage, FormulaFailure> {
+        match &self.schedule {
+            Some(schedule) => schedule.predicate_stage(predicate, limits, counters, location),
+            None => Ok(components::PredicateStage::Open),
+        }
     }
 
     pub(in crate::formula_support) fn bytes(&self) -> usize {
