@@ -103,9 +103,17 @@ fn intern_number(
     value: i32,
     location: ProgramSite,
 ) -> Result<TermKey, FormulaFailure> {
-    builder
+    let key = builder
         .computation
-        .number(value, builder.limits, builder.counters, location)
+        .number(value, builder.limits, builder.counters, location)?;
+    // The join cursor records each generated numeric identity in the
+    // GeneratedValues population before it is assigned. Keep that charge so
+    // later rules, including constraints that still use the cursor, accumulate
+    // against the same ceiling.
+    builder
+        .counters
+        .generated(&key, builder.computation, builder.limits, location)?;
+    Ok(key)
 }
 
 fn charge(
