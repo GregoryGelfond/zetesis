@@ -30,10 +30,11 @@ use zetesis_algebra::{
     walk::{self, Counting, Visit, Walk},
 };
 use zetesis_ferraris::{
-    ChoiceHeads, ClosedQuery, FrozenPreparation, FrozenPreparationLimits, FrozenSubject,
-    GeneratorOrder, GeneratorOrderError, Interpretation, LearningLimits, LearningOwner, Narrower,
-    NarrowingAttempt, NarrowingScratch, OriginalSubject, PreparationError, PreparationLimits,
-    Producers, RegionLimits, RootPreparation, SupportExplanationStatistics, Theory,
+    BoundLearningStatistics, ChoiceHeads, ClosedQuery, ConflictLearningStatistics,
+    FrozenPreparation, FrozenPreparationLimits, FrozenSubject, GeneratorOrder, GeneratorOrderError,
+    Interpretation, LearningLimits, LearningOccupancy, LearningOwner, Narrower, NarrowingAttempt,
+    NarrowingScratch, OriginalSubject, PreparationError, PreparationLimits, Producers,
+    RegionLimits, RootPreparation, SupportExplanationStatistics, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions, CountermodelKnowledge};
@@ -97,6 +98,13 @@ pub struct RegionCounts {
     /// The byte peak is the largest single worker ledger/capture footprint, not
     /// the sum across workers or total process memory.
     pub support_explanations: SupportExplanationStatistics,
+    /// Refuted-region conflict capture; a statistic, not a receipt field.
+    pub conflict_explanations: ConflictLearningStatistics,
+    /// Objective-bound capture; a statistic, not a receipt field.
+    pub bound_explanations: BoundLearningStatistics,
+    /// Worker-ledger occupancy of the two learning classes; a statistic,
+    /// not a receipt field.
+    pub learning_occupancy: LearningOccupancy,
     // Private attribution travels with the existing receipt. Public arithmetic
     // observations are projected by the original-region statistics owner.
     pub(crate) arithmetic: arithmetic_counts::ArithmeticCounts,
@@ -191,6 +199,63 @@ impl RegionCounts {
                     .support_explanations
                     .peak_bytes
                     .max(other.support_explanations.peak_bytes),
+            },
+            conflict_explanations: {
+                let mut stats = self.conflict_explanations;
+                stats.attempts = stats
+                    .attempts
+                    .checked_add(other.conflict_explanations.attempts)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                stats.certified = stats
+                    .certified
+                    .checked_add(other.conflict_explanations.certified)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                stats.declined = stats
+                    .declined
+                    .checked_add(other.conflict_explanations.declined)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                stats.shrunk = stats
+                    .shrunk
+                    .checked_add(other.conflict_explanations.shrunk)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                stats
+            },
+            bound_explanations: {
+                let mut stats = self.bound_explanations;
+                stats.attempts = stats
+                    .attempts
+                    .checked_add(other.bound_explanations.attempts)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                stats.certified = stats
+                    .certified
+                    .checked_add(other.bound_explanations.certified)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                stats.declined = stats
+                    .declined
+                    .checked_add(other.bound_explanations.declined)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                stats.shrunk = stats
+                    .shrunk
+                    .checked_add(other.bound_explanations.shrunk)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                stats
+            },
+            learning_occupancy: {
+                let mut occupancy = self.learning_occupancy;
+                occupancy.theory_rows = occupancy
+                    .theory_rows
+                    .max(other.learning_occupancy.theory_rows);
+                occupancy.bound_rows = occupancy
+                    .bound_rows
+                    .max(other.learning_occupancy.bound_rows);
+                occupancy.evicted = occupancy
+                    .evicted
+                    .checked_add(other.learning_occupancy.evicted)
+                    .ok_or(Incomplete::CounterOverflow)?;
+                occupancy.peak_bytes = occupancy
+                    .peak_bytes
+                    .max(other.learning_occupancy.peak_bytes);
+                occupancy
             },
             arithmetic: self.arithmetic.checked_add(other.arithmetic)?,
         };
@@ -462,6 +527,7 @@ pub(crate) struct OriginalParts {
     generator_order: Option<GeneratorOrder>,
     arithmetic: Option<subjects::PreparedArithmetic>,
     learning: LearningOwner,
+    bound_learning: LearningOwner,
     learned: Option<Arc<LearnedStore>>,
 }
 
@@ -481,6 +547,7 @@ pub(super) struct CandidateReading<'a> {
     pub(super) original: OriginalSubject<'a>,
     pub(super) narrower: &'a Narrower,
     pub(super) arithmetic: Option<&'a subjects::PreparedArithmetic>,
+    pub(super) bound_learning: Option<&'a LearningOwner>,
 }
 
 /// Which way a walk boundary moves a tier's rows.
@@ -492,8 +559,9 @@ enum Sharing {
 
 impl OriginalParts {
     /// The walk's subject over `theory`, the theory these parts came from:
-    /// the carrier of the rows the walk learns. Restrictions, the bound and
-    /// filters are read by other subjects, which never carry rows.
+    /// the carrier of the theory-class rows the walk learns. Restrictions
+    /// and filters never carry rows. The bound subject carries bound-class
+    /// rows under `bound_learning`.
     pub(crate) fn subject(&self, theory: &Theory) -> Result<OriginalSubject<'_>, Incomplete> {
         if !self.learning.owns(theory)
             || self
@@ -521,6 +589,7 @@ impl OriginalParts {
             original: self.subject(theory)?,
             narrower,
             arithmetic: self.arithmetic.as_ref(),
+            bound_learning: Some(&self.bound_learning),
         })
     }
 
@@ -598,22 +667,45 @@ impl OriginalParts {
         };
         let mut quota = BudgetQuota { budget };
         let mut meter = Meter::reserved(&mut quota);
-        let attempt = {
+        let (theory_attempt, bound_attempt) = {
             let mut rows = store.lock();
             match sharing {
-                Sharing::Seed => scratch.seed_learning(&self.learning, &mut rows, &mut meter),
-                Sharing::Deliver => scratch.deliver_learning(&self.learning, &mut rows, &mut meter),
+                Sharing::Seed => (
+                    scratch.seed_learning(&self.learning, &mut rows, &mut meter),
+                    scratch.seed_bound_learning(&self.bound_learning, &mut rows, &mut meter),
+                ),
+                Sharing::Deliver => (
+                    scratch.deliver_learning(&self.learning, &mut rows, &mut meter),
+                    scratch.deliver_bound_learning(&self.bound_learning, &mut rows, &mut meter),
+                ),
             }
         };
+        let work = theory_attempt
+            .work
+            .checked_add(bound_attempt.work)
+            .ok_or(Incomplete::CounterOverflow)?;
         counts.add(RegionCounts {
-            work: attempt.work,
+            work,
             support_explanations: SupportExplanationStatistics {
-                work: attempt.work,
+                work: theory_attempt.work,
+                peak_bytes: scratch.learning_peak_bytes(),
                 ..SupportExplanationStatistics::default()
+            },
+            learning_occupancy: {
+                let mut occupancy = LearningOccupancy::default();
+                occupancy.theory_rows = scratch.learned_rows() as u64;
+                occupancy.bound_rows = scratch.bound_rows() as u64;
+                occupancy.evicted = scratch.learned_evictions() + scratch.bound_evictions();
+                occupancy.peak_bytes = scratch.learning_peak_bytes();
+                occupancy
             },
             ..RegionCounts::default()
         })?;
-        attempt.result.map_err(meter_failure)
+        let result = match (theory_attempt.result, bound_attempt.result) {
+            (Err(error), _) => Err(error),
+            (Ok(()), result) => result,
+        };
+        result.map_err(meter_failure)
     }
 }
 
@@ -801,6 +893,7 @@ fn open_recording(
             generator_order,
             arithmetic,
             learning: LearningOwner::theory(theory, learning),
+            bound_learning: LearningOwner::bound(theory, learning),
             learned: None,
         },
         root,
@@ -1129,7 +1222,15 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                     }
                 }),
         )
-        .chain(restrictions.bound.iter().map(CandidateSubject::Bound))
+        .chain(
+            restrictions
+                .bound
+                .iter()
+                .map(|bound| CandidateSubject::Bound {
+                    bound,
+                    learning: reading.bound_learning,
+                }),
+        )
     };
     let mut late = subjects::late(&reading, filter);
     let result = joint(eager, &mut late, region, knowledge, scratch, budget, counts)?;

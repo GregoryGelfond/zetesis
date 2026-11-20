@@ -81,6 +81,7 @@ fn shared_narrowing_never_executes_an_unleased_read() {
             original: zetesis_ferraris::OriginalSubject::new(&theory, None),
             narrower: &narrower,
             arithmetic: None,
+            bound_learning: None,
         },
         &Conditions::<(Theory, Narrower)>::default(),
         &mut entry,

@@ -146,6 +146,7 @@ fn run(theory: &Theory, reply: Reply, mut counts: RegionCounts) -> Attempt {
             original: OriginalSubject::new(theory, None),
             narrower: &narrower,
             arithmetic: None,
+            bound_learning: None,
         },
         &Conditions::<(Theory, Narrower)>::default(),
         &mut entry,

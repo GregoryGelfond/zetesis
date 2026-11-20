@@ -83,7 +83,8 @@ use zetesis_algebra::Meter;
 use zetesis_algebra::region::Region;
 use zetesis_algebra::walk::{self, Counting};
 use zetesis_ferraris::{
-    Interpretation, Narrower, NarrowingScratch, SupportExplanationStatistics, Theory,
+    BoundLearningStatistics, ConflictLearningStatistics, Interpretation, LearningOccupancy,
+    Narrower, NarrowingScratch, SupportExplanationStatistics, Theory,
 };
 
 use super::certified::{self, Certification};
@@ -264,6 +265,18 @@ struct Live {
     support_explanation_work: AtomicU64,
     /// Maximum single worker ledger/capture capacity, saturated at `u64::MAX`.
     support_explanation_peak_bytes: AtomicU64,
+    conflict_explanation_attempts: AtomicU64,
+    conflict_explanation_certified: AtomicU64,
+    conflict_explanation_declined: AtomicU64,
+    conflict_explanation_shrunk: AtomicU64,
+    bound_explanation_attempts: AtomicU64,
+    bound_explanation_certified: AtomicU64,
+    bound_explanation_declined: AtomicU64,
+    bound_explanation_shrunk: AtomicU64,
+    learning_theory_rows: AtomicU64,
+    learning_bound_rows: AtomicU64,
+    learning_evicted: AtomicU64,
+    learning_peak_bytes: AtomicU64,
     countermodel_queries: AtomicU64,
     countermodels: AtomicU64,
     /// Queries whose pending regions were published.
@@ -447,6 +460,124 @@ impl Live {
                 .peak_bytes
                 .max(u128::from(Self::read(&self.support_explanation_peak_bytes))),
         }
+    }
+
+    fn add_conflict_explanations(
+        &self,
+        before: &ConflictLearningStatistics,
+        after: &ConflictLearningStatistics,
+    ) {
+        if before == after {
+            return;
+        }
+        Self::add(
+            &self.conflict_explanation_attempts,
+            after.attempts - before.attempts,
+        );
+        Self::add(
+            &self.conflict_explanation_certified,
+            after.certified - before.certified,
+        );
+        Self::add(
+            &self.conflict_explanation_declined,
+            after.declined - before.declined,
+        );
+        Self::add(
+            &self.conflict_explanation_shrunk,
+            after.shrunk - before.shrunk,
+        );
+    }
+
+    fn conflict_explanations(
+        &self,
+        coordinator: ConflictLearningStatistics,
+    ) -> ConflictLearningStatistics {
+        let mut stats = coordinator;
+        stats.attempts = stats
+            .attempts
+            .saturating_add(Self::read(&self.conflict_explanation_attempts));
+        stats.certified = stats
+            .certified
+            .saturating_add(Self::read(&self.conflict_explanation_certified));
+        stats.declined = stats
+            .declined
+            .saturating_add(Self::read(&self.conflict_explanation_declined));
+        stats.shrunk = stats
+            .shrunk
+            .saturating_add(Self::read(&self.conflict_explanation_shrunk));
+        stats
+    }
+
+    fn add_bound_explanations(
+        &self,
+        before: &BoundLearningStatistics,
+        after: &BoundLearningStatistics,
+    ) {
+        if before == after {
+            return;
+        }
+        Self::add(
+            &self.bound_explanation_attempts,
+            after.attempts - before.attempts,
+        );
+        Self::add(
+            &self.bound_explanation_certified,
+            after.certified - before.certified,
+        );
+        Self::add(
+            &self.bound_explanation_declined,
+            after.declined - before.declined,
+        );
+        Self::add(&self.bound_explanation_shrunk, after.shrunk - before.shrunk);
+    }
+
+    fn bound_explanations(&self, coordinator: BoundLearningStatistics) -> BoundLearningStatistics {
+        let mut stats = coordinator;
+        stats.attempts = stats
+            .attempts
+            .saturating_add(Self::read(&self.bound_explanation_attempts));
+        stats.certified = stats
+            .certified
+            .saturating_add(Self::read(&self.bound_explanation_certified));
+        stats.declined = stats
+            .declined
+            .saturating_add(Self::read(&self.bound_explanation_declined));
+        stats.shrunk = stats
+            .shrunk
+            .saturating_add(Self::read(&self.bound_explanation_shrunk));
+        stats
+    }
+
+    fn add_learning_occupancy(&self, before: &LearningOccupancy, after: &LearningOccupancy) {
+        if before == after && after.peak_bytes == 0 {
+            return;
+        }
+        self.learning_theory_rows
+            .fetch_max(after.theory_rows, Ordering::Relaxed);
+        self.learning_bound_rows
+            .fetch_max(after.bound_rows, Ordering::Relaxed);
+        Self::add(&self.learning_evicted, after.evicted - before.evicted);
+        self.learning_peak_bytes.fetch_max(
+            u64::try_from(after.peak_bytes).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+    }
+
+    fn learning_occupancy(&self, coordinator: LearningOccupancy) -> LearningOccupancy {
+        let mut occupancy = coordinator;
+        occupancy.theory_rows = occupancy
+            .theory_rows
+            .max(Self::read(&self.learning_theory_rows));
+        occupancy.bound_rows = occupancy
+            .bound_rows
+            .max(Self::read(&self.learning_bound_rows));
+        occupancy.evicted = occupancy
+            .evicted
+            .saturating_add(Self::read(&self.learning_evicted));
+        occupancy.peak_bytes = occupancy
+            .peak_bytes
+            .max(u128::from(Self::read(&self.learning_peak_bytes)));
+        occupancy
     }
 
     /// Add what a worker measured since its last report.
@@ -932,6 +1063,12 @@ impl ParallelRegions {
                     .saturating_add(Live::read(&live.founded_work)),
                 support_explanations: live
                     .support_explanations(&self.statistics.counts.support_explanations),
+                conflict_explanations: live
+                    .conflict_explanations(self.statistics.counts.conflict_explanations),
+                bound_explanations: live
+                    .bound_explanations(self.statistics.counts.bound_explanations),
+                learning_occupancy: live
+                    .learning_occupancy(self.statistics.counts.learning_occupancy),
                 arithmetic: live.arithmetic(self.statistics.counts.arithmetic),
             },
             producers: self.statistics.producers,
@@ -1849,6 +1986,15 @@ fn publish_counts(shared: &Shared, before: &RegionCounts, after: &RegionCounts) 
     shared
         .live
         .add_support_explanations(&before.support_explanations, &after.support_explanations);
+    shared
+        .live
+        .add_conflict_explanations(&before.conflict_explanations, &after.conflict_explanations);
+    shared
+        .live
+        .add_bound_explanations(&before.bound_explanations, &after.bound_explanations);
+    shared
+        .live
+        .add_learning_occupancy(&before.learning_occupancy, &after.learning_occupancy);
 }
 
 /// What a worker takes: a region of the candidate tree, or a region of a

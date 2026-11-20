@@ -72,7 +72,7 @@ mod counters;
 mod extrema;
 mod founded;
 mod ledger;
-pub use ledger::{ConflictCore, LearningLimits, LearningOwner, LearningStore};
+pub use ledger::{ConflictCore, LearningClass, LearningLimits, LearningOwner, LearningStore};
 mod generators;
 pub use generators::{
     GeneratorOrder, GeneratorOrderAttempt, GeneratorOrderError, GeneratorOrderLimits,
@@ -149,8 +149,21 @@ impl<'a> OriginalSubject<'a> {
     /// so every row it learns belongs to the owner's class.
     #[must_use]
     pub const fn carrier(owner: &'a LearningOwner, producers: Option<&'a Producers>) -> Self {
+        Self::carrier_for(owner, &owner.theory, producers)
+    }
+
+    /// A carrier that matches and captures `owner`'s class while reading
+    /// `theory`. The theory-class owner reads its own theory; a bound-class
+    /// owner reads the bound restriction, which must use the original
+    /// semantic atom index.
+    #[must_use]
+    pub const fn carrier_for(
+        owner: &'a LearningOwner,
+        theory: &'a Theory,
+        producers: Option<&'a Producers>,
+    ) -> Self {
         Self {
-            theory: &owner.theory,
+            theory,
             producers,
             choices: &NO_CHOICES,
             generator_order: None,
@@ -589,6 +602,36 @@ pub struct ConflictLearningStatistics {
     pub shrunk: u64,
 }
 
+/// Capture and retention counts of the objective-bound source.
+/// Matching hits of those rows still use [`SupportExplanationStatistics`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct BoundLearningStatistics {
+    /// Bound-carrier refutations for which a bound capture was attempted.
+    pub attempts: u64,
+    /// Distinct bound rows retained by the worker.
+    pub certified: u64,
+    /// Attempts that supplied no new bounded bound-class row.
+    pub declined: u64,
+    /// Decided literals dropped by minimization, across attempts.
+    pub shrunk: u64,
+}
+
+/// Worker-ledger occupancy of the two learning classes, reported as
+/// statistics, not as a receipt.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct LearningOccupancy {
+    /// Theory-class rows on the worker at the snapshot.
+    pub theory_rows: u64,
+    /// Bound-class rows on the worker at the snapshot.
+    pub bound_rows: u64,
+    /// Rows evicted from either class ledger over this worker's life.
+    pub evicted: u64,
+    /// Peak retained-plus-capture bytes of either class ledger on this worker.
+    pub peak_bytes: u128,
+}
+
 /// The work one narrowing charged.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -604,6 +647,10 @@ pub struct NarrowingStatistics {
     pub support_explanations: SupportExplanationStatistics,
     /// Refuted-region conflict capture, not included in support explanations.
     pub conflict_explanations: ConflictLearningStatistics,
+    /// Objective-bound capture, not included in support explanations.
+    pub bound_explanations: BoundLearningStatistics,
+    /// Occupancy of this worker's theory-class and bound-class ledgers.
+    pub learning_occupancy: LearningOccupancy,
     /// Propagation events: nodes and atoms learned and their neighbours
     /// revisited, atoms whose support was rechecked, and threshold rows whose
     /// residual divisibility or changed requirements were checked.
@@ -1606,7 +1653,13 @@ impl Narrower {
         });
         work.refund();
         statistics.work = work.charged() - before;
-        statistics.support_explanations.peak_bytes = scratch.learning.explanations.peak_bytes();
+        statistics.support_explanations.peak_bytes = scratch.learning_peak_bytes();
+        statistics.learning_occupancy = LearningOccupancy {
+            theory_rows: scratch.learned_rows() as u64,
+            bound_rows: scratch.bound_rows() as u64,
+            evicted: scratch.learned_evictions() + scratch.bound_evictions(),
+            peak_bytes: scratch.learning_peak_bytes(),
+        };
         NarrowingAttempt {
             result,
             statistics,
@@ -1638,12 +1691,13 @@ impl Narrower {
                 .founded
                 .begin_local(subject.theory(), known.founded_closed, work)?;
         }
-        // Only the owner's carrier matches and captures rows. Restriction,
-        // bound and frozen visits suspend the ledger without clearing it.
+        // Only the owner's carrier matches and captures rows. Restriction
+        // and frozen visits suspend the ledger without clearing it. A bound
+        // visit swaps in the bound-class ledger first, then prepares it.
         scratch.common.matching = subject.learning().is_some();
         if let Some(owner) = subject.learning() {
-            scratch.learning.explanations.prepare(owner);
-            scratch.learning.explanations.begin_narrowing();
+            scratch.learning.current().prepare(owner);
+            scratch.learning.current().begin_narrowing();
             scratch.common.match_dirty = true;
             scratch.learning.decided.clear();
         }
@@ -1676,10 +1730,11 @@ impl Narrower {
         Ok(Narrowing::Fixed { changed })
     }
 
-    /// Record a theory-class conflict row from a carrier region this closure
+    /// Record a conflict or bound row from a carrier region this closure
     /// just refuted, when no founded or already-matching row explained it.
-    /// Restriction, bound and frozen subjects never reach this: they are not
-    /// carriers. Minimization probes set `skip_capture` and are ignored.
+    /// Restriction and frozen subjects never reach this: they are not
+    /// carriers. A bound carrier records a bound-class row. Minimization
+    /// probes set `skip_capture` and are ignored.
     fn remember_refuted_conflict<C: ReadingClass, Q: Quota + ?Sized>(
         &self,
         subject: Context<'_, C>,
@@ -1699,7 +1754,12 @@ impl Narrower {
         {
             return Ok(());
         }
-        if !scratch.learning.explanations.can_capture_conflict() {
+        let bound = subject.learning().is_some_and(LearningOwner::is_bound);
+        if bound {
+            if !scratch.learning.current().can_capture_bound() {
+                return Ok(());
+            }
+        } else if !scratch.learning.current().can_capture_conflict() {
             return Ok(());
         }
         let mut decided: Vec<(usize, bool)> = region.decided().collect();
@@ -1717,11 +1777,23 @@ impl Narrower {
                     self.minimize_conflict_core(original, decided, scratch, work, statistics)?;
             }
         }
-        scratch.learning.explanations.capture_conflict(
-            &decided,
-            work,
-            &mut statistics.conflict_explanations,
-        )
+        let owner = subject.learning().expect("carrier already checked");
+        if owner.is_bound() {
+            if !scratch.learning.current().can_capture_bound() {
+                return Ok(());
+            }
+            scratch.learning.current().capture_bound(
+                &decided,
+                work,
+                &mut statistics.bound_explanations,
+            )
+        } else {
+            scratch.learning.current().capture_conflict(
+                &decided,
+                work,
+                &mut statistics.conflict_explanations,
+            )
+        }
     }
 
     /// Drop decided literals that a fresh carrier narrowing still refutes
@@ -1778,7 +1850,12 @@ impl Narrower {
         })();
         scratch.learning.skip_capture = false;
         result?;
-        statistics.conflict_explanations.shrunk += (before - decided.len()) as u64;
+        let dropped = (before - decided.len()) as u64;
+        if subject.learning.is_some_and(LearningOwner::is_bound) {
+            statistics.bound_explanations.shrunk += dropped;
+        } else {
+            statistics.conflict_explanations.shrunk += dropped;
+        }
         Ok(decided)
     }
 
@@ -1804,8 +1881,8 @@ impl Narrower {
         }
         scratch.common.matching = subject.learning().is_some();
         if let Some(owner) = subject.learning() {
-            scratch.learning.explanations.prepare(owner);
-            scratch.learning.explanations.begin_narrowing();
+            scratch.learning.current().prepare(owner);
+            scratch.learning.current().begin_narrowing();
             scratch.common.match_dirty = true;
             scratch.learning.decided.clear();
         }
@@ -1999,10 +2076,26 @@ struct LearningScratch {
     decided: Vec<usize>,
     /// Row positions one matching step tests.
     match_rows: Vec<usize>,
-    /// When true, a contradicted carrier does not capture a founded or
-    /// conflict row. Minimization probes set this so trial regions do not
-    /// learn from their own refutation.
+    /// When true, a contradicted carrier does not capture a founded,
+    /// conflict or bound row. Minimization probes set this so trial
+    /// regions do not learn from their own refutation.
     skip_capture: bool,
+    /// Bound-class rows, distinct from `explanations` so a bound visit
+    /// cannot adopt a different class over the theory-class tier.
+    bound: ledger::Ledger,
+    /// When true, matching and conflict/bound capture use `bound`.
+    /// Founded capture always uses `explanations`.
+    using_bound: bool,
+}
+
+impl LearningScratch {
+    fn current(&mut self) -> &mut ledger::Ledger {
+        if self.using_bound {
+            &mut self.bound
+        } else {
+            &mut self.explanations
+        }
+    }
 }
 
 impl NarrowingScratch {
@@ -2025,6 +2118,7 @@ impl NarrowingScratch {
             + self.common.founded.retained_bytes()
             + self.arithmetic.allocated_bytes()
             + self.learning.explanations.retained_bytes()
+            + self.learning.bound.retained_bytes()
             + (self.learning.decided.capacity() + self.learning.match_rows.capacity()) as u128
                 * size_of::<usize>() as u128
     }
@@ -2082,6 +2176,75 @@ impl NarrowingScratch {
     #[must_use]
     pub fn learned_evictions(&self) -> u64 {
         self.learning.explanations.evicted()
+    }
+
+    /// Seed the bound-class ledger from `store` under `owner`.
+    pub fn seed_bound_learning<Q: Quota + ?Sized>(
+        &mut self,
+        owner: &LearningOwner,
+        store: &mut LearningStore,
+        work: &mut Meter<'_, Q>,
+    ) -> LearningAttempt<Failure<Q::Error>> {
+        let before = work.charged();
+        self.learning.bound.prepare(owner);
+        self.common.match_dirty = true;
+        let result = self.learning.bound.seed(store, work);
+        work.refund();
+        LearningAttempt {
+            result,
+            work: work.charged() - before,
+        }
+    }
+
+    /// Deliver the bound-class ledger to `store` under `owner`.
+    pub fn deliver_bound_learning<Q: Quota + ?Sized>(
+        &mut self,
+        owner: &LearningOwner,
+        store: &mut LearningStore,
+        work: &mut Meter<'_, Q>,
+    ) -> LearningAttempt<Failure<Q::Error>> {
+        let before = work.charged();
+        self.learning.bound.prepare(owner);
+        let result = self.learning.bound.deliver(store, work);
+        work.refund();
+        LearningAttempt {
+            result,
+            work: work.charged() - before,
+        }
+    }
+
+    /// Rows the bound-class ledger holds.
+    #[must_use]
+    pub fn bound_rows(&self) -> usize {
+        self.learning.bound.len()
+    }
+
+    /// Bound-class evictions over this scratch's life.
+    #[must_use]
+    pub fn bound_evictions(&self) -> u64 {
+        self.learning.bound.evicted()
+    }
+
+    /// Peak bytes of either class ledger on this scratch, including capture
+    /// workspace already recorded on each ledger.
+    #[must_use]
+    pub fn learning_peak_bytes(&self) -> u128 {
+        self.learning
+            .explanations
+            .peak_bytes()
+            .max(self.learning.bound.peak_bytes())
+    }
+
+    /// Direct matching and conflict/bound capture at the bound-class ledger
+    /// until [`Self::unbind_bound_ledger`]. Founded capture stays on the
+    /// theory-class ledger.
+    pub fn bind_bound_ledger(&mut self) {
+        self.learning.using_bound = true;
+    }
+
+    /// Restore theory-class matching and capture after a bound visit.
+    pub fn unbind_bound_ledger(&mut self) {
+        self.learning.using_bound = false;
     }
 }
 
@@ -2374,7 +2537,7 @@ impl<W: Count, C: ReadingClass> NarrowingState<'_, W, C> {
             && self.lists.matching
         {
             self.lists.match_dirty = true;
-            if learning.explanations.records_decisions() {
+            if learning.current().records_decisions() {
                 learning.decided.push(atom);
             }
         }
@@ -2723,7 +2886,7 @@ impl<W: Count, C: ReadingClass> NarrowingState<'_, W, C> {
         self.lists.match_dirty = false;
         let mut rows = std::mem::take(&mut learning.match_rows);
         let decided = std::mem::take(&mut learning.decided);
-        let gathered = learning.explanations.candidates(&decided, &mut rows, work);
+        let gathered = learning.current().candidates(&decided, &mut rows, work);
         learning.decided = decided;
         learning.decided.clear();
         let result =
@@ -2749,7 +2912,7 @@ impl<W: Count, C: ReadingClass> NarrowingState<'_, W, C> {
                 .learning
                 .state_mut()
                 .expect("matching has a candidate capability")
-                .explanations
+                .current()
                 .deduction(row, &self.known.atom_sure, &self.known.atom_never, work)?
             {
                 ledger::Deduction::None => continue,
@@ -2758,7 +2921,7 @@ impl<W: Count, C: ReadingClass> NarrowingState<'_, W, C> {
                     self.learning
                         .state_mut()
                         .expect("matching has a candidate capability")
-                        .explanations
+                        .current()
                         .hit(row);
                     counts.forced += 1;
                     counts.matched += 1;
@@ -2776,7 +2939,7 @@ impl<W: Count, C: ReadingClass> NarrowingState<'_, W, C> {
                 .learning
                 .state_mut()
                 .expect("matching has a candidate capability")
-                .explanations
+                .current()
                 .next_publication_output(
                     row,
                     &mut outputs,
@@ -2794,7 +2957,7 @@ impl<W: Count, C: ReadingClass> NarrowingState<'_, W, C> {
                     self.learning
                         .state_mut()
                         .expect("matching has a candidate capability")
-                        .explanations
+                        .current()
                         .hit(row);
                     counts.matched += 1;
                     counts.refuted += 1;
@@ -2812,7 +2975,7 @@ impl<W: Count, C: ReadingClass> NarrowingState<'_, W, C> {
                 self.learning
                     .state_mut()
                     .expect("matching has a candidate capability")
-                    .explanations
+                    .current()
                     .hit(row);
                 counts.matched += 1;
             }

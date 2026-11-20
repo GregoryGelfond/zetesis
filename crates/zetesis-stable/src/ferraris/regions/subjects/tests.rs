@@ -94,6 +94,7 @@ fn absent_late_owners_create_no_subject() {
         original: OriginalSubject::new(&theory, None),
         narrower: &narrower,
         arithmetic: None,
+        bound_learning: None,
     };
     assert!(late(&reading, None).iter().all(Option::is_none));
 }
@@ -106,6 +107,7 @@ fn prepared_arithmetic_uses_the_declared_late_order() {
         original: OriginalSubject::new(&theory, None),
         narrower: &narrower,
         arithmetic: Some(&prepared),
+        bound_learning: None,
     };
     let subjects = late(&reading, None);
     assert!(matches!(subjects[0], Some(CandidateSubject::Parity(_))));

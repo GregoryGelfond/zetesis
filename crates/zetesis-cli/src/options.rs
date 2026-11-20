@@ -143,6 +143,19 @@ pub struct Options {
     /// allowance. Parallel answer order can vary; the answer-set family does not.
     #[arg(long = "threads", visible_alias = "workers", value_name = "auto|N", value_parser = zetesis_backend::parse_threads, default_value = "auto")]
     pub workers: NonZeroUsize,
+    /// Disable every learned-row source. Answers are unchanged; only pruning
+    /// is lost. Measurement use.
+    #[arg(long = "disable-learning", hide = true)]
+    pub disable_learning: bool,
+    /// How a refuted region's decided literals are reduced to a core.
+    /// Measurement use; the default records a full decided-literal core.
+    #[arg(
+        long = "learning-conflict-core",
+        value_parser = conflict_core_parser(),
+        default_value = "full",
+        hide = true
+    )]
+    pub learning_conflict_core: zetesis_ferraris::ConflictCore,
 }
 
 /// The full help's account of `--backend`: every value with its meaning, in the
@@ -282,6 +295,8 @@ impl From<&Options> for crate::SolveConfig {
             oracle: options.oracle,
             stats: options.stats,
             models: options.models,
+            learning: !options.disable_learning,
+            conflict_core: options.learning_conflict_core,
             ..options.resources().solve_config()
         }
     }
@@ -323,6 +338,21 @@ fn formula_joins_parser() -> impl TypedValueParser<Value = zetesis_themelios::Jo
             JoinStrategy::Table,
             PossibleValue::new("table")
                 .help("Reuse finite-table masks over completed possible support."),
+        ),
+    ])
+}
+
+fn conflict_core_parser() -> impl TypedValueParser<Value = zetesis_ferraris::ConflictCore> {
+    use zetesis_ferraris::ConflictCore;
+    policy_parser([
+        (
+            ConflictCore::Full,
+            PossibleValue::new("full").help("Record every decided literal of a refuted region."),
+        ),
+        (
+            ConflictCore::Minimized,
+            PossibleValue::new("minimized")
+                .help("Drop decided literals a fresh carrier narrowing still refutes without."),
         ),
     ])
 }

@@ -200,6 +200,10 @@ fn parsed_type(argument: &Arg) -> &'static str {
             TypeId::of::<zetesis_themelios::JoinStrategy>(),
             "JoinStrategy",
         ),
+        (
+            TypeId::of::<zetesis_ferraris::ConflictCore>(),
+            "ConflictCore",
+        ),
     ]
     .into_iter()
     .find_map(|(type_id, name)| (parsed == type_id).then_some(name))

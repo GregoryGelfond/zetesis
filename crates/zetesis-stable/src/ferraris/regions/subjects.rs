@@ -4,8 +4,8 @@ use std::cell::Cell;
 
 use zetesis_algebra::{AnswerSetsSought, Countermodels, Failure, Meter};
 use zetesis_ferraris::{
-    ArithmeticAttempt, CardinalitySystem, FrozenPreparation, FrozenSubject, Narrower,
-    NarrowingScratch, OriginalSubject, ParitySystem, RootPreparation, Theory,
+    ArithmeticAttempt, CardinalitySystem, FrozenPreparation, FrozenSubject, LearningOwner,
+    Narrower, NarrowingScratch, OriginalSubject, ParitySystem, RootPreparation, Theory,
 };
 
 use super::super::conditions::{Bound, CandidateKnowledge, CountermodelKnowledge};
@@ -57,7 +57,10 @@ pub(super) enum CandidateSubject<'theory, 'check, 'factory, 'state> {
         theory: &'theory Theory,
         narrower: &'theory Narrower,
     },
-    Bound(&'theory Bound),
+    Bound {
+        bound: &'theory Bound,
+        learning: Option<&'theory LearningOwner>,
+    },
     Parity(&'theory ParitySystem),
     Cardinality(&'theory CardinalitySystem),
     Streamed {
@@ -92,13 +95,13 @@ impl Subject<AnswerSetsSought> for CandidateSubject<'_, '_, '_, '_> {
                 *narrower,
                 knowledge.permanent(*index, narrower),
             ),
-            Self::Bound(bound) => {
+            Self::Bound { bound, learning } => {
                 let (theory, narrower) = bound.index.as_ref();
-                (
-                    OriginalSubject::new(theory, None),
-                    narrower,
-                    knowledge.bound(bound),
-                )
+                let reading = match *learning {
+                    Some(owner) => OriginalSubject::carrier_for(owner, theory, None),
+                    None => OriginalSubject::new(theory, None),
+                };
+                (reading, narrower, knowledge.bound(bound))
             }
             Self::Parity(system) => {
                 return arithmetic(
@@ -142,9 +145,22 @@ impl Subject<AnswerSetsSought> for CandidateSubject<'_, '_, '_, '_> {
             Ok(known) => known,
             Err(error) => return SubjectAttempt::failed(error),
         };
+        let bound_class = matches!(
+            self,
+            Self::Bound {
+                learning: Some(_),
+                ..
+            }
+        );
+        if bound_class {
+            scratch.bind_bound_ledger();
+        }
         let attempt = BudgetQuota::narrow(context.budget, |cancellation, meter| {
             narrower.propagate_known_reserved(reading, region, known, scratch, cancellation, meter)
         });
+        if bound_class {
+            scratch.unbind_bound_ledger();
+        }
         SubjectAttempt::from_narrowing(&attempt)
     }
 }

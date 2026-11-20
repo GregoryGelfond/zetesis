@@ -63,6 +63,14 @@ command zetesis | An answer-set solver
       index=None action=Set num_args=Some(1) value_names=Some(["auto|N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=[]
       help "Host threads; auto uses available parallelism, falling back to one"
       long "Host threads; auto uses available parallelism, falling back to one.\n\nA hard cap: at most this many solver threads run at once, the main thread included, across grounding, search and completion. A GPU backend may add its device-discovery thread and the driver's threads.\n\nThe shared policy assigns worker and scratch capacity within the memory allowance. Parallel answer order can vary; the answer-set family does not."
+    arg disable_learning long=Some("disable-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["DISABLE_LEARNING"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
+      help "Disable every learned-row source. Answers are unchanged; only pruning is lost. Measurement use"
+      long ""
+    arg learning_conflict_core long=Some("learning-conflict-core") short=None aliases=None values=["full", "minimized"] defaults=["full"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(1) value_names=Some(["LEARNING_CONFLICT_CORE"]) delimiter=None terminator=None parser=ConflictCore flags=[] conflicts=[]
+      help "How a refuted region's decided literals are reduced to a core. Measurement use; the default records a full decided-literal core"
+      long ""
     arg help long=Some("help") short=Some('h') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
       index=None action=HelpShort num_args=Some(0) value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show everyday solving options"
@@ -384,6 +392,14 @@ command zetesis | An answer-set solver
       index=None action=Set num_args=Some(1) value_names=Some(["auto|N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=[]
       help "Host threads; auto uses available parallelism, falling back to one"
       long "Host threads; auto uses available parallelism, falling back to one.\n\nA hard cap: at most this many solver threads run at once, the main thread included, across grounding, search and completion. A GPU backend may add its device-discovery thread and the driver's threads.\n\nThe shared policy assigns worker and scratch capacity within the memory allowance. Parallel answer order can vary; the answer-set family does not."
+    arg disable_learning long=Some("disable-learning") short=None aliases=None values=[] defaults=["false"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["DISABLE_LEARNING"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
+      help "Disable every learned-row source. Answers are unchanged; only pruning is lost. Measurement use"
+      long ""
+    arg learning_conflict_core long=Some("learning-conflict-core") short=None aliases=None values=["full", "minimized"] defaults=["full"] hidden=true short_help_hidden=false heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(1) value_names=Some(["LEARNING_CONFLICT_CORE"]) delimiter=None terminator=None parser=ConflictCore flags=[] conflicts=[]
+      help "How a refuted region's decided literals are reduced to a core. Measurement use; the default records a full decided-literal core"
+      long ""
     arg help long=Some("help") short=Some('h') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
       index=None action=HelpShort num_args=Some(0) value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show everyday solving options"
