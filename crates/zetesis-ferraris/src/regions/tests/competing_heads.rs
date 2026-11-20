@@ -7,7 +7,7 @@ use crate::{
     NarrowingScratch, Node, OriginalSubject, Producers, Region, RegionLimits, Theory,
 };
 
-use super::super::{Closure, Context, Meter, SplitSelection, Step};
+use super::super::{Context, Meter, NarrowingState, SplitSelection, Step};
 use super::{
     compact_mut,
     counters::{native, same_knowledge},
@@ -294,7 +294,7 @@ fn multiple_heads_keep_ordered_competitor_wakeups() {
     let mut knowledge = index.knowledge();
     let mut lists = NarrowingScratch::default();
     lists.common.prepare(theory.atom_count());
-    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
         lists: &mut lists.common,
         learning: &mut lists.learning,

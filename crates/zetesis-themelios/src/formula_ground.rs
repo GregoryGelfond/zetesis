@@ -25,7 +25,7 @@ mod nodes;
 mod pairwise_exclusions;
 mod grouped_exclusions;
 mod producer;
-mod projection;
+mod projective;
 mod rejected;
 pub(crate) use rejected::validate_atom_keys;
 mod retained;
@@ -67,8 +67,8 @@ use crate::formula::{Compiled, ceiling};
 use crate::formula_assignment::{Contributions, Kind, Numeric, Reduced, Sides};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadLiteral,
-    HeadMeasure, HeadOperand, LiteralIr, Projection, RuleIr,
+    AggregateGuard, AggregateIr, AggregateKey, AnonymousWitnesses, ChoiceIr, HeadElementKey,
+    HeadIr, HeadLiteral, HeadMeasure, HeadOperand, LiteralIr, RuleIr,
 };
 use crate::formula_support::{self, Buffer, Computation, Counters, Join, Support, TermTable};
 use crate::grounding_observer::{Event, Profile};
@@ -262,7 +262,7 @@ fn ground_with_schedule(
 /// hybrid construction retains them with the unmaterialized constraint templates.
 struct Instantiation {
     expansion: crate::ExpansionUsage,
-    projection: crate::PreparedProjection,
+    projection: crate::ProjectiveDomain,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<ProgramSite>>,
@@ -454,7 +454,7 @@ pub(crate) fn complete_support_with_executor<'source>(
 /// Completed support may grow canonical terms during emission. Only owned
 /// selections and the same cumulative account cross into publication.
 struct PendingEmission {
-    projection: projection::PendingProjection,
+    projection: projective::PendingProjectiveDomain,
     objectives: objectives::PendingProgram,
     emission: Emission<formula_support::SourceSelection>,
     warnings: Warnings,
@@ -585,7 +585,7 @@ fn emit<'source>(
             execution.executor(),
         )
     })?;
-    let projection = projection::prepare(
+    let projection = projective::prepare(
         prepared,
         queries,
         computation,
@@ -648,7 +648,7 @@ struct PublishedEmission {
     streamed: Option<formula_support::StreamedSupport>,
     /// The open catalog, returned only to a retained schedule.
     catalog: Option<formula_support::CompletedCatalog>,
-    projection: crate::PreparedProjection,
+    projection: crate::ProjectiveDomain,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<ProgramSite>>,
@@ -2016,10 +2016,10 @@ impl<'source> Builder<'_, '_, 'source> {
                     location,
                 )?;
                 result = self.and(result, conditional, location)?;
-            } else if let LiteralIr::ProjectedAtom(negation, _) = literal {
-                let mut projected = self.project(
+            } else if let LiteralIr::AnonymousAtom(negation, _) = literal {
+                let mut projected = self.anonymous_formula(
                     source_literal.map(|literal| {
-                        let LiteralIr::ProjectedAtom(_, value) = literal else {
+                        let LiteralIr::AnonymousAtom(_, value) = literal else {
                             unreachable!("selected projection")
                         };
                         value
@@ -2037,32 +2037,32 @@ impl<'source> Builder<'_, '_, 'source> {
         }
         Ok(result)
     }
-    pub(super) fn project(
+    pub(super) fn anonymous_formula(
         &mut self,
-        projection: Ir<'_, 'source, Projection>,
+        witnesses: Ir<'_, 'source, AnonymousWitnesses>,
         assignment: &Binding,
         support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
-        match projection.get() {
-            Projection::Arguments { predicate, terms } => {
+        match witnesses.get() {
+            AnonymousWitnesses::Arguments { predicate, terms } => {
                 let predicate = self.computation.static_predicate(
                     *predicate,
                     self.limits,
                     self.counters,
                     location,
                 )?;
-                self.project_arguments(predicate, terms, assignment, support, location)
+                self.anonymous_arguments(predicate, terms, assignment, support, location)
             }
-            Projection::Witnesses {
+            AnonymousWitnesses::Witnesses {
                 atom,
                 bindings: _,
                 variables,
                 inputs,
             } => {
                 let mut rows = Join::local(
-                    projection.map(|projection| {
-                        let Projection::Witnesses { bindings, .. } = projection else {
+                    witnesses.map(|witnesses| {
+                        let AnonymousWitnesses::Witnesses { bindings, .. } = witnesses else {
                             unreachable!("witness projection")
                         };
                         bindings.as_slice()
@@ -2096,7 +2096,7 @@ impl<'source> Builder<'_, '_, 'source> {
         }
     }
 
-    fn project_arguments(
+    fn anonymous_arguments(
         &mut self,
         predicate: zetesis_core::catalog::PredicateRef<'_>,
         terms: &[Option<components::Term>],

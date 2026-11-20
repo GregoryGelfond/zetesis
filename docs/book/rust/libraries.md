@@ -52,7 +52,7 @@ retain the contracts documented in the themelios manual.
 | Key values by canonical atom identity per row scope | `catalog::AtomIdentityMap` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Construct derived terms over immutable input owners | `catalog::{DerivedTerms, DeclaredConstructor}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Look up complete typed atoms | `Model::lookup`, `AtomIndex`, `CatalogIndex`, `AtomLookup`, `AtomPattern::key`, `BindingView` | [Checked lookup example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#checked-atom-lookup-probe) |
-| Build an append-only atom catalog | `atom_interner::{AtomInterner, CommittedAtoms, AtomAppender}` | [Catalog construction](models.md#building-a-catalog-during-grounding) |
+| Build an append-only atom catalog | `atom_registry::{AtomRegistry, CommittedAtoms, AtomAppender}` | [Catalog construction](models.md#building-a-catalog-during-grounding) |
 | Intern content once and order identities by one comparison | `zetesis_core::intern::{Interner, ContentOrder, Id, Handle}` | [Interner module](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/intern.rs), [content-order law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ContentOrderInterning.lean) |
 | Select equality matches in one relation | `zetesis_core::relation::{Relation, Query, Selection, Mask}` | [Core relation API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs) |
 | Restrict rows and project finite domains | `zetesis_core::table::{Table, Domain, Selection}` | [Finite tables](finite-tables.md) |
@@ -248,7 +248,7 @@ alongside the callback. See [domain observation](source.md#optional-numeric-anal
 Replace `zetesis_wgpu::{GpuOracle, GpuTightOracle, GpuFormulaOracle}::new_metal`
 with `new_selected(options, GpuSelection { api: GpuApi::Metal })`.
 For `GpuFormulaOracle::new_metal_with_projection`, use
-`new_selected_with_projection` with the same selection and projection.
+`new_selected_with_node_kernel` with the same selection and node kernel.
 `zetesis_core::catalog::CatalogRead::constructor_of_predicate` is removed.
 
 The former `zetesis-cpu` closure helpers `CONSTRAINT_HEAD` and `InstanceAtomIter`

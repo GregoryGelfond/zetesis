@@ -344,8 +344,8 @@ those instructions rather than interpreting the plan as new program semantics.
 | Formula preparation | `formula`, `formula::preparation`, `formula_ir` | Public owned preparation, scoped rule/objective IR and cumulative budgets |
 | Canonical input inspection | `program_limits`, `formula_program_check` | Bounded borrowed traversal before relational compilation or formula normalization |
 | Counted occurrences and alternatives | `formula_ir`, `formula_pool` | Canonical counted entries, bounded pool alternatives and expanded Boolean identities |
-| Upstream analysis | `formula_analysis`, `formula_conditional_projection` | Bounded pool-free input and an explicit analysis basis |
-| Value and pattern lowering | `formula_value_ir`, `formula_range_ir`, `formula_pattern_ir`, `formula_projection_ir` | Shared bounded value/range fold, structural captures and anonymous negative projection |
+| Upstream analysis | `formula_analysis`, `formula_conditional_unpool` | Bounded pool-free input and an explicit analysis basis |
+| Value and pattern lowering | `formula_value_ir`, `formula_range_ir`, `formula_pattern_ir`, `formula_anonymous_ir` | Shared bounded value/range fold, structural captures and anonymous negative projection |
 | Scalar bindings | `formula_binding_ir`, `formula_binding_guard`, `formula_binding_plan` | Safe producers, finite envelopes and dependency order; original guards remain |
 | Aggregate bindings | `formula_aggregate_ir`, `formula_assignment_ir`, `formula_assignment_plan` | Element scopes, assignment applicability and required/produced inputs |
 | Binding execution | `formula_binding_cursor`, `formula_assignment` | Bounded scalar/range and aggregate proposals over complete relational rows |

@@ -1,10 +1,10 @@
 //! Checked compiler metadata over already admitted scalar occurrences.
 
 use super::{
-    Admission, CatalogRead, Counters, Event, Filter, FilterRef, FormulaFailure, FormulaLimits,
-    FormulaResource, Pattern, PatternRef, Predicate, PredicateRef, ProgramSite, StorageLease,
-    TemplateCatalogFailure, TemplateComponentsRef, TemplateTerm, Term, atom_failure, ceiling,
-    failure, missing, owner_limits, read_failure, remaining_u128, size_of,
+    Admission, CatalogRead, Counters, Event, FilterCoordinate, FilterRef, FormulaFailure,
+    FormulaLimits, FormulaResource, Pattern, PatternRef, Predicate, PredicateRef, ProgramSite,
+    StorageLease, TemplateCatalogFailure, TemplateComponentsRef, TemplateTerm, Term, atom_failure,
+    ceiling, failure, missing, owner_limits, read_failure, remaining_u128, size_of,
 };
 
 impl Admission<'_> {
@@ -142,7 +142,7 @@ impl Admission<'_> {
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
-    ) -> Result<Filter, FormulaFailure> {
+    ) -> Result<FilterCoordinate, FormulaFailure> {
         self.append(
             limits,
             counters,
@@ -156,7 +156,7 @@ impl Admission<'_> {
                 let filter = FilterRef::from_parts(equal, left, right);
                 components
                     .append_filter_with(read, filter, allowance, || counters.work(limits, location))
-                    .map(Filter)
+                    .map(FilterCoordinate)
             },
         )
     }
@@ -263,7 +263,7 @@ impl Pattern {
         self.resolve(view).ok_or_else(|| missing(location))
     }
 }
-impl Filter {
+impl FilterCoordinate {
     pub(crate) fn get<'a>(
         self,
         view: TemplateComponentsRef<'a>,

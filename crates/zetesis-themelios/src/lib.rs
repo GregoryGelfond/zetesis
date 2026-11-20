@@ -58,7 +58,7 @@ mod formula_choice_ir;
 mod formula_conditional;
 mod formula_conditional_head_ir;
 mod formula_conditional_ir;
-mod formula_conditional_projection;
+mod formula_conditional_unpool;
 mod formula_consequent_ir;
 mod formula_factor;
 mod formula_facts;
@@ -74,7 +74,7 @@ mod formula_pattern_ir;
 mod formula_pool;
 mod formula_program_check;
 mod formula_project_ir;
-mod formula_projection_ir;
+mod formula_anonymous_ir;
 mod formula_raise;
 mod formula_range_ir;
 mod formula_source;
@@ -162,8 +162,8 @@ pub use grounding_options::{DomainLimits, DomainStop, GroundingOptions, JoinStra
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, Directives, LocatedDirective,
     MetadataError, MetadataFeature, MetadataLimits, MetadataResource, MetadataStorageError,
-    MetadataStorageLimits, OutputSelection, PreparedProjection, PreparedSelection,
-    ProjectSelection, Signatures, SourceDirective, SourceMetadata,
+    MetadataStorageLimits, OutputSelection, PreparedSelection, ProjectDirectives, ProjectiveDomain,
+    Signatures, SourceDirective, SourceMetadata,
 };
 
 /// Explicit host admission ceilings. Zero means that no resource of that kind

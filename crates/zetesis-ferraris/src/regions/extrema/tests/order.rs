@@ -1,7 +1,9 @@
 //! Ordered cut implications retain the full scan's effects, including masks
 //! and contradictory targets, while skipping the unrelated end of a column.
 
-use crate::regions::{ChainOperands, Closure, Known, Meter, Narrower, NarrowingScratch, Step};
+use crate::regions::{
+    ChainOperands, Known, Meter, Narrower, NarrowingScratch, NarrowingState, Step,
+};
 use crate::test_support::SinglePermits;
 use crate::{ExtremumCutRule, Theory};
 use zetesis_algebra::Stop;
@@ -40,7 +42,7 @@ struct Attempt {
 /// The former complete column scan is an independent effects oracle: it never
 /// calls the new range selection and retains both original frozen-mask gates.
 fn scan<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
-    closure: &mut Closure<'_, u16>,
+    closure: &mut NarrowingState<'_, u16>,
     index: &Narrower,
     chain: usize,
     frozen: Option<&[bool]>,
@@ -84,7 +86,7 @@ fn attempt<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
 ) -> Attempt {
     let mut known = index.root_known::<u16>();
     let mut lists = NarrowingScratch::default();
-    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+    let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
         lists: &mut lists.common,
         learning: &mut lists.learning,
@@ -257,7 +259,7 @@ fn interrupted_ordering_retains_only_a_charged_effect_prefix() {
                         assert!(complete.events.starts_with(&partial.events));
                         let mut expected = index.root_known::<u16>();
                         let mut scratch = NarrowingScratch::default();
-                        let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
+                        let mut closure = NarrowingState::<_, zetesis_algebra::AnswerSetsSought> {
                             known: expected.borrow(),
                             lists: &mut scratch.common,
                             learning: &mut scratch.learning,

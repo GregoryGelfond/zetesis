@@ -238,7 +238,7 @@ fn source_consequences_avoid_rejected_core_membership() {
         assert_eq!(statistics.rejected, 0);
         assert_eq!(statistics.pending, 0);
         let search = outcome.countermodel_statistics().unwrap();
-        let regions = search.region_filter.unwrap();
+        let regions = search.constraint_refutation.unwrap();
         // Source consequences exclude the forbidden combinations before they
         // form a region with a true constraint body, or a complete proposal.
         assert_eq!(regions.refuted, 0);
@@ -263,7 +263,7 @@ fn a_refuted_root_establishes_unsatisfiability() {
     assert_eq!(statistics.pending, 0);
     let search = outcome.countermodel_statistics().unwrap();
     assert_eq!(search.candidates, 0);
-    assert_eq!(search.region_filter.unwrap().refuted, 1);
+    assert_eq!(search.constraint_refutation.unwrap().refuted, 1);
 }
 
 #[test]
@@ -646,7 +646,7 @@ fn ordinary_hybrid_checks_a_wide_ready_body() {
     let regions = outcome
         .countermodel_statistics()
         .unwrap()
-        .region_filter
+        .constraint_refutation
         .unwrap();
     assert!(regions.checks > 0);
     assert!(regions.refuted > 0);

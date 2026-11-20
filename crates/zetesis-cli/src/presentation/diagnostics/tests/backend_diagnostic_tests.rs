@@ -51,7 +51,7 @@ fn hybrid_device_metadata_preserves_pending_host_acceptance() {
                 } else {
                     ExecutionObservation::DeviceFormula {
                         adapter,
-                        projection: zetesis_wgpu::GateProjection::Enumerated,
+                        node_kernel: zetesis_wgpu::BinaryNodeKernel::Enumerated,
                         grounder: Grounder::Eager,
                         batch_size: NonZeroUsize::MIN,
                         completion_workers: NonZeroUsize::MIN,

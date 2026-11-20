@@ -489,7 +489,7 @@ impl Execution {
         );
         observations.record(Event::DeviceFormula {
             adapter: oracle.info().metadata(),
-            projection: oracle.projection(),
+            node_kernel: oracle.node_kernel(),
             grounder: options.grounder,
             batch_size: options.batch_size,
             completion_workers: options.completion_workers,

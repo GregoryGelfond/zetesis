@@ -22,12 +22,12 @@
 mod budget;
 mod error;
 mod ferraris;
-mod region_filter;
+mod constraint_refutation;
 mod subject;
 mod streamed_constraints;
 mod timing;
-pub(crate) use region_filter::RegionFeasibility;
-pub use region_filter::RegionFilterStatistics;
+pub use constraint_refutation::ConstraintRefutationStatistics;
+pub(crate) use constraint_refutation::RegionFeasibility;
 pub use streamed_constraints::StreamedConstraints;
 mod checked;
 mod reduct;

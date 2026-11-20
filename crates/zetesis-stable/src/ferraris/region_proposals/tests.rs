@@ -1,4 +1,6 @@
-use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
+use crate::constraint_refutation::tests::injection::{
+    Source as InjectedSource, Worker as InjectedWorker,
+};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -941,8 +943,8 @@ impl InjectedWorker for PanicOnDecidedWorker {
 fn a_panicking_producers_counts_reach_the_merged_receipts() {
     let theory = tautologies(2);
     let mut proposals = proposals(&theory, 1);
-    proposals.set_filter(crate::region_filter::Filter::new(
-        crate::region_filter::Source::Fixture(Arc::new(PanicOnDecided)),
+    proposals.set_refuter(crate::constraint_refutation::ConstraintRefuter::new(
+        crate::constraint_refutation::Source::Fixture(Arc::new(PanicOnDecided)),
     ));
     let before = proposals.statistics().counts.regions;
     let (produced, output) = fill(&mut proposals, &theory, 4);
@@ -984,7 +986,7 @@ impl InjectedWorker for PanickingWorker<'_> {
         _: &Cancellation,
     ) -> Result<RegionFeasibility, Incomplete> {
         if self.0.fail_check {
-            Err(Incomplete::RegionFilter)
+            Err(Incomplete::ConstraintRefutation)
         } else {
             Ok(RegionFeasibility::NotRefuted)
         }
@@ -1010,7 +1012,7 @@ fn panicking_search(fail_check: bool) -> (StableModels, Arc<PanickingFilter>) {
         dropped: AtomicUsize::new(0),
         fail_check,
     });
-    search.set_region_filter(filter.clone()).unwrap();
+    search.set_constraint_refuter(filter.clone()).unwrap();
     (search, filter)
 }
 
@@ -1062,9 +1064,12 @@ fn iterator_drop_contains_checker_panics() {
 #[test]
 fn source_failure_survives_checker_drop_panic() {
     let (mut search, filter) = panicking_search(true);
-    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    assert!(matches!(
+        search.next(),
+        Some(Err(Incomplete::ConstraintRefutation))
+    ));
     assert_eq!(filter.dropped.load(Ordering::SeqCst), 1);
-    assert_eq!(search.statistics().region_filter.unwrap().failed, 1);
+    assert_eq!(search.statistics().constraint_refutation.unwrap().failed, 1);
     assert!(!search.exhausted());
     assert!(search.next().is_none());
 }

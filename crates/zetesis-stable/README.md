@@ -120,8 +120,8 @@ covers the core's stable models that satisfy the constraints. It is the only
 check of its kind: no caller code can refute a region or decide an atom. A
 check that stops records its typed failure, read with
 `StreamedConstraints::take_failure`, and the stream reports
-`Incomplete::RegionFilter`, never exhaustion. A closed or started stream, or a
-second installation, is refused. The `region_filter` statistics count the
+`Incomplete::ConstraintRefutation`, never exhaustion. A closed or started stream, or a
+second installation, is refused. The `constraint_refutation` statistics (JSON `region_filter`) count the
 check's preparations, passes, refutations and failures.
 
 ## Proposing candidates by regions

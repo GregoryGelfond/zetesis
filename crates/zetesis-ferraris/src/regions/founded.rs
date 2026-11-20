@@ -134,10 +134,10 @@ mod components;
 pub(super) mod explanations;
 mod initialization;
 mod local;
-mod projection;
+mod incidences;
 
+use incidences::FoundedIncidences;
 use initialization::Initial;
-use projection::Projection;
 
 #[cfg(test)]
 mod tests;
@@ -171,7 +171,7 @@ pub(super) struct Scratch {
     fact_rows: Vec<usize>,
     /// Original ordered parent and cyclic-head occurrences in the body projection.
     /// Absence keeps original rows for the first pass; exact-owner reuse builds it.
-    projected: Option<Projection>,
+    projected: Option<FoundedIncidences>,
     /// Test-only operation count; no closure authority is stored here.
     #[cfg(test)]
     pub(super) passes: usize,
@@ -188,7 +188,10 @@ impl Scratch {
                 + self.body_nodes.capacity() as u128
                 + self.fact_rows.capacity() as u128)
                 * size_of::<usize>() as u128
-            + self.projected.as_ref().map_or(0, Projection::payload_bytes)
+            + self
+                .projected
+                .as_ref()
+                .map_or(0, FoundedIncidences::payload_bytes)
     }
 
     /// Number of packed original-atom words inspected during publication.
@@ -549,7 +552,7 @@ impl Scratch {
             if self.projected.is_none() {
                 // No partial construction may retain body-projection authority.
                 self.owner = None;
-                let projected = Projection::prepare(theory, index, producers, self, work)?;
+                let projected = FoundedIncidences::prepare(theory, index, producers, self, work)?;
                 // Publish all owner-bound buffers together. A refused build
                 // leaves every previously retained capacity unchanged. During
                 // construction both old membership and this fresh membership

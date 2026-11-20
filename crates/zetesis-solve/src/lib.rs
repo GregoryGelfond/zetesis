@@ -102,7 +102,7 @@ mod terminal_session;
 mod source_session;
 mod session;
 mod world_view;
-mod projection;
+mod projective;
 mod error;
 mod completion;
 mod countermodel;
@@ -126,7 +126,7 @@ pub use model_construction::{ModelConstructionStatistics, ModelConstructionStop}
 pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
 pub use policy::{GpuBatching, Grounder, OptimumSearch, Oracle};
-pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
+pub use projective::{ProjectiveError, ProjectiveLimits, ProjectiveResource, ProjectiveStatistics};
 pub use residual_handovers::sampling::{
     ResidualQuantiles, ResidualRunSamples, ResidualSampleGroup, ResidualSampleMetric,
     ResidualSamplePopulation,

@@ -1,5 +1,9 @@
 //! The interner: one source of identity and order for interned content.
 //!
+//! This generic interner states `ContentOrderInterning.IdOrderEqCompare`. No
+//! grounding owner uses it yet: support atoms are still owned by
+//! [`crate::atom_registry::AtomRegistry`] over the catalog's discovery IDs.
+//!
 //! Content is a string of `u32` words whose meaning belongs to the caller's
 //! [`ContentOrder`]: a term's constructor and argument identities, an atom's
 //! predicate and arguments, or a fact's tuple. The interner decides only
@@ -16,14 +20,14 @@
 //! nothing: memory is allocated only on a miss.
 //!
 //! # Identities
-//! A pending entry has a provisional [`Pending`] coordinate. [`Interner::freeze`]
+//! A pending entry has a provisional [`Pending`] coordinate. [`ContentInterner::freeze`]
 //! ends the generation: it sorts the generation's new content once by the one
 //! comparison and gives it dense final [`Id`]s in that order, after every
 //! earlier generation's identities. The result depends only on the set of
 //! content interned, never on which thread interned it first or in what order.
 //!
 //! # Order
-//! [`Interner::compare`] is the only source of order between identities; [`Id`]
+//! [`ContentInterner::compare`] is the only source of order between identities; [`Id`]
 //! implements neither `Ord` nor `PartialOrd`. Within one generation identity
 //! order equals the content order (the Lean law `IdOrderEqCompare` in
 //! `proofs/Zetesis/ContentOrderInterning.lean`), so `compare` decides such a pair
@@ -33,7 +37,7 @@
 //! Every operation adds deterministic counts to a caller-owned [`Work`]: words
 //! hashed, table probes, content comparisons and words written. A generation's
 //! totals depend only on the multiset of requests, so they are the same at
-//! every worker count; [`freeze`](Interner::freeze) sorts fixed-size blocks and
+//! every worker count; [`freeze`](ContentInterner::freeze) sorts fixed-size blocks and
 //! merges them pairwise, so its comparisons do not depend on the worker count
 //! either.
 
@@ -56,7 +60,7 @@ const SHARD_BITS: u32 = SHARDS.trailing_zeros();
 /// A final identity: dense, in content order within its generation.
 ///
 /// Deliberately not `Ord`: order between identities comes only from
-/// [`Interner::compare`].
+/// [`ContentInterner::compare`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Id(u32);
 
@@ -260,7 +264,7 @@ impl Frozen<'_> {
 }
 
 /// The interner. See the [module documentation](self).
-pub struct Interner<O> {
+pub struct ContentInterner<O> {
     order: O,
     shards: Box<[Shard]>,
     /// Content of every final identity, in identity order.
@@ -270,7 +274,7 @@ pub struct Interner<O> {
     generations: Vec<u32>,
 }
 
-impl<O: ContentOrder> Interner<O> {
+impl<O: ContentOrder> ContentInterner<O> {
     /// An empty interner whose one order is `order`.
     #[must_use]
     pub fn new(order: O) -> Self {
@@ -601,9 +605,9 @@ impl<O: ContentOrder> Interner<O> {
     }
 }
 
-impl<O> std::fmt::Debug for Interner<O> {
+impl<O> std::fmt::Debug for ContentInterner<O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Interner")
+        f.debug_struct("ContentInterner")
             .field("final", &self.arena.len())
             .field("generations", &(self.generations.len() - 1))
             .finish_non_exhaustive()

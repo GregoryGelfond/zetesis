@@ -119,13 +119,13 @@ impl<'source> Builder<'_, '_, 'source> {
                 self.work(location)?;
                 let mut value = match &alternative.operand {
                     ConsequentOperand::Atom(atom) => self.atom(*atom, &row, location)?,
-                    ConsequentOperand::Projection(_) => self.project(
+                    ConsequentOperand::Anonymous(_) => self.anonymous_formula(
                         alternative.map(|alternative| {
-                            let ConsequentOperand::Projection(projection) = &alternative.operand
+                            let ConsequentOperand::Anonymous(witnesses) = &alternative.operand
                             else {
                                 unreachable!("projection operand")
                             };
-                            projection
+                            witnesses
                         }),
                         &row,
                         support,

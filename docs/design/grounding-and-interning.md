@@ -43,7 +43,7 @@ term or atom. A snapshot retains a fixed prefix of sealed storage; later appends
 cannot change its contents. Published occurrence maps share that storage without
 retaining the writer or its lookup indexes.
 
-[`AtomInterner`](../../crates/zetesis-core/src/catalog/interner.rs) adds unique
+[`AtomRegistry`](../../crates/zetesis-core/src/catalog/registry.rs) adds unique
 atom discovery order and typed lookup. Its committed prefix and append capability
 can be borrowed separately during a grounding round. New discoveries become
 visible at the next commit. The typed ordered index stores identities rather

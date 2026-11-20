@@ -879,7 +879,7 @@ impl AdmittedFormula {
     /// Fixed projection domain completed with this exact original source.
     /// It changes only explicitly requested enumeration identity.
     #[must_use]
-    pub fn projection(&self) -> &crate::PreparedProjection {
+    pub fn projective_domain(&self) -> &crate::ProjectiveDomain {
         &self.compiled.projection
     }
 }
@@ -1050,7 +1050,7 @@ impl AdmittedFormulaBundle {
 
     /// Fixed projection domain completed with this original source bundle.
     #[must_use]
-    pub fn projection(&self) -> &crate::PreparedProjection {
+    pub fn projective_domain(&self) -> &crate::ProjectiveDomain {
         &self.compiled.projection
     }
 }
@@ -1115,7 +1115,7 @@ pub(crate) struct RetainedConstraints {
 #[derive(Debug)]
 pub(crate) struct Compiled {
     pub warnings: Vec<crate::FormulaWarning>,
-    pub projection: crate::PreparedProjection,
+    pub projection: crate::ProjectiveDomain,
     pub analysis_basis: AnalysisBasis,
     pub analysis: themelios_analysis::Analysis,
     pub analyzed: crate::formula_analysis::Summary,
@@ -1638,7 +1638,7 @@ fn prepare(
                 catalog: &mut catalog,
                 work: crate::formula_support::GroundingWork::new(limits, counters, location),
             }
-            .prepare(source, metadata.project_selection().clone())
+            .prepare(source, metadata.project_directives().clone())
         },
     )?;
     budget.poll(location)?;

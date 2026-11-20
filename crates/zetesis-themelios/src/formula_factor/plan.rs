@@ -12,7 +12,7 @@ use zetesis_core::PatternRef;
 use super::Component;
 use crate::FormulaFailure;
 use crate::formula_ground::Builder;
-use crate::formula_ir::{Expression, LiteralIr, Operation, Projection, RuleIr};
+use crate::formula_ir::{AnonymousWitnesses, Expression, LiteralIr, Operation, RuleIr};
 use crate::formula_support::{StorageLease, reserve};
 
 pub(super) struct Plan {
@@ -309,8 +309,8 @@ fn scope(
             scratch.arithmetic = true;
             pattern_scope(builder, rule, pattern.atom, scratch)?;
         }
-        LiteralIr::ProjectedAtom(_, projection) => {
-            let Projection::Arguments { terms, .. } = projection else {
+        LiteralIr::AnonymousAtom(_, witnesses) => {
+            let AnonymousWitnesses::Arguments { terms, .. } = witnesses else {
                 return Ok(false);
             };
             for term in terms.iter().flatten() {
@@ -460,11 +460,11 @@ fn copy_literal(
                 pattern.atom,
             )
         }
-        LiteralIr::ProjectedAtom(negation, projection) => {
-            let Projection::Arguments {
+        LiteralIr::AnonymousAtom(negation, witnesses) => {
+            let AnonymousWitnesses::Arguments {
                 predicate,
                 terms: original,
-            } = projection
+            } = witnesses
             else {
                 unreachable!("factor scope excludes structural projections")
             };
@@ -479,9 +479,9 @@ fn copy_literal(
                 builder.work(rule.location)?;
                 terms.push(*term);
             }
-            LiteralIr::ProjectedAtom(
+            LiteralIr::AnonymousAtom(
                 *negation,
-                Projection::Arguments {
+                AnonymousWitnesses::Arguments {
                     predicate: *predicate,
                     terms,
                 },

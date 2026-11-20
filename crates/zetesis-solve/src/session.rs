@@ -56,7 +56,7 @@ enum Prepared<'a> {
 pub struct PreparedInput<'a> {
     input: Prepared<'a>,
     metadata: Option<&'a SourceMetadata>,
-    projection: Option<&'a zetesis_themelios::PreparedProjection>,
+    projection: Option<&'a zetesis_themelios::ProjectiveDomain>,
 }
 impl<'a> PreparedInput<'a> {
     /// Borrow a certified normal source program without materializing formulas.
@@ -101,7 +101,7 @@ impl<'a> PreparedInput<'a> {
         Self {
             input: Prepared::Hybrid(owner),
             metadata: Some(owner.metadata()),
-            projection: Some(owner.projection()),
+            projection: Some(owner.projective_domain()),
         }
     }
 
@@ -123,7 +123,7 @@ impl<'a> PreparedInput<'a> {
                 ),
             }),
             metadata: Some(owner.metadata()),
-            projection: Some(owner.projection()),
+            projection: Some(owner.projective_domain()),
         }
     }
     /// Reuse a formula bundle with its original metadata and objective program.
@@ -144,7 +144,7 @@ impl<'a> PreparedInput<'a> {
                 ),
             }),
             metadata: Some(owner.metadata()),
-            projection: Some(owner.projection()),
+            projection: Some(owner.projective_domain()),
         }
     }
     /// Representation used for strategy compatibility checks.
@@ -166,7 +166,7 @@ impl<'a> PreparedInput<'a> {
     /// Fixed source projection domain compiled with this coherent input.
     /// An absent or implicit domain leaves ordinary full enumeration unchanged.
     #[must_use]
-    pub const fn projection(self) -> Option<&'a zetesis_themelios::PreparedProjection> {
+    pub const fn projective_domain(self) -> Option<&'a zetesis_themelios::ProjectiveDomain> {
         self.projection
     }
     pub(crate) fn original(self) -> Original {
@@ -328,7 +328,7 @@ pub struct SessionBuilder<'a> {
     selection: AnswerSelection,
     resources: ExecutionResources,
     measurements: Option<crate::SolveMeasurements>,
-    projection: Option<crate::ProjectionLimits>,
+    projection: Option<crate::ProjectiveLimits>,
     counting: bool,
 }
 
@@ -357,7 +357,7 @@ impl<'a> SessionBuilder<'a> {
     /// explicit projection domain; history limits are independent of search.
     /// Counting mode ignores this request and keeps full answer identities.
     #[must_use]
-    pub const fn projected(mut self, limits: crate::ProjectionLimits) -> Self {
+    pub const fn projected(mut self, limits: crate::ProjectiveLimits) -> Self {
         self.projection = Some(limits);
         self
     }
@@ -499,16 +499,16 @@ impl<'a> SessionBuilder<'a> {
                 let _solving = phases.stage(crate::SolveStage::Solving);
                 self.cancellation
                     .poll()
-                    .map_err(crate::ProjectionError::Control)?;
+                    .map_err(crate::ProjectiveError::Control)?;
                 let domain = self
                     .input
-                    .projection()
-                    .ok_or(crate::ProjectionError::MissingDeclaration)?;
-                crate::projection::Projection::new(domain, limits)
+                    .projective_domain()
+                    .ok_or(crate::ProjectiveError::MissingDeclaration)?;
+                crate::projective::ProjectiveHistory::new(domain, limits)
             })
             .transpose()
             .map_err(|error| {
-                let mut failure = SolveFailure::from(SolveError::Projection(error));
+                let mut failure = SolveFailure::from(SolveError::AnswerProjection(error));
                 failure.original = Some(self.input.original());
                 failure.phase_timings = phases.snapshot().map(Box::new);
                 failure
@@ -587,7 +587,7 @@ pub struct Session<'a> {
     cancellation: Cancellation,
     phases: crate::SolveMeasurements,
     original: Original,
-    projection: Option<crate::projection::Projection<'a>>,
+    projection: Option<crate::projective::ProjectiveHistory<'a>>,
     projected_limit: usize,
     projection_done: bool,
 }
@@ -865,7 +865,7 @@ impl<'a> Session<'a> {
         outcome.projection = self
             .projection
             .as_ref()
-            .map(crate::projection::Projection::statistics);
+            .map(crate::projective::ProjectiveHistory::statistics);
         if self.projection_done
             && self.projected_limit != 0
             && outcome
@@ -921,7 +921,8 @@ impl<'a> Session<'a> {
                         }
                         Err(error) => {
                             self.projection_done = true;
-                            let mut failure = SolveFailure::from(SolveError::Projection(error));
+                            let mut failure =
+                                SolveFailure::from(SolveError::AnswerProjection(error));
                             failure.original = Some(self.original.clone());
                             failure.semantic = Some(Box::new(self.progress()));
                             failure.phase_timings = self.phase_timings().map(Box::new);

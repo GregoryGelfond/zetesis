@@ -1,4 +1,4 @@
-use crate::atom_interner::{AtomInterner, Limits as AtomLimits};
+use crate::atom_registry::{AtomRegistry, Limits as AtomLimits};
 use crate::catalog::{AtomRef, Atoms, PredicateRef, ReadError, TermRef};
 use proptest::prelude::*;
 
@@ -21,7 +21,7 @@ fn atom(left: i32, right: i32) -> Atom {
 // Owned descriptions enter only this fixture's shared authority. Every tested
 // relation operation uses canonical references and reports metadata costs alone.
 struct Fixture {
-    authority: AtomInterner,
+    authority: AtomRegistry,
     rows: Catalog,
 }
 
@@ -31,7 +31,7 @@ fn atom_limits() -> AtomLimits {
 
 impl Fixture {
     fn new(predicate: &Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
-        let mut authority = AtomInterner::default();
+        let mut authority = AtomRegistry::default();
         let declared = authority
             .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
             .unwrap();
@@ -41,7 +41,7 @@ impl Fixture {
 
     /// The same owner with the interner's term identities as equality IDs.
     fn interned(predicate: &Predicate, limits: Limits) -> Result<Self, CatalogFailure> {
-        let mut authority = AtomInterner::default();
+        let mut authority = AtomRegistry::default();
         let declared = authority
             .declare_predicate_with(predicate, atom_limits(), || Ok::<_, ()>(()))
             .unwrap();
@@ -1139,7 +1139,7 @@ fn independent_atom_scopes_cannot_exchange_rows() {
 
 #[test]
 fn predicate_declaration_requires_a_covering_prefix() {
-    let mut authority = AtomInterner::default();
+    let mut authority = AtomRegistry::default();
     let (committed, mut appender) = authority.split();
     let predicate = Predicate::with_sign("later", 0, Sign::Negative).unwrap();
     let declared = appender
@@ -1153,7 +1153,7 @@ fn predicate_declaration_requires_a_covering_prefix() {
 
 #[test]
 fn appended_membership_requires_a_covering_prefix() {
-    let mut authority = AtomInterner::default();
+    let mut authority = AtomRegistry::default();
     let predicate = Predicate::new("pair", 2).unwrap();
     let declared = authority
         .declare_predicate_with(&predicate, atom_limits(), || Ok::<_, ()>(()))

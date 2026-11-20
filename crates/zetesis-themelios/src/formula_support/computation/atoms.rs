@@ -1,7 +1,7 @@
 //! Assigned source atoms carry identity without claiming any membership.
 
 use zetesis_core::PatternRef;
-use zetesis_core::atom_interner::{PreparedPattern, PreparedRows, RowColumn};
+use zetesis_core::atom_registry::{PreparedPattern, PreparedRows, RowColumn};
 use zetesis_core::catalog::{AtomRef, PredicateRef};
 use zetesis_core::relation::{Relation, Row};
 

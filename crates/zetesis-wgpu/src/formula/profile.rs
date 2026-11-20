@@ -1,6 +1,6 @@
 //! Caller-owned compilation for one exact context and gate implementation.
 
-use super::GateProjection;
+use super::BinaryNodeKernel;
 use crate::runtime::{DeviceProfile, Runtime};
 use crate::{
     GpuContext, GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection,
@@ -31,7 +31,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct GpuFormulaProfile {
     pub(super) runtime: Arc<Runtime>,
-    projection: GateProjection,
+    node_kernel: BinaryNodeKernel,
 }
 
 impl GpuFormulaProfile {
@@ -42,7 +42,7 @@ impl GpuFormulaProfile {
     /// Returns typed adapter, capacity, allocation, validation or device failure.
     /// Selection retains the hard API and physical-device policy.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
-        Self::new_selected_with_projection(options, selection, GateProjection::default())
+        Self::new_selected_with_node_kernel(options, selection, BinaryNodeKernel::default())
     }
 
     /// Select a native device and request optional compute-pass timestamps.
@@ -81,8 +81,8 @@ impl GpuFormulaProfile {
         source: GpuDeviceSource<'_>,
         options: crate::GpuKernelOptions,
     ) -> Result<Self, GpuError> {
-        let projection = GateProjection::default();
-        Self::open(source, projection, Self::descriptor(projection, options)?)
+        let node_kernel = BinaryNodeKernel::default();
+        Self::open(source, node_kernel, Self::descriptor(node_kernel, options)?)
     }
 
     /// Select a native device and compile exactly the requested implementation's
@@ -94,10 +94,10 @@ impl GpuFormulaProfile {
     /// # Errors
     /// Returns adapter, capability, source allocation, validation or device
     /// failure. No different API, projection or CPU is substituted.
-    pub fn new_selected_with_projection(
+    pub fn new_selected_with_node_kernel(
         options: GpuOptions,
         selection: GpuSelection,
-        projection: GateProjection,
+        node_kernel: BinaryNodeKernel,
     ) -> Result<Self, GpuError> {
         Self::open(
             GpuDeviceSource::Selected {
@@ -105,8 +105,8 @@ impl GpuFormulaProfile {
                 selection,
                 timing: false,
             },
-            projection,
-            Self::descriptor(projection, crate::GpuKernelOptions::default())?,
+            node_kernel,
+            Self::descriptor(node_kernel, crate::GpuKernelOptions::default())?,
         )
     }
 
@@ -117,7 +117,7 @@ impl GpuFormulaProfile {
     /// Refuses an active or invalidated context, unsupported granted limits,
     /// allocation or shader validation failure. No adapter selection occurs.
     pub fn from_context(context: &GpuContext) -> Result<Self, GpuError> {
-        Self::from_context_with_projection(context, GateProjection::default())
+        Self::from_context_with_node_kernel(context, BinaryNodeKernel::default())
     }
 
     /// Compile the requested implementation's shader on an existing context.
@@ -128,11 +128,11 @@ impl GpuFormulaProfile {
     /// # Errors
     /// Reports the context, capability and compilation failures of
     /// [`Self::from_context`], plus fallible shader-source construction.
-    pub fn from_context_with_projection(
+    pub fn from_context_with_node_kernel(
         context: &GpuContext,
-        projection: GateProjection,
+        node_kernel: BinaryNodeKernel,
     ) -> Result<Self, GpuError> {
-        Self::from_context_with_kernel(context, projection, crate::GpuKernelOptions::default())
+        Self::from_context_with_kernel(context, node_kernel, crate::GpuKernelOptions::default())
     }
 
     /// Compile the shader of explicit physical choices on the exact retained
@@ -152,25 +152,25 @@ impl GpuFormulaProfile {
     /// first check that needs it.
     pub fn from_context_with_kernel(
         context: &GpuContext,
-        projection: GateProjection,
+        node_kernel: BinaryNodeKernel,
         options: crate::GpuKernelOptions,
     ) -> Result<Self, GpuError> {
         Self::open(
             GpuDeviceSource::Context(context),
-            projection,
-            Self::descriptor(projection, options)?,
+            node_kernel,
+            Self::descriptor(node_kernel, options)?,
         )
     }
 
     fn open(
         source: GpuDeviceSource<'_>,
-        projection: GateProjection,
+        node_kernel: BinaryNodeKernel,
         descriptor: DeviceProfile,
     ) -> Result<Self, GpuError> {
         let runtime = pollster::block_on(Runtime::open(source, descriptor))?;
         Ok(Self {
             runtime: Arc::new(runtime),
-            projection,
+            node_kernel,
         })
     }
 
@@ -182,8 +182,8 @@ impl GpuFormulaProfile {
 
     /// Selected gate implementation; inspection performs no device operation.
     #[must_use]
-    pub const fn projection(&self) -> GateProjection {
-        self.projection
+    pub const fn node_kernel(&self) -> BinaryNodeKernel {
+        self.node_kernel
     }
 
     /// Physical options retained by this exact compilation; no device operation.
@@ -211,14 +211,14 @@ impl GpuFormulaProfile {
     }
 
     fn descriptor(
-        projection: GateProjection,
+        node_kernel: BinaryNodeKernel,
         options: crate::GpuKernelOptions,
     ) -> Result<DeviceProfile, GpuError> {
         Ok(DeviceProfile {
             device_label: "zetesis frozen formula device",
             shader_label: "frozen formula propagation",
             pipeline_label: "cooperative finite-formula query",
-            shader: projection.shader()?,
+            shader: node_kernel.shader()?,
             entry_point: "propagate",
             dense_entry_point: None,
             validate_limits: check_limits,
@@ -264,13 +264,13 @@ pub(crate) fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{GateProjection, GpuFormulaProfile};
+    use super::{BinaryNodeKernel, GpuFormulaProfile};
 
     #[test]
-    fn every_formula_projection_translates_to_spirv() {
-        for projection in GateProjection::ALL {
+    fn every_formula_node_kernel_translates_to_spirv() {
+        for node_kernel in BinaryNodeKernel::ALL {
             let profile =
-                GpuFormulaProfile::descriptor(projection, crate::GpuKernelOptions::default())
+                GpuFormulaProfile::descriptor(node_kernel, crate::GpuKernelOptions::default())
                     .unwrap();
             crate::spirv_translation::assert_profile_translates(&profile);
         }

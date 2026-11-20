@@ -4,7 +4,7 @@ mod rows;
 pub(crate) use rows::{RowHead, project as row_column};
 
 use zetesis_core::PatternRef;
-use zetesis_core::atom_interner::PreparedPattern;
+use zetesis_core::atom_registry::PreparedPattern;
 
 use super::{AtomPattern, Binding, Computation, Counters, StorageLease};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};

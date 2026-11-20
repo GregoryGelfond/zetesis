@@ -3,7 +3,7 @@
 use super::{
     AtomAppender, AtomRef, AtomicUsize, CatalogRead, Counters, Failure, FormulaFailure,
     FormulaLimits, FormulaResource, Memory, Ordering, ProgramSite, TermRef, atom_failure,
-    atom_interner, ceiling, failure, owner_limits, record_owner_peak, size_of,
+    atom_registry, ceiling, failure, owner_limits, record_owner_peak, size_of,
 };
 use crate::formula_support::GroundingWork;
 use zetesis_algebra::words::Words;
@@ -58,7 +58,7 @@ impl<'a> SupportAppend<'a> {
         self.owner.read()
     }
 
-    pub(in crate::formula_support) fn term_lookup(&self) -> atom_interner::TermLookup<'_> {
+    pub(in crate::formula_support) fn term_lookup(&self) -> atom_registry::TermLookup<'_> {
         self.owner.term_lookup()
     }
 
@@ -119,10 +119,10 @@ impl<'a> SupportAppend<'a> {
         );
         let refreshed = self.refresh(workspace, limits, counters, location);
         let key = result.map_err(|error| match error {
-            atom_interner::AssignedFailure::Assignment(error) => {
+            atom_registry::AssignedFailure::Assignment(error) => {
                 crate::formula_binding::assignment(error, location)
             }
-            atom_interner::AssignedFailure::Interner(error) => {
+            atom_registry::AssignedFailure::Registry(error) => {
                 atom_failure(error, limits, outer, location)
             }
         })?;

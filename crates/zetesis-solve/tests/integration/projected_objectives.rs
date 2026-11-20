@@ -9,21 +9,21 @@ use zetesis_solve::{
     PreparedInput, Session, SolveConfig,
 };
 use zetesis_themelios::objective_bound::{
-    ObjectiveBoundErrorKind, ObjectiveBoundResource, ObjectiveProjectionError,
-    ObjectiveProjectionErrorKind,
+    ObjectiveBoundErrorKind, ObjectiveBoundResource, ObjectiveReadSetError,
+    ObjectiveReadSetErrorKind,
 };
 use zetesis_themelios::{BundleAdmissionOptions, ExpansionLimits, FormulaLimits};
 
 #[derive(Default)]
 struct Refusals {
-    projected: Vec<ObjectiveProjectionError>,
+    projected: Vec<ObjectiveReadSetError>,
     legacy: usize,
 }
 impl ExecutionObserver for Refusals {
     type Error = Infallible;
     fn observe(&mut self, event: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         match event {
-            ExecutionObservation::ObjectiveProjectionUnavailable(error) => {
+            ExecutionObservation::ObjectiveReadSetUnavailable(error) => {
                 self.projected.push(error);
             }
             ExecutionObservation::ObjectiveUnavailable(_) => self.legacy += 1,
@@ -132,7 +132,7 @@ fn all_admitted_owners_preserve_families_after_projection_refusal() {
         };
         assert_eq!(
             refusal.kind(),
-            &ObjectiveProjectionErrorKind::Existing(ObjectiveBoundErrorKind::Limit(
+            &ObjectiveReadSetErrorKind::Existing(ObjectiveBoundErrorKind::Limit(
                 ObjectiveBoundResource::Keys
             ))
         );
@@ -237,7 +237,7 @@ fn assert_sparse_choice_bound(eager: &zetesis_themelios::AdmittedFormula) {
     assert_eq!(selected.len(), 3);
     assert!(selected.iter().any(|&position| position >= selected.len()));
     let cancellation = Cancellation::default();
-    let mut plan = ObjectivePlan::new_projected(
+    let mut plan = ObjectivePlan::new_read_set(
         eager.objective_source(),
         ObjectivePlanLimits {
             max_atoms: selected.len(),

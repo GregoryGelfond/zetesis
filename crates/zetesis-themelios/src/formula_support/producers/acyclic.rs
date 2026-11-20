@@ -35,7 +35,7 @@ pub(crate) struct AcyclicPlan {
     // where its fact rules stood. Constraints sort last.
     items: Vec<(usize, usize)>,
     // By component rank: how the component is closed.
-    closed: Vec<Closure>,
+    closed: Vec<ComponentCertainty>,
     _lease: StorageLease,
 }
 
@@ -69,7 +69,7 @@ impl AcyclicPlan {
         // definite closure below), then a rule reading its own component.
         let mut closed = Vec::new();
         memory.reserve(&mut closed, components_count)?;
-        closed.resize(components_count, Closure::Saturated);
+        closed.resize(components_count, ComponentCertainty::Saturated);
         let mut recursive = Vec::new();
         memory.reserve(&mut recursive, components_count)?;
         recursive.resize(components_count, false);
@@ -113,7 +113,7 @@ impl AcyclicPlan {
                 if *negation != DefaultNegation::None
                     && let Some(flag) = closed.get_mut(rank)
                 {
-                    *flag = Closure::Certain;
+                    *flag = ComponentCertainty::Certain;
                 }
                 let dependency = ranks.atom(*atom, limits, counters, rule.location)?;
                 if dependency > rank {
@@ -138,10 +138,10 @@ impl AcyclicPlan {
         for (&recursive, closed) in recursive.iter().zip(&mut closed) {
             counters.work(limits, location)?;
             if recursive {
-                if *closed == Closure::Open {
+                if *closed == ComponentCertainty::Open {
                     return Ok(None);
                 }
-                *closed = Closure::Saturated;
+                *closed = ComponentCertainty::Saturated;
             }
         }
         memory.release(size_of::<bool>() * recursive.capacity());
@@ -171,7 +171,7 @@ impl AcyclicPlan {
     /// or free of default negation. Constraints have no component and are
     /// never saturated.
     pub(crate) fn closed(&self, rank: usize) -> bool {
-        self.closed.get(rank) == Some(&Closure::Saturated)
+        self.closed.get(rank) == Some(&ComponentCertainty::Saturated)
     }
 }
 
@@ -223,9 +223,10 @@ impl<'plan> Ranks<'plan, '_> {
     }
 }
 
-/// How a component is closed under what it reads.
+/// How a component is closed under what it reads: its certainty status, not
+/// the `ComponentClosure` support fixed point.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Closure {
+enum ComponentCertainty {
     /// Not certain.
     Open,
     /// Certain, with a default negation over a lower certain component.
@@ -239,7 +240,7 @@ enum Closure {
 /// each lower component they read positively is certain. Lower ranks are final
 /// before a rank reads them.
 fn close(
-    closed: &mut [Closure],
+    closed: &mut [ComponentCertainty],
     items: &[(usize, usize)],
     source: &Prepared,
     ranks: &Ranks<'_, '_>,
@@ -253,7 +254,7 @@ fn close(
         counters.work(limits, rule.location)?;
         if closed
             .get(rank)
-            .is_none_or(|closure| *closure == Closure::Open)
+            .is_none_or(|closure| *closure == ComponentCertainty::Open)
         {
             continue;
         }
@@ -262,7 +263,7 @@ fn close(
             let certain = match literal {
                 LiteralIr::Atom(negation, atom) => {
                     let dependency = ranks.atom(*atom, limits, counters, rule.location)?;
-                    let lower = dependency < rank && closed[dependency] != Closure::Open;
+                    let lower = dependency < rank && closed[dependency] != ComponentCertainty::Open;
                     (*negation == DefaultNegation::None && dependency == rank) || lower
                 }
                 LiteralIr::Aggregate(aggregate) => elements_certain(
@@ -277,7 +278,7 @@ fn close(
                 _ => true,
             };
             if !certain {
-                closed[rank] = Closure::Open;
+                closed[rank] = ComponentCertainty::Open;
                 break;
             }
         }
@@ -291,7 +292,7 @@ fn close(
 fn elements_certain(
     aggregate: &AggregateIr,
     rank: usize,
-    closed: &[Closure],
+    closed: &[ComponentCertainty],
     ranks: &Ranks<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
@@ -303,7 +304,7 @@ fn elements_certain(
             match literal {
                 LiteralIr::Atom(DefaultNegation::None, atom) => {
                     let dependency = ranks.atom(*atom, limits, counters, location)?;
-                    if dependency >= rank || closed[dependency] == Closure::Open {
+                    if dependency >= rank || closed[dependency] == ComponentCertainty::Open {
                         return Ok(false);
                     }
                 }
@@ -325,7 +326,7 @@ fn eligible(
     if source.analysis_basis != AnalysisBasis::NormalizedProgram
         || !source.objectives.is_empty()
         || !source.objective_declarations.is_empty()
-        || source.project_selection.is_explicit()
+        || source.project_directives.is_explicit()
         || !source.projection.is_empty()
     {
         return Ok(false);

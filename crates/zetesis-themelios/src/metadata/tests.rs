@@ -25,7 +25,7 @@ fn directive_and_selector_names_borrow_the_same_payload() {
         panic!("defined occurrence")
     };
     let output = metadata.output().signatures().at(0).unwrap();
-    let projection = metadata.project_selection().signatures().at(0).unwrap();
+    let projection = metadata.project_directives().signatures().at(0).unwrap();
     assert_eq!(defined, output);
     assert_eq!(defined.name().as_ptr(), output.name().as_ptr());
     assert_eq!(defined.name().as_ptr(), projection.name().as_ptr());
@@ -120,7 +120,7 @@ fn common_collector_applies_constructed_policy_without_source_evidence() {
     let actual = builder.finish(ProgramSite::program()).unwrap();
     assert!(actual.directives().is_empty());
     assert_eq!(actual.atom_selection(), expected.atom_selection());
-    assert_eq!(actual.project_selection(), expected.project_selection());
+    assert_eq!(actual.project_directives(), expected.project_directives());
 }
 
 #[test]

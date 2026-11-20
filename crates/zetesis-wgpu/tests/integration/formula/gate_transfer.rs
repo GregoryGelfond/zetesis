@@ -1,4 +1,4 @@
-//! Test-only finite relation that `GateProjection::Bitwise` computes: the
+//! Test-only finite relation that `BinaryNodeKernel::Bitwise` computes: the
 //! bitwise transfer and an independent Boolean reference, with the contract
 //! both satisfy.
 //!

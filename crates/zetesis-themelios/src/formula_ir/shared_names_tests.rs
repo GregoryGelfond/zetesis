@@ -42,7 +42,7 @@ fn objective_scopes_share_canonical_predicate_text() {
     }
     .prepare(
         &std::sync::Arc::new(raised.program().clone()),
-        metadata.project_selection().clone(),
+        metadata.project_directives().clone(),
     )
     .unwrap();
     let limits = FormulaLimits::default();

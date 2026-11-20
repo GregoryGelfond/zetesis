@@ -20,7 +20,7 @@ pub enum SolveError {
     /// Explicit batch executor selection, protocol, or original external failure.
     Executor(crate::ExecutorError),
     /// Fixed-domain answer projection failed after preserving full membership.
-    Projection(crate::ProjectionError),
+    AnswerProjection(crate::ProjectiveError),
     /// The exact-completion worker pool could not be constructed.
     CompletionPool(rayon::ThreadPoolBuildError),
     /// The requested device backend was not compiled.
@@ -76,7 +76,7 @@ impl fmt::Display for SolveError {
                 formatter.write_str("hybrid answer accounting overflow")
             }
             Self::Executor(error) => error.fmt(formatter),
-            Self::Projection(error) => error.fmt(formatter),
+            Self::AnswerProjection(error) => error.fmt(formatter),
             Self::CompletionPool(error) => write!(formatter, "completion worker pool: {error}"),
             Self::BackendUnavailable => {
                 formatter.write_str("GPU support was not compiled into this build")
@@ -121,7 +121,7 @@ impl std::error::Error for SolveError {
             Self::Reconstruction(error) => Some(error),
             Self::Constraint(error) => Some(error),
             Self::Executor(error) => Some(error),
-            Self::Projection(error) => Some(error),
+            Self::AnswerProjection(error) => Some(error),
             Self::CompletionPool(error) => Some(error),
             Self::ExecutionObservation(error) => Some(error.as_ref()),
             #[cfg(feature = "gpu")]

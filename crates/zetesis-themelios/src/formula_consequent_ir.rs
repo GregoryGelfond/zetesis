@@ -34,10 +34,10 @@ impl Compiler<'_> {
                 Term::Variable(Variable::Named(name)) => !local.named.contains_key(name.as_str()),
                 _ => false,
             });
-        let operand = if let Some(LiteralIr::ProjectedAtom(_, projection)) =
-            self.projected_atom(atom, negation, &mut local, &mut bindings)?
+        let operand = if let Some(LiteralIr::AnonymousAtom(_, witnesses)) =
+            self.anonymous_atom(atom, negation, &mut local, &mut bindings)?
         {
-            ConsequentOperand::Projection(projection)
+            ConsequentOperand::Anonymous(witnesses)
         } else if missing && negation == DefaultNegation::None {
             ConsequentOperand::Atom(self.positive_atom_key(atom, &mut local, &mut bindings)?)
         } else {

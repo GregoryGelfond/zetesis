@@ -14,7 +14,9 @@ use super::{
     BodyKind, Buffer, Computation, Context, Counters, Join, RuleIr, StorageLease, checked_rule,
     order, relations, selected_rows,
 };
-use crate::formula_support::{Comparisons, Coverage, Traversal, projections, scalar_selection};
+use crate::formula_support::{
+    Comparisons, Coverage, Traversal, expression_memos, scalar_selection,
+};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -215,7 +217,7 @@ fn initial_kind(
     require!(cursor.multiples.is_none());
     require!(cursor.range_selection.is_none());
     require!(cursor.checked_guard.is_none());
-    require!(cursor.row_filter.is_none());
+    require!(cursor.bind_restriction.is_none());
     require!(cursor.anchor.is_none());
     require!(cursor.positive_prefix.is_none());
     require!(cursor.pattern_rows.is_none());
@@ -232,8 +234,8 @@ fn initial_kind(
         scalar_selection::Preparation::Ready { .. }
     ));
     require!(matches!(
-        cursor.projections,
-        projections::Projections::Local(_)
+        cursor.expression_memos,
+        expression_memos::ExpressionMemos::Local(_)
     ));
     for position in &cursor.positions {
         require!(*position == 0);

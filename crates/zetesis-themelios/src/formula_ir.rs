@@ -25,7 +25,7 @@ mod facts;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::formula_support::components::{
-    Filter, Pattern as AtomPattern, Predicate, Term as CoreTerm,
+    FilterCoordinate, Pattern as AtomPattern, Predicate, Term as CoreTerm,
 };
 use crate::{ProgramSite, StatementId};
 use themelios_program::program::{
@@ -60,7 +60,7 @@ pub(crate) struct Prepared {
     /// reader that never sees facts, [`Self::rules_without_facts`].
     items: crate::formula_facts::Items,
     pub projection: Vec<RuleIr>,
-    pub project_selection: crate::ProjectSelection,
+    pub project_directives: crate::ProjectDirectives,
     pub objectives: Vec<ObjectiveIr>,
     pub objective_declarations: Vec<ProgramSite>,
     /// Extrema tuple carriers selected for an optional numeric-weight precision
@@ -135,7 +135,7 @@ pub(crate) struct ObjectiveIr {
     pub priority: Expression,
     pub tuple: Vec<ObjectiveField>,
     pub positive: Vec<AtomPattern>,
-    pub filters: Vec<Filter>,
+    pub filters: Vec<FilterCoordinate>,
     pub polarity: WeightPolarity,
     /// Positive conditions whose generated values affect priority evaluation or
     /// source eligibility through a literal, filter or repeated variable.
@@ -330,7 +330,7 @@ pub(super) enum ComparisonParts {
 pub(crate) enum LiteralIr {
     Atom(DefaultNegation, AtomPattern),
     PatternAtom(crate::formula_pattern::PatternAtom),
-    ProjectedAtom(DefaultNegation, Projection),
+    AnonymousAtom(DefaultNegation, AnonymousWitnesses),
     Compare(Comparison),
     /// Equality between a captured positive subterm and its source expression:
     /// the comparison `captured = value`, captured on the left. This is
@@ -355,8 +355,10 @@ pub(crate) enum LiteralIr {
         binder: bool,
     },
 }
-/// Complete existential witnesses, with a flat relational fast path.
-pub(crate) enum Projection {
+/// Anonymous-variable witnesses for one source literal. Grounding expands them
+/// to a disjunction of possible atoms (then applies the literal's negation).
+/// This is literal lowering, not `Lifted.Project` head emission or `#project`.
+pub(crate) enum AnonymousWitnesses {
     Arguments {
         predicate: Predicate,
         terms: Vec<Option<CoreTerm>>,
@@ -370,7 +372,7 @@ pub(crate) enum Projection {
         inputs: usize,
     },
 }
-impl Projection {
+impl AnonymousWitnesses {
     pub(crate) fn predicate<'a>(
         &self,
         view: zetesis_core::TemplateComponentsRef<'a>,
@@ -445,7 +447,7 @@ pub(crate) fn decided(literal: &LiteralIr) -> bool {
         | LiteralIr::Range { .. } => true,
         LiteralIr::Atom(..)
         | LiteralIr::PatternAtom(_)
-        | LiteralIr::ProjectedAtom(..)
+        | LiteralIr::AnonymousAtom(..)
         | LiteralIr::HeadGuard(_)
         | LiteralIr::Conditional(_)
         | LiteralIr::Aggregate(_) => false,
@@ -567,7 +569,7 @@ impl PreparationContext<'_> {
     pub(crate) fn prepare(
         self,
         source: &std::sync::Arc<SourceProgram>,
-        project_selection: crate::ProjectSelection,
+        project_directives: crate::ProjectDirectives,
     ) -> Result<Prepared, FormulaFailure> {
         let Self {
             options,
@@ -658,7 +660,7 @@ impl PreparationContext<'_> {
             analyzed,
             items: parts.items,
             projection: parts.projection,
-            project_selection,
+            project_directives,
             objectives: parts.objectives,
             objective_declarations: parts.objective_declarations,
             objective_extrema,

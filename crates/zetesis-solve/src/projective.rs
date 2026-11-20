@@ -1,0 +1,281 @@
+//! Fixed-domain answer identity, applied after exact membership and selection.
+
+use std::{fmt, mem::size_of};
+
+mod index;
+
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, MeterWorkError, Stop, words::Words};
+use zetesis_core::Model;
+use zetesis_themelios::ProjectiveDomain;
+
+/// Independent ceilings for distinct projected answer identities.
+/// These do not replace candidate exclusion, membership or objective budgets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProjectiveLimits {
+    /// Maximum distinct projection keys; duplicate answers require no new key.
+    pub max_keys: usize,
+    /// History header, index capacity and packed key words, including conservative
+    /// old/new growth overlap and the reusable current-key buffer. Excludes the
+    /// borrowed domain, answer, allocator metadata and search; this is not RSS.
+    pub max_bytes: usize,
+    /// Cumulative key-word resets, domain probes, hashing/comparison/copy words,
+    /// and index initialization/probe steps, including failed attempts. A domain
+    /// probe includes the model's typed lookup, not one machine instruction.
+    /// Hash collisions consume this same finite allowance.
+    pub max_work: u64,
+}
+
+impl Default for ProjectiveLimits {
+    fn default() -> Self {
+        Self {
+            max_keys: 1_000_000,
+            max_bytes: 128 * 1024 * 1024,
+            max_work: 100_000_000,
+        }
+    }
+}
+
+/// A projected-enumeration limit, independent of original answer identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProjectiveResource {
+    /// Distinct completed keys.
+    Keys,
+    /// Named history and construction capacity.
+    Bytes,
+    /// Cumulative key construction and lookup work.
+    Work,
+}
+
+/// Answer projection failed without publishing a partial or unexamined key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProjectiveError {
+    /// A projected door requires completed source projection declarations.
+    MissingDeclaration,
+    /// An inclusive projection ceiling was exceeded.
+    Limit {
+        /// Resource whose admission failed.
+        resource: ProjectiveResource,
+        /// Required amount, before publication.
+        observed: u128,
+        /// Inclusive configured ceiling.
+        limit: u128,
+    },
+    /// Checked capacity or counter arithmetic overflowed.
+    Overflow,
+    /// A fallible history reservation failed.
+    Allocation,
+    /// Cooperative cancellation or deadline reached during projection.
+    Control(Stop),
+}
+
+impl fmt::Display for ProjectiveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingDeclaration => {
+                f.write_str("projected enumeration requires a completed #project declaration")
+            }
+            Self::Limit {
+                resource,
+                observed,
+                limit,
+            } => write!(
+                f,
+                "answer projection {resource:?} limit: {observed} exceeds {limit}"
+            ),
+            Self::Overflow => f.write_str("answer projection accounting overflow"),
+            Self::Allocation => f.write_str("answer projection storage could not be reserved"),
+            Self::Control(stop) => stop.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ProjectiveError {}
+
+/// Evidence from projected enumeration, separate from full-model search counts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ProjectiveStatistics {
+    /// Distinct keys retained and returned as full answer-set representatives.
+    pub representatives: usize,
+    /// Fully keyed answers equal to a previously returned representative.
+    pub duplicates: u64,
+    /// Charged work, including attempts that failed before key publication.
+    pub work: u64,
+    /// Current named retained history capacity, excluding borrowed owners.
+    pub retained_bytes: u128,
+    /// Greatest observed named capacity, including conservative old/new growth
+    /// overlap. Refused proposals that allocated nothing do not increase it.
+    pub peak_bytes: u128,
+    /// Every selected answer was consumed and original search was exhaustive.
+    /// Requested representative limits and failures leave this false even when
+    /// optimization independently established the best score.
+    pub complete: bool,
+}
+
+pub(crate) struct ProjectiveHistory<'a> {
+    domain: &'a ProjectiveDomain,
+    limits: ProjectiveLimits,
+    history: index::History,
+    current: Words<u64>,
+    stats: ProjectiveStatistics,
+}
+
+impl<'a> ProjectiveHistory<'a> {
+    pub(crate) fn new(
+        domain: &'a ProjectiveDomain,
+        limits: ProjectiveLimits,
+    ) -> Result<Self, ProjectiveError> {
+        if !domain.is_explicit() {
+            return Err(ProjectiveError::MissingDeclaration);
+        }
+        let words = domain.atoms().len().div_ceil(64);
+        let mut result = Self {
+            domain,
+            limits,
+            history: index::History::new(words),
+            current: Words::new(Vec::new()),
+            stats: ProjectiveStatistics::default(),
+        };
+        check_bytes(
+            result.base_bytes() + bytes::<u64>(words)?,
+            limits.max_bytes as u128,
+        )?;
+        result
+            .current
+            .storage_mut()
+            .try_reserve_exact(words)
+            .map_err(|_| ProjectiveError::Allocation)?;
+        result.stats.retained_bytes = result.base_bytes();
+        MeterBytes::observe_peak(
+            result.stats.retained_bytes,
+            limits.max_bytes as u128,
+            &mut result.stats.peak_bytes,
+        )
+        .map_err(|_| ProjectiveError::Limit {
+            resource: ProjectiveResource::Bytes,
+            observed: result.stats.retained_bytes,
+            limit: limits.max_bytes as u128,
+        })?;
+        result.current.storage_mut().resize(words, 0);
+        Ok(result)
+    }
+
+    pub(crate) fn statistics(&self) -> ProjectiveStatistics {
+        self.stats
+    }
+
+    pub(crate) fn finish(&mut self, complete: bool) {
+        self.stats.complete = complete;
+    }
+
+    /// Complete the key before indexing it. History has one packed copy per key;
+    /// hash slots contain only its local index. Neither hash nor local index is
+    /// an answer identity, and collision equality always compares every word.
+    pub(crate) fn insert(
+        &mut self,
+        model: &Model,
+        cancellation: &Cancellation,
+    ) -> Result<bool, ProjectiveError> {
+        let base = self.base_bytes();
+        let mut work = Work {
+            limits: self.limits,
+            stats: &mut self.stats,
+            cancellation,
+        };
+        for word in self.current.iter_mut() {
+            work.charge(1)?;
+            *word = 0;
+        }
+        for (index, atom) in self.domain.atoms().iter().enumerate() {
+            work.charge(1)?;
+            if model.contains(atom) {
+                self.current.insert(index);
+            }
+        }
+        let inserted = self.history.insert(&self.current, base, &mut work)?;
+        if inserted {
+            work.stats.representatives = self.history.len();
+        } else {
+            work.stats.duplicates = work
+                .stats
+                .duplicates
+                .checked_add(1)
+                .ok_or(ProjectiveError::Overflow)?;
+        }
+        Ok(inserted)
+    }
+
+    // All vector headers, including History's, are already within Self.
+    fn base_bytes(&self) -> u128 {
+        size_of::<Self>() as u128 + self.current.capacity() as u128 * size_of::<u64>() as u128
+    }
+}
+
+struct Work<'a> {
+    limits: ProjectiveLimits,
+    stats: &'a mut ProjectiveStatistics,
+    cancellation: &'a Cancellation,
+}
+
+impl Work<'_> {
+    fn charge(&mut self, amount: u64) -> Result<(), ProjectiveError> {
+        self.cancellation.poll().map_err(ProjectiveError::Control)?;
+        Meter::charge_receipt(
+            &mut self.stats.work,
+            u128::from(amount),
+            self.limits.max_work,
+        )
+        .map_err(|error| match error {
+            // Every u64 carry is refused before the shared receipt can change.
+            MeterWorkError::Limit { observed, .. } if observed > u128::from(u64::MAX) => {
+                ProjectiveError::Overflow
+            }
+            MeterWorkError::Limit { observed, limit } => ProjectiveError::Limit {
+                resource: ProjectiveResource::Work,
+                observed,
+                limit,
+            },
+            MeterWorkError::Overflow => ProjectiveError::Overflow,
+        })
+    }
+
+    fn admit_bytes(&self, required: u128) -> Result<(), ProjectiveError> {
+        check_bytes(required, self.limits.max_bytes as u128)
+    }
+
+    /// Observe actual retained capacity plus a currently allocated replacement.
+    /// A refused proposal calls `admit_bytes` alone. Allocator slack is observed
+    /// before refusal; failed temporary construction drops that replacement.
+    fn observe(&mut self, retained: u128, temporary: u128) -> Result<(), ProjectiveError> {
+        self.stats.retained_bytes = retained;
+        let live = retained
+            .checked_add(temporary)
+            .ok_or(ProjectiveError::Overflow)?;
+        MeterBytes::observe_peak(
+            live,
+            self.limits.max_bytes as u128,
+            &mut self.stats.peak_bytes,
+        )
+        .map_err(|_| ProjectiveError::Limit {
+            resource: ProjectiveResource::Bytes,
+            observed: live,
+            limit: self.limits.max_bytes as u128,
+        })
+    }
+}
+
+fn bytes<T>(count: usize) -> Result<u128, ProjectiveError> {
+    (count as u128)
+        .checked_mul(size_of::<T>() as u128)
+        .ok_or(ProjectiveError::Overflow)
+}
+
+fn check_bytes(observed: u128, limit: u128) -> Result<(), ProjectiveError> {
+    MeterBytes::check(observed, limit).map_err(|_| ProjectiveError::Limit {
+        resource: ProjectiveResource::Bytes,
+        observed,
+        limit,
+    })
+}
+
+#[cfg(test)]
+mod tests;

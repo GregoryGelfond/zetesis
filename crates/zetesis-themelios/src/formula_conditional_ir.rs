@@ -7,7 +7,7 @@ use themelios_program::program::{
 use themelios_program::term::Term;
 
 use crate::formula_guard::Guard;
-use crate::formula_ir::{Compiler, LiteralIr, LocalFamily, Projection, Variables};
+use crate::formula_ir::{AnonymousWitnesses, Compiler, LiteralIr, LocalFamily, Variables};
 use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, InputLimit};
 
 pub(crate) struct ConditionalIr {
@@ -40,11 +40,11 @@ pub(crate) struct Alternative {
 }
 
 /// Source alternatives and anonymous witnesses have distinct quantifiers.
-/// Projection completes the witness disjunction before default negation;
+/// An anonymous operand completes its witness disjunction before default negation;
 /// the caller disjoins the resulting signed source alternatives afterwards.
 pub(crate) enum ConsequentOperand {
     Atom(AtomPattern),
-    Projection(Projection),
+    Anonymous(AnonymousWitnesses),
 }
 
 impl Compiler<'_> {

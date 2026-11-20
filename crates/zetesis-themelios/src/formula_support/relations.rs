@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ProgramSite;
 use zetesis_algebra::words::Words;
-use zetesis_core::atom_interner::{self, AtomAppender, AtomInterner};
+use zetesis_core::atom_registry::{self, AtomAppender, AtomRegistry};
 use zetesis_core::catalog::{AtomRef, Atoms, CatalogRead, PredicateRef, TermRef};
 use zetesis_core::relation::{Catalog, CatalogFailure, Failure, Limits, Relation, Resource, Row};
 #[cfg(test)]
@@ -91,7 +91,7 @@ impl KeyIdentifiers {
 /// Canonical payload has one evolving authority. Relations and pending rounds
 /// retain only metadata scoped to that authority; discovery positions never escape.
 pub(crate) struct SupportCatalog {
-    pub(super) owner: AtomInterner,
+    pub(super) owner: AtomRegistry,
     pub(super) components: Option<TemplateComponents>,
     scope: SourceScope,
     rows: Vec<CatalogRows>,
@@ -123,7 +123,7 @@ pub(crate) struct SupportCatalog {
 impl Default for SupportCatalog {
     fn default() -> Self {
         Self {
-            owner: AtomInterner::new(),
+            owner: AtomRegistry::new(),
             components: None,
             scope: SourceScope::new(),
             rows: Vec::new(),
@@ -136,7 +136,7 @@ impl Default for SupportCatalog {
             fact_rows_open: false,
             head_rows: Vec::new(),
             entries: 0,
-            index_bytes: size_of::<Self>() - size_of::<AtomInterner>()
+            index_bytes: size_of::<Self>() - size_of::<AtomRegistry>()
                 + SourceScope::shared_bytes(),
             prepared_bytes: 0,
         }
@@ -149,7 +149,7 @@ impl SupportCatalog {
     }
 
     #[cfg(test)]
-    pub(super) fn owner(&self) -> &AtomInterner {
+    pub(super) fn owner(&self) -> &AtomRegistry {
         &self.owner
     }
     pub(super) fn prepared_bytes(&mut self, bytes: usize) {
@@ -592,14 +592,14 @@ pub(crate) fn owner_limits(
     limits: &FormulaLimits,
     outer: u128,
     location: ProgramSite,
-) -> Result<atom_interner::Limits, FormulaFailure> {
+) -> Result<atom_registry::Limits, FormulaFailure> {
     ceiling(
         FormulaResource::SupportBytes,
         outer,
         limits.max_support_bytes as u128,
         location,
     )?;
-    Ok(atom_interner::Limits {
+    Ok(atom_registry::Limits {
         max_atoms: limits.theory.max_atoms,
         max_bytes: limits.max_support_bytes as u128 - outer,
     })
@@ -610,30 +610,30 @@ fn record_owner_peak(peak: u128, outer: u128, counters: &Counters) {
 }
 
 pub(crate) fn atom_failure(
-    error: atom_interner::Failure<FormulaFailure>,
+    error: atom_registry::Failure<FormulaFailure>,
     limits: &FormulaLimits,
     outer: u128,
     location: ProgramSite,
 ) -> FormulaFailure {
     match error {
-        atom_interner::Failure::Stopped(error) => error,
-        atom_interner::Failure::Catalog(error) => FormulaFailure::AtomCatalog { error, location },
-        atom_interner::Failure::Allocation(error) => {
+        atom_registry::Failure::Stopped(error) => error,
+        atom_registry::Failure::Catalog(error) => FormulaFailure::AtomCatalog { error, location },
+        atom_registry::Failure::Allocation(error) => {
             FormulaFailure::AtomAllocation { error, location }
         }
-        atom_interner::Failure::Atoms { required, limit } => FormulaFailure::Limit {
+        atom_registry::Failure::Atoms { required, limit } => FormulaFailure::Limit {
             resource: FormulaResource::Atoms,
             observed: required as u128,
             limit: limit as u128,
             location,
         },
-        atom_interner::Failure::Bytes { required, .. } => FormulaFailure::Limit {
+        atom_registry::Failure::Bytes { required, .. } => FormulaFailure::Limit {
             resource: FormulaResource::SupportBytes,
             observed: required.saturating_add(outer),
             limit: limits.max_support_bytes as u128,
             location,
         },
-        atom_interner::Failure::Overflow => failure(Failure::Overflow, location),
+        atom_registry::Failure::Overflow => failure(Failure::Overflow, location),
     }
 }
 
@@ -700,7 +700,7 @@ impl CatalogRows {
     /// caller has already charged entry to its first pending row.
     fn append_run(
         &mut self,
-        owner: &AtomInterner,
+        owner: &AtomRegistry,
         pending: &[usize],
         predicate: PredicateRef<'_>,
         entries: &mut usize,

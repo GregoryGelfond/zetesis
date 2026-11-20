@@ -5,7 +5,7 @@
 //! prefix. The finite row cursors and depth delimit the remaining traversal.
 
 use zetesis_core::{AtomRows, BindingView, Model, PatternRef, UnificationFailure};
-use zetesis_core::{atom_interner::AtomInterner, catalog::TermRef};
+use zetesis_core::{atom_registry::AtomRegistry, catalog::TermRef};
 
 use super::{ReconstructionError, Work, plan::Rule};
 use crate::formula_support::StorageLease;
@@ -29,7 +29,7 @@ impl<'plan, 'model> Frame<'plan, 'model> {
         rule: &Rule<'plan>,
         patterns: &[PatternRef<'plan>],
         model: &'model Model,
-        writer: &AtomInterner,
+        writer: &AtomRegistry,
         work: &mut Work<'_>,
     ) -> Result<Self, ReconstructionError> {
         let mut frame = Self {
@@ -97,7 +97,7 @@ pub(super) fn derive(
     rule: &Rule<'_>,
     patterns: &[PatternRef<'_>],
     model: &Model,
-    writer: &mut AtomInterner,
+    writer: &mut AtomRegistry,
     work: &mut Work<'_>,
 ) -> Result<(), ReconstructionError> {
     let head = rule.head;
@@ -146,7 +146,7 @@ pub(super) fn derive(
 pub(super) fn emit(
     head: PatternRef<'_>,
     slots: &[Option<TermRef<'_>>],
-    writer: &mut AtomInterner,
+    writer: &mut AtomRegistry,
     work: &mut Work<'_>,
 ) -> Result<(), ReconstructionError> {
     work.permit()?;

@@ -3,7 +3,7 @@
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 
 use super::integer::WithoutForm;
-use super::{Comparison, HeadIr, LiteralIr, ObjectiveIr, Projection, RuleIr};
+use super::{AnonymousWitnesses, Comparison, HeadIr, LiteralIr, ObjectiveIr, RuleIr};
 
 /// How the comparison literals of a prepared program were compiled: with an
 /// integer comparison form, which decides a row with machine integers when the
@@ -51,16 +51,16 @@ impl ComparisonForms {
     }
 
     /// Count every comparison literal of a prepared program's rules,
-    /// projection rules and objectives.
+    /// anonymous rules and objectives.
     ///
     /// The count reads each literal once, a pass linear in the intermediate
     /// representation whose compilation preparation charged; it allocates
     /// nothing and charges nothing itself. Its recursion follows the
     /// representation's nesting, whose depth the admitted source's syntax
     /// depth bounds.
-    pub(crate) fn of(rules: &[RuleIr], projection: &[RuleIr], objectives: &[ObjectiveIr]) -> Self {
+    pub(crate) fn of(rules: &[RuleIr], anonymous: &[RuleIr], objectives: &[ObjectiveIr]) -> Self {
         let mut forms = Self::default();
-        for rule in rules.iter().chain(projection) {
+        for rule in rules.iter().chain(anonymous) {
             forms.literals(&rule.body);
             match &rule.head {
                 HeadIr::Choice(group) => {
@@ -88,17 +88,17 @@ impl ComparisonForms {
                 LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
                     self.comparison(comparison);
                 }
-                LiteralIr::ProjectedAtom(_, projection) => self.projection(projection),
+                LiteralIr::AnonymousAtom(_, anonymous) => self.anonymous(anonymous),
                 LiteralIr::Conditional(conditional) => {
                     self.literals(&conditional.condition);
                     match &conditional.consequent {
                         Consequent::Atoms(_, alternatives) => {
                             for alternative in alternatives {
                                 self.literals(&alternative.bindings);
-                                if let ConsequentOperand::Projection(projection) =
+                                if let ConsequentOperand::Anonymous(anonymous) =
                                     &alternative.operand
                                 {
-                                    self.projection(projection);
+                                    self.anonymous(anonymous);
                                 }
                             }
                         }
@@ -126,8 +126,8 @@ impl ComparisonForms {
         }
     }
 
-    fn projection(&mut self, projection: &Projection) {
-        if let Projection::Witnesses { bindings, .. } = projection {
+    fn anonymous(&mut self, anonymous: &AnonymousWitnesses) {
+        if let AnonymousWitnesses::Witnesses { bindings, .. } = anonymous {
             self.literals(bindings);
         }
     }

@@ -794,7 +794,7 @@ impl SourceEligibility {
                 }
                 LiteralIr::Aggregate(_)
                 | LiteralIr::Conditional(_)
-                | LiteralIr::ProjectedAtom(..) => Activity::Optional,
+                | LiteralIr::AnonymousAtom(..) => Activity::Optional,
                 LiteralIr::PatternAtom(pattern) => {
                     self.pattern_activity(pattern.atom, binding, context)?
                 }

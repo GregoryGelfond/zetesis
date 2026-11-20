@@ -71,8 +71,8 @@ mod parallel_executor;
 pub(crate) use parallel_executor::with_source_workers;
 pub(crate) use parallel_executor::{Executor, SourceExecution};
 pub(crate) mod row_blocks;
-mod projections;
-pub(crate) use projections::supports_column_totality;
+mod expression_memos;
+pub(crate) use expression_memos::supports_column_totality;
 mod queries;
 mod relations;
 mod rows;
@@ -109,7 +109,7 @@ use relations::RelationRows;
 pub(crate) use relations::{
     ClosedSource, Relations, SourceAtom, SourceScope, SupportCatalog, atom_failure, owner_limits,
 };
-pub(crate) use rows::{FilteredRows, PositiveRows, RowFilter, RowSelection};
+pub(crate) use rows::{BindRestriction, PositiveRows, RestrictedRows, RowSelection};
 
 /// Possible atoms after a complete support round added no new head.
 ///
@@ -130,7 +130,7 @@ pub(crate) struct CompletedCatalog {
 /// An immutable relation view of one successfully completed support owner.
 /// Intermediate round snapshots deliberately have only the `Relations` type.
 pub(crate) struct CompletedSupport<'source> {
-    lookup_owner: Option<&'source zetesis_core::atom_interner::AtomInterner>,
+    lookup_owner: Option<&'source zetesis_core::atom_registry::AtomRegistry>,
     completion: &'source Completion,
     relations: Relations<'source>,
 }
@@ -173,7 +173,7 @@ pub(crate) struct StreamedSupport {
     /// a hybrid base's.
     closed: std::sync::Arc<ClosedSource>,
     rows: relations::StreamedRows,
-    lookup: zetesis_core::atom_interner::AtomInterner,
+    lookup: zetesis_core::atom_registry::AtomRegistry,
     completion: Completion,
 }
 
@@ -203,7 +203,7 @@ impl CompletedCatalog {
                 GroundingWork::new(limits, counters, location),
             )
             .map_err(|failure| failure.into_parts().0)?;
-        let lookup = zetesis_core::atom_interner::AtomInterner::for_closed_catalog(
+        let lookup = zetesis_core::atom_registry::AtomRegistry::for_closed_catalog(
             &closed.storage,
             max_bytes,
         )
@@ -325,7 +325,7 @@ impl<'source> CompletedSupport<'source> {
 /// Queries over exactly one completed support certificate. Only its completed
 /// snapshot constructs this workspace; growing relations cannot claim it.
 pub(crate) struct CompletedQueries<'source> {
-    lookup_owner: Option<&'source zetesis_core::atom_interner::AtomInterner>,
+    lookup_owner: Option<&'source zetesis_core::atom_registry::AtomRegistry>,
     completion: &'source Completion,
     support: Support<'source>,
 }
@@ -1561,7 +1561,7 @@ enum Traversal {
 /// The cursor owns its current assignment, undo trails and bounded expression
 /// storage. Ordinary joins enumerate upper support and retain negative gates
 /// in emitted formulas. An explicit admitted-source scan may additionally
-/// borrow a necessary positive-row filter; it never supplies family evidence.
+/// borrow a necessary positive-row condition; it never supplies family evidence.
 pub(crate) struct Join<'a, 'source> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
     scalar_selection: scalar_selection::Preparation,
@@ -1592,7 +1592,7 @@ pub(crate) struct Join<'a, 'source> {
     /// met it; released when that depth is undone.
     failure: Option<(usize, EvalError)>,
     evaluation: Evaluation,
-    projections: projections::Projections<'a>,
+    expression_memos: expression_memos::ExpressionMemos<'a>,
     pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     head_slots: std::ops::Range<usize>,
@@ -1600,7 +1600,7 @@ pub(crate) struct Join<'a, 'source> {
     domains: Option<&'a queries::Guards<'a, 'source>>,
     // Installed only by filtered_rule before traversal; never replaced while
     // its authenticated source slots or held prefix can be retained.
-    row_filter: Option<&'a dyn RowFilter>,
+    bind_restriction: Option<&'a dyn BindRestriction>,
     /// An admitted selected query's one original positive occurrence. Its
     /// immutable source row remains resolved across ordinary backtracking.
     anchor: Option<rows::Anchor<'a>>,
@@ -1617,7 +1617,7 @@ pub(crate) struct Join<'a, 'source> {
     positions: Vec<usize>,
     probes: Vec<Option<Probe<'a, 'source>>>,
     /// Completed necessary selections of short postings, owned by their fixed
-    /// positive occurrence and used only with an immutable row filter.
+    /// positive occurrence and used only with an immutable row condition.
     probe_selections: Vec<probe_selection::Receipt<'a>>,
     /// Borrowed relations are resolved once per occurrence in this snapshot.
     resolutions: Vec<Resolution<'source>>,
@@ -1665,7 +1665,7 @@ enum Resolution<'source> {
     Unresolved,
     Resolved {
         rows: Option<&'source relations::RelationRows<'source>>,
-        /// A slot in this join's row filter, authenticated for these exact
+        /// A slot in this join's row condition, authenticated for these exact
         /// source occurrences. Absent without a filter or an offered source.
         filter_source: Option<usize>,
     },
@@ -1812,11 +1812,11 @@ impl<'a, 'source> Join<'a, 'source> {
     fn filtered_rule(
         rule: impl Into<Ir<'a, 'source, crate::formula_ir::RuleIr>>,
         support: &'a Support<'source>,
-        filter: Option<&'a dyn RowFilter>,
+        filter: Option<&'a dyn BindRestriction>,
         prepared: Option<&'a PreparedRule<'a>>,
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
-    ) -> Result<FilteredRows<'a, 'source>, FormulaFailure> {
+    ) -> Result<RestrictedRows<'a, 'source>, FormulaFailure> {
         let source_rule = rule.into();
         let rule = source_rule.get();
         let Context {
@@ -1855,9 +1855,9 @@ impl<'a, 'source> Join<'a, 'source> {
         } else {
             Self::rule(source_rule, support, computation, limits, budget, counters)?
         };
-        join.row_filter = filter;
+        join.bind_restriction = filter;
         join.prepare_selections(Context::new(computation, limits, counters, rule.location))?;
-        Ok(FilteredRows::new(join))
+        Ok(RestrictedRows::new(join))
     }
 
     /// Attach necessary domains to their exact rule and support owner.
@@ -1909,7 +1909,7 @@ impl<'a, 'source> Join<'a, 'source> {
         variant: delta::Variant,
         support: &'a Support<'source>,
         domains: Option<&'a queries::Guards<'a, 'source>>,
-        total: Option<&'a projections::ProjectionValues<'a>>,
+        total: Option<&'a expression_memos::ExpressionMemoTable<'a>>,
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
@@ -1987,7 +1987,7 @@ impl<'a, 'source> Join<'a, 'source> {
         }) {
             return Ok(());
         }
-        if self.projections.total_body(
+        if self.expression_memos.total_body(
             rule,
             self.support,
             &mut self.evaluation,
@@ -2081,7 +2081,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
         if (self.coverage != Coverage::Complete
-            && !projections::needs_totality(&rule.body)
+            && !expression_memos::needs_totality(&rule.body)
             && !self.generated)
             || self.source_evidence
             || self.delta.is_some()
@@ -2094,7 +2094,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 location: rule.location,
             });
         }
-        let total = self.projections.total_body(
+        let total = self.expression_memos.total_body(
             rule,
             self.support,
             &mut self.evaluation,
@@ -2137,7 +2137,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 location: rule.location,
             });
         }
-        if !projections::supports_column_totality(rule, limits, counters)?
+        if !expression_memos::supports_column_totality(rule, limits, counters)?
             || !keys::covered_family(
                 rule,
                 &self.plan,
@@ -2146,7 +2146,7 @@ impl<'a, 'source> Join<'a, 'source> {
         {
             return Ok(false);
         }
-        let total = self.projections.total_family(
+        let total = self.expression_memos.total_family(
             rule,
             self.support,
             &mut self.evaluation,
@@ -2682,7 +2682,7 @@ impl<'a, 'source> Join<'a, 'source> {
         context: Context<'_, &Computation<'_, '_>>,
         (variant, total): (
             delta::Variant,
-            Option<&'a projections::ProjectionValues<'a>>,
+            Option<&'a expression_memos::ExpressionMemoTable<'a>>,
         ),
     ) -> Result<Self, FormulaFailure> {
         let Context {
@@ -2728,7 +2728,7 @@ impl<'a, 'source> Join<'a, 'source> {
         variables: usize,
         support: &'a Support<'source>,
         plan: JoinPlan<'a>,
-        total: Option<&'a projections::ProjectionValues<'a>>,
+        total: Option<&'a expression_memos::ExpressionMemoTable<'a>>,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
         let Context {
@@ -2749,7 +2749,7 @@ impl<'a, 'source> Join<'a, 'source> {
         let header = size_of::<Self>()
             - size_of::<Binding>()
             - size_of::<Evaluation>()
-            - usize::from(total.is_none()) * size_of::<projections::ProjectionValues<'_>>();
+            - usize::from(total.is_none()) * size_of::<expression_memos::ExpressionMemoTable<'_>>();
         let initial = usize::try_from(plan_bytes + header as u128).map_err(|_| {
             crate::formula_binding::assignment(
                 zetesis_core::catalog::AssignmentError::Storage(
@@ -2792,12 +2792,12 @@ impl<'a, 'source> Join<'a, 'source> {
             verdicts: Vec::new(),
             failure: None,
             evaluation: Evaluation::default(),
-            projections: projections::Projections::for_cursor(
+            expression_memos: expression_memos::ExpressionMemos::for_cursor(
                 total,
                 &Context::new(computation, limits, counters, location),
             )?,
             domains: None,
-            row_filter: None,
+            bind_restriction: None,
             anchor: None,
             positive_prefix: None,
             support,
@@ -2861,7 +2861,7 @@ impl<'a, 'source> Join<'a, 'source> {
         size_of::<Self>()
             - size_of::<Binding>()
             - size_of::<Evaluation>()
-            - self.projections.leased_header()
+            - self.expression_memos.leased_header()
             - self.scalar_selection.leased_header()
             - self
                 .structural_query
@@ -3102,7 +3102,7 @@ impl<'a, 'source> Join<'a, 'source> {
             .map(Frame::into_owned))
     }
     /// Return each completed positive binding with its scalar selection result.
-    /// Ordinary admission joins have no external row filter and visit the full family.
+    /// Ordinary admission joins have no external row condition and visit the full family.
     pub(crate) fn next_row(
         &mut self,
         computation: &mut Computation<'_, '_>,
@@ -3650,7 +3650,7 @@ impl<'a, 'source> Join<'a, 'source> {
             let rows = self
                 .support
                 .resolve(pattern.atom(), limits, counters, location)?;
-            let filter_source = match (self.row_filter, rows) {
+            let filter_source = match (self.bind_restriction, rows) {
                 (Some(filter), Some(source)) if source.row_count() != 0 => {
                     Some(filter.resolve(source.atoms, limits, counters, location)?)
                 }
@@ -3758,14 +3758,14 @@ impl<'a, 'source> Join<'a, 'source> {
             source,
             Context::new(computation, limits, counters, location),
         )? {
-            projections::Computed::Probe(probe) => {
+            expression_memos::Computed::Probe(probe) => {
                 return Ok(Narrowed {
                     probe: Some(probe),
                     declined: None,
                 });
             }
-            projections::Computed::Declined(ticket) => Some(ticket),
-            projections::Computed::Absent => None,
+            expression_memos::Computed::Declined(ticket) => Some(ticket),
+            expression_memos::Computed::Absent => None,
         };
         let probe = self.expression_key_probe(
             pattern,
@@ -3906,7 +3906,7 @@ impl<'a, 'source> Join<'a, 'source> {
     }
     /// External admitted-source selection and ordinary necessary domains meet
     /// at the same pre-binding boundary. Complete arithmetic admission ignores
-    /// domains as before; only an explicit filtered consumer has a row filter.
+    /// domains as before; only an explicit filtered consumer has a row condition.
     fn permits_row(
         &self,
         pattern: PatternOccurrence<'_>,
@@ -3915,7 +3915,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<RowSelection, FormulaFailure> {
-        let selected = if let Some(filter) = self.row_filter {
+        let selected = if let Some(filter) = self.bind_restriction {
             let source = self.resolutions[self.depth]
                 .filter_source()
                 .expect("an offered filtered row has an authenticated source");
@@ -4076,7 +4076,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 .and_then(|view| view.operands(index))
             {
                 // The selected operands have their own DAG. Original unary
-                // projection descriptors name generated slots and cannot serve it.
+                // expression-memo descriptors name generated slots and cannot serve it.
                 self.evaluation.source_comparison(
                     operands,
                     &self.values,
@@ -4094,7 +4094,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 if let Some(holds) = decided {
                     Ok(holds)
                 } else if self.certified_total {
-                    self.projections.compare(
+                    self.expression_memos.compare(
                         index,
                         ([left, right], relation),
                         &self.values,

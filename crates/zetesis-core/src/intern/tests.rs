@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use proptest::prelude::*;
 use zetesis_algebra::threads::Pool;
 
-use super::{ContentOrder, Frozen, Handle, Id, Interner, Words, Work, sort_by_content};
+use super::{ContentInterner, ContentOrder, Frozen, Handle, Id, Words, Work, sort_by_content};
 
 fn pool(threads: usize) -> Pool {
     Pool::new(NonZeroUsize::new(threads).unwrap(), |index| {
@@ -14,7 +14,7 @@ fn pool(threads: usize) -> Pool {
 }
 
 /// Intern every content, freeze, and return each content's final identity.
-fn frozen_ids(interner: &mut Interner<Words>, contents: &[Vec<u32>]) -> Vec<Id> {
+fn frozen_ids(interner: &mut ContentInterner<Words>, contents: &[Vec<u32>]) -> Vec<Id> {
     let mut work = Work::default();
     let handles: Vec<Handle> = contents
         .iter()
@@ -29,7 +29,7 @@ fn frozen_ids(interner: &mut Interner<Words>, contents: &[Vec<u32>]) -> Vec<Id> 
 
 #[test]
 fn freeze_numbers_a_generation_in_content_order() {
-    let mut interner = Interner::new(Words);
+    let mut interner = ContentInterner::new(Words);
     let ids = frozen_ids(&mut interner, &[vec![3], vec![1, 9], vec![2], vec![1]]);
     let indices: Vec<usize> = ids.iter().map(|id| id.index()).collect();
     // [1] < [1, 9] < [2] < [3] lexicographically.
@@ -38,7 +38,7 @@ fn freeze_numbers_a_generation_in_content_order() {
 
 #[test]
 fn equal_content_interns_to_one_identity() {
-    let mut interner = Interner::new(Words);
+    let mut interner = ContentInterner::new(Words);
     let ids = frozen_ids(&mut interner, &[vec![5, 6], vec![5, 6], vec![7]]);
     assert_eq!(ids[0], ids[1]);
     assert_eq!(interner.len(), 2);
@@ -46,7 +46,7 @@ fn equal_content_interns_to_one_identity() {
 
 #[test]
 fn a_frozen_lookup_allocates_nothing() {
-    let mut interner = Interner::new(Words);
+    let mut interner = ContentInterner::new(Words);
     let contents: Vec<Vec<u32>> = (0..500).map(|value| vec![value, value * 7]).collect();
     let ids = frozen_ids(&mut interner, &contents);
     let bytes = interner.bytes();
@@ -61,7 +61,7 @@ fn a_frozen_lookup_allocates_nothing() {
 
 #[test]
 fn a_later_generation_follows_every_earlier_identity() {
-    let mut interner = Interner::new(Words);
+    let mut interner = ContentInterner::new(Words);
     let first = frozen_ids(&mut interner, &[vec![50], vec![10]]);
     let second = frozen_ids(&mut interner, &[vec![30], vec![5]]);
     assert!(second.iter().all(|id| id.index() >= 2));
@@ -81,7 +81,7 @@ fn a_later_generation_follows_every_earlier_identity() {
 
 #[test]
 fn an_empty_freeze_starts_no_generation() {
-    let mut interner = Interner::new(Words);
+    let mut interner = ContentInterner::new(Words);
     let mut work = Work::default();
     interner.freeze(None, &mut work).unwrap();
     assert_eq!(interner.generations(), 0);
@@ -104,7 +104,7 @@ impl ContentOrder for Nested {
 
 #[test]
 fn nested_content_orders_by_its_children_order() {
-    let mut interner = Interner::new(Nested);
+    let mut interner = ContentInterner::new(Nested);
     let mut work = Work::default();
     let numbers: Vec<Handle> = [9, 4]
         .iter()
@@ -133,7 +133,7 @@ fn nested_content_orders_by_its_children_order() {
 /// per-worker shuffled order, then frozen on the same pool.
 fn concurrent_run(threads: usize, contents: &[Vec<u32>]) -> (Vec<Id>, Work) {
     let pool = pool(threads);
-    let mut interner = Interner::new(Words);
+    let mut interner = ContentInterner::new(Words);
     let works = std::sync::Mutex::new(Vec::new());
     pool.scope(|scope| {
         for worker in 0..threads {
@@ -179,7 +179,7 @@ fn identities_are_the_same_at_one_two_four_and_fourteen_threads() {
 fn intern_work_totals_do_not_depend_on_the_interning_order() {
     let contents: Vec<Vec<u32>> = (0..300).map(|value| vec![value % 40, value]).collect();
     let tally = |order: &[usize]| {
-        let interner = Interner::new(Words);
+        let interner = ContentInterner::new(Words);
         let mut work = Work::default();
         for &index in order {
             interner.intern(&contents[index], &mut work).unwrap();
@@ -222,7 +222,7 @@ proptest! {
     fn identity_order_is_content_order_within_a_generation(
         contents in proptest::collection::vec(proptest::collection::vec(0_u32..6, 0..4), 1..60)
     ) {
-        let mut interner = Interner::new(Words);
+        let mut interner = ContentInterner::new(Words);
         let ids = frozen_ids(&mut interner, &contents);
         for (a, left) in ids.iter().zip(&contents) {
             for (b, right) in ids.iter().zip(&contents) {

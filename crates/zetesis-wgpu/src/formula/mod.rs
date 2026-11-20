@@ -4,15 +4,15 @@ mod device;
 mod packing;
 mod preparation;
 mod profile;
-mod projection;
+mod node_kernel;
 mod transport;
 
 use std::time::Duration;
 
 pub use device::{GpuFormulaOracle, PreparedFormulaSubmission};
+pub use node_kernel::BinaryNodeKernel;
 pub use profile::GpuFormulaProfile;
 pub(crate) use profile::check_limits;
-pub use projection::GateProjection;
 
 /// Bounds for one resident finite-formula propagation dispatch.
 #[derive(Clone, Copy, Debug)]

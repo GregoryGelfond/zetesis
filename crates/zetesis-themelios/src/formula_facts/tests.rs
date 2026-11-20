@@ -119,7 +119,7 @@ fn grounded(admitted: &crate::AdmittedFormulaBundle) -> String {
         admitted.objectives(),
         admitted.objective_origins(),
         admitted.objective_declarations(),
-        admitted.projection(),
+        admitted.projective_domain(),
         admitted.warnings(),
     )
 }

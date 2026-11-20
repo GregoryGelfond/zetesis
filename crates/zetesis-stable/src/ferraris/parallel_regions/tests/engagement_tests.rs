@@ -397,12 +397,13 @@ struct Pass {
 
 struct PassWorker(Arc<AtomicUsize>);
 
-impl crate::region_filter::tests::injection::Source for Pass {
+impl crate::constraint_refutation::tests::injection::Source for Pass {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn crate::region_filter::tests::injection::Worker + '_>, Incomplete> {
+    ) -> Result<Box<dyn crate::constraint_refutation::tests::injection::Worker + '_>, Incomplete>
+    {
         cancellation.poll()?;
         if !theory.same_instance(&self.theory) {
             return Err(Incomplete::WrongTheory);
@@ -412,7 +413,7 @@ impl crate::region_filter::tests::injection::Source for Pass {
     }
 }
 
-impl crate::region_filter::tests::injection::Worker for PassWorker {
+impl crate::constraint_refutation::tests::injection::Worker for PassWorker {
     fn check(
         &mut self,
         _: &Theory,
@@ -445,12 +446,13 @@ struct FaultyWorker {
     checked: usize,
 }
 
-impl crate::region_filter::tests::injection::Source for Faulty {
+impl crate::constraint_refutation::tests::injection::Source for Faulty {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn crate::region_filter::tests::injection::Worker + '_>, Incomplete> {
+    ) -> Result<Box<dyn crate::constraint_refutation::tests::injection::Worker + '_>, Incomplete>
+    {
         cancellation.poll()?;
         if !theory.same_instance(&self.theory) {
             return Err(Incomplete::WrongTheory);
@@ -463,7 +465,7 @@ impl crate::region_filter::tests::injection::Source for Faulty {
     }
 }
 
-impl crate::region_filter::tests::injection::Worker for FaultyWorker {
+impl crate::constraint_refutation::tests::injection::Worker for FaultyWorker {
     fn check(
         &mut self,
         _: &Theory,
@@ -501,7 +503,7 @@ impl Drop for FaultyWorker {
 fn handoff(
     (mut search, index): (ParallelRegions, Arc<IndexedTheory>),
     certificate: Option<&Arc<Certification>>,
-    filter: Option<&Arc<dyn crate::region_filter::tests::injection::Source>>,
+    filter: Option<&Arc<dyn crate::constraint_refutation::tests::injection::Source>>,
     refuted: bool,
     skip: usize,
 ) -> (ParallelRegions, Vec<Vec<usize>>) {
@@ -514,8 +516,8 @@ fn handoff(
     }
     if let Some(filter) = filter {
         search
-            .set_filter(crate::region_filter::Filter::new(
-                crate::region_filter::Source::Fixture(Arc::clone(filter)),
+            .set_refuter(crate::constraint_refutation::ConstraintRefuter::new(
+                crate::constraint_refutation::Source::Fixture(Arc::clone(filter)),
             ))
             .unwrap();
     }
@@ -673,13 +675,13 @@ fn a_handoff_counts_the_coordinators_tight_checks_once() {
 fn a_filtered_handoff_prepares_at_most_one_checker_more_than_its_workers() {
     let theory = loop_beside_choices(3);
     let live = Arc::new(AtomicUsize::new(0));
-    let filter: Arc<dyn crate::region_filter::tests::injection::Source> = Arc::new(Pass {
+    let filter: Arc<dyn crate::constraint_refutation::tests::injection::Source> = Arc::new(Pass {
         theory: theory.clone(),
         live: Arc::clone(&live),
     });
     let expected = unengaged(walk(&theory, NEVER), None, true);
     let (search, models) = handoff(walk(&theory, LATE), None, Some(&filter), true, 1);
-    let preparations = search.filter().unwrap().statistics().preparations;
+    let preparations = search.refuter().unwrap().statistics().preparations;
     assert!((1..=3).contains(&preparations), "{preparations}");
     assert_eq!(live.load(Ordering::SeqCst), 0);
     assert_eq!(
@@ -959,8 +961,8 @@ fn a_failed_release_at_engagement_starts_no_thread() {
     let theory = tautologies(3);
     let (mut search, index) = walk(&theory, LATE);
     search
-        .set_filter(crate::region_filter::Filter::new(
-            crate::region_filter::Source::Fixture(Arc::new(Faulty {
+        .set_refuter(crate::constraint_refutation::ConstraintRefuter::new(
+            crate::constraint_refutation::Source::Fixture(Arc::new(Faulty {
                 theory: theory.clone(),
                 panic_on_drop: true,
                 panic_at: Arc::new(AtomicUsize::new(0)),
@@ -991,8 +993,8 @@ fn a_panic_in_a_coordinator_step_merges_nothing_of_its_pull() {
     omit_producers_for_membership_test(&mut search);
     let panic_at = Arc::new(AtomicUsize::new(0));
     search
-        .set_filter(crate::region_filter::Filter::new(
-            crate::region_filter::Source::Fixture(Arc::new(Faulty {
+        .set_refuter(crate::constraint_refutation::ConstraintRefuter::new(
+            crate::constraint_refutation::Source::Fixture(Arc::new(Faulty {
                 theory: theory.clone(),
                 panic_on_drop: false,
                 panic_at: Arc::clone(&panic_at),
@@ -1106,13 +1108,13 @@ fn configuration_is_refused_once_the_walk_has_begun() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        search.set_filter(crate::region_filter::Filter::new(
-            crate::region_filter::Source::Fixture(Arc::new(Pass {
+        search.set_refuter(crate::constraint_refutation::ConstraintRefuter::new(
+            crate::constraint_refutation::Source::Fixture(Arc::new(Pass {
                 theory: theory.clone(),
                 live: Arc::new(AtomicUsize::new(0)),
             }))
         )),
-        Err(Incomplete::LateRegionFilter)
+        Err(Incomplete::LateConstraintRefuter)
     );
     let candidate = Interpretation::new(&theory, []).unwrap();
     assert_eq!(

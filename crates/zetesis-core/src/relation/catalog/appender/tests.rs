@@ -1,4 +1,4 @@
-use crate::atom_interner::{AtomInterner, Limits as AtomLimits};
+use crate::atom_registry::{AtomRegistry, Limits as AtomLimits};
 use crate::relation::{Catalog, Failure, Limits, Resource};
 use crate::{Atom, Predicate, Value};
 
@@ -10,8 +10,8 @@ fn atom(values: &[i32]) -> Atom {
     .unwrap()
 }
 
-fn owner(atoms: &[Atom]) -> AtomInterner {
-    let mut owner = AtomInterner::default();
+fn owner(atoms: &[Atom]) -> AtomRegistry {
+    let mut owner = AtomRegistry::default();
     let limits = AtomLimits::for_atoms(65_536, 64 * 1024 * 1024);
     for atom in atoms {
         owner
@@ -23,7 +23,7 @@ fn owner(atoms: &[Atom]) -> AtomInterner {
     owner
 }
 
-fn catalog(owner: &AtomInterner) -> Catalog {
+fn catalog(owner: &AtomRegistry) -> Catalog {
     let read = owner.read();
     Catalog::new(
         read,
@@ -34,7 +34,7 @@ fn catalog(owner: &AtomInterner) -> Catalog {
     .unwrap()
 }
 
-fn columns(catalog: &Catalog, owner: &AtomInterner) -> Vec<Vec<u32>> {
+fn columns(catalog: &Catalog, owner: &AtomRegistry) -> Vec<Vec<u32>> {
     catalog
         .view(owner.read())
         .unwrap()

@@ -513,7 +513,7 @@ fn classify(
             | LiteralIr::HeadGuard(_)
             | LiteralIr::Bind { .. }
             | LiteralIr::Range { .. } => {}
-            LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
+            LiteralIr::AnonymousAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
                 return Ok(Kind::Rich);
             }
         }
