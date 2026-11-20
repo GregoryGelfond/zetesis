@@ -6,15 +6,15 @@
 
 use std::ops::Range;
 
-use super::{Computation, Context, Counters, GroundingWork, StorageLease, Support};
 use super::{cursor_rows::CursorRows, witness_rows};
+use super::{Computation, Context, Counters, GroundingWork, StorageLease, Support};
 use crate::formula_ir::RuleIr;
 use crate::formula_support::accounting::StopPrecedence;
-use crate::formula_support::parallel_executor::{Capture, Executor, Outcome, TASKS, settle};
+use crate::formula_support::parallel_executor::{settle, Capture, Executor, Outcome, TASKS};
 use crate::formula_support::{Accounting, Buffer, Join};
 use crate::grounding_observer::Work;
+use crate::{expansion::Budget, ProgramSite};
 use crate::{ExpansionLimits, ExpansionUsage, FormulaFailure, FormulaLimits, FormulaResource};
-use crate::{ProgramSite, expansion::Budget};
 
 struct Block {
     rows: Range<usize>,
@@ -140,13 +140,8 @@ pub(crate) fn run<T: Send>(
     width: usize,
     budget: &mut Budget,
     context: Context<'_, &Computation<'_, '_>>,
-    kernel: impl Fn(
-        Range<usize>,
-        &FormulaLimits,
-        &mut Budget,
-        &mut Counters,
-    ) -> Result<T, FormulaFailure>
-    + Sync,
+    kernel: impl Fn(Range<usize>, &FormulaLimits, &mut Budget, &mut Counters) -> Result<T, FormulaFailure>
+        + Sync,
 ) -> Result<Completed<T>, FormulaFailure> {
     run_grouped(executor, width, TASKS, budget, context, kernel)
 }
@@ -157,13 +152,8 @@ pub(crate) fn run_grouped<T: Send>(
     groups: usize,
     budget: &mut Budget,
     context: Context<'_, &Computation<'_, '_>>,
-    kernel: impl Fn(
-        Range<usize>,
-        &FormulaLimits,
-        &mut Budget,
-        &mut Counters,
-    ) -> Result<T, FormulaFailure>
-    + Sync,
+    kernel: impl Fn(Range<usize>, &FormulaLimits, &mut Budget, &mut Counters) -> Result<T, FormulaFailure>
+        + Sync,
 ) -> Result<Completed<T>, FormulaFailure> {
     let Context {
         computation,
@@ -593,6 +583,72 @@ pub(in crate::formula_support) fn derive<'source>(
     Ok(true)
 }
 
+/// Stage emission witnesses with the same adaptive prefix split as support.
+///
+/// Already-admitted positive-flat streams still use `TASKS` groups when `d = 1`.
+/// A short first probe that actually reaches `PRIME_GROUPS` tuples at `d = 2`
+/// or `d = 3` takes that deeper list and the 56-group cap. Prime-admitted
+/// emission (generated cursors, or a body that failed PositiveAtoms) uses the
+/// same reservation decline as support. A deep prefix that cannot be reserved
+/// on a non-Prime stream falls back to the first-row split rather than leaving
+/// the already-admitted path.
+pub(crate) fn stage_emission_witnesses<'plan, 'source: 'plan>(
+    executor: &Executor,
+    plan: &'plan witness_rows::WitnessPlan<'plan, 'source>,
+    support: &Support<'source>,
+    budget: &mut Budget,
+    context: Context<'_, &mut Computation<'_, 'source>>,
+) -> Result<Option<Completed<witness_rows::Batch<'plan, 'source>>>, FormulaFailure>
+where
+    'source: 'plan,
+{
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    let mut prefixes = super::prime::prefixes::adapt(
+        plan.rule(),
+        plan.join_plan(),
+        plan.first_rows(),
+        support,
+        budget,
+        Context::new(computation, limits, counters, location),
+    )?;
+    if plan.prime() || prefixes.depth() > 1 {
+        let remaining = limits
+            .max_support_bytes
+            .saturating_sub(computation.query_support().live_bytes());
+        if super::prime::admit_reservation(
+            prefixes.len(),
+            plan.pattern_count(),
+            plan.max_row_index(),
+            0,
+            0,
+            0,
+            remaining,
+        )
+        .is_none()
+        {
+            if plan.prime() {
+                return Ok(None);
+            }
+            prefixes = super::prime::prefixes::Prefixes::first(plan.first_rows());
+        }
+    }
+    Ok(Some(stage_witnesses_with(
+        executor,
+        plan,
+        &prefixes,
+        budget,
+        Context::new(&*computation, limits, counters, location),
+    )?))
+}
+
 /// The pending-read borrow ends after every task joins, before any consumer can
 /// publish through the original writer. This path stages occurrences only.
 pub(crate) fn stage_witnesses<'plan, 'source: 'plan>(
@@ -639,10 +695,17 @@ pub(crate) fn stage_witnesses_with<'plan, 'source: 'plan>(
     } else {
         prefixes.len()
     };
+    // A deepened prefix list is an A′ split: cap it at PRIME_GROUPS even when
+    // the underlying plan is a 14-task positive-flat emission stream.
+    let groups = if prefixes.depth() > 1 {
+        super::prime::PRIME_GROUPS
+    } else {
+        plan.groups()
+    };
     run_grouped(
         executor,
         width,
-        plan.groups(),
+        groups,
         budget,
         Context::new(computation, limits, counters, location),
         |block, limits, budget, counters| {

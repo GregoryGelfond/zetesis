@@ -1,7 +1,9 @@
 //! Adaptive prefix depth for A′: smallest `d ≤ 3` with at least `PRIME_GROUPS`
 //! prefix tuples, then the same data-defined group split as the d = 1 path.
 //!
-//! Existing 14-task streams never enter this module. A Prime rule whose first
+//! Support's 14-task path never enters this module. Formula emission may call
+//! [`adapt`] so a short first probe can deepen; when `d = 1`, that call returns
+//! the existing first-row list with no extra walk. A Prime rule whose first
 //! selected probe already has at least [`PRIME_GROUPS`] rows, or that has only
 //! one pattern, keeps that first-row list and incurs no extra walk or storage.
 //! Prefix enumeration is charged work under the same limits as the serial join
@@ -9,13 +11,13 @@
 //! refusal while deepening falls back to the longest successful prefix list
 //! (or to d = 1) rather than aborting the rule.
 
-use super::{PRIME_GROUPS, classify_body};
+use super::{classify_body, PRIME_GROUPS};
 use crate::expansion::Budget;
 use crate::formula_ir::RuleIr;
 use crate::formula_support::accounting::StopPrecedence;
 use crate::formula_support::{
-    Binding, Buffer, Computation, Context, Counters, GroundingWork, Ir, Join, JoinPlan, Support,
-    order,
+    order, Binding, Buffer, Computation, Context, Counters, GroundingWork, Ir, Join, JoinPlan,
+    Support,
 };
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
@@ -175,7 +177,8 @@ pub(super) fn chosen_depth(first: usize, deeper: &[usize], pattern_count: usize)
     1
 }
 
-/// Build the A′ prefix list. Called only for Prime-admitted rules.
+/// Build the A′ prefix list. Support calls this only for Prime-admitted rules.
+/// Emission may also call it for already-admitted positive-flat streams.
 ///
 /// Resource refusals while enumerating a deeper list keep the longest
 /// successful list so the rule can still proceed, or fall back to d = 1.
@@ -308,7 +311,7 @@ fn owner(location: ProgramSite) -> FormulaFailure {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_PREFIX_DEPTH, PRIME_GROUPS, chosen_depth};
+    use super::{chosen_depth, MAX_PREFIX_DEPTH, PRIME_GROUPS};
 
     #[test]
     fn a_wide_first_probe_stays_at_depth_one() {

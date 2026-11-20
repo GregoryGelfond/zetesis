@@ -11,11 +11,11 @@ mod producer;
 mod tests;
 
 use super::{
-    BodyKind, Buffer, Computation, Context, Counters, Join, RuleIr, StorageLease, checked_rule,
-    order, relations, selected_rows,
+    checked_rule, order, relations, selected_rows, BodyKind, Buffer, Computation, Context,
+    Counters, Join, RuleIr, StorageLease,
 };
 use crate::formula_support::{
-    Comparisons, Coverage, Traversal, expression_memos, scalar_selection,
+    expression_memos, scalar_selection, Comparisons, Coverage, Traversal,
 };
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
@@ -106,7 +106,41 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
             return Err(owner(rule.location));
         }
         let mut prime = false;
-        if kind != Kind::Support {
+        if kind == Kind::Emission {
+            // Existing positive-atom emission keeps its original charge
+            // order and still declines comparison bodies: `witnesses::eligible`
+            // and `emit_row` remain all-atom, so Prime is only a fallback for
+            // generated cursors that the 14-task `!generated` gate rejects.
+            if !cursor.generated {
+                if !checked_rule(rule, computation, limits, counters, BodyKind::PositiveAtoms)?
+                    || !initial_kind(
+                        cursor,
+                        Coverage::Selected,
+                        limits,
+                        counters,
+                        rule.location,
+                        true,
+                        false,
+                    )?
+                {
+                    return Ok(None);
+                }
+            } else if !checked_rule(rule, computation, limits, counters, BodyKind::Prime)?
+                || !initial_kind(
+                    cursor,
+                    Coverage::Selected,
+                    limits,
+                    counters,
+                    rule.location,
+                    true,
+                    true,
+                )?
+            {
+                return Ok(None);
+            } else {
+                prime = true;
+            }
+        } else if kind != Kind::Support {
             // Only this complete read-only body certificate makes the retained
             // family owner unreachable from worker traversal. It stays on the
             // original cursor and is never copied into a worker.
