@@ -1,12 +1,13 @@
 //! Bounded preparation of a complete human model record.
 //!
-//! Both passes read the same immutable contents. The first counts actual UTF-8
-//! writes without allocating a record; exceeding the byte ceiling stops that
-//! pass. The second reserves the admitted length once and reproduces those bytes.
-//! No external sink is touched here. Time is two spelling/selection traversals;
-//! retained record storage is its admitted length, subject to allocator rounding.
-//! Compound spelling also uses fallible temporary frames proportional to depth;
-//! the record byte ceiling does not bound those frames.
+//! One spelling pass appends the record's UTF-8 writes to a buffer that grows
+//! fallibly and never past the byte ceiling; the write that would exceed the
+//! ceiling stops the pass, and so does cancellation. No external sink is
+//! touched here, and no incomplete record escapes. Time is one
+//! spelling/selection traversal; record storage is at most the ceiling, and
+//! at most twice the record's length, subject to allocator rounding.
+//! Compound spelling also uses fallible temporary frames proportional to
+//! depth; the record byte ceiling does not bound those frames.
 
 use std::{
     convert::Infallible,
@@ -39,32 +40,26 @@ impl Record {
         maximum: usize,
         cancellation: &Cancellation,
     ) -> Result<Self, RunError> {
-        let mut length = Length {
-            bytes: 0,
+        let mut record = Bounded {
+            bytes: Vec::new(),
             maximum,
             refusal: None,
             stopped: None,
             cancellation,
         };
-        if let Err(error) = write_record(&mut length, number, contents, score, color) {
-            if let Some(observed) = length.refusal {
+        if let Err(error) = write_record(&mut record, number, contents, score, color) {
+            if let Some(observed) = record.refusal {
                 return Err(RunError::ObservationOutputLimit {
                     observed,
                     limit: maximum,
                 });
             }
-            if let Some(stop) = length.stopped {
+            if let Some(stop) = record.stopped {
                 return Err(RunError::PublicationStopped(stop));
             }
             return Err(RunError::Output(error));
         }
-        let mut bytes = Vec::new();
-        bytes
-            .try_reserve_exact(length.bytes)
-            .map_err(|error| RunError::Output(io::Error::other(error)))?;
-        write_record(&mut bytes, number, contents, score, color)?;
-        debug_assert_eq!(bytes.len(), length.bytes);
-        Ok(Self(bytes))
+        Ok(Self(record.bytes))
     }
 
     pub(crate) fn bytes(&self) -> &[u8] {
@@ -96,28 +91,39 @@ fn write_record(
     Ok(())
 }
 
-/// A bounded count of the attempted record prefix, not an output sink.
-struct Length<'a> {
-    bytes: usize,
+/// The attempted record prefix, bounded by the record byte ceiling; not an
+/// output sink.
+struct Bounded<'a> {
+    bytes: Vec<u8>,
     maximum: usize,
     refusal: Option<u128>,
     stopped: Option<Stop>,
     cancellation: &'a Cancellation,
 }
 
-impl Write for Length<'_> {
+impl Write for Bounded<'_> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if let Err(stop) = self.cancellation.poll() {
             self.stopped = Some(stop);
             return Err(io::Error::other(stop));
         }
-        let observed = self.bytes as u128 + bytes.len() as u128;
+        let observed = self.bytes.len() as u128 + bytes.len() as u128;
         if observed > self.maximum as u128 {
             self.refusal = Some(observed);
             return Err(io::Error::other("human model record byte ceiling"));
         }
         // The checked prefix is bounded by a usize ceiling, so this sum fits.
-        self.bytes += bytes.len();
+        let needed = self.bytes.len() + bytes.len();
+        if needed > self.bytes.capacity() {
+            // Doubling keeps the appends linear; the ceiling caps the buffer.
+            let target = needed
+                .max(self.bytes.capacity().saturating_mul(2))
+                .min(self.maximum);
+            self.bytes
+                .try_reserve_exact(target - self.bytes.len())
+                .map_err(io::Error::other)?;
+        }
+        self.bytes.extend_from_slice(bytes);
         Ok(bytes.len())
     }
 
