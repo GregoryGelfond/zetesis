@@ -731,11 +731,15 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             return TiePass::Stopped(error);
         }
         // The tie pass is another stream of this solve call, so it shares the
-        // call's learned store: the strict pass's rows seed its walk.
-        if let Some(store) = self.learned.clone()
-            && let Err(error) = fresh.set_learned_store(store)
-        {
-            return TiePass::Stopped(error);
+        // call's learned store: the strict pass's theory-class rows seed its
+        // walk. Bound-class rows learned under the stricter bound are not
+        // valid for the inclusive tie-pass bound, which is weaker at the
+        // same score, and must not seed it.
+        if let Some(store) = self.learned.clone() {
+            store.drop_bound_class();
+            if let Err(error) = fresh.set_learned_store(store) {
+                return TiePass::Stopped(error);
+            }
         }
         if let Err(error) = observations.record(Event::ObjectiveTiePass {
             costs: optimum.costs(),

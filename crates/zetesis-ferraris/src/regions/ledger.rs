@@ -356,6 +356,17 @@ impl LearningStore {
             .unwrap_or(0)
     }
 
+    /// Drop every bound-class ledger. Theory-class rows remain.
+    ///
+    /// Bound-class rows hold only under a bound at least as tight as the one
+    /// they were learned under. A later stream whose bound is weaker, such as
+    /// the inclusive tie pass after a strict optimality proof, must not
+    /// inherit them.
+    pub fn drop_bound_class(&mut self) {
+        self.classes
+            .retain(|ledger| !ledger.owner.as_ref().is_some_and(LearningOwner::is_bound));
+    }
+
     /// Rows currently held whose source is founded, conflict, or bound.
     #[must_use]
     pub fn source_rows(&self) -> (usize, usize, usize) {

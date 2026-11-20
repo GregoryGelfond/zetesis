@@ -135,3 +135,55 @@ fn a_theory_carrier_does_not_apply_a_bound_row() {
     assert_eq!(counts.bound_explanations.certified, 0);
     assert_eq!(seeded.learned_rows(), 1);
 }
+
+#[test]
+fn dropping_the_bound_class_keeps_theory_rows() {
+    let bound = program(founding_disabled());
+    let mut bound_scratch = crate::NarrowingScratch::default();
+    let (result, counts) = bound.close(
+        &mut region(&dead_end()),
+        &mut bound.index.knowledge(),
+        &mut bound_scratch,
+    );
+    assert_eq!(result, Narrowing::Refuted);
+    assert_eq!(counts.bound_explanations.certified, 1);
+
+    let mut theory = Program::new(false);
+    theory.owner = LearningOwner::theory(&theory.theory, founding_disabled());
+    let mut theory_scratch = crate::NarrowingScratch::default();
+    let (result, counts) = theory.close(
+        &mut region(&dead_end()),
+        &mut theory.index.knowledge(),
+        &mut theory_scratch,
+    );
+    assert_eq!(result, Narrowing::Refuted);
+    assert_eq!(counts.conflict_explanations.certified, 1);
+
+    let mut store = LearningStore::new();
+    let attempt = crate::test_support::stop_learning(&bound_scratch.deliver_learning(
+        &bound.owner,
+        &mut store,
+        &mut Meter::reserved(&mut unlimited()),
+    ));
+    assert_eq!(attempt.result, Ok(()));
+    let attempt = crate::test_support::stop_learning(&theory_scratch.deliver_learning(
+        &theory.owner,
+        &mut store,
+        &mut Meter::reserved(&mut unlimited()),
+    ));
+    assert_eq!(attempt.result, Ok(()));
+    assert_eq!(store.source_rows(), (0, 1, 1));
+
+    store.drop_bound_class();
+    assert_eq!(store.source_rows(), (0, 1, 0));
+    assert_eq!(store.len(), 1);
+
+    let mut seeded = crate::NarrowingScratch::default();
+    let seeded_attempt = crate::test_support::stop_learning(&seeded.seed_learning(
+        &bound.owner,
+        &mut store,
+        &mut Meter::reserved(&mut unlimited()),
+    ));
+    assert_eq!(seeded_attempt.result, Ok(()));
+    assert_eq!(seeded.learned_rows(), 0);
+}
