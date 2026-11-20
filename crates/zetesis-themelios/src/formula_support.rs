@@ -992,9 +992,8 @@ fn produce<'source>(
         (guards.as_ref(), totality),
         support,
         Some(producers),
-        budget,
+        (budget, executor),
         Context::new(&mut computation, limits, counters, rule.location),
-        executor,
     )
 }
 
@@ -1087,9 +1086,8 @@ fn derive_variants<'source>(
         (guards, totality),
         support,
         None,
-        budget,
+        (budget, None),
         context,
-        None,
     )
 }
 
@@ -1102,9 +1100,8 @@ fn derive_variants_with_executor<'source>(
     ),
     support: &Support<'source>,
     producers: Option<&producers::Producers<'_>>,
-    budget: &mut Budget,
+    (budget, executor): (&mut Budget, Option<&Executor>),
     context: Context<'_, &mut Computation<'_, 'source>>,
-    executor: Option<&Executor>,
 ) -> Result<(), FormulaFailure> {
     let Context {
         computation,
@@ -1126,11 +1123,8 @@ fn derive_variants_with_executor<'source>(
         (index, rule),
         variants,
         support,
-        computation,
+        (computation, limits, budget, counters),
         producers,
-        limits,
-        budget,
-        counters,
         executor,
     )? {
         return Ok(());
@@ -1277,19 +1271,22 @@ fn positive_partners_complete(
     Ok(true)
 }
 
+const MIN_PARALLEL_DELTA: usize = 64;
+
 /// Serial evaluate at t1 (and for tiny deltas). At tN, partition each
 /// semi-naive delta across coordinator tasks, merge the bindings, and
-/// finish residuals on the coordinator so emission stays in TermRef order.
-fn evaluate_algebra_join<'a, 'source>(
+/// finish residuals on the coordinator so emission stays in `TermRef` order.
+fn evaluate_algebra_join<'a>(
     rule: &'a crate::formula_ir::RuleIr,
     support: &'a Support<'_>,
-    computation: &mut Computation<'_, 'source>,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
+    (computation, limits, budget, counters): (
+        &mut Computation<'_, '_>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ),
     executor: Option<&Executor>,
-    allow_negation: bool,
-    pending: &[usize],
+    (allow_negation, pending): (bool, &[usize]),
 ) -> Result<Option<crate::formula_ground::algebra_join::Evaluated<'a>>, FormulaFailure> {
     let parallel = executor.and_then(|executor| executor.pool()).is_some();
     if !parallel {
@@ -1312,7 +1309,7 @@ fn evaluate_algebra_join<'a, 'source>(
     if parts_spec.is_empty() {
         return crate::formula_ground::algebra_join::finish(
             prepared,
-            Vec::new(),
+            &[],
             support,
             limits,
             counters,
@@ -1332,7 +1329,6 @@ fn evaluate_algebra_join<'a, 'source>(
     };
     let tables = &prepared.tables;
     let mut bindings = Vec::new();
-    const MIN_PARALLEL_DELTA: usize = 64;
     for part in parts_spec {
         let mut account = |amount: u64| {
             crate::formula_ground::algebra_join::charge(counters, limits, rule.location, amount)
@@ -1381,7 +1377,7 @@ fn evaluate_algebra_join<'a, 'source>(
     }
     crate::formula_ground::algebra_join::finish(
         prepared,
-        bindings,
+        &bindings,
         support,
         limits,
         counters,
@@ -1408,11 +1404,13 @@ fn derive_columnar_variants<'source>(
     (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     variants: &mut delta::Variants<'_, '_>,
     support: &Support<'source>,
-    computation: &mut Computation<'_, 'source>,
+    (computation, limits, budget, counters): (
+        &mut Computation<'_, 'source>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ),
     producers: Option<&producers::Producers<'_>>,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
     executor: Option<&Executor>,
 ) -> Result<bool, FormulaFailure> {
     if derive_algebra_variants(
@@ -1430,11 +1428,8 @@ fn derive_columnar_variants<'source>(
         (index, rule),
         variants,
         support,
-        computation,
+        (computation, limits, budget, counters),
         producers,
-        limits,
-        budget,
-        counters,
         executor,
     )
 }
@@ -1445,11 +1440,13 @@ fn derive_algebra_join_variants<'source>(
     (index, rule): (usize, &'source crate::formula_ir::RuleIr),
     variants: &mut delta::Variants<'_, '_>,
     support: &Support<'source>,
-    computation: &mut Computation<'_, 'source>,
+    (computation, limits, budget, counters): (
+        &mut Computation<'_, 'source>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ),
     producers: Option<&producers::Producers<'_>>,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
     executor: Option<&Executor>,
 ) -> Result<bool, FormulaFailure> {
     let HeadIr::Normal(Some(head)) = &rule.head else {
@@ -1471,13 +1468,9 @@ fn derive_algebra_join_variants<'source>(
     let Some(evaluated) = evaluate_algebra_join(
         rule,
         support,
-        computation,
-        limits,
-        budget,
-        counters,
+        (computation, limits, budget, counters),
         executor,
-        allow_negation,
-        &pending,
+        (allow_negation, pending.as_slice()),
     )?
     else {
         return Ok(false);

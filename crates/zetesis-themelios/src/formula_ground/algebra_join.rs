@@ -17,7 +17,7 @@
 //! support atom.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_algebra::{Atoms, Bindings, JoinMethod, JoinStats, join};
@@ -36,16 +36,16 @@ fn method() -> JoinMethod {
 }
 
 /// Persistent interned snapshot columns and transferable term keys for one
-/// support-completion run. See `grounding-joins/PRIOR-ART.md`: Soufflé, FVLog,
+/// support-completion run. See `grounding-joins/PRIOR-ART.md`: Soufflé, `FVLog`,
 /// and the Vaelii redesign all keep ordinals with the relation and intern only
 /// new rows. `TermRef` cannot be stored here, because `Support` is recreated
 /// each round; `TermKey` is reborrowed through the current `CatalogRead`.
 struct InternCache {
     keys: HashMap<i32, TermKey>,
     bodies: HashMap<usize, CachedBody>,
-    /// Keys in TermRef order, grown by merging keys first seen at emit.
+    /// Keys in `TermRef` order, grown by merging keys first seen at emit.
     sorted_keys: Vec<i32>,
-    /// Dense ranks of `sorted_keys`. Relative order is TermRef order, so
+    /// Dense ranks of `sorted_keys`. Relative order is `TermRef` order, so
     /// ranks over a superset of one visit's output keys still sort that
     /// visit correctly.
     rank: HashMap<i32, u32>,
@@ -446,7 +446,7 @@ pub(crate) fn prepare<'a>(
 /// an [`Evaluated`] table for TermRef-ordered emission.
 pub(crate) fn finish<'a>(
     prepared: PreparedJoin<'a>,
-    parts: Vec<Bindings>,
+    parts: &[Bindings],
     support: &'a Support<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
@@ -482,7 +482,7 @@ pub(crate) fn finish<'a>(
 
 fn concat_bindings(
     width: usize,
-    parts: Vec<Bindings>,
+    parts: &[Bindings],
     account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
 ) -> Result<Option<Bindings>, FormulaFailure> {
     if width == 0 {
@@ -492,7 +492,7 @@ fn concat_bindings(
         return Ok(Some(Bindings::empty(width)));
     }
     let mut rows = Vec::new();
-    for part in &parts {
+    for part in parts {
         rows.extend(part.to_rows());
     }
     let mut columns = vec![Vec::with_capacity(rows.len()); width];
@@ -604,8 +604,7 @@ fn join_atoms_prebuilt(
     }
     if bounds.len() == 1 {
         let first = match (&fixed[0], &delta) {
-            (Some(table), _) => table.clone(),
-            (_, Some(table)) => table.clone(),
+            (Some(table), _) | (_, Some(table)) => table.clone(),
             _ => return Ok(None),
         };
         return Ok(Some((first, slots[0].clone())));
@@ -623,20 +622,17 @@ fn join_atoms_prebuilt(
             right_delta = Some(table);
         }
         let right: &Atoms = match (&fixed[index], &right_delta) {
-            (Some(table), _) => table,
-            (_, Some(table)) => table,
+            (Some(table), _) | (_, Some(table)) => table,
             _ => return Ok(None),
         };
-        let (left, left_slots): (&Atoms, &[usize]) = match &current {
-            Some((table, left_slots)) => (table, left_slots),
-            None => {
-                let first: &Atoms = match (&fixed[0], &delta) {
-                    (Some(table), _) => table,
-                    (_, Some(table)) => table,
-                    _ => return Ok(None),
-                };
-                (first, slots[0].as_slice())
-            }
+        let (left, left_slots): (&Atoms, &[usize]) = if let Some((table, left_slots)) = &current {
+            (table, left_slots)
+        } else {
+            let first: &Atoms = match (&fixed[0], &delta) {
+                (Some(table), _) | (_, Some(table)) => table,
+                _ => return Ok(None),
+            };
+            (first, slots[0].as_slice())
         };
         let Some((left_keys, right_keys)) = key_columns(left_slots, &slots[index]) else {
             return Ok(None);
@@ -819,22 +815,19 @@ impl<'a> TermMap<'a> {
         }
         self.resolved.get_mut().entry(key).or_insert(term);
         if let Some(read) = self.read {
-            match read.term_key(term) {
-                Ok(tk) => {
+            if let Ok(tk) = read.term_key(term) {
+                INTERN.with(|cell| {
+                    cell.borrow_mut().keys.insert(key, tk);
+                });
+            } else {
+                // A foreign key means the cache still holds a previous
+                // program's vocabulary. Drop it; this visit keeps the
+                // TermRef in `resolved` and later visits start clean.
+                reset_intern_cache();
+                if let Ok(tk) = read.term_key(term) {
                     INTERN.with(|cell| {
                         cell.borrow_mut().keys.insert(key, tk);
                     });
-                }
-                Err(_) => {
-                    // A foreign key means the cache still holds a previous
-                    // program's vocabulary. Drop it; this visit keeps the
-                    // TermRef in `resolved` and later visits start clean.
-                    reset_intern_cache();
-                    if let Ok(tk) = read.term_key(term) {
-                        INTERN.with(|cell| {
-                            cell.borrow_mut().keys.insert(key, tk);
-                        });
-                    }
                 }
             }
         }
@@ -869,11 +862,11 @@ impl<'a> TermMap<'a> {
         rows: usize,
     ) -> HashMap<i32, u32> {
         let mut needed: Vec<i32> = Vec::new();
-        let mut seen: HashMap<i32, ()> = HashMap::new();
+        let mut seen: HashSet<i32> = HashSet::new();
         for column in columns {
             let end = rows.min(column.len());
             for &key in &column[..end] {
-                if seen.insert(key, ()).is_none() {
+                if seen.insert(key) {
                     needed.push(key);
                 }
             }
@@ -895,27 +888,29 @@ impl<'a> TermMap<'a> {
         let mut old = sorted_keys.iter().copied().peekable();
         let mut new = fresh.iter().copied().peekable();
         while let (Some(&left), Some(&right)) = (old.peek(), new.peek()) {
-            match self.get(left).cmp(&self.get(right)).then(left.cmp(&right)) {
-                std::cmp::Ordering::Greater => {
-                    merged.push(right);
-                    new.next();
-                }
-                _ => {
-                    merged.push(left);
-                    old.next();
-                }
+            if self.get(left).cmp(&self.get(right)).then(left.cmp(&right))
+                == std::cmp::Ordering::Greater
+            {
+                merged.push(right);
+                new.next();
+            } else {
+                merged.push(left);
+                old.next();
             }
         }
         merged.extend(old);
         merged.extend(new);
         let mut new_rank = HashMap::with_capacity(merged.len());
         for (index, key) in merged.iter().copied().enumerate() {
-            new_rank.insert(key, index as u32);
+            new_rank.insert(
+                key,
+                u32::try_from(index).expect("intern-cache rank fits in u32"),
+            );
         }
         INTERN.with(|cell| {
             let mut intern = cell.borrow_mut();
             intern.sorted_keys = merged;
-            intern.rank = new_rank.clone();
+            intern.rank.clone_from(&new_rank);
         });
         new_rank
     }
@@ -982,7 +977,7 @@ fn counting_sort_usize(
         let shift = pass * 8;
         let mut counts = [0usize; 256];
         for (key, row) in src.iter() {
-            counts[((digit(key, *row) >> shift) & 0xff) as usize] += 1;
+            counts[(digit(key, *row) >> shift) & 0xff] += 1;
         }
         let mut sum = 0;
         for count in &mut counts {
@@ -991,7 +986,7 @@ fn counting_sort_usize(
             sum = next;
         }
         for entry in src.iter() {
-            let bucket = ((digit(&entry.0, entry.1) >> shift) & 0xff) as usize;
+            let bucket = (digit(&entry.0, entry.1) >> shift) & 0xff;
             dst[counts[bucket]] = *entry;
             counts[bucket] += 1;
         }
@@ -1289,10 +1284,7 @@ fn apply_residuals<'a>(
         return Ok(None);
     }
     for negated in &plan.negated {
-        if pending
-            .iter()
-            .any(|&occurrence| occurrence == negated.occurrence)
-        {
+        if pending.contains(&negated.occurrence) {
             // Settled, not reached: snapshot is incomplete. The hook
             // anti-joins against snapshot ∪ pending after bind.
             continue;
