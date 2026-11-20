@@ -1882,8 +1882,9 @@ impl NarrowingScratch {
         self.small.get_or_insert_with(Box::default)
     }
 
-    /// Whether a size-specialized narrowing policy is in force (off unless
-    /// `ZETESIS_SMALL_REGIONS` or [`Self::set_small_policy`] names one).
+    /// Whether a size-specialized narrowing policy is in force: the measured
+    /// default unless `ZETESIS_SMALL_REGIONS` (`off` disables it) or
+    /// [`Self::set_small_policy`] names another.
     pub fn small_active(&mut self) -> bool {
         match &mut self.small {
             Some(small) => small.active(),

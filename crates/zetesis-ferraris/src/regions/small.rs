@@ -100,16 +100,45 @@ const GATE_RETRY: u32 = 32;
 const CORES: usize = 64;
 
 impl SmallPolicy {
+    /// The measured default: the learned search on regions of at least 256
+    /// open atoms, 500 conflicts each, behind the yield gate (25%), outside
+    /// matching-shaped (at-most-one atoms >= 50%) and formula-dense (more
+    /// than 32 nodes per atom) theories.
+    #[must_use]
+    pub const fn measured() -> Self {
+        Self {
+            enumerate_up_to: 0,
+            learn_up_to: usize::MAX,
+            learn_conflicts: 500,
+            adapt_from: 0,
+            decide_all: false,
+            probe: 0,
+            gate: 25,
+            learn_from: 256,
+            matching: 50,
+            learn_after: 0,
+            density: 32,
+        }
+    }
+
     /// The policy named by `ZETESIS_SMALL_REGIONS`, e.g.
-    /// `enumerate=10,learn=256,conflicts=4000`; off when unset.
+    /// `enumerate=10,learn=256,conflicts=4000`; [`Self::measured`] when
+    /// unset, and off when `off`.
     #[must_use]
     pub fn from_environment() -> Self {
+        let Ok(text) = std::env::var("ZETESIS_SMALL_REGIONS") else {
+            return Self::measured();
+        };
+        Self::parse(&text)
+    }
+
+    /// The policy a `key=value,...` text names; keys left out are off, and
+    /// `off` names no specialization.
+    #[must_use]
+    pub fn parse(text: &str) -> Self {
         let mut policy = Self {
             learn_conflicts: 4000,
             ..Self::default()
-        };
-        let Ok(text) = std::env::var("ZETESIS_SMALL_REGIONS") else {
-            return policy;
         };
         for part in text.split(',') {
             let Some((key, value)) = part.split_once('=') else {
