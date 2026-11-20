@@ -117,151 +117,42 @@ impl RegionCounts {
     /// A sum beyond its counter's width is the counter refusal, with these
     /// counts unchanged.
     pub fn add(&mut self, other: Self) -> Result<(), Incomplete> {
+        let overflow = Incomplete::CounterOverflow;
         let sum = Self {
-            regions: self
-                .regions
-                .checked_add(other.regions)
-                .ok_or(Incomplete::CounterOverflow)?,
-            refuted: self
-                .refuted
-                .checked_add(other.refuted)
-                .ok_or(Incomplete::CounterOverflow)?,
-            leaves: self
-                .leaves
-                .checked_add(other.leaves)
-                .ok_or(Incomplete::CounterOverflow)?,
-            propagations: self
-                .propagations
-                .checked_add(other.propagations)
-                .ok_or(Incomplete::CounterOverflow)?,
-            held: self
-                .held
-                .checked_add(other.held)
-                .ok_or(Incomplete::CounterOverflow)?,
-            cut: self
-                .cut
-                .checked_add(other.cut)
-                .ok_or(Incomplete::CounterOverflow)?,
-            work: self
-                .work
-                .checked_add(other.work)
-                .ok_or(Incomplete::CounterOverflow)?,
-            support_work: self
-                .support_work
-                .checked_add(other.support_work)
-                .ok_or(Incomplete::CounterOverflow)?,
-            founded_work: self
-                .founded_work
-                .checked_add(other.founded_work)
-                .ok_or(Incomplete::CounterOverflow)?,
-            support_explanations: SupportExplanationStatistics {
-                attempts: self
-                    .support_explanations
-                    .attempts
-                    .checked_add(other.support_explanations.attempts)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                certified: self
-                    .support_explanations
-                    .certified
-                    .checked_add(other.support_explanations.certified)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                matched: self
-                    .support_explanations
-                    .matched
-                    .checked_add(other.support_explanations.matched)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                cut: self
-                    .support_explanations
-                    .cut
-                    .checked_add(other.support_explanations.cut)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                forced: self
-                    .support_explanations
-                    .forced
-                    .checked_add(other.support_explanations.forced)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                refuted: self
-                    .support_explanations
-                    .refuted
-                    .checked_add(other.support_explanations.refuted)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                declined: self
-                    .support_explanations
-                    .declined
-                    .checked_add(other.support_explanations.declined)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                work: self
-                    .support_explanations
-                    .work
-                    .checked_add(other.support_explanations.work)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                peak_bytes: self
-                    .support_explanations
-                    .peak_bytes
-                    .max(other.support_explanations.peak_bytes),
-            },
-            conflict_explanations: {
-                let mut stats = self.conflict_explanations;
-                stats.attempts = stats
-                    .attempts
-                    .checked_add(other.conflict_explanations.attempts)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                stats.certified = stats
-                    .certified
-                    .checked_add(other.conflict_explanations.certified)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                stats.declined = stats
-                    .declined
-                    .checked_add(other.conflict_explanations.declined)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                stats.shrunk = stats
-                    .shrunk
-                    .checked_add(other.conflict_explanations.shrunk)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                stats
-            },
-            bound_explanations: {
-                let mut stats = self.bound_explanations;
-                stats.attempts = stats
-                    .attempts
-                    .checked_add(other.bound_explanations.attempts)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                stats.certified = stats
-                    .certified
-                    .checked_add(other.bound_explanations.certified)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                stats.declined = stats
-                    .declined
-                    .checked_add(other.bound_explanations.declined)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                stats.shrunk = stats
-                    .shrunk
-                    .checked_add(other.bound_explanations.shrunk)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                stats
-            },
-            learning_occupancy: {
-                let mut occupancy = self.learning_occupancy;
-                occupancy.theory_rows = occupancy
-                    .theory_rows
-                    .max(other.learning_occupancy.theory_rows);
-                occupancy.bound_rows = occupancy
-                    .bound_rows
-                    .max(other.learning_occupancy.bound_rows);
-                occupancy.evicted = occupancy
-                    .evicted
-                    .checked_add(other.learning_occupancy.evicted)
-                    .ok_or(Incomplete::CounterOverflow)?;
-                occupancy.peak_bytes = occupancy
-                    .peak_bytes
-                    .max(other.learning_occupancy.peak_bytes);
-                occupancy
-            },
+            regions: self.regions.checked_add(other.regions).ok_or(overflow)?,
+            refuted: self.refuted.checked_add(other.refuted).ok_or(overflow)?,
+            leaves: self.leaves.checked_add(other.leaves).ok_or(overflow)?,
+            propagations: add_count(self.propagations, other.propagations)?,
+            held: add_count(self.held, other.held)?,
+            cut: add_count(self.cut, other.cut)?,
+            work: add_count(self.work, other.work)?,
+            support_work: add_count(self.support_work, other.support_work)?,
+            founded_work: add_count(self.founded_work, other.founded_work)?,
+            support_explanations: self
+                .support_explanations
+                .checked_add(other.support_explanations)
+                .ok_or(overflow)?,
+            conflict_explanations: self
+                .conflict_explanations
+                .checked_add(other.conflict_explanations)
+                .ok_or(overflow)?,
+            bound_explanations: self
+                .bound_explanations
+                .checked_add(other.bound_explanations)
+                .ok_or(overflow)?,
+            learning_occupancy: self
+                .learning_occupancy
+                .checked_add(other.learning_occupancy)
+                .ok_or(overflow)?,
             arithmetic: self.arithmetic.checked_add(other.arithmetic)?,
         };
         *self = sum;
         Ok(())
     }
+}
+
+fn add_count(left: u64, right: u64) -> Result<u64, Incomplete> {
+    left.checked_add(right).ok_or(Incomplete::CounterOverflow)
 }
 
 // Keep the public solver receipt name while the generic frontier owns its fields.

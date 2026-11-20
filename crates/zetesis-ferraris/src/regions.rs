@@ -587,6 +587,25 @@ pub struct SupportExplanationStatistics {
     pub peak_bytes: u128,
 }
 
+impl SupportExplanationStatistics {
+    /// Combine two snapshots. Peak bytes take the larger observation;
+    /// the other fields sum and overflow as `None`.
+    #[must_use]
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        Some(Self {
+            attempts: self.attempts.checked_add(other.attempts)?,
+            certified: self.certified.checked_add(other.certified)?,
+            matched: self.matched.checked_add(other.matched)?,
+            cut: self.cut.checked_add(other.cut)?,
+            forced: self.forced.checked_add(other.forced)?,
+            refuted: self.refuted.checked_add(other.refuted)?,
+            declined: self.declined.checked_add(other.declined)?,
+            work: self.work.checked_add(other.work)?,
+            peak_bytes: self.peak_bytes.max(other.peak_bytes),
+        })
+    }
+}
+
 /// Capture and retention counts of the refuted-region conflict source.
 /// Matching hits of those rows still use [`SupportExplanationStatistics`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -600,6 +619,19 @@ pub struct ConflictLearningStatistics {
     pub declined: u64,
     /// Decided literals dropped by minimization, across attempts.
     pub shrunk: u64,
+}
+
+impl ConflictLearningStatistics {
+    /// Combine two snapshots. Fields sum and overflow as `None`.
+    #[must_use]
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        Some(Self {
+            attempts: self.attempts.checked_add(other.attempts)?,
+            certified: self.certified.checked_add(other.certified)?,
+            declined: self.declined.checked_add(other.declined)?,
+            shrunk: self.shrunk.checked_add(other.shrunk)?,
+        })
+    }
 }
 
 /// Capture and retention counts of the objective-bound source.
@@ -617,6 +649,19 @@ pub struct BoundLearningStatistics {
     pub shrunk: u64,
 }
 
+impl BoundLearningStatistics {
+    /// Combine two snapshots. Fields sum and overflow as `None`.
+    #[must_use]
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        Some(Self {
+            attempts: self.attempts.checked_add(other.attempts)?,
+            certified: self.certified.checked_add(other.certified)?,
+            declined: self.declined.checked_add(other.declined)?,
+            shrunk: self.shrunk.checked_add(other.shrunk)?,
+        })
+    }
+}
+
 /// Worker-ledger occupancy of the two learning classes, reported as
 /// statistics, not as a receipt.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -630,6 +675,20 @@ pub struct LearningOccupancy {
     pub evicted: u64,
     /// Peak retained-plus-capture bytes of either class ledger on this worker.
     pub peak_bytes: u128,
+}
+
+impl LearningOccupancy {
+    /// Combine two snapshots. Row and peak-byte fields take the larger
+    /// observation; evictions sum and overflow as `None`.
+    #[must_use]
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        Some(Self {
+            theory_rows: self.theory_rows.max(other.theory_rows),
+            bound_rows: self.bound_rows.max(other.bound_rows),
+            evicted: self.evicted.checked_add(other.evicted)?,
+            peak_bytes: self.peak_bytes.max(other.peak_bytes),
+        })
+    }
 }
 
 /// The work one narrowing charged.
