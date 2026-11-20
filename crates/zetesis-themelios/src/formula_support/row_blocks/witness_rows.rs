@@ -45,6 +45,7 @@ pub(crate) struct WitnessPlan<'plan, 'source> {
 enum Purpose {
     Support,
     Emission,
+    Continuation,
 }
 
 pub(crate) use replay::Replay;
@@ -84,6 +85,24 @@ impl<'plan, 'source: 'plan> WitnessPlan<'plan, 'source> {
             limits,
             counters,
             Purpose::Emission,
+        )
+    }
+
+    pub(crate) fn for_continuations(
+        base: Descriptor<'plan, 'source>,
+        support: &Support<'source>,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<Self, FormulaFailure> {
+        Self::with_purpose(
+            base,
+            support.relations(),
+            support,
+            computation,
+            limits,
+            counters,
+            Purpose::Continuation,
         )
     }
 
@@ -165,6 +184,10 @@ impl<'plan, 'source: 'plan> WitnessPlan<'plan, 'source> {
 
     pub(crate) fn prime(&self) -> bool {
         self.base.prime
+    }
+
+    pub(crate) fn continuations(&self) -> bool {
+        self.base.continuations
     }
 
     pub(crate) fn first_rows(&self) -> &[usize] {
@@ -372,6 +395,37 @@ where
     )
 }
 
+fn residual_skip<'plan, 'source>(
+    prepared: &WitnessPlan<'plan, 'source>,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<super::prime::ResidualSkip, FormulaFailure> {
+    let classified = if prepared.base.continuations {
+        super::prime::classify_continuation_body(
+            &prepared.base.rule.body,
+            prepared.base.rule.body_variables,
+            computation,
+            limits,
+            counters,
+            location,
+        )?
+    } else {
+        super::prime::classify_body(
+            &prepared.base.rule.body,
+            prepared.base.rule.body_variables,
+            computation,
+            limits,
+            counters,
+            location,
+        )?
+    };
+    classified
+        .map(|class| class.skip)
+        .ok_or_else(|| owner(location))
+}
+
 fn traverse<'plan, 'source, 'read>(
     prepared: &'plan WitnessPlan<'plan, 'source>,
     rows: &[usize],
@@ -408,18 +462,13 @@ where
         )?;
         join.configure_rule(Ir::Source(prepared.base.rule), limits, counters)?;
         if prepared.prime() {
-            let skip = match super::prime::classify_body(
-                &prepared.base.rule.body,
-                prepared.base.rule.body_variables,
+            join.skip_residuals(residual_skip(
+                prepared,
                 computation,
                 limits,
                 counters,
                 location,
-            )? {
-                Some(class) => class.skip,
-                None => return Err(owner(location)),
-            };
-            join.skip_residuals(skip);
+            )?);
         }
         let first = join.plan.patterns[0];
         join.resolve_probe_source(first, GroundingWork::new(limits, counters, location))?;
@@ -511,17 +560,7 @@ where
             Context::new(computation, limits, counters, location),
         )?;
         join.configure_rule(Ir::Source(prepared.base.rule), limits, counters)?;
-        let skip = match super::prime::classify_body(
-            &prepared.base.rule.body,
-            prepared.base.rule.body_variables,
-            computation,
-            limits,
-            counters,
-            location,
-        )? {
-            Some(class) => class.skip,
-            None => return Err(owner(location)),
-        };
+        let skip = residual_skip(prepared, computation, limits, counters, location)?;
         join.skip_residuals(skip);
         join.retain_witnesses(Context::new(computation, limits, counters, location))?;
         let HeadIr::Normal(Some(head)) = prepared.base.rule.head else {
@@ -570,17 +609,7 @@ pub(super) fn publish<'plan, 'source: 'plan>(
         Context::new(&*computation, limits, counters, location),
     )?;
     let skip = if prepared.prime() {
-        match super::prime::classify_body(
-            &prepared.base.rule.body,
-            prepared.base.rule.body_variables,
-            computation,
-            limits,
-            counters,
-            location,
-        )? {
-            Some(class) => class.skip,
-            None => return Err(owner(location)),
-        }
+        residual_skip(prepared, computation, limits, counters, location)?
     } else {
         super::prime::ResidualSkip::none()
     };

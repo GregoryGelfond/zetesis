@@ -11,13 +11,13 @@
 //! refusal while deepening falls back to the longest successful prefix list
 //! (or to d = 1) rather than aborting the rule.
 
-use super::{classify_body, PRIME_GROUPS};
+use super::{PRIME_GROUPS, classify_body};
 use crate::expansion::Budget;
 use crate::formula_ir::RuleIr;
 use crate::formula_support::accounting::StopPrecedence;
 use crate::formula_support::{
-    order, Binding, Buffer, Computation, Context, Counters, GroundingWork, Ir, Join, JoinPlan,
-    Support,
+    Binding, Buffer, Computation, Context, Counters, GroundingWork, Ir, Join, JoinPlan, Support,
+    order,
 };
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
@@ -193,6 +193,21 @@ pub(in crate::formula_support) fn adapt<'plan, 'source>(
 where
     'source: 'plan,
 {
+    adapt_with(rule, join_plan, first, support, budget, false, context)
+}
+
+pub(in crate::formula_support) fn adapt_with<'plan, 'source>(
+    rule: &'source RuleIr,
+    join_plan: &'plan order::Plan<'plan>,
+    first: &'plan [usize],
+    support: &'plan Support<'source>,
+    budget: &mut Budget,
+    continuations: bool,
+    context: Context<'_, &mut Computation<'_, 'source>>,
+) -> Result<Prefixes<'plan>, FormulaFailure>
+where
+    'source: 'plan,
+{
     let patterns = join_plan.patterns.len();
     if first.len() >= PRIME_GROUPS || patterns <= 1 {
         return Ok(Prefixes::first(first));
@@ -218,6 +233,7 @@ where
             limits,
             counters,
             location,
+            continuations,
         )
     }) {
         Ok(at_two) if chosen_depth(first.len(), &[at_two.len()], patterns) == 2 => {
@@ -236,6 +252,7 @@ where
                 limits,
                 counters,
                 location,
+                continuations,
             )
         }) {
             Ok(at_three)
@@ -263,6 +280,7 @@ fn enumerate<'plan, 'source>(
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
+    continuations: bool,
 ) -> Result<PrefixTape, FormulaFailure>
 where
     'source: 'plan,
@@ -279,14 +297,26 @@ where
         Context::new(computation, limits, counters, location),
     )?;
     join.configure_rule(Ir::Source(rule), limits, counters)?;
-    let skip = match classify_body(
-        &rule.body,
-        rule.body_variables,
-        computation,
-        limits,
-        counters,
-        location,
-    )? {
+    let classified = if continuations {
+        super::classify_continuation_body(
+            &rule.body,
+            rule.body_variables,
+            computation,
+            limits,
+            counters,
+            location,
+        )?
+    } else {
+        classify_body(
+            &rule.body,
+            rule.body_variables,
+            computation,
+            limits,
+            counters,
+            location,
+        )?
+    };
+    let skip = match classified {
         Some(class) => class.skip,
         None => return Err(owner(location)),
     };
@@ -311,7 +341,7 @@ fn owner(location: ProgramSite) -> FormulaFailure {
 
 #[cfg(test)]
 mod tests {
-    use super::{chosen_depth, MAX_PREFIX_DEPTH, PRIME_GROUPS};
+    use super::{MAX_PREFIX_DEPTH, PRIME_GROUPS, chosen_depth};
 
     #[test]
     fn a_wide_first_probe_stays_at_depth_one() {

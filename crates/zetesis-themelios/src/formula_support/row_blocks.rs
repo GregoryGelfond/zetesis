@@ -74,6 +74,10 @@ enum BodyKind {
     /// term-minting binds, and any later comparisons) are skipped in the
     /// Join walk and replayed by the owner after restore.
     Prime,
+    /// Like Prime, but trailing aggregate literals are residuals. Used only
+    /// by formula-factor continuations, so support admission is unchanged.
+    /// Family evaluation stays in the owner's existing emit path.
+    Continuations,
 }
 
 fn checked_rule(
@@ -147,6 +151,9 @@ fn checked_body_kind(
     if kind == BodyKind::Prime {
         return checked_prime_body(body, variables, computation, limits, counters, location);
     }
+    if kind == BodyKind::Continuations {
+        return checked_continuation_body(body, variables, computation, limits, counters, location);
+    }
     for literal in body {
         counters.work(limits, location)?;
         match literal {
@@ -192,8 +199,35 @@ fn checked_prime_body(
     if prime::classify_body(body, variables, computation, limits, counters, location)?.is_none() {
         return Ok(false);
     }
-    // Trailing residuals are admitted: classify_body already declined a
-    // generating atom at or after the first residual.
+    checked_residual_patterns(body, variables, computation, limits, counters, location)
+}
+
+fn checked_continuation_body(
+    body: &[LiteralIr],
+    variables: usize,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    if prime::classify_continuation_body(body, variables, computation, limits, counters, location)?
+        .is_none()
+    {
+        return Ok(false);
+    }
+    checked_residual_patterns(body, variables, computation, limits, counters, location)
+}
+
+/// Trailing residuals are admitted: classify already declined a generating
+/// atom at or after the first residual.
+fn checked_residual_patterns(
+    body: &[LiteralIr],
+    variables: usize,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
     for literal in body {
         counters.work(limits, location)?;
         let pattern = match literal {
@@ -312,6 +346,7 @@ impl<'plan, 'source> RowPlan<'plan, 'source> {
             relations: self.relations,
             rows: self.rows.slice(),
             prime: false,
+            continuations: false,
         }
     }
 

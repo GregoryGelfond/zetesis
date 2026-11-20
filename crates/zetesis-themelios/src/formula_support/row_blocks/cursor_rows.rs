@@ -11,11 +11,11 @@ mod producer;
 mod tests;
 
 use super::{
-    checked_rule, order, relations, selected_rows, BodyKind, Buffer, Computation, Context,
-    Counters, Join, RuleIr, StorageLease,
+    BodyKind, Buffer, Computation, Context, Counters, Join, RuleIr, StorageLease, checked_rule,
+    order, relations, selected_rows,
 };
 use crate::formula_support::{
-    expression_memos, scalar_selection, Comparisons, Coverage, Traversal,
+    Comparisons, Coverage, Traversal, expression_memos, scalar_selection,
 };
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
@@ -24,6 +24,7 @@ enum Kind {
     Support,
     Emission,
     Producer,
+    Continuation,
 }
 
 /// A common borrowed input for either the isolated fixture or a real cursor.
@@ -37,6 +38,9 @@ pub(crate) struct Descriptor<'plan, 'source> {
     /// True when this stream was admitted by A′ (`BodyKind::Prime`) and should
     /// use [`super::prime::PRIME_GROUPS`] rather than `TASKS`.
     pub(super) prime: bool,
+    /// True when this stream is a formula-factor continuation. Trailing
+    /// aggregates are residuals; workers use [`super::prime::classify_continuation_body`].
+    pub(super) continuations: bool,
 }
 
 impl Descriptor<'_, '_> {
@@ -51,7 +55,7 @@ impl Descriptor<'_, '_> {
     /// Existing positive-flat streams keep `TASKS` groups. A′ streams use the
     /// data-defined `PRIME_GROUPS` cap. Either count is independent of `--threads`.
     pub(super) fn groups(self) -> usize {
-        if self.prime {
+        if self.prime || self.continuations {
             super::prime::PRIME_GROUPS
         } else {
             crate::formula_support::parallel_executor::TASKS
@@ -67,6 +71,7 @@ pub(crate) struct CursorRows<'cursor, 'source> {
     relations: &'source relations::Relations<'source>,
     rows: Buffer<usize>,
     prime: bool,
+    continuations: bool,
     _lease: StorageLease,
 }
 
@@ -83,6 +88,30 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
         'plan: 'cursor,
     {
         Self::prepare_kind(rule, cursor, computation, limits, counters, Kind::Support)
+    }
+
+    /// Admit a formula-factor continuation's base join for A′ staging.
+    /// Generated cursors with trailing aggregates are expected; a short
+    /// non-expanding first probe still splits when it has at least two rows.
+    pub(crate) fn prepare_continuation<'plan>(
+        rule: &'source RuleIr,
+        cursor: &'cursor mut Join<'plan, 'source>,
+        computation: &mut Computation<'_, 'source>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<Option<Self>, FormulaFailure>
+    where
+        'source: 'plan,
+        'plan: 'cursor,
+    {
+        Self::prepare_kind(
+            rule,
+            cursor,
+            computation,
+            limits,
+            counters,
+            Kind::Continuation,
+        )
     }
 
     fn prepare_kind<'plan>(
@@ -106,7 +135,25 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
             return Err(owner(rule.location));
         }
         let mut prime = false;
-        if kind == Kind::Emission {
+        let mut continuations = false;
+        if kind == Kind::Continuation {
+            let coverage = cursor.coverage;
+            if !checked_rule(rule, computation, limits, counters, BodyKind::Continuations)?
+                || !initial_kind(
+                    cursor,
+                    coverage,
+                    limits,
+                    counters,
+                    rule.location,
+                    true,
+                    true,
+                )?
+            {
+                return Ok(None);
+            }
+            prime = true;
+            continuations = true;
+        } else if kind == Kind::Emission {
             // Existing positive-atom emission keeps its original charge
             // order and still declines comparison bodies: `witnesses::eligible`
             // and `emit_row` remain all-atom, so Prime is only a fallback for
@@ -202,7 +249,10 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
         // A scan followed only by fully bound tests remains in the ordinary
         // witnessed consumer. This source-shape decision precedes row-copy or
         // worker admission; it never retries an already claimed task.
-        if !generators::expands(&cursor.plan, limits, counters, rule.location)? {
+        let expanded = generators::expands(&cursor.plan, limits, counters, rule.location)?;
+        // Continuation element/base joins may be a single large scan. The
+        // first-row split is still useful; a one-row stream stays serial.
+        if !expanded && kind != Kind::Continuation {
             return Ok(None);
         }
         let Some(&first) = cursor.plan.patterns.first() else {
@@ -223,12 +273,16 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
             counters,
             rule.location,
         )?;
+        if kind == Kind::Continuation && !expanded && rows.len() < 2 {
+            return Ok(None);
+        }
         Ok(Some(Self {
             rule,
             plan: &cursor.plan,
             relations: cursor.support.relations(),
             rows,
             prime,
+            continuations,
             _lease: lease,
         }))
     }
@@ -240,6 +294,7 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
             relations: self.relations,
             rows: self.rows.slice(),
             prime: self.prime,
+            continuations: self.continuations,
         }
     }
 }

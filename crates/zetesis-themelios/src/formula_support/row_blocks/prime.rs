@@ -247,6 +247,47 @@ pub(super) fn classify_body(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Option<Classification>, FormulaFailure> {
+    classify_body_with(
+        body,
+        variables,
+        computation,
+        limits,
+        counters,
+        location,
+        false,
+    )
+}
+
+/// Like [`classify_body`], but trailing [`LiteralIr::Aggregate`] literals are
+/// residuals. Support admission keeps using [`classify_body`].
+pub(super) fn classify_continuation_body(
+    body: &[LiteralIr],
+    variables: usize,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Option<Classification>, FormulaFailure> {
+    classify_body_with(
+        body,
+        variables,
+        computation,
+        limits,
+        counters,
+        location,
+        true,
+    )
+}
+
+fn classify_body_with(
+    body: &[LiteralIr],
+    variables: usize,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+    aggregates_are_residual: bool,
+) -> Result<Option<Classification>, FormulaFailure> {
     if body.is_empty() {
         return Ok(None);
     }
@@ -258,7 +299,15 @@ pub(super) fn classify_body(
     let mut first_residual = None;
     for (index, literal) in body.iter().enumerate() {
         counters.work(limits, location)?;
-        match literal_role(literal, &bound, variables, limits, counters, location)? {
+        match literal_role(
+            literal,
+            &bound,
+            variables,
+            limits,
+            counters,
+            location,
+            aggregates_are_residual,
+        )? {
             LiteralRole::Serial => return Ok(None),
             LiteralRole::Residual => {
                 if first_residual.is_none() {
@@ -318,6 +367,7 @@ fn literal_role(
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
+    aggregates_are_residual: bool,
 ) -> Result<LiteralRole, FormulaFailure> {
     match literal {
         LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::PatternAtom(_) => {
@@ -345,6 +395,7 @@ fn literal_role(
                 Ok(LiteralRole::Serial)
             }
         }
+        LiteralIr::Aggregate(_) if aggregates_are_residual => Ok(LiteralRole::Residual),
         LiteralIr::AnonymousAtom(_, _)
         | LiteralIr::TupleCompare(_, _, _)
         | LiteralIr::Guard(_)

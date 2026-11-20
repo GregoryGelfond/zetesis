@@ -6,15 +6,15 @@
 
 use std::ops::Range;
 
-use super::{cursor_rows::CursorRows, witness_rows};
 use super::{Computation, Context, Counters, GroundingWork, StorageLease, Support};
+use super::{cursor_rows::CursorRows, witness_rows};
 use crate::formula_ir::RuleIr;
 use crate::formula_support::accounting::StopPrecedence;
-use crate::formula_support::parallel_executor::{settle, Capture, Executor, Outcome, TASKS};
+use crate::formula_support::parallel_executor::{Capture, Executor, Outcome, TASKS, settle};
 use crate::formula_support::{Accounting, Buffer, Join};
 use crate::grounding_observer::Work;
-use crate::{expansion::Budget, ProgramSite};
 use crate::{ExpansionLimits, ExpansionUsage, FormulaFailure, FormulaLimits, FormulaResource};
+use crate::{ProgramSite, expansion::Budget};
 
 struct Block {
     rows: Range<usize>,
@@ -140,8 +140,13 @@ pub(crate) fn run<T: Send>(
     width: usize,
     budget: &mut Budget,
     context: Context<'_, &Computation<'_, '_>>,
-    kernel: impl Fn(Range<usize>, &FormulaLimits, &mut Budget, &mut Counters) -> Result<T, FormulaFailure>
-        + Sync,
+    kernel: impl Fn(
+        Range<usize>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ) -> Result<T, FormulaFailure>
+    + Sync,
 ) -> Result<Completed<T>, FormulaFailure> {
     run_grouped(executor, width, TASKS, budget, context, kernel)
 }
@@ -152,8 +157,13 @@ pub(crate) fn run_grouped<T: Send>(
     groups: usize,
     budget: &mut Budget,
     context: Context<'_, &Computation<'_, '_>>,
-    kernel: impl Fn(Range<usize>, &FormulaLimits, &mut Budget, &mut Counters) -> Result<T, FormulaFailure>
-        + Sync,
+    kernel: impl Fn(
+        Range<usize>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ) -> Result<T, FormulaFailure>
+    + Sync,
 ) -> Result<Completed<T>, FormulaFailure> {
     let Context {
         computation,
@@ -611,12 +621,13 @@ where
                 location,
             },
     } = context;
-    let mut prefixes = super::prime::prefixes::adapt(
+    let mut prefixes = super::prime::prefixes::adapt_with(
         plan.rule(),
         plan.join_plan(),
         plan.first_rows(),
         support,
         budget,
+        plan.continuations(),
         Context::new(computation, limits, counters, location),
     )?;
     if plan.prime() || prefixes.depth() > 1 {

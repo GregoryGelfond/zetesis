@@ -235,6 +235,7 @@ impl<'plan, 'source: 'plan> Family<'plan, 'source> {
                 relations: self.relations,
                 rows: &[],
                 prime: false,
+                continuations: false,
             },
             support,
             computation,
