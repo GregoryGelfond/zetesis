@@ -9,10 +9,12 @@
 //! Cross products, aggregates, non-canonical columns, and anything this
 //! compiler cannot name are declined so the Join cursor keeps their
 //! admission and work. Recursive predicates are admitted against the
-//! current snapshot. The output is sorted, so the CPU path is deterministic
-//! at every thread count. Emit assigns each interned term with
-//! `Binding::set_term_with`, charging work exactly as the Join cursor does
-//! when it binds a support atom.
+//! current snapshot. Join methods still agree on a lex-TermId binding
+//! table. Heads are emitted from pre-projected term columns, in
+//! `TermRef` semantic order, so the catalog stays in a few ordered
+//! stretches for model-construction `checked_sort`. Emit still charges
+//! `Binding::set_term_with` as the Join cursor does when it binds a
+//! support atom.
 
 use std::collections::HashMap;
 
@@ -91,6 +93,64 @@ impl Evaluated<'_> {
             })?;
         }
         Ok(())
+    }
+
+    /// Row indices of the binding table in semantic head order.
+    ///
+    /// The algebra Join sorts by interned identity, which is not term
+    /// order. Inserting heads in `TermRef` comparison order keeps each
+    /// recursive stretch nearly sorted, so `ModelOrder::prepare_with`
+    /// does far fewer checked comparisons. Ties break by the original
+    /// row index so the order is deterministic at every thread count.
+    pub(crate) fn emission_order(&self, rule: &RuleIr, support: &Support<'_>) -> Vec<usize> {
+        let mut rows: Vec<usize> = self.bindings.row_range().collect();
+        let HeadIr::Normal(Some(head)) = &rule.head else {
+            return rows;
+        };
+        let Some(view) = support.components() else {
+            return rows;
+        };
+        let Some(pattern) = head.resolve(view) else {
+            return rows;
+        };
+        let width = self.bindings.width();
+        let mut slots = Vec::with_capacity(pattern.predicate().arity());
+        for index in 0..pattern.predicate().arity() {
+            match pattern.terms().at(index) {
+                Some(TemplateTerm::Variable(slot)) if slot < width => slots.push(Some(slot)),
+                Some(TemplateTerm::Constant(_)) => slots.push(None),
+                _ => return rows,
+            }
+        }
+        // Rank interned keys once by TermRef order, then sort rows by
+        // integer ranks. Repeated structural compares were dominating
+        // support time, especially on sg at many threads.
+        let columns: Vec<Option<&[i32]>> = slots
+            .iter()
+            .map(|slot| slot.map(|slot| self.bindings.column(slot)))
+            .collect();
+        let ranks = self
+            .terms
+            .ranks(columns.iter().copied().flatten(), rows.len());
+        rows.sort_by(|&left, &right| {
+            for column in &columns {
+                let Some(column) = column else {
+                    continue;
+                };
+                let left_rank = ranks
+                    .get(&column[left])
+                    .expect("join keys are interned from the snapshot");
+                let right_rank = ranks
+                    .get(&column[right])
+                    .expect("join keys are interned from the snapshot");
+                match left_rank.cmp(right_rank) {
+                    std::cmp::Ordering::Equal => {}
+                    ordering => return ordering,
+                }
+            }
+            left.cmp(&right)
+        });
+        rows
     }
 }
 
@@ -278,6 +338,35 @@ impl<'a> TermMap<'a> {
 
     fn get(&self, key: i32) -> Option<TermRef<'a>> {
         self.by_key.get(&key).copied()
+    }
+
+    /// Dense semantic ranks for the keys that appear in `columns`.
+    fn ranks<'c>(
+        &self,
+        columns: impl Iterator<Item = &'c [i32]>,
+        rows: usize,
+    ) -> HashMap<i32, u32> {
+        let mut terms: Vec<(i32, TermRef<'a>)> = Vec::new();
+        let mut seen: HashMap<i32, ()> = HashMap::new();
+        for column in columns {
+            let end = rows.min(column.len());
+            for &key in &column[..end] {
+                if seen.contains_key(&key) {
+                    continue;
+                }
+                let term = self
+                    .get(key)
+                    .expect("join keys are interned from the snapshot");
+                seen.insert(key, ());
+                terms.push((key, term));
+            }
+        }
+        terms.sort_by(|left, right| left.1.cmp(&right.1).then(left.0.cmp(&right.0)));
+        terms
+            .into_iter()
+            .enumerate()
+            .map(|(rank, (key, _))| (key, rank as u32))
+            .collect()
     }
 }
 
