@@ -127,10 +127,10 @@ impl AcyclicPlan {
         }
         // Sort physical source positions with the shared bounded operation;
         // semantic signatures remain in the original analysis owner.
-        crate::formula_support::sort::by(
+        crate::formula_support::sort::by_key(
             &mut items,
             crate::formula_support::GroundingWork::new(limits, counters, location),
-            |left, right, _| Ok(left.cmp(right)),
+            |&item| item,
         )?;
         close(&mut closed, &items, source, &ranks, limits, counters)?;
         // Recursion through a component that is not certain declines the

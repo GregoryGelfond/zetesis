@@ -1,8 +1,8 @@
 //! Deferred local coordinates for a finite source-identity batch.
 //!
 //! Push authenticates and appends one occurrence without searching or growing
-//! an inverse. Finish consumes the private batch, sorts IDs using the existing
-//! metered constant-scratch heapsort, compacts duplicates, and only then builds
+//! an inverse. Finish consumes the private batch, sorts IDs in place with the
+//! metered unstable sort, compacts duplicates, and only then builds
 //! the ordinary selection's inverse. No partially sorted/indexed selection is
 //! observable. Published local coordinates follow increasing source IDs; their
 //! order has no semantic role. Ordinary `SourceSelection` insertion is unchanged.
@@ -97,10 +97,10 @@ impl SourceBatch {
         if !self.0.scope.same(&computation.source_scope(location)?) {
             return Err(owner_failure(location));
         }
-        sort::by(
+        sort::by_key(
             &mut self.0.positions,
             GroundingWork::new(limits, counters, location),
-            |left, right, _| Ok(left.cmp(right)),
+            |&position| position,
         )?;
         let mut distinct = 0;
         for read in 0..self.0.positions.len() {
@@ -151,10 +151,10 @@ impl SourceBatch {
         if !self.0.scope.same(&selection.scope) {
             return Err(owner_failure(location));
         }
-        sort::by(
+        sort::by_key(
             &mut self.0.positions,
             GroundingWork::new(limits, counters, location),
-            |left, right, _| Ok(left.cmp(right)),
+            |&position| position,
         )?;
         // Visit already selected atoms, and compact the absent distinct ones.
         let mut absent = 0;
