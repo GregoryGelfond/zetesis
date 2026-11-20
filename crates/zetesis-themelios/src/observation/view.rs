@@ -581,7 +581,7 @@ impl<'a> Buffer<'a> {
         self.account(count)
     }
 
-    #[inline(always)]
+    #[inline]
     fn account(&mut self, count: u128) -> Result<(), ViewError> {
         let work = u128::from(self.work) + count;
         Meter::check_wide_receipt(work, 0, u128::from(self.limits.max_work))
