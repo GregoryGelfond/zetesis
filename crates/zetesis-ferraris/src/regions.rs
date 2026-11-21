@@ -1900,6 +1900,15 @@ impl NarrowingScratch {
         }
     }
 
+    /// Say whether this walker is the one that runs the size-specialized
+    /// learned search when only one may: a walk designates the walker that
+    /// carries its depth-first order, so a walker that would hold up the
+    /// start of parallel workers, or a second parallel worker, never builds
+    /// the clausal encoding.
+    pub fn designate_small_walker(&mut self, designated: bool) {
+        self.small_scratch().designate(designated);
+    }
+
     /// Fix the size-specialized narrowing policy instead of reading it from
     /// the environment.
     pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {

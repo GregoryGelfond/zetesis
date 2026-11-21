@@ -85,9 +85,12 @@ pub struct SmallPolicy {
     /// nodes per atom (0: any): its clausal encoding would restate, at
     /// several times the size, arithmetic the algebra already reads natively.
     pub density: usize,
-    /// Only the walker on the main thread runs the learned search. Parallel
-    /// workers would each build and search their own encoding, multiplying
-    /// its memory by the worker count and repeating its work.
+    /// Only one walker runs the learned search: the one its walk designates
+    /// (the calling thread's walker while the walk is single-threaded, the
+    /// first parallel worker once workers start), or, for a walker no walk
+    /// designates, the one on the main thread. Parallel workers would each
+    /// build and search their own encoding, multiplying its memory by the
+    /// worker count and repeating its work.
     pub main_only: bool,
 }
 
@@ -290,8 +293,9 @@ pub(crate) struct SmallScratch {
     skipped: u32,
     /// Regions offered to the learned search so far.
     offered: u64,
-    /// Whether this walker runs on the main thread, read once.
-    on_main: Option<bool>,
+    /// Whether this walker runs the learned search under `main_only`: set by
+    /// its walk, or read once from the thread's name.
+    designated: Option<bool>,
     /// Completions recently found to pass, as held-atom words.
     models: Vec<Vec<u64>>,
     /// The counts so far.
@@ -599,6 +603,12 @@ impl SmallScratch {
         self.policy().active()
     }
 
+    /// Say whether this walker is the one that runs the learned search
+    /// under `main_only`.
+    pub(crate) fn designate(&mut self, designated: bool) {
+        self.designated = Some(designated);
+    }
+
     /// Replace the policy (tests and measurements).
     pub(crate) fn set_policy(&mut self, policy: SmallPolicy) {
         self.policy = Some(policy);
@@ -724,7 +734,7 @@ impl SmallScratch {
     ) -> bool {
         if policy.main_only
             && !*self
-                .on_main
+                .designated
                 .get_or_insert_with(|| std::thread::current().name() == Some("main"))
         {
             return false;
