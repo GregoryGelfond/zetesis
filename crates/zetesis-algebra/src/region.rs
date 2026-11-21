@@ -371,9 +371,25 @@ pub struct Entry<S = ()> {
     pub region: Region,
     /// Knowledge or other state carried along this entry's lineage.
     pub state: S,
-    preferred: Option<usize>,
+    policy: Policy,
+}
+
+/// An entry's walk policy: a preferred atom and a deferral request, packed
+/// into the storage an optional atom alone would take.
+#[derive(Clone, Copy, Debug)]
+struct Policy {
+    atom: usize,
+    preferred: bool,
     /// The narrowing asked to visit this entry after the others pending.
     deferred: bool,
+}
+
+impl Policy {
+    const NONE: Self = Self {
+        atom: 0,
+        preferred: false,
+        deferred: false,
+    };
 }
 
 impl<S> Entry<S> {
@@ -383,8 +399,7 @@ impl<S> Entry<S> {
         Self {
             region,
             state,
-            preferred: None,
-            deferred: false,
+            policy: Policy::NONE,
         }
     }
 
@@ -402,26 +417,27 @@ impl<S> Entry<S> {
 
     /// Prefer an open atom for the next split; a decided atom is not retained.
     pub fn prefer(&mut self, atom: usize) {
-        self.preferred = Some(atom).filter(|&atom| self.region.is_open(atom));
+        self.policy.preferred = self.region.is_open(atom);
+        self.policy.atom = atom;
     }
 
     /// Ask the walk to visit this entry after the others pending, once: the
     /// region, its order among the rest and the visited family are
     /// unchanged; a walk that ignores the request visits it now.
     pub const fn defer(&mut self) {
-        self.deferred = true;
+        self.policy.deferred = true;
     }
 
     /// Whether the narrowing asked to defer this entry, clearing the ask.
     pub const fn take_deferred(&mut self) -> bool {
-        std::mem::replace(&mut self.deferred, false)
+        std::mem::replace(&mut self.policy.deferred, false)
     }
 
     /// The preferred atom if still open, otherwise the highest open atom.
     #[must_use]
     pub fn split_atom(&self) -> Option<usize> {
-        self.preferred
-            .filter(|&atom| self.region.is_open(atom))
+        Some(self.policy.atom)
+            .filter(|&atom| self.policy.preferred && self.region.is_open(atom))
             .or_else(|| self.region.highest_open())
     }
 
