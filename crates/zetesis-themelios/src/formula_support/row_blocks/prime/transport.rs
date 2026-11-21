@@ -112,13 +112,18 @@ impl PackedCoords {
             Data::U16(buffer) => {
                 let packed = *buffer.slice().get(index)?;
                 Some((
-                    usize::from(packed as u16),
-                    usize::from((packed >> 16) as u16),
+                    usize::from(u16::try_from(packed & 0xFFFF).expect("low 16 bits")),
+                    usize::from(u16::try_from(packed >> 16).expect("high 16 bits")),
                 ))
             }
             Data::U32(buffer) => {
                 let packed = *buffer.slice().get(index)?;
-                Some((packed as u32 as usize, (packed >> 32) as u32 as usize))
+                Some((
+                    usize::try_from(u32::try_from(packed & 0xFFFF_FFFF).expect("low 32 bits"))
+                        .expect("u32 fits usize"),
+                    usize::try_from(u32::try_from(packed >> 32).expect("high 32 bits"))
+                        .expect("u32 fits usize"),
+                ))
             }
         }
     }

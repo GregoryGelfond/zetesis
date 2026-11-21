@@ -395,8 +395,25 @@ where
     )
 }
 
-fn residual_skip<'plan, 'source>(
-    prepared: &WitnessPlan<'plan, 'source>,
+fn replay_plan(
+    prepared: &WitnessPlan<'_, '_>,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<(super::prime::ResidualSkip, bool), FormulaFailure> {
+    let skip = if prepared.prime() {
+        residual_skip(prepared, computation, limits, counters, location)?
+    } else {
+        super::prime::ResidualSkip::none()
+    };
+    let owner_replay =
+        prepared.prime() && super::prime::owner_replays(&prepared.base.rule.body, skip);
+    Ok((skip, owner_replay))
+}
+
+fn residual_skip(
+    prepared: &WitnessPlan<'_, '_>,
     computation: &Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
@@ -608,13 +625,7 @@ pub(super) fn publish<'plan, 'source: 'plan>(
         support,
         Context::new(&*computation, limits, counters, location),
     )?;
-    let skip = if prepared.prime() {
-        residual_skip(prepared, computation, limits, counters, location)?
-    } else {
-        super::prime::ResidualSkip::none()
-    };
-    let owner_replay =
-        prepared.prime() && super::prime::owner_replays(&prepared.base.rule.body, skip);
+    let (skip, owner_replay) = replay_plan(prepared, computation, limits, counters, location)?;
     let decided: Vec<usize> = if owner_replay {
         support
             .certainty()
@@ -632,16 +643,15 @@ pub(super) fn publish<'plan, 'source: 'plan>(
         let mut rows = replay.batch(batch, limits, counters)?;
         while let Some(row) = rows.next(Context::new(&*computation, limits, counters, location))? {
             if owner_replay {
-                let values = match binding.as_mut() {
-                    Some(existing) => existing,
-                    None => {
-                        binding = Some(RowBinding::new(
-                            prepared,
-                            &row,
-                            Context::new(&*computation, limits, counters, location),
-                        )?);
-                        binding.as_mut().expect("just installed")
-                    }
+                let values = if let Some(existing) = binding.as_mut() {
+                    existing
+                } else {
+                    binding = Some(RowBinding::new(
+                        prepared,
+                        &row,
+                        Context::new(&*computation, limits, counters, location),
+                    )?);
+                    binding.as_mut().expect("just installed")
                 };
                 values.read(
                     &row,

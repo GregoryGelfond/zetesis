@@ -591,11 +591,11 @@ pub(in crate::formula_support) fn derive<'source>(
 /// Already-admitted positive-flat streams still use `TASKS` groups when `d = 1`.
 /// A short first probe that actually reaches `PRIME_GROUPS` tuples at `d = 2`
 /// or `d = 3` takes that deeper list and the 56-group cap. Prime-admitted
-/// emission (generated cursors, or a body that failed PositiveAtoms) uses the
+/// emission (generated cursors, or a body that failed `PositiveAtoms`) uses the
 /// same reservation decline as support. A deep prefix that cannot be reserved
 /// on a non-Prime stream falls back to the first-row split rather than leaving
 /// the already-admitted path.
-pub(crate) fn stage_emission_witnesses<'plan, 'source: 'plan>(
+pub(crate) fn stage_emission_witnesses<'plan, 'source>(
     executor: &Executor,
     plan: &'plan witness_rows::WitnessPlan<'plan, 'source>,
     support: &Support<'source>,

@@ -20,8 +20,6 @@ use crate::formula_support::evaluation::Evaluation;
 use crate::formula_support::heads::row_column;
 use crate::formula_support::integer_comparisons;
 use crate::formula_support::row_blocks::prime::ResidualSkip;
-use themelios_program::program::DefaultNegation;
-
 pub(crate) struct RowBinding<'plan, 'source> {
     plan: &'plan WitnessPlan<'plan, 'source>,
     columns: Buffer<Option<RowColumn>>,
@@ -193,11 +191,6 @@ impl<'plan, 'source: 'plan> RowBinding<'plan, 'source> {
                         return Ok(false);
                     }
                 }
-                LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
-                | LiteralIr::Atom(_, _)
-                | LiteralIr::PatternAtom(_)
-                | LiteralIr::Compare(_)
-                | LiteralIr::ArgumentCheck(_) => {}
                 _ => {}
             }
         }
