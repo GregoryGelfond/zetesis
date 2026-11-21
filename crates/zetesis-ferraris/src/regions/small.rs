@@ -1508,12 +1508,12 @@ const fn watch(clause: u32, blocker: u32) -> Watch {
     ((clause as u64) << 32) | blocker as u64
 }
 
-const fn watch_clause(w: Watch) -> u32 {
-    (w >> 32) as u32
+fn watch_clause(entry: Watch) -> u32 {
+    u32::try_from(entry >> 32).unwrap_or(u32::MAX)
 }
 
-const fn watch_blocker(w: Watch) -> u32 {
-    w as u32
+fn watch_blocker(entry: Watch) -> u32 {
+    u32::try_from(entry & u64::from(u32::MAX)).unwrap_or(u32::MAX)
 }
 
 /// A threshold constraint `out <-> sum(weights of true conditions) >= bound`.
@@ -1951,16 +1951,16 @@ impl Solver {
             let mut i = 0;
             let mut conflict = None;
             while i < watchers.len() {
-                let w = watchers[i];
-                let blocker = watch_blocker(w);
-                let b = self.assigns[var(blocker) as usize];
-                if b != UNDEF && (b ^ u8::from(blocker & 1 == 1)) == TRUE {
+                let entry = watchers[i];
+                let blocker = watch_blocker(entry);
+                let held = self.assigns[var(blocker) as usize];
+                if held != UNDEF && (held ^ u8::from(blocker & 1 == 1)) == TRUE {
                     i += 1;
                     continue;
                 }
-                let ci = watch_clause(w);
+                let ci = watch_clause(entry);
                 if ci == BINARY {
-                    if b == UNDEF {
+                    if held == UNDEF {
                         self.assign(blocker, Reason::Binary(false_lit));
                         i += 1;
                     } else {
