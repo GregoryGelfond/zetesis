@@ -49,6 +49,9 @@ pub(super) struct VocabularySegment {
     pub(super) text: String,
     pub(super) texts: Vec<Text>,
     pub(super) terms: Nodes<TermId, TextId>,
+    /// Each term's content-order identity within this segment, its interner
+    /// generation; empty until the segment's commit freezes it.
+    pub(super) order: Vec<u32>,
     pub(super) predicates: Vec<Signature>,
 }
 
@@ -59,6 +62,7 @@ impl VocabularySegment {
             text: String::new(),
             texts: Vec::new(),
             terms: Nodes::new(),
+            order: Vec::new(),
             predicates: Vec::new(),
         }
     }
@@ -81,6 +85,7 @@ impl VocabularySegment {
             + self.text.capacity() as u128
             + budget::capacity(&self.texts)
             + self.terms.buffer_bytes()
+            + budget::capacity(&self.order)
             + budget::capacity(&self.predicates)
     }
 }
@@ -192,6 +197,16 @@ pub(crate) struct Term<'a> {
 }
 
 impl<'a> Term<'a> {
+    /// Typed order decided by content-order identities: `Some` exactly when
+    /// both terms belong to one frozen generation (one sealed segment).
+    pub(crate) fn content_order(self, other: Self) -> Option<std::cmp::Ordering> {
+        if !std::ptr::eq(self.segment, other.segment) {
+            return None;
+        }
+        let order = &self.segment.order;
+        Some(order.get(self.local)?.cmp(order.get(other.local)?))
+    }
+
     pub(crate) fn descriptor(self) -> ValueNodeRef<'a> {
         self.segment.terms.descriptor(
             self.local,
@@ -285,8 +300,9 @@ mod layout_tests {
     #[test]
     fn grouped_lanes_preserve_the_vocabulary_header() {
         // Before grouping, the segment held Counts, String and seven Vec
-        // headers directly. No extra owner, enum or box belongs in that layout.
-        let prior = size_of::<Counts>() + size_of::<String>() + 7 * size_of::<Vec<u8>>();
+        // headers directly; the content-order lane adds the eighth. No extra
+        // owner, enum or box belongs in that layout.
+        let prior = size_of::<Counts>() + size_of::<String>() + 8 * size_of::<Vec<u8>>();
         assert_eq!(size_of::<VocabularySegment>(), prior);
         assert_eq!(
             VocabularySegment::new(Counts::default()).bytes(),

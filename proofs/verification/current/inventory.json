@@ -3186,6 +3186,11 @@
       "name": "Zetesis.ContentOrderInterning.freeze_establishes_law"
     },
     {
+      "file": "Zetesis/ContentOrderInterning.lean",
+      "line": 104,
+      "name": "Zetesis.ContentOrderInterning.dispatch_eq_compare"
+    },
+    {
       "file": "Zetesis/Core.lean",
       "line": 22,
       "name": "Zetesis.sub_refl"
@@ -12069,7 +12074,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "a2cb502a58bf7640c25bf0a2c74dc9665487c3c4d914ad77d646ada37c4d4e9b",
+    "Audit.lean": "4da04f843e39977c7ec11522bc62fe7d932aacbb0f8466fd148f9e7d7f466446",
     "Zetesis.lean": "ae805a58ae3a1b8c2fddf1fb797d369208e5736d6200347bfef0bbbc9e41d681",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -12120,7 +12125,7 @@
     "Zetesis/ConsequentAlternatives.lean": "f056a33623c406de8644d47c55912ac300f855a9d9ff0afef23bdbfaff2cc306",
     "Zetesis/ConstrainedPositive.lean": "d129f55437d51a995981c55ac67ee8dc7c01495ffd907f864cf4fb707b433167",
     "Zetesis/ConstructorPatterns.lean": "9760a578639689c713f59d3fc8492e8c5aca2cdfb0c31598eca318e38bbfeeb2",
-    "Zetesis/ContentOrderInterning.lean": "7ddfdf7652280692a66dff7db4fe619e20740b61ee13fd976017e51bfe314d9c",
+    "Zetesis/ContentOrderInterning.lean": "4390809d76a26275ca7606b0c240e59f5a9212196501dfc1caff387ece58ccf4",
     "Zetesis/Core.lean": "77182e54d0d8ea63987ddc057a2928dfe06bc675c1fe07af469cfe1082931c41",
     "Zetesis/CountEligibility.lean": "d9457fe5dd6ec6a259e8bbe990aa1ae6de25c99ccf9727a5df575c02df83785b",
     "Zetesis/CountHeadActivity.lean": "245128dd761e2643d9b2dca4af1c36220923f6f5ae0f24d0bd5dc9a2accae4a7",

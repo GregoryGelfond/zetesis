@@ -216,6 +216,9 @@ impl Store {
         if self.tail.count() != 0 {
             return Err(Fault::VocabularyHasAtoms.into());
         }
+        // Freezing the vocabulary is its semantic commit: its last tail's
+        // terms receive content-order identities before the tail is sealed.
+        self.order_terms_with(&mut work)?;
         self.budget.check_extra(extra)?;
         if let Vocabulary::Frozen(mut base) = self.vocabulary {
             base.publication_peak = self.budget.used + extra;

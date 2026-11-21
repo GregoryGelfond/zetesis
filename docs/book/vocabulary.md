@@ -123,8 +123,12 @@ domain support (`FiniteTables.lean`), not `Lifted.Project`.
 clingo's projective enumeration (`ProjectedAnswers.lean`), not head projection.
 `zetesis_wgpu::BinaryNodeKernel` selects how a GPU formula node computes its
 exact supports (`GateProjection.lean`). `zetesis_core::intern::ContentInterner`
-and `zetesis_core::atom_registry::AtomRegistry` are distinct public APIs; the
-former is not yet wired into grounding, and the single-interner migration has
-not happened. Reserved algebra names (`Bind`, `Filter`, `Gate`, `Project`,
+and `zetesis_core::atom_registry::AtomRegistry` are distinct public APIs.
+Grounding uses the former for term order: each registry commit and each
+vocabulary freeze interns the commit's new terms as one generation and freezes
+it, so terms of one generation compare by their content-order identities.
+Atom identities are still the registry's discovery positions and term
+deduplication is still the catalog's hash index; the rest of the
+single-interner migration has not happened. Reserved algebra names (`Bind`, `Filter`, `Gate`, `Project`,
 `Region`, `Narrower`, `Closed`, `Walk`, `Reduction`, `Meter`, `Pool`, …) name
 only their realizations above.

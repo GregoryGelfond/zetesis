@@ -207,6 +207,24 @@ impl<'a> TermRef<'a> {
         }
     }
 
+    /// Typed order of two canonical terms of one vocabulary generation, by
+    /// their content-order identities alone; `None` otherwise.
+    pub(super) fn content_order(self, other: Self) -> Option<Ordering> {
+        let (
+            TermSource::Canonical { snapshot: left, .. },
+            TermSource::Canonical {
+                snapshot: right, ..
+            },
+        ) = (self.0, other.0)
+        else {
+            return None;
+        };
+        if !left.same_vocabulary(right) {
+            return None;
+        }
+        self.stored()?.content_order(other.stored()?)
+    }
+
     pub(super) fn is_canonical(self) -> bool {
         matches!(
             self.0,

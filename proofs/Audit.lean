@@ -637,6 +637,7 @@ import Zetesis
 #print axioms Zetesis.ContentOrderInterning.id_injective_of_law
 #print axioms Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare
 #print axioms Zetesis.ContentOrderInterning.freeze_establishes_law
+#print axioms Zetesis.ContentOrderInterning.dispatch_eq_compare
 #print axioms Zetesis.sub_refl
 #print axioms Zetesis.sub_trans
 #print axioms Zetesis.atoms_ext

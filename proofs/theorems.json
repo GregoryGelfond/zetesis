@@ -3185,6 +3185,11 @@
     "line": 65
   },
   {
+    "name": "Zetesis.ContentOrderInterning.dispatch_eq_compare",
+    "file": "Zetesis/ContentOrderInterning.lean",
+    "line": 104
+  },
+  {
     "name": "Zetesis.sub_refl",
     "file": "Zetesis/Core.lean",
     "line": 22

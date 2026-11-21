@@ -1,8 +1,12 @@
 //! The interner: one source of identity and order for interned content.
 //!
-//! This generic interner states `ContentOrderInterning.IdOrderEqCompare`. No
-//! grounding owner uses it yet: support atoms are still owned by
-//! [`crate::atom_registry::AtomRegistry`] over the catalog's discovery IDs.
+//! This generic interner states `ContentOrderInterning.IdOrderEqCompare`.
+//! Grounding uses it for term order: every commit of a catalog vocabulary
+//! (an [`crate::atom_registry::AtomRegistry`] commit or a vocabulary freeze)
+//! freezes the commit's new terms as one generation, so terms of one
+//! generation compare by identity. Atoms are still owned by the registry over
+//! the catalog's discovery IDs, and term identity (deduplication) is still
+//! the catalog's own hash index.
 //!
 //! Content is a string of `u32` words whose meaning belongs to the caller's
 //! [`ContentOrder`]: a term's constructor and argument identities, an atom's

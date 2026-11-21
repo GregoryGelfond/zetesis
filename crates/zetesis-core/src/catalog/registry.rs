@@ -8,9 +8,10 @@
 //! duplicate positions, without retaining the supplied description addresses.
 //!
 //! This [`AtomRegistry`] is the atom owner grounding uses today. Its positions
-//! are discovery coordinates, not content order. It is distinct from the
-//! generation-freezing [`crate::intern::ContentInterner`], which grounding does not yet
-//! call.
+//! are discovery coordinates, not content order. Its terms are not: each
+//! [`Self::commit_with`] freezes the round's new terms as one generation of the
+//! [`crate::intern::ContentInterner`], so terms of one generation compare by
+//! their content-order identities.
 
 mod closed;
 mod discovery;
@@ -505,6 +506,15 @@ impl AtomRegistry {
         for _ in &self.pending {
             checked()?;
         }
+        // The commit is a semantic boundary: the round's new terms receive
+        // content-order identities before publication seals them, so no
+        // pending interner handle reaches a published segment.
+        self.store
+            .order_terms(&mut checked)
+            .map_err(|error| match error {
+                storage::Failure::Storage(error) => store_failure(error, live, limits),
+                storage::Failure::Stopped(error) => error,
+            })?;
         for _ in 0..self
             .store
             .publication_steps(&mut self.snapshot)
