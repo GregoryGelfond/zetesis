@@ -85,6 +85,10 @@ pub struct SmallPolicy {
     /// nodes per atom (0: any): its clausal encoding would restate, at
     /// several times the size, arithmetic the algebra already reads natively.
     pub density: usize,
+    /// Only the walker on the main thread runs the learned search. Parallel
+    /// workers would each build and search their own encoding, multiplying
+    /// its memory by the worker count and repeating its work.
+    pub main_only: bool,
 }
 
 /// No enumeration reads more than `2^22` completions.
@@ -103,7 +107,7 @@ impl SmallPolicy {
     /// The measured default: the learned search on regions of at least 256
     /// open atoms, 500 conflicts each, behind the yield gate (25%), outside
     /// matching-shaped (at-most-one atoms >= 50%) and formula-dense (more
-    /// than 32 nodes per atom) theories.
+    /// than 32 nodes per atom) theories, in the main thread's walker only.
     #[must_use]
     pub const fn measured() -> Self {
         Self {
@@ -118,6 +122,7 @@ impl SmallPolicy {
             matching: 50,
             learn_after: 0,
             density: 32,
+            main_only: true,
         }
     }
 
@@ -162,6 +167,7 @@ impl SmallPolicy {
                 "matching" => policy.matching = parsed,
                 "after" => policy.learn_after = parsed,
                 "density" => policy.density = parsed,
+                "main" => policy.main_only = parsed > 0,
                 _ => {}
             }
         }
@@ -284,6 +290,8 @@ pub(crate) struct SmallScratch {
     skipped: u32,
     /// Regions offered to the learned search so far.
     offered: u64,
+    /// Whether this walker runs on the main thread, read once.
+    on_main: Option<bool>,
     /// Completions recently found to pass, as held-atom words.
     models: Vec<Vec<u64>>,
     /// The counts so far.
@@ -714,6 +722,13 @@ impl SmallScratch {
         producers: Option<&Producers>,
         policy: &SmallPolicy,
     ) -> bool {
+        if policy.main_only
+            && !*self
+                .on_main
+                .get_or_insert_with(|| std::thread::current().name() == Some("main"))
+        {
+            return false;
+        }
         self.offered += 1;
         if self.offered <= u64::try_from(policy.learn_after).unwrap_or(u64::MAX) {
             return false;
