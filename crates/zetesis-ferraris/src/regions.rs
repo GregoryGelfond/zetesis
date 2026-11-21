@@ -79,6 +79,7 @@ pub use generators::{
 };
 mod masks;
 mod preference;
+pub(crate) mod small;
 mod support;
 mod thresholds;
 mod witnesses;
@@ -194,6 +195,31 @@ impl<'a> OriginalSubject<'a> {
     #[must_use]
     pub const fn generator_order(&self) -> Option<&'a GeneratorOrder> {
         self.generator_order
+    }
+
+    /// Narrow an original region, already closed by the general narrowing of
+    /// this subject, by the size-specialized implementation its open-atom
+    /// count selects. It refutes the region or leaves it.
+    ///
+    /// # Errors
+    /// Cancellation observed during a learned search.
+    /// `restrictions` are the theories also active on the region (permanent
+    /// restrictions and an objective bound); the learned search reads their
+    /// roots too.
+    pub fn narrow_small(
+        &self,
+        region: &Region,
+        scratch: &mut NarrowingScratch,
+        restrictions: &[&Theory],
+        cancellation: &Cancellation,
+    ) -> Result<small::SmallNarrowing, Stop> {
+        scratch.small_scratch().narrow(
+            self.theory,
+            self.producers,
+            restrictions,
+            region,
+            cancellation,
+        )
     }
 
     /// The theory read.
@@ -2084,6 +2110,8 @@ pub struct NarrowingScratch {
     common: CommonScratch,
     learning: LearningScratch,
     arithmetic: arithmetic::runtime::ArithmeticScratch,
+    /// The walker's size-specialized narrowing state ([`small`]).
+    small: Option<Box<small::SmallScratch>>,
 }
 
 /// Worklists shared by original and frozen closure execution.
@@ -2157,6 +2185,59 @@ impl LearningScratch {
 }
 
 impl NarrowingScratch {
+    /// The size-specialized narrowings this walker made.
+    #[must_use]
+    pub fn small_statistics(&self) -> small::SmallStatistics {
+        self.small
+            .as_ref()
+            .map_or_else(small::SmallStatistics::default, |small| small.statistics)
+    }
+
+    /// The size-specialized state, created on first use.
+    fn small_scratch(&mut self) -> &mut small::SmallScratch {
+        self.small.get_or_insert_with(Box::default)
+    }
+
+    /// Whether a size-specialized narrowing policy is in force: the measured
+    /// default unless `ZETESIS_SMALL_REGIONS` (`off` disables it) or
+    /// [`Self::set_small_policy`] names another.
+    pub fn small_active(&mut self) -> bool {
+        match &mut self.small {
+            Some(small) => small.active(),
+            None => small::SmallPolicy::environment().active(),
+        }
+    }
+
+    /// Tell the size-specialized narrowing that the general narrowing refuted
+    /// `region` (an adapting policy reads its size).
+    pub fn note_general_refutation(&mut self, region: &Region) {
+        if let Some(small) = &mut self.small {
+            small.note_refuted(region);
+        }
+    }
+
+    /// Say whether this walker is the one that runs the size-specialized
+    /// learned search when only one may: a walk designates the walker that
+    /// carries its depth-first order, so a walker that would hold up the
+    /// start of parallel workers, or a second parallel worker, never builds
+    /// the clausal encoding.
+    pub fn designate_small_walker(&mut self, designated: bool) {
+        self.small_scratch().designate(designated);
+    }
+
+    /// Count of idle peers: while it is nonzero the size-specialized learned
+    /// search starts no search and ends a running one as spent, so its
+    /// region is split and shared rather than held.
+    pub fn yield_small_search_to(&mut self, idle: std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        self.small_scratch().yield_to(idle);
+    }
+
+    /// Fix the size-specialized narrowing policy instead of reading it from
+    /// the environment.
+    pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {
+        self.small_scratch().set_policy(policy);
+    }
+
     /// Worklist and pending-mask capacity in bytes; the value's own header is
     /// counted by its owner.
     #[must_use]

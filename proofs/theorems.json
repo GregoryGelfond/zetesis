@@ -5800,6 +5800,56 @@
     "line": 105
   },
   {
+    "name": "Zetesis.LeafRefinement.refutation_keeps_outputs",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 57
+  },
+  {
+    "name": "Zetesis.LeafRefinement.necessary_refutes",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 68
+  },
+  {
+    "name": "Zetesis.LeafRefinement.enumeration_exact",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 91
+  },
+  {
+    "name": "Zetesis.LeafRefinement.enumeration_refutes",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 105
+  },
+  {
+    "name": "Zetesis.LeafRefinement.lanes_refute",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 115
+  },
+  {
+    "name": "Zetesis.LeafRefinement.resolvent_sound",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 141
+  },
+  {
+    "name": "Zetesis.LeafRefinement.clause_entails_core",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 168
+  },
+  {
+    "name": "Zetesis.LeafRefinement.learned_refutes",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 181
+  },
+  {
+    "name": "Zetesis.LeafRefinement.core_row",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 196
+  },
+  {
+    "name": "Zetesis.LeafRefinement.core_row_valid",
+    "file": "Zetesis/LeafRefinement.lean",
+    "line": 212
+  },
+  {
     "name": "Zetesis.LearnedRegions.decides_holds",
     "file": "Zetesis/LearnedRegions.lean",
     "line": 65
