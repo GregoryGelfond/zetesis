@@ -6,6 +6,7 @@ use crate::formula_support::row_blocks::{RowPlan, cursor_rows::CursorRows};
 use crate::formula_support::{Accounting, testing};
 use crate::grounding_observer::Work;
 use crate::{ExpansionLimits, ExpansionUsage, FormulaResource};
+use std::fmt::Write;
 use std::sync::Barrier;
 use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, ValueLimits};
@@ -636,7 +637,7 @@ fn seeded_prefixes_preserve_first_row_order_and_heads() {
     let mut source = String::from("r(1). r(2). e(1,10). e(1,11). e(2,10). e(2,11).\n");
     for y in 10..=11 {
         for z in 1..=30 {
-            source.push_str(&format!("f({y},{z}). "));
+            write!(source, "f({y},{z}). ").expect("source buffer");
         }
         source.push('\n');
     }
@@ -707,47 +708,62 @@ fn assert_prefix_depth_matches_serial(source: &str) {
     };
     assert!(prefixes.depth() >= 2 && prefixes.depth() <= 3);
     assert!(prefixes.len() >= super::super::prime::PRIME_GROUPS);
+    let (first, seeded, published) = run_serial_and_prefixed(
+        &plan,
+        &prefixes,
+        &mut append,
+        &support,
+        &limits,
+        &mut counters,
+    );
+    assert_eq!(seeded.len(), first.len());
+    assert_eq!(pending_heads(&append), expected);
+    assert_eq!(published, expected.len());
+}
+
+fn run_serial_and_prefixed<'plan, 'source>(
+    plan: &'plan WitnessPlan<'plan, 'source>,
+    prefixes: &super::super::prime::prefixes::Prefixes<'_>,
+    append: &mut crate::formula_support::SupportAppend<'source>,
+    support: &Support<'source>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> (
+    super::Batch<'plan, 'source>,
+    super::Batch<'plan, 'source>,
+    usize,
+) {
     let first = {
         let mut local = Counters::default();
         let mut walk = testing::budget();
-        execute_borrowed(
-            &plan,
-            0..plan.len(),
-            &append,
-            &limits,
-            &mut walk,
-            &mut local,
-        )
-        .unwrap()
+        execute_borrowed(plan, 0..plan.len(), append, limits, &mut walk, &mut local).unwrap()
     };
     let seeded = {
         let mut local = Counters::default();
         let mut walk = testing::budget();
         execute_prefixed(
-            &plan,
-            &prefixes,
+            plan,
+            prefixes,
             0..prefixes.len(),
-            &append,
-            &limits,
+            append,
+            limits,
             &mut walk,
             &mut local,
         )
         .unwrap()
     };
-    assert_eq!(seeded.len(), first.len());
     let published = {
-        let mut computation = Computation::new(&mut append, &support);
+        let mut computation = Computation::new(append, support);
         publish(
-            &plan,
+            plan,
             [&seeded],
-            &support,
+            support,
             &mut computation,
-            &limits,
-            &mut counters,
+            limits,
+            counters,
             0,
         )
         .unwrap()
     };
-    assert_eq!(pending_heads(&append), expected);
-    assert_eq!(published, expected.len());
+    (first, seeded, published)
 }

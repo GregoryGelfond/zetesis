@@ -134,118 +134,11 @@ impl<'cursor, 'source> CursorRows<'cursor, 'source> {
         if !std::ptr::eq(cursor.support, computation.query_support()) {
             return Err(owner(rule.location));
         }
-        let mut prime = false;
-        let mut continuations = false;
-        if kind == Kind::Continuation {
-            let coverage = cursor.coverage;
-            if !checked_rule(rule, computation, limits, counters, BodyKind::Continuations)?
-                || !initial_kind(
-                    cursor,
-                    coverage,
-                    limits,
-                    counters,
-                    rule.location,
-                    true,
-                    true,
-                )?
-            {
-                return Ok(None);
-            }
-            prime = true;
-            continuations = true;
-        } else if kind == Kind::Emission {
-            // Existing positive-atom emission keeps its original charge
-            // order and still declines comparison bodies: `witnesses::eligible`
-            // and `emit_row` remain all-atom, so Prime is only a fallback for
-            // generated cursors that the 14-task `!generated` gate rejects.
-            if !cursor.generated {
-                if !checked_rule(rule, computation, limits, counters, BodyKind::PositiveAtoms)?
-                    || !initial_kind(
-                        cursor,
-                        Coverage::Selected,
-                        limits,
-                        counters,
-                        rule.location,
-                        true,
-                        false,
-                    )?
-                {
-                    return Ok(None);
-                }
-            } else if !checked_rule(rule, computation, limits, counters, BodyKind::Prime)?
-                || !initial_kind(
-                    cursor,
-                    Coverage::Selected,
-                    limits,
-                    counters,
-                    rule.location,
-                    true,
-                    true,
-                )?
-            {
-                return Ok(None);
-            } else {
-                prime = true;
-            }
-        } else if kind != Kind::Support {
-            // Only this complete read-only body certificate makes the retained
-            // family owner unreachable from worker traversal. It stays on the
-            // original cursor and is never copied into a worker.
-            let body = if kind == Kind::Producer {
-                BodyKind::ProducerLeaves
-            } else {
-                BodyKind::PositiveAtoms
-            };
-            if !checked_rule(rule, computation, limits, counters, body)?
-                || !initial_kind(
-                    cursor,
-                    Coverage::Selected,
-                    limits,
-                    counters,
-                    rule.location,
-                    true,
-                    false,
-                )?
-            {
-                return Ok(None);
-            }
-        } else if !cursor.generated {
-            // The 14-task path still requires a not-yet-generated cursor, and
-            // its work charges stay exactly as they were.
-            if !initial(cursor, Coverage::Selected, limits, counters, rule.location)? {
-                return Ok(None);
-            } else if !checked_rule(
-                rule,
-                computation,
-                limits,
-                counters,
-                support_body(computation),
-            )? {
-                // The existing positive-atom / producer-leaf path declined.
-                // Try A′ admission so comparison, default-negation and
-                // integer-bind bodies can take the parallel path without
-                // changing already-admitted rules.
-                if !checked_rule(rule, computation, limits, counters, BodyKind::Prime)? {
-                    return Ok(None);
-                }
-                prime = true;
-            }
-        } else if !initial_kind(
-            cursor,
-            Coverage::Selected,
-            limits,
-            counters,
-            rule.location,
-            false,
-            true,
-        )? || !checked_rule(rule, computation, limits, counters, BodyKind::Prime)?
-        {
-            // Bind and other body generators set `generated`. Only A′ admits
-            // those cursors; the existing 14-task gates are unchanged.
+        let Some((prime, continuations)) =
+            admit_prepared_kind(kind, rule, cursor, computation, limits, counters)?
+        else {
             return Ok(None);
-        } else {
-            prime = true;
-        }
+        };
         // A scan followed only by fully bound tests remains in the ordinary
         // witnessed consumer. This source-shape decision precedes row-copy or
         // worker admission; it never retries an already claimed task.
@@ -385,4 +278,166 @@ fn owner(location: ProgramSite) -> FormulaFailure {
         error: zetesis_core::relation::Failure::Owner,
         location,
     }
+}
+
+/// Kind-specific cursor admission shared by [`CursorRows::prepare_kind`].
+/// Returns `Ok(None)` when this kind declines the existing serial path.
+fn admit_prepared_kind<'source>(
+    kind: Kind,
+    rule: &'source RuleIr,
+    cursor: &mut Join<'_, 'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<Option<(bool, bool)>, FormulaFailure> {
+    match kind {
+        Kind::Continuation => admit_continuation(rule, cursor, computation, limits, counters),
+        Kind::Emission => admit_emission(rule, cursor, computation, limits, counters),
+        Kind::Producer => admit_producer(rule, cursor, computation, limits, counters),
+        Kind::Support => admit_support(rule, cursor, computation, limits, counters),
+    }
+}
+
+fn admit_continuation<'source>(
+    rule: &'source RuleIr,
+    cursor: &mut Join<'_, 'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<Option<(bool, bool)>, FormulaFailure> {
+    let coverage = cursor.coverage;
+    if !checked_rule(rule, computation, limits, counters, BodyKind::Continuations)?
+        || !initial_kind(
+            cursor,
+            coverage,
+            limits,
+            counters,
+            rule.location,
+            true,
+            true,
+        )?
+    {
+        return Ok(None);
+    }
+    Ok(Some((true, true)))
+}
+
+fn admit_emission<'source>(
+    rule: &'source RuleIr,
+    cursor: &mut Join<'_, 'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<Option<(bool, bool)>, FormulaFailure> {
+    // Existing positive-atom emission keeps its original charge
+    // order and still declines comparison bodies: `witnesses::eligible`
+    // and `emit_row` remain all-atom, so Prime is only a fallback for
+    // generated cursors that the 14-task `!generated` gate rejects.
+    if !cursor.generated {
+        if !checked_rule(rule, computation, limits, counters, BodyKind::PositiveAtoms)?
+            || !initial_kind(
+                cursor,
+                Coverage::Selected,
+                limits,
+                counters,
+                rule.location,
+                true,
+                false,
+            )?
+        {
+            return Ok(None);
+        }
+        return Ok(Some((false, false)));
+    }
+    if !checked_rule(rule, computation, limits, counters, BodyKind::Prime)?
+        || !initial_kind(
+            cursor,
+            Coverage::Selected,
+            limits,
+            counters,
+            rule.location,
+            true,
+            true,
+        )?
+    {
+        return Ok(None);
+    }
+    Ok(Some((true, false)))
+}
+
+fn admit_producer<'source>(
+    rule: &'source RuleIr,
+    cursor: &mut Join<'_, 'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<Option<(bool, bool)>, FormulaFailure> {
+    // Only this complete read-only body certificate makes the retained
+    // family owner unreachable from worker traversal. It stays on the
+    // original cursor and is never copied into a worker.
+    if !checked_rule(
+        rule,
+        computation,
+        limits,
+        counters,
+        BodyKind::ProducerLeaves,
+    )? || !initial_kind(
+        cursor,
+        Coverage::Selected,
+        limits,
+        counters,
+        rule.location,
+        true,
+        false,
+    )? {
+        return Ok(None);
+    }
+    Ok(Some((false, false)))
+}
+
+fn admit_support<'source>(
+    rule: &'source RuleIr,
+    cursor: &mut Join<'_, 'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<Option<(bool, bool)>, FormulaFailure> {
+    if !cursor.generated {
+        // The 14-task path still requires a not-yet-generated cursor, and
+        // its work charges stay exactly as they were.
+        if !initial(cursor, Coverage::Selected, limits, counters, rule.location)? {
+            return Ok(None);
+        } else if !checked_rule(
+            rule,
+            computation,
+            limits,
+            counters,
+            support_body(computation),
+        )? {
+            // The existing positive-atom / producer-leaf path declined.
+            // Try A′ admission so comparison, default-negation and
+            // integer-bind bodies can take the parallel path without
+            // changing already-admitted rules.
+            if !checked_rule(rule, computation, limits, counters, BodyKind::Prime)? {
+                return Ok(None);
+            }
+            return Ok(Some((true, false)));
+        }
+        return Ok(Some((false, false)));
+    }
+    if !initial_kind(
+        cursor,
+        Coverage::Selected,
+        limits,
+        counters,
+        rule.location,
+        false,
+        true,
+    )? || !checked_rule(rule, computation, limits, counters, BodyKind::Prime)?
+    {
+        // Bind and other body generators set `generated`. Only A′ admits
+        // those cursors; the existing 14-task gates are unchanged.
+        return Ok(None);
+    }
+    Ok(Some((true, false)))
 }

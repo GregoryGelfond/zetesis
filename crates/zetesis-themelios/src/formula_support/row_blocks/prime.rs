@@ -101,10 +101,11 @@ impl ResidualSkip {
 
     /// Suffix starting at `first`. `None` if `first` does not fit in `u16`.
     pub(in crate::formula_support) fn suffix(first: usize) -> Option<Self> {
-        if first >= usize::from(Self::NONE) {
+        let from = u16::try_from(first).ok()?;
+        if from == Self::NONE {
             return None;
         }
-        Some(Self { from: first as u16 })
+        Some(Self { from })
     }
 }
 
@@ -135,9 +136,9 @@ pub(in crate::formula_support) fn owner_replays(body: &[LiteralIr], skip: Residu
 /// Choose the narrowest coordinate width that can address `max_index`.
 /// `None` means the range does not fit `u32` and the rule must decline.
 pub(super) fn coord_width(max_index: usize) -> Option<CoordWidth> {
-    if max_index <= usize::from(u16::MAX) {
+    if u16::try_from(max_index).is_ok() {
         Some(CoordWidth::U16)
-    } else if max_index <= u32::MAX as usize {
+    } else if u32::try_from(max_index).is_ok() {
         Some(CoordWidth::U32)
     } else {
         None

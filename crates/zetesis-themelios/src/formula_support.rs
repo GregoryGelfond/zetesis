@@ -373,8 +373,8 @@ impl Counters {
     }
 
     /// Run `op` against the same work and storage limits, but without recording
-    /// occurrence statistics. Prefix census is charged work; JoinRow and
-    /// JoinProbe counts belong to the walk that produces staged rows.
+    /// occurrence statistics. Prefix census is charged work; `JoinRow` and
+    /// `JoinProbe` counts belong to the walk that produces staged rows.
     pub(in crate::formula_support) fn without_observation<T>(
         &mut self,
         op: impl FnOnce(&mut Self) -> T,
@@ -3077,7 +3077,7 @@ impl<'a, 'source> Join<'a, 'source> {
         computation.storage_observed(&lease, 0, initial, limits, counters, location)?;
         let mut values = prefix.copied(computation, limits, counters, location)?;
         values.extend_scope(variables, computation, limits, counters, location)?;
-        let mut join = Self {
+        let join = Self {
             bindings: None,
             scalar_selection: scalar_selection::Preparation::Pending,
             literals: Ir::Temporary(literals),
@@ -3135,18 +3135,42 @@ impl<'a, 'source> Join<'a, 'source> {
             depth: 0,
             traversal: Traversal::Searching,
         };
-        join.lease.observe(join.storage_bytes(), location)?;
+        join.finish_plan(
+            prefix,
+            variables,
+            count,
+            Context::new(computation, limits, counters, location),
+        )
+    }
+
+    fn finish_plan(
+        mut self,
+        prefix: &Binding,
+        variables: usize,
+        count: usize,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        self.lease.observe(self.storage_bytes(), location)?;
         computation.storage_observed(
-            &join.lease,
+            &self.lease,
             0,
-            join.storage_header(),
+            self.storage_header(),
             limits,
             counters,
             location,
         )?;
-        join.initialize_storage(variables, count, computation, limits, counters, location)?;
-        join.classify_slots(prefix, limits, counters, location)?;
-        Ok(join)
+        self.initialize_storage(variables, count, computation, limits, counters, location)?;
+        self.classify_slots(prefix, limits, counters, location)?;
+        Ok(self)
     }
 
     fn classify_slots(
@@ -3683,10 +3707,7 @@ impl<'a, 'source> Join<'a, 'source> {
                             ),
                             &mut self.evaluation,
                             pending.binding(),
-                            computation,
-                            limits,
-                            counters,
-                            location,
+                            Context::new(computation, limits, counters, location),
                             row_blocks::prime::ResidualSkip::from_raw(self.residual_from),
                         )?;
                         pending.reject(location)?;
@@ -4071,12 +4092,12 @@ impl<'a, 'source> Join<'a, 'source> {
         location: ProgramSite,
     ) -> Result<row_blocks::prime::prefixes::PrefixIds, FormulaFailure> {
         let mut packed = [0u32; row_blocks::prime::prefixes::MAX_PREFIX_DEPTH];
-        for index in 0..depth {
+        for (index, slot) in packed.iter_mut().enumerate().take(depth) {
             let row = self.probe_row(index).ok_or_else(|| owner(location))?;
-            packed[index] = u32::try_from(row).map_err(|_| overflow(location))?;
+            *slot = u32::try_from(row).map_err(|_| overflow(location))?;
         }
         Ok(row_blocks::prime::prefixes::PrefixIds::packed(
-            depth as u8,
+            u8::try_from(depth).map_err(|_| overflow(location))?,
             packed,
         ))
     }

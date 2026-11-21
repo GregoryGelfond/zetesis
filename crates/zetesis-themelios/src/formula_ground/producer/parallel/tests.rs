@@ -1,5 +1,6 @@
 //! Exercise the actual `instantiate_rule` dispatch, with its retained family owner.
 
+use std::fmt::Write;
 use std::num::NonZeroUsize;
 
 use super::*;
@@ -199,7 +200,7 @@ fn a_short_first_probe_deepens_emission_to_fifty_six_groups() {
     let mut source = String::from("r(1). r(2). e(1,10). e(1,11). e(2,10). e(2,11).\n");
     for y in 10..=11 {
         for z in 1..=30 {
-            source.push_str(&format!("f({y},{z}). "));
+            write!(source, "f({y},{z}). ").expect("source buffer");
         }
         source.push('\n');
     }

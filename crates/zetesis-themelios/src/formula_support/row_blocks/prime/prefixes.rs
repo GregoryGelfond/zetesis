@@ -71,11 +71,11 @@ impl PrefixTape {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
-        if depth < 2 || depth > MAX_PREFIX_DEPTH {
+        if !(2..=MAX_PREFIX_DEPTH).contains(&depth) {
             return Err(owner(location));
         }
         Ok(Self {
-            depth: depth as u8,
+            depth: u8::try_from(depth).expect("depth checked"),
             ids: Buffer::new(computation, limits, counters, location)?,
         })
     }
@@ -93,7 +93,8 @@ impl PrefixTape {
         }
         for index in 0..prefix.depth() {
             self.ids.push(
-                prefix.get(index).expect("depth checked") as u32,
+                u32::try_from(prefix.get(index).expect("depth checked"))
+                    .map_err(|_| owner(location))?,
                 computation,
                 limits,
                 counters,
@@ -161,7 +162,7 @@ impl<'plan> Prefixes<'plan> {
 /// short list still uses that deepest count: grouping then yields one tuple
 /// per group, the same rule as today's first-row split.
 pub(super) fn chosen_depth(first: usize, deeper: &[usize], pattern_count: usize) -> usize {
-    let cap = pattern_count.min(MAX_PREFIX_DEPTH).max(1);
+    let cap = pattern_count.clamp(1, MAX_PREFIX_DEPTH);
     if first >= PRIME_GROUPS || cap == 1 {
         return 1;
     }
@@ -223,17 +224,16 @@ where
     } = context;
     match counters.without_observation(|counters| {
         enumerate(
-            rule,
-            join_plan,
-            first,
-            support,
+            PrefixWalk {
+                rule,
+                join_plan,
+                first,
+                support,
+                continuations,
+            },
             2,
             budget,
-            computation,
-            limits,
-            counters,
-            location,
-            continuations,
+            Context::new(computation, limits, counters, location),
         )
     }) {
         Ok(at_two) if chosen_depth(first.len(), &[at_two.len()], patterns) == 2 => {
@@ -242,17 +242,16 @@ where
         Ok(_) if patterns < 3 => Ok(Prefixes::first(first)),
         Ok(at_two) => match counters.without_observation(|counters| {
             enumerate(
-                rule,
-                join_plan,
-                first,
-                support,
+                PrefixWalk {
+                    rule,
+                    join_plan,
+                    first,
+                    support,
+                    continuations,
+                },
                 3,
                 budget,
-                computation,
-                limits,
-                counters,
-                location,
-                continuations,
+                Context::new(computation, limits, counters, location),
             )
         }) {
             Ok(at_three)
@@ -269,22 +268,40 @@ where
     }
 }
 
-fn enumerate<'plan, 'source>(
+#[derive(Clone, Copy)]
+struct PrefixWalk<'plan, 'source> {
     rule: &'source RuleIr,
     join_plan: &'plan order::Plan<'plan>,
     first: &'plan [usize],
     support: &'plan Support<'source>,
+    continuations: bool,
+}
+
+fn enumerate<'plan, 'source>(
+    walk: PrefixWalk<'plan, 'source>,
     depth: usize,
     budget: &mut Budget,
-    computation: &mut Computation<'_, 'source>,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: ProgramSite,
-    continuations: bool,
+    context: Context<'_, &mut Computation<'_, 'source>>,
 ) -> Result<PrefixTape, FormulaFailure>
 where
     'source: 'plan,
 {
+    let PrefixWalk {
+        rule,
+        join_plan,
+        first,
+        support,
+        continuations,
+    } = walk;
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
     let mut tape = PrefixTape::new(depth, computation, limits, counters, location)?;
     let prefix = Binding::new(computation, limits, counters, location)?;
     let mut join = Join::with_plan(
