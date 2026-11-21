@@ -1019,6 +1019,8 @@ import Zetesis
 #print axioms Zetesis.Pending.Step.perm
 #print axioms Zetesis.Pending.Walk.perm
 #print axioms Zetesis.Pending.Walk.exhausted
+#print axioms Zetesis.Pending.outputs_perm
+#print axioms Zetesis.Pending.outputs_defer
 #print axioms Zetesis.GatePositions.rank_fold_eq_blocks
 #print axioms Zetesis.GatePositions.blockOffset_lt_cardinality
 #print axioms Zetesis.GatePositions.atoms_exact
@@ -1166,6 +1168,7 @@ import Zetesis
 #print axioms Zetesis.LeafRefinement.enumeration_refutes
 #print axioms Zetesis.LeafRefinement.lanes_refute
 #print axioms Zetesis.LeafRefinement.resolvent_sound
+#print axioms Zetesis.LeafRefinement.minimized_sound
 #print axioms Zetesis.LeafRefinement.clause_entails_core
 #print axioms Zetesis.LeafRefinement.learned_refutes
 #print axioms Zetesis.LeafRefinement.core_row

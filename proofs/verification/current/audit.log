@@ -1041,6 +1041,8 @@
 'Zetesis.Pending.Step.perm' depends on axioms: [propext]
 'Zetesis.Pending.Walk.perm' depends on axioms: [propext]
 'Zetesis.Pending.Walk.exhausted' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Pending.outputs_perm' depends on axioms: [propext, Quot.sound]
+'Zetesis.Pending.outputs_defer' depends on axioms: [propext, Quot.sound]
 'Zetesis.GatePositions.rank_fold_eq_blocks' depends on axioms: [propext]
 'Zetesis.GatePositions.blockOffset_lt_cardinality' depends on axioms: [propext]
 'Zetesis.GatePositions.atoms_exact' depends on axioms: [propext]
@@ -1190,6 +1192,7 @@
 'Zetesis.LeafRefinement.enumeration_refutes' does not depend on any axioms
 'Zetesis.LeafRefinement.lanes_refute' depends on axioms: [propext, Quot.sound]
 'Zetesis.LeafRefinement.resolvent_sound' depends on axioms: [propext, Quot.sound]
+'Zetesis.LeafRefinement.minimized_sound' depends on axioms: [propext, Quot.sound]
 'Zetesis.LeafRefinement.clause_entails_core' does not depend on any axioms
 'Zetesis.LeafRefinement.learned_refutes' does not depend on any axioms
 'Zetesis.LeafRefinement.core_row' depends on axioms: [propext, Classical.choice, Quot.sound]

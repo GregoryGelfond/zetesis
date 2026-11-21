@@ -5096,6 +5096,16 @@
       "name": "Zetesis.Pending.Walk.exhausted"
     },
     {
+      "file": "Zetesis/Frontier.lean",
+      "line": 136,
+      "name": "Zetesis.Pending.outputs_perm"
+    },
+    {
+      "file": "Zetesis/Frontier.lean",
+      "line": 149,
+      "name": "Zetesis.Pending.outputs_defer"
+    },
+    {
       "file": "Zetesis/GatePositions.lean",
       "line": 43,
       "name": "Zetesis.GatePositions.rank_fold_eq_blocks"
@@ -5832,22 +5842,27 @@
     },
     {
       "file": "Zetesis/LeafRefinement.lean",
-      "line": 168,
+      "line": 172,
+      "name": "Zetesis.LeafRefinement.minimized_sound"
+    },
+    {
+      "file": "Zetesis/LeafRefinement.lean",
+      "line": 198,
       "name": "Zetesis.LeafRefinement.clause_entails_core"
     },
     {
       "file": "Zetesis/LeafRefinement.lean",
-      "line": 181,
+      "line": 211,
       "name": "Zetesis.LeafRefinement.learned_refutes"
     },
     {
       "file": "Zetesis/LeafRefinement.lean",
-      "line": 196,
+      "line": 226,
       "name": "Zetesis.LeafRefinement.core_row"
     },
     {
       "file": "Zetesis/LeafRefinement.lean",
-      "line": 212,
+      "line": 242,
       "name": "Zetesis.LeafRefinement.core_row_valid"
     },
     {
@@ -12069,7 +12084,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "a2cb502a58bf7640c25bf0a2c74dc9665487c3c4d914ad77d646ada37c4d4e9b",
+    "Audit.lean": "c7a359ec1b7dae87420b9d9415bdca9d3987e784b2bcad1b4f22cb2b9fc4e66f",
     "Zetesis.lean": "ae805a58ae3a1b8c2fddf1fb797d369208e5736d6200347bfef0bbbc9e41d681",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -12162,7 +12177,7 @@
     "Zetesis/FormulaBounds.lean": "0ddbf63c3d6e8c88679999693736542a8804361943878c35d0900c2d30a1fb08",
     "Zetesis/FormulaChains.lean": "17f654634e00038d651883cc6562944286a6ae5c8d9de25c5689f6c5bcc9447d",
     "Zetesis/FormulaRegions.lean": "74e2c927f00e52322c906a65033fe3c3c6e33f7fd0763dc4502a13062c518da8",
-    "Zetesis/Frontier.lean": "90850308e0b438585a677fa159940e27d66cf0ed54a6dcd65f50ba02a3c9bd2d",
+    "Zetesis/Frontier.lean": "42cd3bbf180e03ad6e7a5b748a1d02212c951786edeed1311d73155b5274c42a",
     "Zetesis/GatePositions.lean": "765bdd0ede74577aba5c19b3439545d4f55bc96ed5b341c86fd9c6be65fb7243",
     "Zetesis/GateProjection.lean": "d8fffb8e150ab7a0852b097c188da9c4d14f51242ac05be843d98f07940693a6",
     "Zetesis/GateRestrictions.lean": "935995f17824d3eeb895cd7368c20b029585efe30f24590870a1331fa8a9011c",
@@ -12180,7 +12195,7 @@
     "Zetesis/KeptCertificates.lean": "fbcd483beda64d96706b91306b2c21df149afe5580728d4552ddba308cb9912f",
     "Zetesis/KeyedConstraints.lean": "d30e5b9149996725d57ab908a46896de465bbfa52ae1fa2364cdc2558015a40c",
     "Zetesis/LazyRounds.lean": "c356b730916c3add85d422183146eab7150281d375b5b54eff775a6157a76e86",
-    "Zetesis/LeafRefinement.lean": "45a3de101687fc4b37fd9a13e60404f6fbff305b6947e97a358027d5177b0d82",
+    "Zetesis/LeafRefinement.lean": "1d6f0376f873b5f7b1b8c3806ffda9acc737ae86249fd1c59113c704cc96b302",
     "Zetesis/LearnedRegions.lean": "d2fce36ed3d6be073907df7c31b2226b743ca2ae10a3b36e484061da8eaf06d2",
     "Zetesis/Lifted.lean": "beae8b170cd0dc605155cf996395bb3105b544dd622753954de443727915dbbb",
     "Zetesis/LiftedBridge.lean": "97de4a489c8a4e1fadf43d759320532064a70d90be463da25ed1da78b601ca09",
