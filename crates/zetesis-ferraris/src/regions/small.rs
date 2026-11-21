@@ -125,6 +125,9 @@ impl Refinements {
     pub const STEER: Self = Self(4);
     /// Every refinement.
     pub const ALL: Self = Self(7);
+    /// The measured default: minimized clauses and Luby restarts; steering
+    /// is asked for with `steer=1`.
+    pub const MEASURED: Self = Self(Self::MINIMIZE.0 | Self::LUBY.0);
 
     /// Whether every refinement of `other` is on.
     #[must_use]
@@ -164,7 +167,7 @@ impl SmallPolicy {
     /// open atoms, 500 conflicts each, behind the yield gate (25%), outside
     /// matching-shaped (at-most-one atoms >= 50%) and formula-dense (more
     /// than 32 nodes per atom) theories, in the main thread's walker only,
-    /// with minimized learned clauses, Luby restarts and steering.
+    /// with minimized learned clauses and Luby restarts.
     #[must_use]
     pub const fn measured() -> Self {
         Self {
@@ -182,7 +185,7 @@ impl SmallPolicy {
             main_only: true,
             amortize: AMORTIZE_NANOS_PER_NODE,
             yield_idle: true,
-            refinements: Refinements::ALL,
+            refinements: Refinements::MEASURED,
         }
     }
 
