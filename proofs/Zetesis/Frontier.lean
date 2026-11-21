@@ -130,6 +130,26 @@ theorem Walk.exhausted {c : Region α} (tree : CoverageTree valid c)
   · exact (law.symm.mem_iff).trans (tree.mem_outputs_iff z)
   · exact law.nodup_iff.mp tree.outputs_nodup
 
+/-- A frontier rearranged keeps the leaves it holds, up to order.
+
+Proof. `outputs` is a `flatMap`, which respects permutations of its list. -/
+theorem outputs_perm {frontier frontier' : List (Pending valid)}
+    (rearranged : frontier.Perm frontier') :
+    (outputs frontier).Perm (outputs frontier') :=
+  rearranged.flatMap_right _
+
+/-- Deferring a pending region, moving it to the far end of the frontier with
+no step, keeps the leaves the frontier holds, up to order: the walk's deferral
+(`Entry::defer` in `Walk`, `requeue_oldest` in the work-stealing frontier)
+changes which region a later step takes, never the family, and so composes with
+`Walk.perm`. That a deferred region is returned to the frontier unchanged, or
+narrowed by a `narrowed` step first, is the Rust obligation.
+
+Proof. Moving the head to the end is a rotation, a permutation. -/
+theorem outputs_defer (pending : Pending valid) (rest : List (Pending valid)) :
+    (outputs (pending :: rest)).Perm (outputs (rest ++ [pending])) :=
+  outputs_perm (List.perm_append_comm (l₁ := [pending]) (l₂ := rest))
+
 end Pending
 
 end Zetesis

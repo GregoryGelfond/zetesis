@@ -509,6 +509,33 @@ impl<E: Payload, R: From<Stop>> Frontier<E, R> {
         Ok(())
     }
 
+    /// Return a region to the oldest end of worker `index`'s deque without
+    /// changing the count: a region taken, neither resolved nor split, whose
+    /// narrowing asked to visit it after the others. Its owner reaches it
+    /// last and a thief first. Refusal returns the still-owned entry.
+    ///
+    /// # Errors
+    /// Returns the reservation refusal and unchanged entry, without publication.
+    ///
+    /// # Panics
+    /// Panics if `index` is outside the worker deques.
+    pub fn requeue_oldest(
+        &self,
+        index: usize,
+        entry: E,
+        reserve: impl FnOnce(&mut VecDeque<E>, usize) -> Result<(), R>,
+    ) -> Result<(), (R, E)> {
+        let mut queue = self.queue(index);
+        let before = queue.capacity();
+        if let Err(error) = reserve(&mut queue, 1) {
+            return Err((error, entry));
+        }
+        self.resized(before, queue.capacity());
+        self.inserted(&entry);
+        queue.push_front(entry);
+        Ok(())
+    }
+
     /// Take the oldest region of a peer's deque, trying peers in round-robin
     /// order and skipping a busy one, so one owner's growth cannot block
     /// stealing from the others. No two queue locks overlap, and none is

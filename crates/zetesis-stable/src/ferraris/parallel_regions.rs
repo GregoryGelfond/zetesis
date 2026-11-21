@@ -2165,6 +2165,9 @@ fn step<'a>(
     );
     publish_counts(shared, &before, &report.regions);
     let narrowing = narrowing?;
+    let Some(entry) = requeue_deferred(shared, index, entry, narrowing)? else {
+        return Ok(Stepped::Split);
+    };
     let atom = match walk::inspect(&entry, narrowing, Counting::Never, false) {
         walk::Step::Refuted => {
             report.regions.refuted += 1;
@@ -2209,6 +2212,34 @@ fn step<'a>(
         return Err(error);
     }
     Ok(Stepped::Split)
+}
+
+/// A region whose narrowing asked to visit it after the others goes back to
+/// the oldest end of this worker's deque, neither resolved nor split
+/// (`None`); any other region, or one alone in an empty deque, is returned.
+fn requeue_deferred(
+    shared: &Shared,
+    index: usize,
+    mut entry: Entry,
+    narrowing: zetesis_algebra::region::Narrowing,
+) -> Result<Option<Entry>, Incomplete> {
+    if !entry.take_deferred()
+        || narrowing == zetesis_algebra::region::Narrowing::Refuted
+        || shared.frontier.queue(index).is_empty()
+    {
+        return Ok(Some(entry));
+    }
+    match shared
+        .frontier
+        .requeue_oldest(index, entry, reserve_regions)
+    {
+        Ok(()) => Ok(None),
+        Err((error, entry)) => {
+            shared.stop(error);
+            drop(entry);
+            Err(error)
+        }
+    }
 }
 
 /// Decide a leaf as the scalar proposer does, unless `publication` publishes

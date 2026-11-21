@@ -372,6 +372,8 @@ pub struct Entry<S = ()> {
     /// Knowledge or other state carried along this entry's lineage.
     pub state: S,
     preferred: Option<usize>,
+    /// The narrowing asked to visit this entry after the others pending.
+    deferred: bool,
 }
 
 impl<S> Entry<S> {
@@ -382,6 +384,7 @@ impl<S> Entry<S> {
             region,
             state,
             preferred: None,
+            deferred: false,
         }
     }
 
@@ -400,6 +403,18 @@ impl<S> Entry<S> {
     /// Prefer an open atom for the next split; a decided atom is not retained.
     pub fn prefer(&mut self, atom: usize) {
         self.preferred = Some(atom).filter(|&atom| self.region.is_open(atom));
+    }
+
+    /// Ask the walk to visit this entry after the others pending, once: the
+    /// region, its order among the rest and the visited family are
+    /// unchanged; a walk that ignores the request visits it now.
+    pub const fn defer(&mut self) {
+        self.deferred = true;
+    }
+
+    /// Whether the narrowing asked to defer this entry, clearing the ask.
+    pub const fn take_deferred(&mut self) -> bool {
+        std::mem::replace(&mut self.deferred, false)
     }
 
     /// The preferred atom if still open, otherwise the highest open atom.

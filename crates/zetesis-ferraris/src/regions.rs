@@ -2208,6 +2208,21 @@ impl NarrowingScratch {
         }
     }
 
+    /// Whether the walk should visit `region` after the others pending: a
+    /// completion found outside it lies in another pending region.
+    pub fn small_defers(&mut self, region: &Region) -> bool {
+        self.small
+            .as_mut()
+            .is_some_and(|small| small.defers(region))
+    }
+
+    /// An open atom whose split walks toward a completion the learned search
+    /// found in `region`, if one is remembered.
+    #[must_use]
+    pub fn small_guide(&mut self, region: &Region) -> Option<usize> {
+        self.small.as_mut().and_then(|small| small.guide(region))
+    }
+
     /// Tell the size-specialized narrowing that the general narrowing refuted
     /// `region` (an adapting policy reads its size).
     pub fn note_general_refutation(&mut self, region: &Region) {

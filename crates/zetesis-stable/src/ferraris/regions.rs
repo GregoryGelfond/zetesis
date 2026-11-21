@@ -1140,6 +1140,14 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             return Ok(Narrowing::Refuted);
         }
     }
+    if scratch.small_defers(region) {
+        entry.defer();
+        return Ok(result);
+    }
+    if let Some(atom) = scratch.small_guide(region) {
+        entry.prefer(atom);
+        return Ok(result);
+    }
     let preferred = prefer_split(
         (original, narrower),
         restrictions,

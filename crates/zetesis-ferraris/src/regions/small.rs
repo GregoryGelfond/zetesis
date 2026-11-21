@@ -102,6 +102,45 @@ pub struct SmallPolicy {
     /// search while one waits, and a running search ends as spent when one
     /// starts waiting, so the walker splits its region for them.
     pub yield_idle: bool,
+    /// Refinements of the learned search and of how it steers the walk.
+    pub refinements: Refinements,
+}
+
+/// Refinements of the learned search, bit-packed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Refinements(u8);
+
+impl Refinements {
+    /// Minimize each learned clause by dropping the literals its other
+    /// literals imply through reasons (recursive minimization).
+    pub const MINIMIZE: Self = Self(1);
+    /// Restart the learned search on the Luby sequence (unit 64 conflicts)
+    /// rather than on a geometric schedule.
+    pub const LUBY: Self = Self(2);
+    /// Let a completion the learned search finds steer the walk: a search
+    /// that spends its allowance is followed by one under the restriction
+    /// guards alone, the walk defers regions until it reaches one holding
+    /// the completion found, and splits there on an atom it holds. Orders
+    /// the walk only; refutes and decides nothing.
+    pub const STEER: Self = Self(4);
+    /// Every refinement.
+    pub const ALL: Self = Self(7);
+
+    /// Whether every refinement of `other` is on.
+    #[must_use]
+    pub const fn has(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// These refinements with `other` on or off.
+    #[must_use]
+    pub const fn with(self, other: Self, on: bool) -> Self {
+        if on {
+            Self(self.0 | other.0)
+        } else {
+            Self(self.0 & !other.0)
+        }
+    }
 }
 
 /// The measured shape-and-encoding cost per formula node, in nanoseconds,
@@ -124,7 +163,8 @@ impl SmallPolicy {
     /// The measured default: the learned search on regions of at least 256
     /// open atoms, 500 conflicts each, behind the yield gate (25%), outside
     /// matching-shaped (at-most-one atoms >= 50%) and formula-dense (more
-    /// than 32 nodes per atom) theories, in the main thread's walker only.
+    /// than 32 nodes per atom) theories, in the main thread's walker only,
+    /// with minimized learned clauses, Luby restarts and steering.
     #[must_use]
     pub const fn measured() -> Self {
         Self {
@@ -142,6 +182,7 @@ impl SmallPolicy {
             main_only: true,
             amortize: AMORTIZE_NANOS_PER_NODE,
             yield_idle: true,
+            refinements: Refinements::ALL,
         }
     }
 
@@ -189,6 +230,15 @@ impl SmallPolicy {
                 "main" => policy.main_only = parsed > 0,
                 "amortize" => policy.amortize = parsed,
                 "idle" => policy.yield_idle = parsed > 0,
+                "minimize" => {
+                    policy.refinements = policy.refinements.with(Refinements::MINIMIZE, parsed > 0);
+                }
+                "luby" => {
+                    policy.refinements = policy.refinements.with(Refinements::LUBY, parsed > 0);
+                }
+                "steer" => {
+                    policy.refinements = policy.refinements.with(Refinements::STEER, parsed > 0);
+                }
                 _ => {}
             }
         }
@@ -287,6 +337,17 @@ pub struct SmallStatistics {
     /// Regions not searched, and searches ended, because a parallel peer
     /// was idle.
     pub yielded: u64,
+    /// Searches under the restriction guards alone, after a learned search
+    /// spent its allowance, and those that found a completion.
+    pub root_probes: u64,
+    /// See [`Self::root_probes`].
+    pub root_completions: u64,
+    /// Regions the walk was asked to visit after the others pending.
+    pub deferrals: u64,
+    /// Guided splits whose child lost the completion, stopping steering.
+    pub steer_failures: u64,
+    /// Guided walks that reached their completion's leaf, ending steering.
+    pub steer_successes: u64,
 }
 
 /// A walker's specialized-narrowing state: its policy, the clausal reading of
@@ -326,6 +387,19 @@ pub(crate) struct SmallScratch {
     idle: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
     /// Completions recently found to pass, as held-atom words.
     models: Vec<Vec<u64>>,
+    /// A completion found by a root probe outside the current region: the
+    /// walk defers regions until it reaches one holding it.
+    jump: bool,
+    /// Deferrals the current jump may still ask for.
+    jump_left: u32,
+    /// The completion the last guided split headed for: the next region
+    /// the walk narrows is that split's held child, which holds it unless
+    /// the general narrowing excluded it, a proof it is no answer set.
+    following: Option<Vec<u64>>,
+    /// Steering is over for this theory: a guided split's child lost its
+    /// completion (the theory's completions are not answer sets), or a
+    /// guided walk reached its completion's leaf (an answer was found).
+    distrusted: bool,
     /// The counts so far.
     pub(crate) statistics: SmallStatistics,
 }
@@ -351,6 +425,32 @@ impl Drop for SmallScratch {
 fn reports() -> bool {
     std::thread::current().name() == Some("main")
         && std::env::var_os("ZETESIS_SMALL_STATS").is_some()
+}
+
+/// Whether `region` holds the completion `model` (held-atom words): every
+/// held atom of the region is held in it and no cut atom is.
+fn holds(region: &Region, model: &[u64]) -> bool {
+    let (held, cut) = region.decision_words();
+    held.iter()
+        .zip(cut)
+        .zip(model)
+        .all(|((&held, &cut), &model)| held & !model == 0 && cut & model == 0)
+}
+
+/// The `i`-th term (from 0) of the Luby sequence 1, 1, 2, 1, 1, 2, 4, ...
+fn luby(mut i: u64) -> u64 {
+    let mut size = 1_u64;
+    let mut seq = 0_u32;
+    while size < i + 1 {
+        seq += 1;
+        size = 2 * size + 1;
+    }
+    while size - 1 != i {
+        size = (size - 1) >> 1;
+        seq -= 1;
+        i %= size;
+    }
+    1_u64 << seq
 }
 
 /// A node's shape, read once per theory.
@@ -767,6 +867,21 @@ impl SmallScratch {
         region: &Region,
         cancellation: &Cancellation,
     ) -> Result<SmallNarrowing, Stop> {
+        let verdict = self.narrow_inner(theory, producers, restrictions, region, cancellation);
+        if let Ok(SmallNarrowing::Refuted(_)) = verdict {
+            self.observe(region, true);
+        }
+        verdict
+    }
+
+    fn narrow_inner(
+        &mut self,
+        theory: &Theory,
+        producers: Option<&Producers>,
+        restrictions: &[&Theory],
+        region: &Region,
+        cancellation: &Cancellation,
+    ) -> Result<SmallNarrowing, Stop> {
         let policy = self.policy();
         if !policy.active() {
             return Ok(SmallNarrowing::Declined);
@@ -826,7 +941,15 @@ impl SmallScratch {
                 return Ok(SmallNarrowing::Refuted(Variant::Learned));
             }
             let started = Instant::now();
+            let exhausted = self.statistics.learned_exhausted;
             let verdict = self.learn(region, policy.learn_conflicts, cancellation);
+            if self.steering()
+                && self.statistics.learned_exhausted > exhausted
+                && !self.jump
+                && !self.cached(region)
+            {
+                self.probe_root(policy.learn_conflicts, cancellation)?;
+            }
             if let Ok(verdict) = &verdict {
                 self.record_yield(matches!(verdict, SmallNarrowing::Refuted(_)));
             }
@@ -943,6 +1066,7 @@ impl SmallScratch {
     /// adapting policy, regions of that size go to the learned search next,
     /// as cube-and-conquer lowers its cutoff when lookahead itself fails.
     pub(crate) fn note_refuted(&mut self, region: &Region) {
+        self.observe(region, true);
         let policy = self.policy();
         if policy.adapt_from == 0 {
             return;
@@ -961,7 +1085,7 @@ impl SmallScratch {
             return;
         };
         if self.solver.is_none() {
-            let solver = Solver::encode(shape, self.policy.is_some_and(|p| p.decide_all));
+            let solver = Solver::encode(shape, self.policy.unwrap_or_default());
             if reports() {
                 eprintln!(
                     "zetesis-small-encoding vars={} clauses={} pbs={} pb_terms={} atoms={}",
@@ -1042,14 +1166,125 @@ impl SmallScratch {
         self.cores.insert(0, (requires, words));
     }
 
+    /// An open atom of `region` that the most recent remembered completion
+    /// lying in it holds: splitting there, held child first (the walk's
+    /// order), walks toward that completion. Only orders a split.
+    pub(crate) fn guide(&mut self, region: &Region) -> Option<usize> {
+        if !self.steering() {
+            return None;
+        }
+        let model = self
+            .models
+            .iter()
+            .rev()
+            .find(|model| holds(region, model))?;
+        let atom = region
+            .open()
+            .filter(|&atom| {
+                model
+                    .get(atom / 64)
+                    .is_some_and(|w| w & (1 << (atom % 64)) != 0)
+            })
+            .last()?;
+        self.following = Some(model.clone());
+        Some(atom)
+    }
+
+    /// Whether completions may steer the walk: the policy asks for it and
+    /// steering is not over (see `distrusted`).
+    fn steering(&self) -> bool {
+        !self.distrusted
+            && self
+                .policy
+                .is_some_and(|p| p.refinements.has(Refinements::STEER))
+    }
+
+    /// Read the region narrowed after a guided split: refuted, or not
+    /// holding the completion followed, the completion is no answer set
+    /// (narrowing and refutation are sound for answer sets); holding it with
+    /// nothing open, the guided walk arrived. Either way steering ends.
+    fn observe(&mut self, region: &Region, refuted: bool) {
+        let Some(model) = self.following.take() else {
+            return;
+        };
+        if refuted || !holds(region, &model) {
+            self.distrusted = true;
+            self.jump = false;
+            self.statistics.steer_failures += 1;
+        } else if region.open().next().is_none() {
+            // The walk reached the completion's leaf, which the walk checks
+            // as an answer now. Steering exists to reach a first answer
+            // sooner; the rest of the walk keeps its own order.
+            self.distrusted = true;
+            self.jump = false;
+            self.statistics.steer_successes += 1;
+        }
+    }
+
+    /// Search the conditions under the restriction guards alone, not the
+    /// region's decisions, for a completion. Refutes nothing.
+    fn probe_root(&mut self, allowance: u64, cancellation: &Cancellation) -> Result<(), Stop> {
+        let Some(shape) = self.shape.as_ref() else {
+            return Ok(());
+        };
+        let Some(solver) = self.solver.as_mut() else {
+            return Ok(());
+        };
+        self.assumptions.clear();
+        self.assumptions
+            .extend(self.guards.iter().map(|&g| lit(g, false)));
+        self.statistics.root_probes += 1;
+        let before = solver.counts;
+        let started = Instant::now();
+        let outcome = solver.solve(&self.assumptions, allowance, cancellation, None)?;
+        self.statistics.learned_nanos += saturate(started.elapsed().as_nanos());
+        let after = solver.counts;
+        self.statistics.conflicts += after.conflicts - before.conflicts;
+        self.statistics.propagations += after.propagations - before.propagations;
+        self.statistics.learned_clauses += after.learned - before.learned;
+        if let Outcome::Satisfiable = outcome {
+            let words = shape.atoms.div_ceil(64);
+            let mut model = vec![0_u64; words];
+            for atom in 0..shape.atoms {
+                if solver.value(idx(atom)) == TRUE {
+                    model[atom / 64] |= 1 << (atom % 64);
+                }
+            }
+            if self.models.len() >= 8 {
+                self.models.remove(0);
+            }
+            self.models.push(model);
+            self.statistics.root_completions += 1;
+            self.jump = true;
+            self.jump_left = 1 << 12;
+        }
+        solver.cancel_until(0);
+        Ok(())
+    }
+
+    /// Whether the walk should defer `region`: a jump is on and the
+    /// completion it follows lies outside the region. Reaching a region
+    /// that holds it, or spending the jump's deferrals, ends the jump.
+    pub(crate) fn defers(&mut self, region: &Region) -> bool {
+        self.observe(region, false);
+        if !self.jump {
+            return false;
+        }
+        let Some(model) = self.models.last() else {
+            self.jump = false;
+            return false;
+        };
+        if holds(region, model) || self.jump_left == 0 {
+            self.jump = false;
+            return false;
+        }
+        self.jump_left -= 1;
+        self.statistics.deferrals += 1;
+        true
+    }
+
     fn cached(&self, region: &Region) -> bool {
-        let (held, cut) = region.decision_words();
-        self.models.iter().any(|model| {
-            held.iter()
-                .zip(cut)
-                .zip(model)
-                .all(|((&held, &cut), &model)| held & !model == 0 && cut & model == 0)
-        })
+        self.models.iter().any(|model| holds(region, model))
     }
 
     // ---------------------------------------------------------------- enumeration
@@ -1136,10 +1371,7 @@ impl SmallScratch {
             return false;
         };
         if self.solver.is_none() {
-            self.solver = Some(Solver::encode(
-                shape,
-                self.policy.is_some_and(|p| p.decide_all),
-            ));
+            self.solver = Some(Solver::encode(shape, self.policy.unwrap_or_default()));
             self.statistics.encodings += 1;
         }
         true
@@ -1188,7 +1420,7 @@ impl SmallScratch {
             return Ok(SmallNarrowing::Declined);
         };
         if self.solver.is_none() {
-            let solver = Solver::encode(shape, self.policy.is_some_and(|p| p.decide_all));
+            let solver = Solver::encode(shape, self.policy.unwrap_or_default());
             if reports() {
                 eprintln!(
                     "zetesis-small-encoding vars={} clauses={} pbs={} pb_terms={} atoms={}",
@@ -1786,10 +2018,18 @@ struct Solver {
     /// Variables the search decides; the rest are defined by them.
     decidable: Bits,
     decide_all: bool,
+    refinements: Refinements,
+    /// Restarts so far, the Luby sequence's index.
+    restarts: u64,
 }
 
 impl Solver {
-    fn encode(shape: &Shape, decide_all: bool) -> Self {
+    fn encode(shape: &Shape, policy: SmallPolicy) -> Self {
+        let SmallPolicy {
+            decide_all,
+            refinements,
+            ..
+        } = policy;
         let vars = shape.atoms;
         let mut solver = Self {
             vars,
@@ -1819,6 +2059,8 @@ impl Solver {
             guards: Vec::new(),
             decidable: Bits::filled(vars, true),
             decide_all,
+            refinements,
+            restarts: 0,
         };
         for v in 0..idx(vars) {
             solver.heap_insert(v);
@@ -2467,8 +2709,31 @@ impl Solver {
             p = Some(next);
             current = self.reason_lits(v);
         }
-        for &q in &learned[1..] {
-            self.seen.set(var(q) as usize, false);
+        if self.refinements.has(Refinements::MINIMIZE) && learned.len() > 2 {
+            let mut levels = 0_u32;
+            for &q in &learned[1..] {
+                levels |= 1 << (self.level[var(q) as usize] & 31);
+            }
+            let mut clear: Vec<usize> = learned[1..].iter().map(|&q| var(q) as usize).collect();
+            let mut kept = 1;
+            for i in 1..learned.len() {
+                let q = learned[i];
+                let v = var(q) as usize;
+                if matches!(self.reason[v].unpack(), Reason::None)
+                    || !self.redundant(v, levels, &mut clear)
+                {
+                    learned[kept] = q;
+                    kept += 1;
+                }
+            }
+            learned.truncate(kept);
+            for v in clear {
+                self.seen.set(v, false);
+            }
+        } else {
+            for &q in &learned[1..] {
+                self.seen.set(var(q) as usize, false);
+            }
         }
         let mut back = 0;
         if learned.len() > 1 {
@@ -2483,6 +2748,35 @@ impl Solver {
         }
         self.increment *= 1.0 / 0.95;
         (learned, back)
+    }
+
+    /// Whether `v`, seen in a learned clause, is implied by the clause's
+    /// other literals through reasons alone (recursive minimization).
+    fn redundant(&mut self, v: usize, levels: u32, clear: &mut Vec<usize>) -> bool {
+        let top = clear.len();
+        let mut stack = vec![v];
+        while let Some(x) = stack.pop() {
+            for r in self.reason_lits(x) {
+                let u = var(r) as usize;
+                if u == x || self.seen.get(u) || self.level[u] == 0 {
+                    continue;
+                }
+                if !matches!(self.reason[u].unpack(), Reason::None)
+                    && levels & (1 << (self.level[u] & 31)) != 0
+                {
+                    self.seen.set(u, true);
+                    stack.push(u);
+                    clear.push(u);
+                } else {
+                    for &w in &clear[top..] {
+                        self.seen.set(w, false);
+                    }
+                    clear.truncate(top);
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     fn cancel_until(&mut self, level: usize) {
@@ -2533,7 +2827,11 @@ impl Solver {
         }
         self.cancel_until(0);
         let start_conflicts = self.counts.conflicts;
-        let mut restart_at = 100_u64;
+        let mut restart_at = if self.refinements.has(Refinements::LUBY) {
+            64 * luby(self.restarts)
+        } else {
+            100_u64
+        };
         let mut since_restart = 0_u64;
         // All assumptions share decision level 1, so a backjump never
         // re-propagates them one level at a time.
@@ -2584,7 +2882,12 @@ impl Solver {
             }
             if since_restart >= restart_at && self.decision_level() > 1 {
                 since_restart = 0;
-                restart_at = restart_at + restart_at / 2;
+                if self.refinements.has(Refinements::LUBY) {
+                    self.restarts += 1;
+                    restart_at = 64 * luby(self.restarts);
+                } else {
+                    restart_at = restart_at + restart_at / 2;
+                }
                 self.cancel_until(1);
                 if self.learned_count > 20_000 + width(self.counts.conflicts) / 4 {
                     self.reduce();

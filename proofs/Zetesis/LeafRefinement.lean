@@ -159,6 +159,36 @@ theorem resolvent_sound [DecidableEq α] {N : Atoms α → Prop}
       simp [List.mem_filter, inLeft, isPivot]
     exact ⟨l, List.mem_append_left _ kept, lHolds⟩
 
+/-- Clause minimization keeps a learned clause a consequence of `N`. A literal
+`q` of a sound clause may be dropped when a sound reason clause
+`negate q :: rest` has every literal of `rest` in the clause and distinct from
+`q` (`redundant` in `regions/small.rs`). Recursive minimization drops literals
+one at a time, each by this law, after first resolving away the intermediate
+literals its search marked; each such resolution is `resolvent_sound`.
+
+Proof. Resolve the clause with the reason on `q` (`resolvent_sound`): a satisfied
+literal of the resolvent is either in the clause and not `q`, or a literal of
+`rest`, which is in the clause and not `q` as well. -/
+theorem minimized_sound [DecidableEq α] {N : Atoms α → Prop}
+    {clause rest : List (Literal α)} (q : Literal α)
+    (sound : ∀ z, N z → Satisfies z clause)
+    (reason : ∀ z, N z → Satisfies z (negate q :: rest))
+    (covered : ∀ l ∈ rest, l ∈ clause ∧ l ≠ q) :
+    ∀ z, N z → Satisfies z (clause.filter (fun l => l ≠ q)) := by
+  intro z holds
+  obtain ⟨l, inResolvent, lHolds⟩ := resolvent_sound q sound reason z holds
+  rcases List.mem_append.mp inResolvent with inLeft | inRight
+  · exact ⟨l, inLeft, lHolds⟩
+  · have inReason : l ∈ negate q :: rest := (List.mem_filter.mp inRight).1
+    have notNegated : l ≠ negate q := by
+      simpa using (List.mem_filter.mp inRight).2
+    have inRest : l ∈ rest := by
+      rcases List.mem_cons.mp inReason with equal | listed
+      · exact absurd equal notNegated
+      · exact listed
+    obtain ⟨inClause, notPivot⟩ := covered l inRest
+    exact ⟨l, List.mem_filter.mpr ⟨inClause, by simpa using notPivot⟩, lHolds⟩
+
 /-- A sound clause all of whose literals negate core literals entails the core.
 Final-conflict analysis derives such a clause: the negated assumptions of a
 refutation.
