@@ -1421,6 +1421,29 @@ enum Reason {
     /// Forced by this threshold; the explanation is rebuilt from the trail
     /// prefix on demand.
     Pb(u32),
+    /// Forced by a two-literal clause with this other, false, literal.
+    Binary(u32),
+}
+
+/// A watch: the clause index in the high half, with [`BINARY`] set for a
+/// two-literal clause, which is kept in the watches alone, and a blocking
+/// literal of the clause in the low half (for a two-literal clause, its
+/// other literal). A true blocker settles the clause without reading it.
+type Watch = u64;
+
+/// Marks a watch of a two-literal clause.
+const BINARY: u32 = 1 << 31;
+
+const fn watch(clause: u32, blocker: u32) -> Watch {
+    ((clause as u64) << 32) | blocker as u64
+}
+
+const fn watch_clause(w: Watch) -> u32 {
+    (w >> 32) as u32
+}
+
+const fn watch_blocker(w: Watch) -> u32 {
+    w as u32
 }
 
 /// A threshold constraint `out <-> sum(weights of true conditions) >= bound`.
@@ -1477,7 +1500,9 @@ struct Solver {
     clauses: Arena,
     /// Which clauses were learned (only those are ever dropped).
     is_learned: Vec<bool>,
-    watches: Vec<Vec<u32>>,
+    /// Learned clauses kept in the arena.
+    learned_count: usize,
+    watches: Vec<Vec<Watch>>,
     pbs: Vec<Pb>,
     pb_occurs: Vec<Vec<u32>>,
     /// Per variable, the thresholds it is a condition of, with its weight.
@@ -1515,6 +1540,7 @@ impl Solver {
             vars,
             clauses: Arena::default(),
             is_learned: Vec::new(),
+            learned_count: 0,
             watches: vec![Vec::new(); vars * 2],
             pbs: Vec::new(),
             pb_occurs: vec![Vec::new(); vars],
@@ -1796,12 +1822,28 @@ impl Solver {
                 _ => {}
             },
             _ => {
-                let index = self.clauses.push(clause);
-                self.watches[neg(clause[0]) as usize].push(index);
-                self.watches[neg(clause[1]) as usize].push(index);
-                self.is_learned.push(false);
+                self.attach(clause, false);
             }
         }
+    }
+
+    /// Store a clause of at least two literals and watch its first two; a
+    /// two-literal clause lives in the watches alone. The reason that
+    /// asserts its first literal is returned.
+    fn attach(&mut self, clause: &[u32], learned: bool) -> Reason {
+        if clause.len() == 2 {
+            self.watches[neg(clause[0]) as usize].push(watch(BINARY, clause[1]));
+            self.watches[neg(clause[1]) as usize].push(watch(BINARY, clause[0]));
+            return Reason::Binary(clause[1]);
+        }
+        let index = self.clauses.push(clause);
+        self.watches[neg(clause[0]) as usize].push(watch(index, clause[1]));
+        self.watches[neg(clause[1]) as usize].push(watch(index, clause[0]));
+        self.is_learned.push(learned);
+        if learned {
+            self.learned_count += 1;
+        }
+        Reason::Clause(index)
     }
 
     fn assign(&mut self, l: u32, reason: Reason) {
@@ -1839,15 +1881,33 @@ impl Solver {
             let mut i = 0;
             let mut conflict = None;
             while i < watchers.len() {
-                let ci = watchers[i] as usize;
+                let w = watchers[i];
+                let blocker = watch_blocker(w);
+                let b = self.assigns[var(blocker) as usize];
+                if b != UNDEF && (b ^ u8::from(blocker & 1 == 1)) == TRUE {
+                    i += 1;
+                    continue;
+                }
+                let ci = watch_clause(w);
+                if ci == BINARY {
+                    if b == UNDEF {
+                        self.assign(blocker, Reason::Binary(false_lit));
+                        i += 1;
+                    } else {
+                        conflict = Some(vec![blocker, false_lit]);
+                        break;
+                    }
+                    continue;
+                }
+                let ci = ci as usize;
                 let clause = self.clauses.get_mut(ci);
                 if clause[0] == false_lit {
                     clause.swap(0, 1);
                 }
                 let first = clause[0];
-                if self.assigns[var(first) as usize] != UNDEF
-                    && (self.assigns[var(first) as usize] ^ u8::from(first & 1 == 1)) == TRUE
-                {
+                let a = self.assigns[var(first) as usize];
+                if a != UNDEF && (a ^ u8::from(first & 1 == 1)) == TRUE {
+                    watchers[i] = watch(idx(ci), first);
                     i += 1;
                     continue;
                 }
@@ -1857,7 +1917,8 @@ impl Solver {
                     let a = self.assigns[var(l) as usize];
                     if a == UNDEF || (a ^ u8::from(l & 1 == 1)) == TRUE {
                         clause.swap(1, k);
-                        self.watches[neg(clause[1]) as usize].push(idx(ci));
+                        let other = clause[1];
+                        self.watches[neg(other) as usize].push(watch(idx(ci), first));
                         watchers.swap_remove(i);
                         moved = true;
                         break;
@@ -1866,9 +1927,7 @@ impl Solver {
                 if moved {
                     continue;
                 }
-                let a = self.assigns[var(first) as usize];
                 if a == UNDEF {
-                    let first = clause[0];
                     self.assign(first, Reason::Clause(idx(ci)));
                     i += 1;
                 } else {
@@ -1998,6 +2057,7 @@ impl Solver {
     fn reason_lits(&self, v: usize) -> Vec<u32> {
         match self.reason[v] {
             Reason::Clause(ci) => self.clauses.get(ci as usize).to_vec(),
+            Reason::Binary(other) => vec![lit(idx(v), self.assigns[v] == FALSE), other],
             Reason::None => Vec::new(),
             Reason::Pb(index) => self.pb_reason(index, v),
         }
@@ -2186,13 +2246,9 @@ impl Solver {
                 if learned.len() == 1 {
                     self.assign(learned[0], Reason::None);
                 } else {
-                    let index = self.clauses.push(&learned);
-                    self.watches[neg(learned[0]) as usize].push(index);
-                    self.watches[neg(learned[1]) as usize].push(index);
-                    let asserting = learned[0];
-                    self.is_learned.push(true);
+                    let reason = self.attach(&learned, true);
                     self.counts.learned += 1;
-                    self.assign(asserting, Reason::Clause(index));
+                    self.assign(learned[0], reason);
                 }
                 if self.counts.conflicts.trailing_zeros() >= 8 {
                     cancellation.poll()?;
@@ -2207,9 +2263,7 @@ impl Solver {
                 since_restart = 0;
                 restart_at = restart_at + restart_at / 2;
                 self.cancel_until(1);
-                if self.is_learned.iter().filter(|&&l| l).count()
-                    > 20_000 + width(self.counts.conflicts) / 4
-                {
+                if self.learned_count > 20_000 + width(self.counts.conflicts) / 4 {
                     self.reduce();
                 }
                 continue;
@@ -2300,12 +2354,9 @@ impl Solver {
                     }
                     let mut clause = vec![other];
                     clause.extend(core.iter().map(|&k| neg(k)));
-                    let index = self.clauses.push(&clause);
-                    self.watches[neg(clause[0]) as usize].push(index);
-                    self.watches[neg(clause[1]) as usize].push(index);
-                    self.is_learned.push(true);
+                    let reason = self.attach(&clause, true);
                     self.counts.learned += 1;
-                    self.assign(other, Reason::Clause(index));
+                    self.assign(other, reason);
                     if let Some(conflict) = self.propagate() {
                         return Ok(self.refuted_by(&conflict));
                     }
@@ -2425,7 +2476,7 @@ impl Solver {
                 _ => None,
             })
             .collect();
-        let learned = self.is_learned.iter().filter(|&&l| l).count();
+        let learned = self.learned_count;
         let mut keep = vec![true; self.clauses.len()];
         let mut dropped = 0;
         for (ci, kept) in keep.iter_mut().enumerate() {
@@ -2452,10 +2503,15 @@ impl Solver {
         }
         self.clauses = kept;
         self.is_learned = kept_learned;
+        self.learned_count -= dropped;
         for watchers in &mut self.watches {
-            watchers.retain_mut(|ci| {
-                let mapped = remap[*ci as usize];
-                *ci = mapped;
+            watchers.retain_mut(|w| {
+                let ci = watch_clause(*w);
+                if ci == BINARY {
+                    return true;
+                }
+                let mapped = remap[ci as usize];
+                *w = watch(mapped, watch_blocker(*w));
                 mapped != u32::MAX
             });
         }
