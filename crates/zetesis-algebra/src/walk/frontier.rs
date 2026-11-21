@@ -29,7 +29,7 @@ use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering, fence};
-use std::sync::{Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::time::Duration;
 
 use crate::{Cancellation, Stop};
@@ -128,8 +128,9 @@ pub struct Termination {
     /// the walk ends.
     pub gate: Mutex<()>,
     /// The number of idle workers waiting on `idle`: changed only while
-    /// `gate` is held, read by a publication without it.
-    pub idle_waiters: AtomicUsize,
+    /// `gate` is held, read by a publication without it. Shared so a
+    /// worker's long optional work can yield while a peer waits.
+    pub idle_waiters: Arc<AtomicUsize>,
     /// Idle workers wait here for a published region or the end of the walk.
     idle: Condvar,
 }
@@ -149,7 +150,7 @@ impl Termination {
             outstanding: AtomicUsize::new(unresolved),
             closed: AtomicBool::new(false),
             gate: Mutex::new(()),
-            idle_waiters: AtomicUsize::new(0),
+            idle_waiters: Arc::new(AtomicUsize::new(0)),
             idle: Condvar::new(),
         }
     }

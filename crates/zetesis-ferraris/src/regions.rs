@@ -1909,6 +1909,13 @@ impl NarrowingScratch {
         self.small_scratch().designate(designated);
     }
 
+    /// Count of idle peers: while it is nonzero the size-specialized learned
+    /// search starts no search and ends a running one as spent, so its
+    /// region is split and shared rather than held.
+    pub fn yield_small_search_to(&mut self, idle: std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        self.small_scratch().yield_to(idle);
+    }
+
     /// Fix the size-specialized narrowing policy instead of reading it from
     /// the environment.
     pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {

@@ -98,6 +98,10 @@ pub struct SmallPolicy {
     /// time in the theory's nodes, so a walk that ends sooner never pays
     /// for them, and one that runs on spends at most about as long again.
     pub amortize: usize,
+    /// The learned search yields to idle parallel peers: it starts no
+    /// search while one waits, and a running search ends as spent when one
+    /// starts waiting, so the walker splits its region for them.
+    pub yield_idle: bool,
 }
 
 /// The measured shape-and-encoding cost per formula node, in nanoseconds,
@@ -137,6 +141,7 @@ impl SmallPolicy {
             density: 32,
             main_only: true,
             amortize: AMORTIZE_NANOS_PER_NODE,
+            yield_idle: true,
         }
     }
 
@@ -183,6 +188,7 @@ impl SmallPolicy {
                 "density" => policy.density = parsed,
                 "main" => policy.main_only = parsed > 0,
                 "amortize" => policy.amortize = parsed,
+                "idle" => policy.yield_idle = parsed > 0,
                 _ => {}
             }
         }
@@ -278,6 +284,9 @@ pub struct SmallStatistics {
     /// Regions offered before the walk had run long enough to amortize the
     /// shape and encoding.
     pub deferred: u64,
+    /// Regions not searched, and searches ended, because a parallel peer
+    /// was idle.
+    pub yielded: u64,
 }
 
 /// A walker's specialized-narrowing state: its policy, the clausal reading of
@@ -313,6 +322,8 @@ pub(crate) struct SmallScratch {
     designated: Option<bool>,
     /// When this walker first offered a region to the learned search.
     first_offer: Option<Instant>,
+    /// Idle peers of a parallel walker, when its walk shares the count.
+    idle: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
     /// Completions recently found to pass, as held-atom words.
     models: Vec<Vec<u64>>,
     /// The counts so far.
@@ -631,6 +642,20 @@ impl SmallScratch {
         self.designated = Some(designated);
     }
 
+    /// Share the walk's count of idle peers.
+    pub(crate) fn yield_to(&mut self, idle: std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        self.idle = Some(idle);
+    }
+
+    /// Whether a peer waits for work and the policy yields to it.
+    fn peers_idle(&self, policy: &SmallPolicy) -> bool {
+        policy.yield_idle
+            && self
+                .idle
+                .as_ref()
+                .is_some_and(|idle| idle.load(std::sync::atomic::Ordering::Relaxed) > 0)
+    }
+
     /// Replace the policy (tests and measurements).
     pub(crate) fn set_policy(&mut self, policy: SmallPolicy) {
         self.policy = Some(policy);
@@ -770,6 +795,10 @@ impl SmallScratch {
         let nodes = theory.view().len();
         if policy.density > 0 && nodes > policy.density.saturating_mul(theory.atom_count().max(1)) {
             self.statistics.shape_declined += 1;
+            return false;
+        }
+        if self.peers_idle(policy) {
+            self.statistics.yielded += 1;
             return false;
         }
         let first_offer = *self.first_offer.get_or_insert_with(Instant::now);
@@ -1109,7 +1138,11 @@ impl SmallScratch {
         }
         self.statistics.learned += 1;
         let before = solver.counts;
-        let outcome = solver.solve(&self.assumptions, conflicts, cancellation)?;
+        let idle = self
+            .idle
+            .as_deref()
+            .filter(|_| self.policy.is_some_and(|p| p.yield_idle));
+        let outcome = solver.solve(&self.assumptions, conflicts, cancellation, idle)?;
         let after = solver.counts;
         self.statistics.decisions += after.decisions - before.decisions;
         self.statistics.conflicts += after.conflicts - before.conflicts;
@@ -2242,6 +2275,7 @@ impl Solver {
         assumptions: &[u32],
         allowance: u64,
         cancellation: &Cancellation,
+        idle: Option<&std::sync::atomic::AtomicUsize>,
     ) -> Result<Outcome, Stop> {
         self.core.clear();
         if self.inconsistent {
@@ -2290,7 +2324,9 @@ impl Solver {
                 if self.counts.conflicts.trailing_zeros() >= 8 {
                     cancellation.poll()?;
                 }
-                if self.counts.conflicts - start_conflicts >= allowance {
+                if self.counts.conflicts - start_conflicts >= allowance
+                    || idle.is_some_and(|idle| idle.load(std::sync::atomic::Ordering::Relaxed) > 0)
+                {
                     self.cancel_until(0);
                     return Ok(Outcome::Unknown);
                 }

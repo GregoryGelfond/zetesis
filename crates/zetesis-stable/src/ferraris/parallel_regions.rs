@@ -1718,6 +1718,9 @@ fn worker(
     let mut search = SearchStatistics::default();
     let mut workspaces = Workspaces::new();
     workspaces.scratch.designate_small_walker(index == 0);
+    workspaces
+        .scratch
+        .yield_small_search_to(Arc::clone(&shared.frontier.termination.idle_waiters));
     // One lease serves this worker's consecutive regions, so the shared ledger
     // is locked about twice per grant rather than twice per region. It settles
     // before this worker steals or waits for another region and before it sends
