@@ -358,12 +358,17 @@ fn reports() -> bool {
 struct Shape {
     theory: Theory,
     atoms: usize,
-    /// Every node's operands, flattened, and its kind.
-    kinds: Vec<Kind>,
-    operands: Vec<usize>,
-    spans: Vec<(u32, u32)>,
+    /// Every node's kind, bit-packed: the kind in the top [`KIND_BITS`]
+    /// bits, an atom node's atom or a threshold's index below them.
+    kinds: Vec<u32>,
+    /// Every node's operands, flattened in node order, and each node's
+    /// first operand (one past the last node: the operand count).
+    operands: Vec<u32>,
+    offsets: Vec<u32>,
+    /// Each threshold's bound and the start of its weights in `weights`,
+    /// which holds threshold weights only, in node order.
+    thresholds: Vec<(i128, u32)>,
     weights: Vec<u64>,
-    bounds: Vec<i128>,
     /// Logical parents of each node.
     parents_offsets: Vec<u32>,
     parents: Vec<u32>,
@@ -380,51 +385,26 @@ struct Shape {
     amo_atoms: usize,
 }
 
-/// The atoms an at-most-one root reads. Exactly-one choices crossed with
-/// at-most-one constraints (pigeonhole, permutation and matching shapes) are
-/// where resolution needs exponentially many steps and counting does not.
-fn amo_atoms(
-    roots: &[usize],
-    kinds: &[Kind],
-    spans: &[(u32, u32)],
-    operands: &[usize],
-    weights: &[u64],
-    bounds: &[i128],
-    atoms: usize,
-) -> usize {
-    let row = |node: usize| {
-        let (start, end) = spans[node];
-        (start as usize, end as usize)
+/// Bits of a packed node kind that name the kind.
+const KIND_BITS: u32 = 3;
+
+/// The payload bits of a packed node kind.
+const PAYLOAD: u32 = (1 << (32 - KIND_BITS)) - 1;
+
+/// A node's kind packed with its atom or threshold index, or `None` when
+/// the payload does not fit.
+fn pack_kind(kind: Kind, payload: usize) -> Option<u32> {
+    let tag: u32 = match kind {
+        Kind::Atom(_) => 0,
+        Kind::False => 1,
+        Kind::Implies => 2,
+        Kind::And => 3,
+        Kind::Or => 4,
+        Kind::Threshold => 5,
+        Kind::Cut => 6,
     };
-    let mut marked = vec![false; atoms];
-    for &root in roots {
-        let (start, end) = row(root);
-        if kinds[root] != Kind::Implies
-            || end - start != 2
-            || kinds[operands[start + 1]] != Kind::False
-        {
-            continue;
-        }
-        let body = operands[start];
-        let (from, to) = row(body);
-        let children = &operands[from..to];
-        let unit = match kinds[body] {
-            Kind::And => children.len() == 2,
-            Kind::Threshold => bounds[body] == 2 && weights[from..to].iter().all(|&w| w == 1),
-            _ => false,
-        };
-        if !unit {
-            continue;
-        }
-        if children.iter().all(|&c| matches!(kinds[c], Kind::Atom(_))) {
-            for &c in children {
-                if let Kind::Atom(atom) = kinds[c] {
-                    marked[atom as usize] = true;
-                }
-            }
-        }
-    }
-    marked.iter().filter(|&&m| m).count()
+    let payload = u32::try_from(payload).ok().filter(|&p| p <= PAYLOAD)?;
+    Some((tag << (32 - KIND_BITS)) | payload)
 }
 
 #[derive(Debug)]
@@ -526,84 +506,115 @@ impl Support {
     }
 }
 
+/// Each node's distinct parents, in node order, as offsets and a flat row,
+/// counted from the operand rows `offsets`/`operands` of `count` nodes.
+fn parents_of(count: usize, offsets: &[u32], operands: &[u32]) -> (Vec<u32>, Vec<u32>) {
+    let mut parents_offsets = vec![0_u32; count + 1];
+    for &child in operands {
+        parents_offsets[child as usize + 1] += 1;
+    }
+    for node in 0..count {
+        parents_offsets[node + 1] += parents_offsets[node];
+    }
+    let mut cursor = parents_offsets.clone();
+    let mut parents = vec![0_u32; operands.len()];
+    for node in 0..count {
+        for &child in &operands[offsets[node] as usize..offsets[node + 1] as usize] {
+            let slot = &mut cursor[child as usize];
+            // A node reading the same child twice is its parent once.
+            let row_start = parents_offsets[child as usize] as usize;
+            if *slot as usize > row_start && parents[*slot as usize - 1] == idx(node) {
+                continue;
+            }
+            parents[*slot as usize] = idx(node);
+            *slot += 1;
+        }
+    }
+    // Close the gaps left by repeated operands.
+    let mut write = 0_usize;
+    let mut compact_offsets = Vec::with_capacity(count + 1);
+    compact_offsets.push(0_u32);
+    for node in 0..count {
+        let (start, end) = (parents_offsets[node] as usize, cursor[node] as usize);
+        parents.copy_within(start..end, write);
+        write += end - start;
+        compact_offsets.push(idx(write));
+    }
+    parents.truncate(write);
+    parents.shrink_to_fit();
+    drop(cursor);
+    (compact_offsets, parents)
+}
+
 impl Shape {
     fn read(theory: &Theory, producers: Option<&Producers>) -> Option<Self> {
         let view = theory.view();
         let count = view.len();
         let atoms = theory.atom_count();
         let mut kinds = Vec::with_capacity(count);
-        let mut operands = Vec::new();
-        let mut spans = Vec::with_capacity(count);
+        let mut operands: Vec<u32> = Vec::new();
+        let mut offsets = Vec::with_capacity(count + 1);
+        let mut thresholds = Vec::new();
         let mut weights = Vec::new();
-        let mut bounds = vec![0_i128; count];
         let mut has_cuts = false;
-        let mut parent_edges = Vec::new();
         let mut atom_edges = Vec::new();
-        for (node, bound) in bounds.iter_mut().enumerate() {
-            let start = idx(operands.len());
-            let kind = match view.node(node).ok()? {
+        let extend = |operands: &mut Vec<u32>, row: &[usize]| -> Option<()> {
+            for &child in row {
+                operands.push(u32::try_from(child).ok()?);
+            }
+            Some(())
+        };
+        for node in 0..count {
+            offsets.push(u32::try_from(operands.len()).ok()?);
+            let packed = match view.node(node).ok()? {
                 NodeView::Atom(atom) => {
                     atom_edges.push((idx(atom), idx(node)));
-                    Kind::Atom(idx(atom))
+                    pack_kind(Kind::Atom(0), atom)?
                 }
-                NodeView::False => Kind::False,
+                NodeView::False => pack_kind(Kind::False, 0)?,
                 NodeView::Implies(left, right) => {
-                    operands.extend([left, right]);
-                    weights.extend([0, 0]);
-                    Kind::Implies
+                    extend(&mut operands, &[left, right])?;
+                    pack_kind(Kind::Implies, 0)?
                 }
                 NodeView::And(row) => {
-                    operands.extend_from_slice(row);
-                    weights.extend(std::iter::repeat_n(0, row.len()));
-                    Kind::And
+                    extend(&mut operands, row)?;
+                    pack_kind(Kind::And, 0)?
                 }
                 NodeView::Or(row) => {
-                    operands.extend_from_slice(row);
-                    weights.extend(std::iter::repeat_n(0, row.len()));
-                    Kind::Or
+                    extend(&mut operands, row)?;
+                    pack_kind(Kind::Or, 0)?
                 }
                 NodeView::Threshold(threshold) => {
-                    operands.extend_from_slice(threshold.conditions);
+                    extend(&mut operands, threshold.conditions)?;
+                    let index = thresholds.len();
+                    thresholds.push((threshold.bound, u32::try_from(weights.len()).ok()?));
                     weights.extend_from_slice(threshold.weights);
-                    *bound = threshold.bound;
-                    Kind::Threshold
+                    pack_kind(Kind::Threshold, index)?
                 }
                 NodeView::ExtremumCut(cut) => {
                     has_cuts = true;
-                    operands.extend_from_slice(cut.row.conditions);
-                    weights.extend(std::iter::repeat_n(0, cut.row.conditions.len()));
-                    Kind::Cut
+                    extend(&mut operands, cut.row.conditions)?;
+                    pack_kind(Kind::Cut, 0)?
                 }
             };
-            let end = idx(operands.len());
-            for &child in &operands[start as usize..end as usize] {
-                parent_edges.push((idx(child), idx(node)));
-            }
-            kinds.push(kind);
-            spans.push((start, end));
+            kinds.push(packed);
         }
-        parent_edges.sort_unstable();
-        parent_edges.dedup();
-        let (parents_offsets, parents) = csr(count, &parent_edges);
+        offsets.push(u32::try_from(operands.len()).ok()?);
+        let (parents_offsets, parents) = parents_of(count, &offsets, &operands);
         let (atom_nodes_offsets, atom_nodes) = csr(atoms, &atom_edges);
+        drop(atom_edges);
         let support = producers.map(|producers| Support::read(producers, atoms, count));
-        let amo_atoms = amo_atoms(
-            theory.roots(),
-            &kinds,
-            &spans,
-            &operands,
-            &weights,
-            &bounds,
-            atoms,
-        );
-        Some(Self {
+        operands.shrink_to_fit();
+        weights.shrink_to_fit();
+        thresholds.shrink_to_fit();
+        let mut shape = Self {
             theory: theory.clone(),
             atoms,
             kinds,
             operands,
-            spans,
+            offsets,
+            thresholds,
             weights,
-            bounds,
             parents_offsets,
             parents,
             atom_nodes_offsets,
@@ -611,18 +622,84 @@ impl Shape {
             roots: theory.roots().to_vec(),
             support,
             has_cuts,
-            amo_atoms,
-        })
+            amo_atoms: 0,
+        };
+        shape.amo_atoms = shape.count_amo_atoms();
+        Some(shape)
     }
 
-    fn row(&self, node: usize) -> &[usize] {
-        let (start, end) = self.spans[node];
-        &self.operands[start as usize..end as usize]
+    /// The node count.
+    fn nodes(&self) -> usize {
+        self.kinds.len()
     }
 
+    /// A node's kind, unpacked.
+    fn kind(&self, node: usize) -> Kind {
+        let packed = self.kinds[node];
+        match packed >> (32 - KIND_BITS) {
+            0 => Kind::Atom(packed & PAYLOAD),
+            1 => Kind::False,
+            2 => Kind::Implies,
+            3 => Kind::And,
+            4 => Kind::Or,
+            5 => Kind::Threshold,
+            _ => Kind::Cut,
+        }
+    }
+
+    /// A threshold node's bound.
+    fn bound(&self, node: usize) -> i128 {
+        self.thresholds[(self.kinds[node] & PAYLOAD) as usize].0
+    }
+
+    /// The atoms an at-most-one root reads. Exactly-one choices crossed
+    /// with at-most-one constraints (pigeonhole, permutation and matching
+    /// shapes) are where resolution needs exponentially many steps and
+    /// counting does not.
+    fn count_amo_atoms(&self) -> usize {
+        let mut marked = vec![false; self.atoms];
+        for &root in &self.roots {
+            let row = self.row(root);
+            if self.kind(root) != Kind::Implies
+                || row.len() != 2
+                || self.kind(row[1] as usize) != Kind::False
+            {
+                continue;
+            }
+            let body = row[0] as usize;
+            let children = self.row(body);
+            let unit = match self.kind(body) {
+                Kind::And => children.len() == 2,
+                Kind::Threshold => {
+                    self.bound(body) == 2 && self.row_weights(body).iter().all(|&w| w == 1)
+                }
+                _ => false,
+            };
+            if !unit {
+                continue;
+            }
+            if children
+                .iter()
+                .all(|&c| matches!(self.kind(c as usize), Kind::Atom(_)))
+            {
+                for &c in children {
+                    if let Kind::Atom(atom) = self.kind(c as usize) {
+                        marked[atom as usize] = true;
+                    }
+                }
+            }
+        }
+        marked.iter().filter(|&&m| m).count()
+    }
+
+    fn row(&self, node: usize) -> &[u32] {
+        &self.operands[self.offsets[node] as usize..self.offsets[node + 1] as usize]
+    }
+
+    /// A threshold node's weights, one per operand.
     fn row_weights(&self, node: usize) -> &[u64] {
-        let (start, end) = self.spans[node];
-        &self.weights[start as usize..end as usize]
+        let start = self.thresholds[(self.kinds[node] & PAYLOAD) as usize].1 as usize;
+        &self.weights[start..start + self.row(node).len()]
     }
 }
 
@@ -980,7 +1057,7 @@ impl SmallScratch {
     /// `None` declines (an ordinal cut above an open atom).
     fn enumerate(&mut self, region: &Region) -> Option<SmallNarrowing> {
         let shape = self.shape.as_ref()?;
-        let nodes = shape.kinds.len();
+        let nodes = shape.nodes();
         if self.stamp.len() != nodes {
             self.stamp = vec![0; nodes];
             self.constant = vec![2; nodes];
@@ -994,7 +1071,7 @@ impl SmallScratch {
         let open: Vec<usize> = region.open().collect();
         let k = open.len();
         collect_cone(shape, &open, &mut self.stamp, self.epoch, &mut self.cone);
-        if shape.has_cuts && self.cone.iter().any(|&n| shape.kinds[n] == Kind::Cut) {
+        if shape.has_cuts && self.cone.iter().any(|&n| shape.kind(n) == Kind::Cut) {
             return None;
         }
         let words = if k >= 6 { 1_usize << (k - 6) } else { 1 };
@@ -1292,28 +1369,28 @@ impl LaneReader<'_> {
         memo: &mut std::collections::HashMap<usize, bool>,
     ) -> u64 {
         let shape = self.shape;
-        match shape.kinds[node] {
+        match shape.kind(node) {
             Kind::Atom(atom) => self.atom(atom as usize, word),
             Kind::False => 0,
             Kind::Implies => {
                 let row = shape.row(node);
-                !self.operand(row[0], lanes, memo) | self.operand(row[1], lanes, memo)
+                !self.operand(row[0] as usize, lanes, memo)
+                    | self.operand(row[1] as usize, lanes, memo)
             }
-            Kind::And => shape
-                .row(node)
-                .iter()
-                .fold(u64::MAX, |acc, &c| acc & self.operand(c, lanes, memo)),
+            Kind::And => shape.row(node).iter().fold(u64::MAX, |acc, &c| {
+                acc & self.operand(c as usize, lanes, memo)
+            }),
             Kind::Or => shape
                 .row(node)
                 .iter()
-                .fold(0, |acc, &c| acc | self.operand(c, lanes, memo)),
+                .fold(0, |acc, &c| acc | self.operand(c as usize, lanes, memo)),
             Kind::Threshold => {
                 let values: Vec<u64> = shape
                     .row(node)
                     .iter()
-                    .map(|&c| self.operand(c, lanes, memo))
+                    .map(|&c| self.operand(c as usize, lanes, memo))
                     .collect();
-                threshold_lanes(&values, shape.row_weights(node), shape.bounds[node])
+                threshold_lanes(&values, shape.row_weights(node), shape.bound(node))
             }
             Kind::Cut => unreachable!("cones with cuts are declined"),
         }
@@ -1399,17 +1476,18 @@ fn evaluate_constant(
             continue;
         }
         let row = shape.row(node);
-        if !expanded && !matches!(shape.kinds[node], Kind::Atom(_) | Kind::False) {
+        if !expanded && !matches!(shape.kind(node), Kind::Atom(_) | Kind::False) {
             stack.push((node, true));
             for &child in row {
+                let child = child as usize;
                 if !values.contains_key(&child) {
                     stack.push((child, false));
                 }
             }
             continue;
         }
-        let get = |child: usize| values.get(&child).copied().unwrap_or(false);
-        let value = match shape.kinds[node] {
+        let get = |child: u32| values.get(&(child as usize)).copied().unwrap_or(false);
+        let value = match shape.kind(node) {
             Kind::Atom(atom) => region.is_held(atom as usize),
             Kind::False => false,
             Kind::Implies => !get(row[0]) || get(row[1]),
@@ -1422,7 +1500,7 @@ fn evaluate_constant(
                     .filter(|&(&c, _)| get(c))
                     .map(|(_, &w)| i128::from(w))
                     .sum();
-                sum >= shape.bounds[node]
+                sum >= shape.bound(node)
             }
             // Not reached: a cut above no open atom is read as holding only
             // where enumeration declined; treat conservatively as true.
@@ -1531,6 +1609,113 @@ struct Pb {
     heaviest: i128,
 }
 
+/// Booleans packed one per bit.
+#[derive(Debug, Default, Clone)]
+struct Bits {
+    words: Vec<u64>,
+    len: usize,
+}
+
+impl Bits {
+    fn filled(len: usize, value: bool) -> Self {
+        let mut bits = Self {
+            words: vec![if value { u64::MAX } else { 0 }; len.div_ceil(64)],
+            len,
+        };
+        bits.clear_tail();
+        bits
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            words: Vec::with_capacity(capacity.div_ceil(64)),
+            len: 0,
+        }
+    }
+
+    fn clear_tail(&mut self) {
+        if !self.len.is_multiple_of(64)
+            && let Some(last) = self.words.last_mut()
+        {
+            *last &= (1 << (self.len % 64)) - 1;
+        }
+    }
+
+    fn get(&self, index: usize) -> bool {
+        self.words[index / 64] >> (index % 64) & 1 == 1
+    }
+
+    fn set(&mut self, index: usize, value: bool) {
+        let bit = 1 << (index % 64);
+        if value {
+            self.words[index / 64] |= bit;
+        } else {
+            self.words[index / 64] &= !bit;
+        }
+    }
+
+    fn push(&mut self, value: bool) {
+        if self.len.is_multiple_of(64) {
+            self.words.push(0);
+        }
+        self.len += 1;
+        self.set(self.len - 1, value);
+    }
+
+    fn reserve(&mut self, additional: usize) {
+        let words = (self.len + additional).div_ceil(64);
+        self.words.reserve(words.saturating_sub(self.words.len()));
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.words.shrink_to_fit();
+    }
+}
+
+/// A [`Reason`] packed in 32 bits: the variant in the top two bits, its
+/// clause, threshold or literal below them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PackedReason(u32);
+
+/// The payload bits of a [`PackedReason`].
+const REASON_PAYLOAD: u32 = (1 << 30) - 1;
+
+impl PackedReason {
+    const NONE: Self = Self(0);
+
+    fn pack(reason: Reason) -> Self {
+        let (tag, payload) = match reason {
+            Reason::None => (0, 0),
+            Reason::Clause(index) => (1, index),
+            Reason::Pb(index) => (2, index),
+            Reason::Binary(other) => (3, other),
+        };
+        debug_assert!(payload <= REASON_PAYLOAD, "reason payload overflows");
+        Self((tag << 30) | (payload & REASON_PAYLOAD))
+    }
+
+    const fn unpack(self) -> Reason {
+        let payload = self.0 & REASON_PAYLOAD;
+        match self.0 >> 30 {
+            0 => Reason::None,
+            1 => Reason::Clause(payload),
+            2 => Reason::Pb(payload),
+            _ => Reason::Binary(payload),
+        }
+    }
+}
+
+/// The thresholds a variable takes part in: as a condition (with its
+/// weight) or as an output. Only variables of some threshold have one.
+#[derive(Debug, Default)]
+struct PbLists {
+    occurs: Vec<u32>,
+    terms: Vec<(u32, u64)>,
+}
+
+/// No [`PbLists`] for this variable.
+const NO_PB: u32 = u32::MAX;
+
 /// Conflict-learning search over the necessary conditions of one theory.
 /// Clauses stored contiguously: one literal arena and each clause's span.
 /// A clause per allocation costs more than its literals on large encodings.
@@ -1569,28 +1754,28 @@ struct Solver {
     vars: usize,
     clauses: Arena,
     /// Which clauses were learned (only those are ever dropped).
-    is_learned: Vec<bool>,
+    is_learned: Bits,
     /// Learned clauses kept in the arena.
     learned_count: usize,
     watches: Vec<Vec<Watch>>,
     pbs: Vec<Pb>,
-    pb_occurs: Vec<Vec<u32>>,
-    /// Per variable, the thresholds it is a condition of, with its weight.
-    pb_terms: Vec<Vec<(u32, u64)>>,
+    /// Per variable, its slot in `pb_lists`, or [`NO_PB`].
+    pb_slot: Vec<u32>,
+    pb_lists: Vec<PbLists>,
     assigns: Vec<u8>,
     level: Vec<u32>,
-    reason: Vec<Reason>,
+    reason: Vec<PackedReason>,
     trail: Vec<u32>,
     trail_lim: Vec<usize>,
     head: usize,
     activity: Vec<f64>,
     increment: f64,
-    phase: Vec<bool>,
+    phase: Bits,
     heap: Vec<u32>,
     heap_index: Vec<i32>,
     /// Trail position of each assigned variable.
     trail_pos: Vec<u32>,
-    seen: Vec<bool>,
+    seen: Bits,
     /// Level-0 inconsistency: every call refutes.
     inconsistent: bool,
     counts: Counts,
@@ -1599,7 +1784,7 @@ struct Solver {
     /// Restriction theories encoded, with their guard variables.
     guards: Vec<(Theory, u32)>,
     /// Variables the search decides; the rest are defined by them.
-    decidable: Vec<bool>,
+    decidable: Bits,
     decide_all: bool,
 }
 
@@ -1609,37 +1794,81 @@ impl Solver {
         let mut solver = Self {
             vars,
             clauses: Arena::default(),
-            is_learned: Vec::new(),
+            is_learned: Bits::default(),
             learned_count: 0,
             watches: vec![Vec::new(); vars * 2],
             pbs: Vec::new(),
-            pb_occurs: vec![Vec::new(); vars],
-            pb_terms: vec![Vec::new(); vars],
+            pb_slot: vec![NO_PB; vars],
+            pb_lists: Vec::new(),
             assigns: vec![UNDEF; vars],
             level: vec![0; vars],
-            reason: vec![Reason::None; vars],
+            reason: vec![PackedReason::NONE; vars],
             trail: Vec::with_capacity(vars),
             trail_lim: Vec::new(),
             head: 0,
             activity: vec![0.0; vars],
             increment: 1.0,
-            phase: vec![false; vars],
+            phase: Bits::filled(vars, false),
             heap: Vec::new(),
             heap_index: vec![-1; vars],
             trail_pos: vec![0; vars],
-            seen: vec![false; vars],
+            seen: Bits::filled(vars, false),
             inconsistent: false,
             counts: Counts::default(),
             core: Vec::new(),
             guards: Vec::new(),
-            decidable: vec![true; vars],
+            decidable: Bits::filled(vars, true),
             decide_all,
         };
         for v in 0..idx(vars) {
             solver.heap_insert(v);
         }
         solver.add_theory(shape, None);
+        solver.compact();
         solver
+    }
+
+    /// Room for `additional` more variables, so that encoding a theory's
+    /// nodes does not grow every per-variable array by doubling.
+    fn reserve_vars(&mut self, additional: usize) {
+        self.decidable.reserve(additional);
+        self.watches.reserve_exact(2 * additional);
+        self.pb_slot.reserve_exact(additional);
+        self.assigns.reserve_exact(additional);
+        self.level.reserve_exact(additional);
+        self.reason.reserve_exact(additional);
+        self.activity.reserve_exact(additional);
+        self.phase.reserve(additional);
+        self.heap.reserve_exact(additional);
+        self.heap_index.reserve_exact(additional);
+        self.trail.reserve_exact(additional);
+        self.trail_pos.reserve_exact(additional);
+        self.seen.reserve(additional);
+    }
+
+    /// Release the slack left by building the encoding: every watch list
+    /// and threshold list to its length.
+    fn compact(&mut self) {
+        for watchers in &mut self.watches {
+            watchers.shrink_to_fit();
+        }
+        for lists in &mut self.pb_lists {
+            lists.occurs.shrink_to_fit();
+            lists.terms.shrink_to_fit();
+        }
+        self.pb_lists.shrink_to_fit();
+        self.clauses.lits.shrink_to_fit();
+        self.clauses.spans.shrink_to_fit();
+        self.is_learned.shrink_to_fit();
+    }
+
+    /// The thresholds of variable `v`, created on first use.
+    fn pb_lists_mut(&mut self, v: usize) -> &mut PbLists {
+        if self.pb_slot[v] == NO_PB {
+            self.pb_slot[v] = idx(self.pb_lists.len());
+            self.pb_lists.push(PbLists::default());
+        }
+        &mut self.pb_lists[self.pb_slot[v] as usize]
     }
 
     /// A fresh variable, unassigned, in the decision heap.
@@ -1649,11 +1878,10 @@ impl Solver {
         self.vars += 1;
         self.watches.push(Vec::new());
         self.watches.push(Vec::new());
-        self.pb_occurs.push(Vec::new());
-        self.pb_terms.push(Vec::new());
+        self.pb_slot.push(NO_PB);
         self.assigns.push(UNDEF);
         self.level.push(0);
-        self.reason.push(Reason::None);
+        self.reason.push(PackedReason::NONE);
         self.activity.push(0.0);
         self.phase.push(false);
         self.heap_index.push(-1);
@@ -1684,12 +1912,11 @@ impl Solver {
     fn add_theory(&mut self, shape: &Shape, guard: Option<u32>) {
         self.cancel_until(0);
         let atoms = shape.atoms;
-        let nodes = shape.kinds.len();
+        let nodes = shape.nodes();
+        self.reserve_vars(nodes);
         // Atom nodes alias their atom; other nodes get their own variable.
-        let node_var: Vec<u32> = shape
-            .kinds
-            .iter()
-            .map(|kind| match *kind {
+        let node_var: Vec<u32> = (0..nodes)
+            .map(|node| match shape.kind(node) {
                 Kind::Atom(atom) => atom,
                 Kind::Cut => self.fresh(true),
                 _ => self.fresh(false),
@@ -1700,8 +1927,12 @@ impl Solver {
         for node in 0..nodes {
             let v = node_var[node];
             let pos = lit(v, false);
-            let row: Vec<u32> = shape.row(node).iter().map(|&c| node_var[c]).collect();
-            match shape.kinds[node] {
+            let row: Vec<u32> = shape
+                .row(node)
+                .iter()
+                .map(|&c| node_var[c as usize])
+                .collect();
+            match shape.kind(node) {
                 Kind::Atom(_) | Kind::Cut => {}
                 Kind::False => {
                     clauses.push([neg(pos)]);
@@ -1732,7 +1963,7 @@ impl Solver {
                     out: v,
                     conditions: row.clone(),
                     weights: shape.row_weights(node).to_vec(),
-                    bound: shape.bounds[node],
+                    bound: shape.bound(node),
                     sure: 0,
                     open: 0,
                     heaviest: 0,
@@ -1830,7 +2061,7 @@ impl Solver {
 
     /// Install threshold `index`, counting what is already assigned.
     fn add_pb(&mut self, index: u32, mut pb: Pb) {
-        self.pb_occurs[pb.out as usize].push(index);
+        self.pb_lists_mut(pb.out as usize).occurs.push(index);
         let mut terms: Vec<(u32, u64)> = pb
             .conditions
             .iter()
@@ -1856,13 +2087,13 @@ impl Solver {
                 UNDEF => pb.open += w,
                 _ => {}
             }
-            self.pb_terms[c as usize].push((index, weight));
+            self.pb_lists_mut(c as usize).terms.push((index, weight));
         }
         let mut seen_conditions: Vec<u32> = pb.conditions.clone();
         seen_conditions.sort_unstable();
         seen_conditions.dedup();
         for &c in &seen_conditions {
-            self.pb_occurs[c as usize].push(index);
+            self.pb_lists_mut(c as usize).occurs.push(index);
         }
         self.pbs.push(pb);
     }
@@ -1920,11 +2151,17 @@ impl Solver {
         let v = var(l) as usize;
         self.assigns[v] = TRUE ^ u8::from(l & 1 == 1);
         self.level[v] = idx(self.trail_lim.len());
-        self.reason[v] = reason;
+        self.reason[v] = PackedReason::pack(reason);
         self.trail_pos[v] = idx(self.trail.len());
         self.trail.push(l);
         let positive = l & 1 == 0;
-        for &(index, w) in &self.pb_terms[v] {
+        let slot = self.pb_slot[v];
+        let terms: &[(u32, u64)] = if slot == NO_PB {
+            &[]
+        } else {
+            &self.pb_lists[slot as usize].terms
+        };
+        for &(index, w) in terms {
             let pb = &mut self.pbs[index as usize];
             pb.open -= i128::from(w);
             if positive {
@@ -2012,7 +2249,12 @@ impl Solver {
                 self.head = self.trail.len();
                 return conflict;
             }
-            let occurs = std::mem::take(&mut self.pb_occurs[var(p) as usize]);
+            let slot = self.pb_slot[var(p) as usize];
+            let occurs = if slot == NO_PB {
+                Vec::new()
+            } else {
+                std::mem::take(&mut self.pb_lists[slot as usize].occurs)
+            };
             let mut pb_conflict = None;
             for &index in &occurs {
                 if let Some(clause) = self.pb_check(index) {
@@ -2020,7 +2262,9 @@ impl Solver {
                     break;
                 }
             }
-            self.pb_occurs[var(p) as usize] = occurs;
+            if slot != NO_PB {
+                self.pb_lists[slot as usize].occurs = occurs;
+            }
             if pb_conflict.is_some() {
                 self.head = self.trail.len();
                 return pb_conflict;
@@ -2125,7 +2369,7 @@ impl Solver {
 
     /// The reason clause of `v` (implied literal first, the rest false).
     fn reason_lits(&self, v: usize) -> Vec<u32> {
-        match self.reason[v] {
+        match self.reason[v].unpack() {
             Reason::Clause(ci) => self.clauses.get(ci as usize).to_vec(),
             Reason::Binary(other) => vec![lit(idx(v), self.assigns[v] == FALSE), other],
             Reason::None => Vec::new(),
@@ -2196,8 +2440,8 @@ impl Solver {
                     continue;
                 }
                 let v = var(q) as usize;
-                if !self.seen[v] && self.level[v] > 0 {
-                    self.seen[v] = true;
+                if !self.seen.get(v) && self.level[v] > 0 {
+                    self.seen.set(v, true);
                     self.bump(v);
                     if self.level[v] >= level {
                         pending += 1;
@@ -2208,13 +2452,13 @@ impl Solver {
             }
             loop {
                 index -= 1;
-                if self.seen[var(self.trail[index]) as usize] {
+                if self.seen.get(var(self.trail[index]) as usize) {
                     break;
                 }
             }
             let next = self.trail[index];
             let v = var(next) as usize;
-            self.seen[v] = false;
+            self.seen.set(v, false);
             pending -= 1;
             if pending == 0 {
                 learned[0] = neg(next);
@@ -2224,7 +2468,7 @@ impl Solver {
             current = self.reason_lits(v);
         }
         for &q in &learned[1..] {
-            self.seen[var(q) as usize] = false;
+            self.seen.set(var(q) as usize, false);
         }
         let mut back = 0;
         if learned.len() > 1 {
@@ -2249,8 +2493,14 @@ impl Solver {
         for k in (start..self.trail.len()).rev() {
             let l = self.trail[k];
             let v = var(l) as usize;
-            self.phase[v] = l & 1 == 0;
-            for &(index, w) in &self.pb_terms[v] {
+            self.phase.set(v, l & 1 == 0);
+            let slot = self.pb_slot[v];
+            let terms: &[(u32, u64)] = if slot == NO_PB {
+                &[]
+            } else {
+                &self.pb_lists[slot as usize].terms
+            };
+            for &(index, w) in terms {
                 let pb = &mut self.pbs[index as usize];
                 pb.open += i128::from(w);
                 if l & 1 == 0 {
@@ -2258,7 +2508,7 @@ impl Solver {
                 }
             }
             self.assigns[v] = UNDEF;
-            self.reason[v] = Reason::None;
+            self.reason[v] = PackedReason::NONE;
             if self.heap_index[v] < 0 {
                 self.heap_insert(idx(v));
             }
@@ -2353,7 +2603,7 @@ impl Solver {
                 return Ok(Outcome::Satisfiable);
             };
             self.counts.decisions += 1;
-            let decision = lit(v, !self.phase[v as usize]);
+            let decision = lit(v, !self.phase.get(v as usize));
             self.trail_lim.push(self.trail.len());
             self.assign(decision, Reason::None);
         }
@@ -2481,27 +2731,27 @@ impl Solver {
         for &q in conflict {
             let u = var(q) as usize;
             if self.level[u] > 0 {
-                self.seen[u] = true;
+                self.seen.set(u, true);
             }
         }
         let start = self.trail_lim[0];
         for k in (start..self.trail.len()).rev() {
             let l = self.trail[k];
             let v = var(l) as usize;
-            if !self.seen[v] {
+            if !self.seen.get(v) {
                 continue;
             }
-            if self.reason[v] == Reason::None {
+            if self.reason[v] == PackedReason::NONE {
                 core.push(l);
             } else {
                 for &q in &self.reason_lits(v)[1..] {
                     let u = var(q) as usize;
                     if self.level[u] > 0 {
-                        self.seen[u] = true;
+                        self.seen.set(u, true);
                     }
                 }
             }
-            self.seen[v] = false;
+            self.seen.set(v, false);
         }
     }
 
@@ -2513,15 +2763,15 @@ impl Solver {
         if self.decision_level() == 0 {
             return;
         }
-        self.seen[var(p) as usize] = true;
+        self.seen.set(var(p) as usize, true);
         let start = self.trail_lim[0];
         for k in (start..self.trail.len()).rev() {
             let l = self.trail[k];
             let v = var(l) as usize;
-            if !self.seen[v] {
+            if !self.seen.get(v) {
                 continue;
             }
-            if self.reason[v] == Reason::None {
+            if self.reason[v] == PackedReason::NONE {
                 if v != var(p) as usize {
                     core.push(l);
                 }
@@ -2530,13 +2780,13 @@ impl Solver {
                 for &q in &reason[1..] {
                     let u = var(q) as usize;
                     if self.level[u] > 0 {
-                        self.seen[u] = true;
+                        self.seen.set(u, true);
                     }
                 }
             }
-            self.seen[v] = false;
+            self.seen.set(v, false);
         }
-        self.seen[var(p) as usize] = false;
+        self.seen.set(var(p) as usize, false);
     }
 
     fn reduce(&mut self) {
@@ -2544,7 +2794,7 @@ impl Solver {
         let locked: std::collections::HashSet<u32> = self
             .trail
             .iter()
-            .filter_map(|&l| match self.reason[var(l) as usize] {
+            .filter_map(|&l| match self.reason[var(l) as usize].unpack() {
                 Reason::Clause(ci) => Some(ci),
                 _ => None,
             })
@@ -2556,7 +2806,10 @@ impl Solver {
             if dropped >= learned / 2 {
                 break;
             }
-            if self.is_learned[ci] && self.clauses.get(ci).len() > 2 && !locked.contains(&idx(ci)) {
+            if self.is_learned.get(ci)
+                && self.clauses.get(ci).len() > 2
+                && !locked.contains(&idx(ci))
+            {
                 *kept = false;
                 dropped += 1;
             }
@@ -2567,11 +2820,11 @@ impl Solver {
             lits: Vec::with_capacity(old.lits.len()),
             spans: Vec::with_capacity(old.len() - dropped),
         };
-        let mut kept_learned = Vec::with_capacity(old.len() - dropped);
+        let mut kept_learned = Bits::with_capacity(old.len() - dropped);
         for (ci, &keep) in keep.iter().enumerate() {
             if keep {
                 remap[ci] = kept.push(old.get(ci));
-                kept_learned.push(self.is_learned[ci]);
+                kept_learned.push(self.is_learned.get(ci));
             }
         }
         self.clauses = kept;
@@ -2589,8 +2842,8 @@ impl Solver {
             });
         }
         for v in 0..self.vars {
-            if let Reason::Clause(ci) = self.reason[v] {
-                self.reason[v] = Reason::Clause(remap[ci as usize]);
+            if let Reason::Clause(ci) = self.reason[v].unpack() {
+                self.reason[v] = PackedReason::pack(Reason::Clause(remap[ci as usize]));
             }
         }
     }
@@ -2611,7 +2864,7 @@ impl Solver {
     }
 
     fn heap_insert(&mut self, v: u32) {
-        if !self.decidable[v as usize] {
+        if !self.decidable.get(v as usize) {
             return;
         }
         self.heap_index[v as usize] = slot(self.heap.len());
