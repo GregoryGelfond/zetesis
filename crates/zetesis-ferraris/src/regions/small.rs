@@ -92,7 +92,17 @@ pub struct SmallPolicy {
     /// build and search their own encoding, multiplying its memory by the
     /// worker count and repeating its work.
     pub main_only: bool,
+    /// Nanoseconds per formula node the walker must have walked since its
+    /// first region offered to the learned search before it reads the shape
+    /// and builds the clausal encoding (0: at once). Both cost about linear
+    /// time in the theory's nodes, so a walk that ends sooner never pays
+    /// for them, and one that runs on spends at most about as long again.
+    pub amortize: usize,
 }
+
+/// The measured shape-and-encoding cost per formula node, in nanoseconds,
+/// that [`SmallPolicy::measured`] amortizes.
+const AMORTIZE_NANOS_PER_NODE: usize = 1500;
 
 /// No enumeration reads more than `2^22` completions.
 pub(crate) const ENUMERATION_CEILING: usize = 22;
@@ -126,6 +136,7 @@ impl SmallPolicy {
             learn_after: 0,
             density: 32,
             main_only: true,
+            amortize: AMORTIZE_NANOS_PER_NODE,
         }
     }
 
@@ -171,6 +182,7 @@ impl SmallPolicy {
                 "after" => policy.learn_after = parsed,
                 "density" => policy.density = parsed,
                 "main" => policy.main_only = parsed > 0,
+                "amortize" => policy.amortize = parsed,
                 _ => {}
             }
         }
@@ -263,6 +275,9 @@ pub struct SmallStatistics {
     /// Regions the theory's shape (matching or density) kept from the
     /// learned search.
     pub shape_declined: u64,
+    /// Regions offered before the walk had run long enough to amortize the
+    /// shape and encoding.
+    pub deferred: u64,
 }
 
 /// A walker's specialized-narrowing state: its policy, the clausal reading of
@@ -296,6 +311,8 @@ pub(crate) struct SmallScratch {
     /// Whether this walker runs the learned search under `main_only`: set by
     /// its walk, or read once from the thread's name.
     designated: Option<bool>,
+    /// When this walker first offered a region to the learned search.
+    first_offer: Option<Instant>,
     /// Completions recently found to pass, as held-atom words.
     models: Vec<Vec<u64>>,
     /// The counts so far.
@@ -305,7 +322,12 @@ pub(crate) struct SmallScratch {
 impl Drop for SmallScratch {
     fn drop(&mut self) {
         let s = &self.statistics;
-        if (s.enumerated > 0 || s.learned > 0 || s.cached > 0 || s.shape_declined > 0) && reports()
+        if (s.enumerated > 0
+            || s.learned > 0
+            || s.cached > 0
+            || s.shape_declined > 0
+            || s.deferred > 0)
+            && reports()
         {
             eprintln!("zetesis-small-regions {s:?}");
         }
@@ -749,6 +771,21 @@ impl SmallScratch {
         if policy.density > 0 && nodes > policy.density.saturating_mul(theory.atom_count().max(1)) {
             self.statistics.shape_declined += 1;
             return false;
+        }
+        let first_offer = *self.first_offer.get_or_insert_with(Instant::now);
+        if policy.amortize > 0
+            && self
+                .shape
+                .as_ref()
+                .is_none_or(|shape| !shape.theory.same_instance(theory))
+        {
+            let cost = u64::try_from(nodes)
+                .unwrap_or(u64::MAX)
+                .saturating_mul(policy.amortize as u64);
+            if saturate(first_offer.elapsed().as_nanos()) < cost {
+                self.statistics.deferred += 1;
+                return false;
+            }
         }
         let Some(shape) = self.shape(theory, producers) else {
             return false;
