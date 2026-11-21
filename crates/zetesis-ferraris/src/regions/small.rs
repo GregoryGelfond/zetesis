@@ -293,12 +293,19 @@ pub(crate) struct SmallScratch {
 impl Drop for SmallScratch {
     fn drop(&mut self) {
         let s = &self.statistics;
-        if (s.enumerated > 0 || s.learned > 0 || s.cached > 0 || s.shape_declined > 0)
-            && std::env::var_os("ZETESIS_SMALL_STATS").is_some()
+        if (s.enumerated > 0 || s.learned > 0 || s.cached > 0 || s.shape_declined > 0) && reports()
         {
             eprintln!("zetesis-small-regions {s:?}");
         }
     }
+}
+
+/// Whether this thread writes the diagnostics `ZETESIS_SMALL_STATS` asks
+/// for. Only the main thread does: a parallel worker writing to stderr while
+/// the caller holds it to report the run would never finish.
+fn reports() -> bool {
+    std::thread::current().name() == Some("main")
+        && std::env::var_os("ZETESIS_SMALL_STATS").is_some()
 }
 
 /// A node's shape, read once per theory.
@@ -787,7 +794,7 @@ impl SmallScratch {
         };
         if self.solver.is_none() {
             let solver = Solver::encode(shape, self.policy.is_some_and(|p| p.decide_all));
-            if std::env::var_os("ZETESIS_SMALL_STATS").is_some() {
+            if reports() {
                 eprintln!(
                     "zetesis-small-encoding vars={} clauses={} pbs={} pb_terms={} atoms={}",
                     solver.vars,
@@ -1014,7 +1021,7 @@ impl SmallScratch {
         };
         if self.solver.is_none() {
             let solver = Solver::encode(shape, self.policy.is_some_and(|p| p.decide_all));
-            if std::env::var_os("ZETESIS_SMALL_STATS").is_some() {
+            if reports() {
                 eprintln!(
                     "zetesis-small-encoding vars={} clauses={} pbs={} pb_terms={} atoms={}",
                     solver.vars,
