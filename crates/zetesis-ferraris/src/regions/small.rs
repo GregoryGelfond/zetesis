@@ -104,6 +104,11 @@ pub struct SmallPolicy {
     pub yield_idle: bool,
     /// Refinements of the learned search and of how it steers the walk.
     pub refinements: Refinements,
+    /// Under steering, a search that spends its allowance probes the root
+    /// only while the learned search refutes fewer than this percentage of
+    /// the regions it reads (its yield): a search that mostly refutes is
+    /// proving, not looking for a completion. 100 always probes.
+    pub steer_yield: usize,
 }
 
 /// Refinements of the learned search, bit-packed.
@@ -123,8 +128,12 @@ impl Refinements {
     /// the completion found, and splits there on an atom it holds. Orders
     /// the walk only; refutes and decides nothing.
     pub const STEER: Self = Self(4);
+    /// Under steering, probe the root once before the walk's first learned
+    /// search, even while peers wait: in a parallel walk their regions are
+    /// what the completion found orders.
+    pub const EAGER: Self = Self(8);
     /// Every refinement.
-    pub const ALL: Self = Self(7);
+    pub const ALL: Self = Self(15);
     /// The measured default: minimized clauses and Luby restarts; steering
     /// is asked for with `steer=1`.
     pub const MEASURED: Self = Self(Self::MINIMIZE.0 | Self::LUBY.0);
@@ -186,6 +195,7 @@ impl SmallPolicy {
             amortize: AMORTIZE_NANOS_PER_NODE,
             yield_idle: true,
             refinements: Refinements::MEASURED,
+            steer_yield: 100,
         }
     }
 
@@ -206,6 +216,7 @@ impl SmallPolicy {
     pub fn parse(text: &str) -> Self {
         let mut policy = Self {
             learn_conflicts: 4000,
+            steer_yield: 100,
             ..Self::default()
         };
         for part in text.split(',') {
@@ -242,6 +253,10 @@ impl SmallPolicy {
                 "steer" => {
                     policy.refinements = policy.refinements.with(Refinements::STEER, parsed > 0);
                 }
+                "eager" => {
+                    policy.refinements = policy.refinements.with(Refinements::EAGER, parsed > 0);
+                }
+                "steer_yield" => policy.steer_yield = parsed,
                 _ => {}
             }
         }
@@ -351,6 +366,8 @@ pub struct SmallStatistics {
     pub steer_failures: u64,
     /// Guided walks that reached their completion's leaf, ending steering.
     pub steer_successes: u64,
+    /// Completions adopted from a peer's root probe.
+    pub adopted: u64,
 }
 
 /// A walker's specialized-narrowing state: its policy, the clausal reading of
@@ -358,6 +375,12 @@ pub struct SmallStatistics {
 /// buffers. It belongs to the walker's scratch, never to a region.
 #[derive(Debug, Default)]
 pub(crate) struct SmallScratch {
+    /// The completion a root probe published to every walker of the walk.
+    shared: Option<std::sync::Arc<SharedCompletion>>,
+    /// The shared completion's generation this walker last adopted.
+    adopted: u64,
+    /// Whether this walker's one eager root probe ran.
+    eager_probed: bool,
     policy: Option<SmallPolicy>,
     shape: Option<Shape>,
     solver: Option<Solver>,
@@ -428,6 +451,29 @@ impl Drop for SmallScratch {
 fn reports() -> bool {
     std::thread::current().name() == Some("main")
         && std::env::var_os("ZETESIS_SMALL_STATS").is_some()
+}
+
+/// A completion one walker's root probe found, shared with its peers so
+/// each defers and splits toward it. Orders walks only.
+#[derive(Debug, Default)]
+pub struct SharedCompletion {
+    /// Bumped on every publication; zero means none yet.
+    generation: std::sync::atomic::AtomicU64,
+    /// The latest completion, as held-atom words.
+    model: std::sync::Mutex<Vec<u64>>,
+}
+
+impl SharedCompletion {
+    fn publish(&self, model: &[u64]) {
+        let mut slot = self
+            .model
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        slot.clear();
+        slot.extend_from_slice(model);
+        self.generation
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+    }
 }
 
 /// Whether `region` holds the completion `model` (held-atom words): every
@@ -822,6 +868,39 @@ impl SmallScratch {
         self.designated = Some(designated);
     }
 
+    /// Share the walk's completion slot, read and written by every walker.
+    pub(crate) fn share_completions(&mut self, shared: std::sync::Arc<SharedCompletion>) {
+        self.shared = Some(shared);
+    }
+
+    /// Take up a completion a peer published since this walker last looked:
+    /// remember it and start a jump toward it.
+    fn adopt(&mut self) {
+        let Some(shared) = &self.shared else {
+            return;
+        };
+        let generation = shared.generation.load(std::sync::atomic::Ordering::Acquire);
+        if generation == self.adopted {
+            return;
+        }
+        self.adopted = generation;
+        let model = shared
+            .model
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if self.models.last() == Some(&model) {
+            return;
+        }
+        if self.models.len() >= 8 {
+            self.models.remove(0);
+        }
+        self.models.push(model);
+        self.statistics.adopted += 1;
+        self.jump = true;
+        self.jump_left = 1 << 12;
+    }
+
     /// Share the walk's count of idle peers.
     pub(crate) fn yield_to(&mut self, idle: std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         self.idle = Some(idle);
@@ -852,6 +931,7 @@ impl SmallScratch {
             self.models.clear();
             self.stamp.clear();
             self.constant.clear();
+            self.eager_probed = false;
         }
         self.shape.as_ref()
     }
@@ -892,6 +972,15 @@ impl SmallScratch {
         let open = region.open().count();
         if open == 0 {
             return Ok(SmallNarrowing::Declined);
+        }
+        if self.steering()
+            && policy.refinements.has(Refinements::EAGER)
+            && !self.eager_probed
+            && self.probe_admits(theory, producers, &policy)
+        {
+            self.eager_probed = true;
+            self.guard(restrictions);
+            self.probe_root(policy.learn_conflicts, cancellation)?;
         }
         if open <= policy.enumerate_up_to {
             if self.shape(theory, producers).is_none() {
@@ -948,6 +1037,8 @@ impl SmallScratch {
             let verdict = self.learn(region, policy.learn_conflicts, cancellation);
             if self.steering()
                 && self.statistics.learned_exhausted > exhausted
+                && u64::from(self.yield_score) * 100
+                    < u64::from(YIELD_ONE) * policy.steer_yield as u64
                 && !self.jump
                 && !self.cached(region)
             {
@@ -1035,6 +1126,48 @@ impl SmallScratch {
             return false;
         }
         true
+    }
+
+    /// Whether the walker may run its one eager root probe now: the walker
+    /// the learned search belongs to, outside dense and matching-shaped
+    /// theories, past the encoding's amortization. Idle peers do not hold
+    /// it back: the completion it finds is what they will walk toward.
+    fn probe_admits(
+        &mut self,
+        theory: &Theory,
+        producers: Option<&Producers>,
+        policy: &SmallPolicy,
+    ) -> bool {
+        if policy.main_only
+            && !*self
+                .designated
+                .get_or_insert_with(|| std::thread::current().name() == Some("main"))
+        {
+            return false;
+        }
+        let nodes = theory.view().len();
+        if policy.density > 0 && nodes > policy.density.saturating_mul(theory.atom_count().max(1)) {
+            return false;
+        }
+        let first_offer = *self.first_offer.get_or_insert_with(Instant::now);
+        if policy.amortize > 0
+            && self
+                .shape
+                .as_ref()
+                .is_none_or(|shape| !shape.theory.same_instance(theory))
+        {
+            let cost = u64::try_from(nodes)
+                .unwrap_or(u64::MAX)
+                .saturating_mul(policy.amortize as u64);
+            if saturate(first_offer.elapsed().as_nanos()) < cost {
+                return false;
+            }
+        }
+        let Some(shape) = self.shape(theory, producers) else {
+            return false;
+        };
+        policy.matching == 0
+            || shape.amo_atoms.saturating_mul(100) < policy.matching.saturating_mul(shape.atoms)
     }
 
     /// Whether the yield gate lets the learned search read this region.
@@ -1176,6 +1309,7 @@ impl SmallScratch {
         if !self.steering() {
             return None;
         }
+        self.adopt();
         let model = self
             .models
             .iter()
@@ -1256,6 +1390,10 @@ impl SmallScratch {
             if self.models.len() >= 8 {
                 self.models.remove(0);
             }
+            if let Some(shared) = &self.shared {
+                shared.publish(&model);
+                self.adopted = shared.generation.load(std::sync::atomic::Ordering::Acquire);
+            }
             self.models.push(model);
             self.statistics.root_completions += 1;
             self.jump = true;
@@ -1270,6 +1408,9 @@ impl SmallScratch {
     /// that holds it, or spending the jump's deferrals, ends the jump.
     pub(crate) fn defers(&mut self, region: &Region) -> bool {
         self.observe(region, false);
+        if self.steering() {
+            self.adopt();
+        }
         if !self.jump {
             return false;
         }

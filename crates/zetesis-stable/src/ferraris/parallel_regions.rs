@@ -236,6 +236,9 @@ struct Shared {
     /// What the workers have done so far, readable while they run, so a
     /// snapshot taken before they finish is current.
     live: Live,
+    /// The completion a learned search's root probe found, which every
+    /// walker may follow. Orders the walks only.
+    completions: Arc<zetesis_ferraris::SmallSharedCompletion>,
 }
 
 /// Counters the workers add to as they go.
@@ -881,6 +884,8 @@ impl ParallelRegions {
         // otherwise worker 0, which continues the coordinator's walk, does.
         let mut scratch = NarrowingScratch::default();
         scratch.designate_small_walker(Instant::now().checked_add(delay).is_none());
+        let completions = Arc::new(zetesis_ferraris::SmallSharedCompletion::default());
+        scratch.share_small_completions(Arc::clone(&completions));
         Ok(Self {
             shared: Arc::new(Shared {
                 parts,
@@ -898,6 +903,7 @@ impl ParallelRegions {
                 timed: false,
                 candidates: AtomicU64::new(0),
                 live: Live::default(),
+                completions,
             }),
             receiver: Some(receiver),
             sender: Some(sender),
@@ -1855,6 +1861,9 @@ fn worker(
     let mut search = SearchStatistics::default();
     let mut workspaces = Workspaces::new();
     workspaces.scratch.designate_small_walker(index == 0);
+    workspaces
+        .scratch
+        .share_small_completions(Arc::clone(&shared.completions));
     workspaces
         .scratch
         .yield_small_search_to(Arc::clone(&shared.frontier.termination.idle_waiters));

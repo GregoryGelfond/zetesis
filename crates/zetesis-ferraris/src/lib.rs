@@ -55,8 +55,8 @@ pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduc
 pub use reduct::FrozenReduct;
 pub use regions::ParityKnowledge;
 pub use regions::small::{
-    Refinements as SmallRefinements, SmallNarrowing, SmallPolicy, SmallStatistics,
-    Variant as SmallVariant,
+    Refinements as SmallRefinements, SharedCompletion as SmallSharedCompletion, SmallNarrowing,
+    SmallPolicy, SmallStatistics, Variant as SmallVariant,
 };
 pub use regions::{
     ArithmeticAttempt, BoundLearningStatistics, CardinalityKnowledge, CardinalityStatistics,

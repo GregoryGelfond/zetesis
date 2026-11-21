@@ -2247,6 +2247,12 @@ impl NarrowingScratch {
         self.small_scratch().yield_to(idle);
     }
 
+    /// Share one completion slot among a walk's walkers: a completion one
+    /// walker's root probe finds steers every walker that adopts it.
+    pub fn share_small_completions(&mut self, shared: std::sync::Arc<small::SharedCompletion>) {
+        self.small_scratch().share_completions(shared);
+    }
+
     /// Fix the size-specialized narrowing policy instead of reading it from
     /// the environment.
     pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {
