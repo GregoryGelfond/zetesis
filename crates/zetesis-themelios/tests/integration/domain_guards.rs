@@ -9,9 +9,9 @@ use zetesis_test_support::thresholds::first_success;
 use zetesis_domain::numeric::Status;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
-    prepare_formula, AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaResource, GroundingObserver,
-    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy,
+    AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaResource, GroundingObserver, GroundingOptions,
+    GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy, prepare_formula,
 };
 
 #[derive(Default)]
@@ -268,10 +268,12 @@ fn producer_meets_prune_downstream_empty_joins() {
         let narrowed = ground(source, strategy, Some(DomainLimits::default()), &on).unwrap();
         equal(&complete, &narrowed);
         assert_eq!(on.status.get(), Some(Status::FixedPoint));
-        assert!(narrowed
-            .atoms()
-            .iter()
-            .all(|atom| atom.predicate().name() != "q"));
+        assert!(
+            narrowed
+                .atoms()
+                .iter()
+                .all(|atom| atom.predicate().name() != "q")
+        );
         let before = *off.rules.borrow().last().unwrap();
         let after = *on.rules.borrow().last().unwrap();
         assert!(after.domain_rejected_rows.unwrap() > 0);
@@ -665,11 +667,13 @@ fn objective_observations_preserve_scored_answers() {
                 assert_eq!(shown, ["f(0)", "f(1)", "p(0)", "p(1)"]);
                 assert!(input.projective_domain().is_explicit());
                 assert_eq!(input.projective_domain().atoms().len(), 2);
-                assert!(input
-                    .projective_domain()
-                    .atoms()
-                    .iter()
-                    .all(|atom| atom.predicate().name() == "p"));
+                assert!(
+                    input
+                        .projective_domain()
+                        .atoms()
+                        .iter()
+                        .all(|atom| atom.predicate().name() == "p")
+                );
             }
         }
     }

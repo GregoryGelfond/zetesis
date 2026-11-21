@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 
 use super::*;
 use crate::formula_ground::{Purpose, Schedule};
-use crate::formula_support::{testing, with_source_workers, Counters, SourceExecution};
+use crate::formula_support::{Counters, SourceExecution, testing, with_source_workers};
 use crate::{ExpansionLimits, FormulaLimits, FormulaResource, ProgramSite};
 use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Atom, ValueLimits};
@@ -294,7 +294,7 @@ fn cancellation_and_entry_refusal_keep_typed_failure_without_source_publication(
 
 #[test]
 fn actual_complete_preparation_preserves_original_and_every_frozen_truth() {
-    use zetesis_ferraris::{models, models_reduct, Interpretation, Limits};
+    use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
     for (source, staged) in [
         ("{p(1);q(1);r(1)}.h(X):-p(X),q(X).h(X):-p(X),r(X).", false),
         ("{-p(1);q(1)}.-h(X,7,X):- -p(X),q(X).", false),

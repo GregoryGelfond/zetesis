@@ -7,14 +7,14 @@
 mod tests;
 
 use super::AtomPattern;
-use super::{emit_row, Body, Builder, Context, FormulaFailure, Join, RowHead, RuleIr};
+use super::{Body, Builder, Context, FormulaFailure, Join, RowHead, RuleIr, emit_row};
 use crate::formula_support::{
+    Executor,
     row_blocks::{
         coordinator,
         cursor_rows::CursorRows,
         witness_rows::{Replay, WitnessPlan},
     },
-    Executor,
 };
 
 pub(super) fn rule<'source>(
