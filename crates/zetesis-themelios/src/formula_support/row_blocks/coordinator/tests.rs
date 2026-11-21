@@ -386,3 +386,103 @@ fn worker_grants_partition_remaining_accounts_and_retained_bytes() {
         assert_eq!(completed.results().count(), TASKS);
     });
 }
+
+#[test]
+fn a_support_bytes_grant_refusal_within_the_ceiling_completes() {
+    // Inherited from par-on-int 60d851e7d / 8d6412672: a SupportBytes demand
+    // that exceeds the partitioned share but fits the source ceiling must
+    // complete on the source retry, including a single worker (whose grant
+    // is only half the remaining bytes).
+    for workers in [1, 3, 14] {
+        let executor = Executor::new(NonZeroUsize::new(workers).unwrap()).unwrap();
+        Fixture::default().with(location(), |_, computation, counters| {
+            let limits = FormulaLimits {
+                max_support_bytes: 1 << 20,
+                ..FormulaLimits::default()
+            };
+            let demand = limits.max_support_bytes as u128 * 3 / 4;
+            let first_share = AtomicUsize::new(0);
+            let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+            let completed = run(
+                &executor,
+                3,
+                &mut budget,
+                Context::new(&*computation, &limits, counters, location()),
+                |_, grant, _, _| {
+                    first_share
+                        .compare_exchange(
+                            0,
+                            grant.max_support_bytes,
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                        )
+                        .ok();
+                    crate::formula::ceiling(
+                        FormulaResource::SupportBytes,
+                        demand,
+                        grant.max_support_bytes as u128,
+                        given_site(),
+                    )?;
+                    Ok(())
+                },
+            )
+            .unwrap_or_else(|error| panic!("{workers}: {error:?}"));
+            let share = first_share.load(Ordering::Relaxed) as u128;
+            assert!(
+                demand > share,
+                "{workers}: demand {demand} did not exceed the partitioned share {share}"
+            );
+            assert!(
+                demand <= limits.max_support_bytes as u128,
+                "{workers}: demand {demand} exceeded the source ceiling"
+            );
+            assert_eq!(completed.results().count(), 3);
+        });
+    }
+}
+
+#[test]
+fn a_support_bytes_refusal_past_the_ceiling_reports_the_source_limit() {
+    // A genuine refusal after the source retry must report the source
+    // ceiling and the requested demand, not the partitioned worker cap.
+    let executor = Executor::new(NonZeroUsize::new(3).unwrap()).unwrap();
+    Fixture::default().with(location(), |_, computation, counters| {
+        let limits = FormulaLimits {
+            max_support_bytes: 1 << 20,
+            ..FormulaLimits::default()
+        };
+        let demand = limits.max_support_bytes as u128 + 1;
+        let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+        let Err(error) = run(
+            &executor,
+            3,
+            &mut budget,
+            Context::new(&*computation, &limits, counters, location()),
+            |_, grant, _, _| {
+                crate::formula::ceiling(
+                    FormulaResource::SupportBytes,
+                    demand,
+                    grant.max_support_bytes as u128,
+                    given_site(),
+                )?;
+                Ok(())
+            },
+        ) else {
+            panic!("demand past the source ceiling should refuse")
+        };
+        assert!(
+            matches!(
+                error,
+                FormulaFailure::Limit {
+                    resource: FormulaResource::SupportBytes,
+                    observed,
+                    limit,
+                    location: site,
+                } if observed == demand
+                    && limit == limits.max_support_bytes as u128
+                    && site == given_site()
+            ),
+            "{error:?}"
+        );
+    });
+}

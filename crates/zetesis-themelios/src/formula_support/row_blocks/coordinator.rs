@@ -270,24 +270,17 @@ fn repeat<T>(
         &mut Counters,
     ) -> Result<T, FormulaFailure>,
 ) {
-    let count = blocks.len();
-    let retained = completed.reserved;
     for index in repeated {
         let block = &blocks.slice()[index];
-        let extra = retained / count + usize::from(index < retained % count);
-        // The block keeps its shared catalog bytes and may use the whole
-        // retained allowance; the other half of the remainder still bounds
-        // what earlier blocks retain.
-        let formula = FormulaLimits {
-            max_work: limits.max_work,
-            max_substitutions: limits.max_substitutions,
-            max_support_bytes: block.formula.max_support_bytes - extra + retained,
-            ..*limits
-        };
+        // Work and substitutions already retry against the source ceilings.
+        // SupportBytes must as well: the worker grant is only a partition of
+        // the remainder (`shared + retained/n`). Retrying against
+        // `shared + retained` still refuses demand that fits the source
+        // ceiling and reports the partitioned cap instead of that ceiling.
         let mut state = (&mut *budget, &mut *counters);
         let capture = Capture::run(
             &mut state,
-            |(budget, counters)| kernel(block.rows.clone(), &formula, budget, counters),
+            |(budget, counters)| kernel(block.rows.clone(), limits, budget, counters),
             |_| Receipt::default(),
         );
         let slot = &mut completed.slots.slice_mut()[index];
