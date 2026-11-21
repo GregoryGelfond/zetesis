@@ -46,7 +46,7 @@ type Core = (Vec<u32>, Vec<(u32, u64, u64)>);
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SmallPolicy {
     /// Enumerate regions with at most this many open atoms (0: never). At
-    /// most [`ENUMERATION_CEILING`].
+    /// most 22 (`2^22` completions).
     pub enumerate_up_to: usize,
     /// Search regions with more open atoms than enumeration takes, and at
     /// most this many, with learning (0: never).
@@ -68,7 +68,7 @@ pub struct SmallPolicy {
     /// reading regions (0: always read). The yield is a moving average of
     /// the learned path's verdicts; a region left open, a cached completion
     /// and a spent allowance count against it. One region in
-    /// [`GATE_RETRY`] skipped is still read, so the yield can recover.
+    /// 32 skipped is still read, so the yield can recover.
     pub gate: usize,
     /// The learned search reads only regions with at least this many open
     /// atoms (0: any): below it the general narrowing's own subtree is small

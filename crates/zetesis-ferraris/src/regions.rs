@@ -186,7 +186,7 @@ impl<'a> OriginalSubject<'a> {
 
     /// Narrow an original region, already closed by the general narrowing of
     /// this subject, by the size-specialized implementation its open-atom
-    /// count selects ([`small`]). It refutes the region or leaves it.
+    /// count selects. It refutes the region or leaves it.
     ///
     /// # Errors
     /// Cancellation observed during a learned search.
