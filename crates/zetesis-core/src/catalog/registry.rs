@@ -9,7 +9,7 @@
 //!
 //! This [`AtomRegistry`] is the atom owner grounding uses today. Its positions
 //! are discovery coordinates, not content order. Its terms are not: each
-//! [`Self::commit_with`] freezes the round's new terms as one generation of the
+//! [`AtomRegistry::commit_with`] freezes the round's new terms as one generation of the
 //! [`crate::intern::ContentInterner`], so terms of one generation compare by
 //! their content-order identities.
 
