@@ -126,7 +126,8 @@ exact supports (`GateProjection.lean`). `zetesis_core::intern::ContentInterner`
 and `zetesis_core::atom_registry::AtomRegistry` are distinct public APIs.
 Grounding uses the former for term order: each registry commit and each
 vocabulary freeze interns the commit's new terms as one generation and freezes
-it, so terms of one generation compare by their content-order identities.
+it, so terms of one generation compare by their content-order identities;
+a term of more than 64 expanded nodes gets no identity and compares by content.
 Atom identities are still the registry's discovery positions and term
 deduplication is still the catalog's hash index; the rest of the
 single-interner migration has not happened. Reserved algebra names (`Bind`, `Filter`, `Gate`, `Project`,

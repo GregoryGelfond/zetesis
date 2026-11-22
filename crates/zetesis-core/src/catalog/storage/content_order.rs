@@ -37,6 +37,15 @@ impl ContentOrder for Typed<'_> {
     }
 }
 
+/// Terms of more expanded nodes than this get no identity order: a fallback
+/// comparison between two keyed terms then reads at most this many nodes of
+/// each, so ordering a tail stays `O(n log n)` comparisons of bounded cost even
+/// for deep terms (a chain of nested tuples shares every key word). Such terms
+/// keep comparing by content, as they did before identities existed.
+const ORDERED_NODES: usize = 64;
+
+use super::segments::UNORDERED;
+
 /// Storage rank of a number; a number's key decides it completely.
 const NUMBER: u32 = 1;
 /// Order-key words per term.
@@ -163,14 +172,21 @@ impl Store {
             let mut pending = Vec::new();
             for local in 0..count {
                 let identity = u32::try_from(start + local).map_err(|_| Fault::IdExhausted)?;
-                handles.push(
-                    interner
-                        .intern(
-                            &content(Read::Writer(self), identity, &mut pending),
-                            &mut tally,
-                        )
-                        .map_err(refusal)?,
-                );
+                let term = Read::Writer(self)
+                    .term(TermId::from_word(identity))
+                    .expect("tail term resolves");
+                handles.push(if term.expanded_nodes() > ORDERED_NODES {
+                    None
+                } else {
+                    Some(
+                        interner
+                            .intern(
+                                &content(Read::Writer(self), identity, &mut pending),
+                                &mut tally,
+                            )
+                            .map_err(refusal)?,
+                    )
+                });
             }
             let mut interner = interner;
             let generation = interner.freeze(None, &mut tally).map_err(refusal)?;
@@ -180,9 +196,17 @@ impl Store {
                 .try_reserve_exact(count)
                 .map_err(|_| Fault::Allocation)?;
             for handle in handles {
-                debug_assert!(matches!(handle, Handle::Pending(_)));
-                let id = generation.finalize(handle).index() - base;
-                order.push(u32::try_from(id).map_err(|_| Fault::IdExhausted)?);
+                order.push(match handle {
+                    Some(handle) => {
+                        debug_assert!(matches!(handle, Handle::Pending(_)));
+                        let id = generation.finalize(handle).index() - base;
+                        u32::try_from(id)
+                            .ok()
+                            .filter(|&id| id != UNORDERED)
+                            .ok_or(Fault::IdExhausted)?
+                    }
+                    None => UNORDERED,
+                });
             }
             order
         };
@@ -283,10 +307,14 @@ mod tests {
     }
 
     fn ordered(values: &[Value]) -> (Store, Vec<TermId>) {
+        ordered_within(values, Limits::default())
+    }
+
+    fn ordered_within(values: &[Value], limits: Limits) -> (Store, Vec<TermId>) {
         let mut store = Store::new(16_000_000);
         let ids = values
             .iter()
-            .map(|value| store.import_value(value, Limits::default()).unwrap())
+            .map(|value| store.import_value(value, limits).unwrap())
             .collect();
         store.order_terms(|| Ok::<_, Infallible>(())).unwrap();
         (store, ids)
@@ -360,5 +388,40 @@ mod tests {
         );
         assert_eq!(a.content_order(b), None);
         assert_eq!(a.cmp(&b), std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn deep_terms_compare_by_content_without_identities() {
+        let chain = |depth: usize, leaf: i32| {
+            let mut nodes = vec![ValueNode::Tuple { arity: 1 }; depth];
+            nodes.push(ValueNode::Number(leaf));
+            Value::from_nodes(
+                nodes,
+                ValueLimits {
+                    max_nodes: usize::MAX,
+                    max_depth: usize::MAX,
+                    max_bytes: usize::MAX,
+                },
+            )
+            .unwrap()
+        };
+        let unbounded = Limits {
+            max_nodes: usize::MAX,
+            max_depth: usize::MAX,
+            max_bytes: usize::MAX,
+        };
+        let (mut store, ids) = ordered_within(
+            &[chain(10_000, 2), chain(10_000, 1), chain(3, 1)],
+            unbounded,
+        );
+        let snapshot = store.snapshot(0).unwrap();
+        let term = |id| TermRef::new(&snapshot, id).unwrap();
+        let (deep_two, deep_one, shallow) = (term(ids[0]), term(ids[1]), term(ids[2]));
+        assert_eq!(deep_two.content_order(deep_one), None);
+        assert_eq!(deep_one.content_order(shallow), None);
+        assert_eq!(deep_one.cmp(&deep_two), Ordering::Less);
+        assert_eq!(shallow.cmp(&deep_one), Ordering::Less);
+        let inner = shallow.child(0).unwrap();
+        assert!(shallow.content_order(inner).is_some());
     }
 }

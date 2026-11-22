@@ -50,7 +50,8 @@ pub(super) struct VocabularySegment {
     pub(super) texts: Vec<Text>,
     pub(super) terms: Nodes<TermId, TextId>,
     /// Each term's content-order identity within this segment, its interner
-    /// generation; empty until the segment's commit freezes it.
+    /// generation, or [`UNORDERED`] for a term too large to key; empty until
+    /// the segment's commit freezes it.
     pub(super) order: Vec<u32>,
     pub(super) predicates: Vec<Signature>,
 }
@@ -189,6 +190,9 @@ pub(super) fn text_measures(segment: &VocabularySegment, id: TextId) -> (usize, 
     (text.bytes.len(), text.quoted_bytes)
 }
 
+/// An order-lane entry for a term frozen without a content-order identity.
+pub(crate) const UNORDERED: u32 = u32::MAX;
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Term<'a> {
     pub(super) read: Read<'a>,
@@ -198,13 +202,15 @@ pub(crate) struct Term<'a> {
 
 impl<'a> Term<'a> {
     /// Typed order decided by content-order identities: `Some` exactly when
-    /// both terms belong to one frozen generation (one sealed segment).
+    /// both terms belong to one frozen generation (one sealed segment) and
+    /// both received an identity there.
     pub(crate) fn content_order(self, other: Self) -> Option<std::cmp::Ordering> {
         if !std::ptr::eq(self.segment, other.segment) {
             return None;
         }
         let order = &self.segment.order;
-        Some(order.get(self.local)?.cmp(order.get(other.local)?))
+        let (left, right) = (*order.get(self.local)?, *order.get(other.local)?);
+        (left != UNORDERED && right != UNORDERED).then(|| left.cmp(&right))
     }
 
     pub(crate) fn descriptor(self) -> ValueNodeRef<'a> {
