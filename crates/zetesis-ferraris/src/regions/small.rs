@@ -160,9 +160,11 @@ impl Refinements {
     pub const FAMILY: Self = Self(128);
     /// Every refinement.
     pub const ALL: Self = Self(255);
-    /// The measured default: minimized clauses and Luby restarts; steering
-    /// is asked for with `steer=1`.
-    pub const MEASURED: Self = Self(Self::MINIMIZE.0 | Self::LUBY.0);
+    /// The measured default: minimized clauses, Luby restarts, the compact
+    /// encoding and glue-kept learned clauses; steering is asked for with
+    /// `steer=1`.
+    pub const MEASURED: Self =
+        Self(Self::MINIMIZE.0 | Self::LUBY.0 | Self::COMPACT.0 | Self::GLUE.0);
 
     /// Whether every refinement of `other` is on.
     #[must_use]
@@ -202,7 +204,8 @@ impl SmallPolicy {
     /// open atoms, 500 conflicts each, behind the yield gate (25%), outside
     /// matching-shaped (at-most-one atoms >= 50%) and formula-dense (more
     /// than 32 nodes per atom) theories, in the main thread's walker only,
-    /// with minimized learned clauses and Luby restarts.
+    /// with minimized learned clauses, Luby restarts, the compact encoding
+    /// and glue-kept learned clauses.
     #[must_use]
     pub const fn measured() -> Self {
         Self {
