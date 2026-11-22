@@ -2208,6 +2208,21 @@ impl NarrowingScratch {
         }
     }
 
+    /// Whether the walk should visit `region` after the others pending: a
+    /// completion found outside it lies in another pending region.
+    pub fn small_defers(&mut self, region: &Region) -> bool {
+        self.small
+            .as_mut()
+            .is_some_and(|small| small.defers(region))
+    }
+
+    /// An open atom whose split walks toward a completion the learned search
+    /// found in `region`, if one is remembered.
+    #[must_use]
+    pub fn small_guide(&mut self, region: &Region) -> Option<usize> {
+        self.small.as_mut().and_then(|small| small.guide(region))
+    }
+
     /// Tell the size-specialized narrowing that the general narrowing refuted
     /// `region` (an adapting policy reads its size).
     pub fn note_general_refutation(&mut self, region: &Region) {
@@ -2230,6 +2245,18 @@ impl NarrowingScratch {
     /// region is split and shared rather than held.
     pub fn yield_small_search_to(&mut self, idle: std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         self.small_scratch().yield_to(idle);
+    }
+
+    /// Share one completion slot among a walk's walkers: a completion one
+    /// walker's root probe finds steers every walker that adopts it.
+    pub fn share_small_completions(&mut self, shared: std::sync::Arc<small::SharedCompletion>) {
+        self.small_scratch().share_completions(shared);
+    }
+
+    /// Say whether the walk this scratch serves optimizes an objective, which
+    /// keeps steering off unless the policy asks for it (`steer_objective`).
+    pub fn note_small_objective(&mut self, present: bool) {
+        self.small_scratch().note_objective(present);
     }
 
     /// Fix the size-specialized narrowing policy instead of reading it from

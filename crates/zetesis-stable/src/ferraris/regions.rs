@@ -845,6 +845,11 @@ impl RegionSearch {
         self.parts.set_learned_store(store);
     }
 
+    /// Say whether the stream's search optimizes an objective.
+    pub(super) fn note_objective(&mut self, present: bool) {
+        self.scratch.note_small_objective(present);
+    }
+
     pub(super) fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
         self.filter.as_ref().map(RetainedRefuter::borrow_owner)
     }
@@ -1139,6 +1144,14 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
         {
             return Ok(Narrowing::Refuted);
         }
+    }
+    if scratch.small_defers(region) {
+        entry.defer();
+        return Ok(result);
+    }
+    if let Some(atom) = scratch.small_guide(region) {
+        entry.prefer(atom);
+        return Ok(result);
     }
     let preferred = prefer_split(
         (original, narrower),
