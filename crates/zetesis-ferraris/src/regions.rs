@@ -2253,6 +2253,12 @@ impl NarrowingScratch {
         self.small_scratch().share_completions(shared);
     }
 
+    /// Say whether the walk this scratch serves optimizes an objective, which
+    /// keeps steering off unless the policy asks for it (`steer_objective`).
+    pub fn note_small_objective(&mut self, present: bool) {
+        self.small_scratch().note_objective(present);
+    }
+
     /// Fix the size-specialized narrowing policy instead of reading it from
     /// the environment.
     pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {

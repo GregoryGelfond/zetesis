@@ -221,6 +221,9 @@ struct Shared {
     inner: InnerDeques,
     /// When a worker's query is published; fixed when the walk begins.
     division: QueryDivision,
+    /// Whether the walk's search optimizes an objective; fixed when the
+    /// walk begins.
+    objective: bool,
     /// The first stop a worker raised; written only on the cold error path,
     /// read by the enumeration once the workers have finished, after their models.
     stopped: Mutex<Option<Incomplete>>,
@@ -895,6 +898,7 @@ impl ParallelRegions {
                 frontier,
                 inner,
                 division: QueryDivision::default(),
+                objective: false,
                 stopped: Mutex::new(None),
                 budget: SharedBudget::new(limits.search, budget.statistics),
                 limits,
@@ -952,6 +956,15 @@ impl ParallelRegions {
 
     /// Divide the walk's queries as `division` says, before the walk begins;
     /// a walk that has begun keeps the division it began with.
+    pub(crate) fn note_objective(&mut self, present: bool) {
+        if matches!(self.record, WalkRecord::NotBegun)
+            && let Some(shared) = Arc::get_mut(&mut self.shared)
+        {
+            shared.objective = present;
+            self.scratch.note_small_objective(present);
+        }
+    }
+
     pub(crate) fn set_query_division(&mut self, division: QueryDivision) {
         if matches!(self.record, WalkRecord::NotBegun)
             && let Some(shared) = Arc::get_mut(&mut self.shared)
@@ -1861,6 +1874,7 @@ fn worker(
     let mut search = SearchStatistics::default();
     let mut workspaces = Workspaces::new();
     workspaces.scratch.designate_small_walker(index == 0);
+    workspaces.scratch.note_small_objective(shared.objective);
     workspaces
         .scratch
         .share_small_completions(Arc::clone(&shared.completions));

@@ -199,5 +199,26 @@ fn root_probes_stay_within_a_quarter_of_the_walk() {
     scratch.statistics.root_nanos = 200_000_000;
     assert!(scratch.probe_affordable(), "a fifth of the walk");
     scratch.statistics.root_nanos = 300_000_000;
-    assert!(!scratch.probe_affordable(), "more than a quarter of the walk");
+    assert!(
+        !scratch.probe_affordable(),
+        "more than a quarter of the walk"
+    );
+}
+
+#[test]
+fn steering_leaves_an_optimizing_walk_alone_unless_asked() {
+    let steered = SmallPolicy {
+        refinements: Refinements::MEASURED.with(Refinements::STEER, true),
+        ..SmallPolicy::measured()
+    };
+    let mut scratch = super::SmallScratch::default();
+    scratch.set_policy(steered);
+    assert!(scratch.steering(), "no objective: steering on");
+    scratch.note_objective(true);
+    assert!(!scratch.steering(), "an objective: steering off");
+    scratch.set_policy(SmallPolicy {
+        refinements: steered.refinements.with(Refinements::STEER_OBJECTIVE, true),
+        ..steered
+    });
+    assert!(scratch.steering(), "steer_objective=1: steering on");
 }

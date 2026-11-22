@@ -165,6 +165,8 @@ pub(crate) struct RegionProposals {
     /// The worklists of the coordinator's own positive checks.
     scratch: NarrowingScratch,
     native_byte_limit: u64,
+    /// Whether the stream's search optimizes an objective.
+    objective: bool,
 }
 
 impl std::fmt::Debug for RegionProposals {
@@ -221,6 +223,7 @@ impl RegionProposals {
             workers: Workers::new(None, |_| Vec::new()),
             scratch: NarrowingScratch::default(),
             native_byte_limit,
+            objective: false,
         })
     }
 
@@ -240,6 +243,13 @@ impl RegionProposals {
     /// one.
     pub(super) fn set_learned_store(&mut self, store: std::sync::Arc<LearnedStore>) {
         self.parts.set_learned_store(store);
+    }
+
+    /// Say whether the stream's search optimizes an objective; every
+    /// producer's scratch hears it before its next slate.
+    pub(super) fn note_objective(&mut self, present: bool) {
+        self.objective = present;
+        self.scratch.note_small_objective(present);
     }
 
     /// A slate that stopped before its producers ran or joined: its retained
@@ -263,6 +273,7 @@ impl RegionProposals {
             workers,
             statistics,
             producers,
+            objective,
             ..
         } = self;
         workers.with_dependent_mut(|_, workspaces| {
@@ -275,6 +286,7 @@ impl RegionProposals {
             }
             for workspace in workspaces.iter_mut() {
                 let (tier, scratch) = (&mut workspace.tier, &mut workspace.scratch);
+                scratch.note_small_objective(*objective);
                 if start {
                     parts.seed_tier(tier, scratch, budget, &mut statistics.counts)?;
                 } else {

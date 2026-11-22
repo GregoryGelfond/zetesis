@@ -116,7 +116,7 @@ pub struct SmallPolicy {
 
 /// Refinements of the learned search, bit-packed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Refinements(u8);
+pub struct Refinements(u16);
 
 impl Refinements {
     /// Minimize each learned clause by dropping the literals its other
@@ -158,8 +158,16 @@ impl Refinements {
     /// aggregate's values are) keeps one true and one open weight, updated
     /// once per assignment, and checks its members by bound.
     pub const FAMILY: Self = Self(128);
+    /// Steer a search that optimizes an objective too (`steer_objective=1`).
+    /// Steering heads for the first completion it finds, whatever it costs;
+    /// an optimizing search must still prove that answer's cost optimal, and
+    /// a walk steered to it leaves that proof a tree split for the
+    /// completion rather than in the walk's own order. Whether a query has
+    /// an objective is a structural property of the query, not of any
+    /// encoding.
+    pub const STEER_OBJECTIVE: Self = Self(256);
     /// Every refinement.
-    pub const ALL: Self = Self(255);
+    pub const ALL: Self = Self(511);
     /// The measured default: minimized clauses, Luby restarts, the compact
     /// encoding and glue-kept learned clauses; steering is asked for with
     /// `steer=1`.
@@ -294,6 +302,11 @@ impl SmallPolicy {
                     policy.refinements = policy.refinements.with(Refinements::EAGER, parsed > 0);
                 }
                 "steer_yield" => policy.steer_yield = parsed,
+                "steer_objective" => {
+                    policy.refinements = policy
+                        .refinements
+                        .with(Refinements::STEER_OBJECTIVE, parsed > 0);
+                }
                 "local" => {
                     policy.refinements = policy.refinements.with(Refinements::LOCAL, parsed > 0);
                 }
@@ -418,6 +431,16 @@ pub struct SmallStatistics {
     pub root_nanos: u64,
 }
 
+/// What a walk's search is for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Goal {
+    /// Answers, the first of them soonest.
+    #[default]
+    Answers,
+    /// An optimum of an objective, proved.
+    Optimum,
+}
+
 /// A walker's specialized-narrowing state: its policy, the clausal reading of
 /// the theory it last read, kept with its learned clauses, and enumeration
 /// buffers. It belongs to the walker's scratch, never to a region.
@@ -474,6 +497,10 @@ pub(crate) struct SmallScratch {
     /// completion (the theory's completions are not answer sets), or a
     /// guided walk reached its completion's leaf (an answer was found).
     distrusted: bool,
+    /// What the walk's search is for: under an objective its first answer
+    /// is not its goal, and steering, which heads for any completion, stays
+    /// off unless the policy asks for it there too.
+    goal: Goal,
     /// The counts so far.
     pub(crate) statistics: SmallStatistics,
 }
@@ -949,6 +976,15 @@ impl SmallScratch {
         self.jump_left = 1 << 12;
     }
 
+    /// Say whether the walk's search optimizes an objective.
+    pub(crate) fn note_objective(&mut self, present: bool) {
+        self.goal = if present {
+            Goal::Optimum
+        } else {
+            Goal::Answers
+        };
+    }
+
     /// Share the walk's count of idle peers.
     pub(crate) fn yield_to(&mut self, idle: std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         self.idle = Some(idle);
@@ -1385,9 +1421,11 @@ impl SmallScratch {
     /// steering is not over (see `distrusted`).
     fn steering(&self) -> bool {
         !self.distrusted
-            && self
-                .policy
-                .is_some_and(|p| p.refinements.has(Refinements::STEER))
+            && self.policy.is_some_and(|p| {
+                p.refinements.has(Refinements::STEER)
+                    && (self.goal == Goal::Answers
+                        || p.refinements.has(Refinements::STEER_OBJECTIVE))
+            })
     }
 
     /// Read the region narrowed after a guided split: refuted, or not
