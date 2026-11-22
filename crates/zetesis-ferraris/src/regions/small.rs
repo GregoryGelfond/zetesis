@@ -109,6 +109,9 @@ pub struct SmallPolicy {
     /// the regions it reads (its yield): a search that mostly refutes is
     /// proving, not looking for a completion. 100 always probes.
     pub steer_yield: usize,
+    /// Under [`Refinements::LOCAL`], the longest restriction-free clause
+    /// kept, whole, once its search ends.
+    pub local_keep: usize,
 }
 
 /// Refinements of the learned search, bit-packed.
@@ -132,8 +135,31 @@ impl Refinements {
     /// search, even while peers wait: in a parallel walk their regions are
     /// what the completion found orders.
     pub const EAGER: Self = Self(8);
+    /// Encode compactly: a negation is its operand's literal negated, and a
+    /// root implication is one clause over its premise's and conclusion's
+    /// literals, reading through a conjunctive premise or a disjunctive
+    /// conclusion that nothing else reads. Same models over the atoms, fewer
+    /// auxiliary variables to propagate.
+    pub const COMPACT: Self = Self(16);
+    /// Keep learned clauses by their literal block distance (the decision
+    /// levels they span): those spanning two levels or fewer stay, and a
+    /// smaller database is halved more often, dropping the widest spans
+    /// first rather than the oldest clauses.
+    pub const GLUE: Self = Self(32);
+    /// Learn under the restriction without its literals: a clause learned
+    /// from a conflict that reads restriction literals is propagated
+    /// without them for the rest of the search, which keeps those literals
+    /// aside to explain any refutation it takes part in, and is put back
+    /// whole (or forgotten, past `local_keep` literals) when the search
+    /// ends. Shorter clauses to propagate; the same refutations.
+    pub const LOCAL: Self = Self(64);
+    /// Count thresholds over the same weighted conditions once: such a
+    /// family (an aggregate compared with many bounds, as an assignment
+    /// aggregate's values are) keeps one true and one open weight, updated
+    /// once per assignment, and checks its members by bound.
+    pub const FAMILY: Self = Self(128);
     /// Every refinement.
-    pub const ALL: Self = Self(15);
+    pub const ALL: Self = Self(255);
     /// The measured default: minimized clauses and Luby restarts; steering
     /// is asked for with `steer=1`.
     pub const MEASURED: Self = Self(Self::MINIMIZE.0 | Self::LUBY.0);
@@ -196,6 +222,7 @@ impl SmallPolicy {
             yield_idle: true,
             refinements: Refinements::MEASURED,
             steer_yield: 100,
+            local_keep: usize::MAX,
         }
     }
 
@@ -217,6 +244,7 @@ impl SmallPolicy {
         let mut policy = Self {
             learn_conflicts: 4000,
             steer_yield: 100,
+            local_keep: usize::MAX,
             ..Self::default()
         };
         for part in text.split(',') {
@@ -253,10 +281,23 @@ impl SmallPolicy {
                 "steer" => {
                     policy.refinements = policy.refinements.with(Refinements::STEER, parsed > 0);
                 }
+                "glue" => {
+                    policy.refinements = policy.refinements.with(Refinements::GLUE, parsed > 0);
+                }
+                "compact" => {
+                    policy.refinements = policy.refinements.with(Refinements::COMPACT, parsed > 0);
+                }
                 "eager" => {
                     policy.refinements = policy.refinements.with(Refinements::EAGER, parsed > 0);
                 }
                 "steer_yield" => policy.steer_yield = parsed,
+                "local" => {
+                    policy.refinements = policy.refinements.with(Refinements::LOCAL, parsed > 0);
+                }
+                "local_keep" => policy.local_keep = parsed,
+                "family" => {
+                    policy.refinements = policy.refinements.with(Refinements::FAMILY, parsed > 0);
+                }
                 _ => {}
             }
         }
@@ -1605,6 +1646,7 @@ impl SmallScratch {
             Outcome::Unsatisfiable(core) => {
                 self.statistics.learned_refuted += 1;
                 self.statistics.core_width += core as u64;
+                solver.keep_core();
                 self.remember_core();
                 SmallNarrowing::Refuted(Variant::Learned)
             }
@@ -1913,6 +1955,9 @@ const TRUE: u8 = 1;
 const FALSE: u8 = 0;
 const UNDEF: u8 = 2;
 
+/// No literal assigned yet (compact encoding).
+const NO_LIT: u32 = u32::MAX;
+
 const fn lit(var: u32, negative: bool) -> u32 {
     var * 2 + negative as u32
 }
@@ -1983,7 +2028,28 @@ struct Pb {
     open: i128,
     /// The largest single weight, to skip scans that cannot force.
     heaviest: i128,
+    /// The [`PbFamily`] counting it, or [`NO_FAMILY`] (it counts itself).
+    family: u32,
 }
+
+/// Thresholds over the same weighted conditions, counted once.
+#[derive(Debug)]
+struct PbFamily {
+    /// (bound, output, threshold index) of each member, by bound.
+    members: Vec<(i128, u32, u32)>,
+    sure: i128,
+    open: i128,
+    heaviest: i128,
+}
+
+/// A threshold that counts its own conditions.
+const NO_FAMILY: u32 = u32::MAX;
+
+/// Marks a [`PbFamily`] entry in a variable's threshold lists.
+const FAMILY_ENTRY: u32 = 1 << 31;
+
+/// The fewest thresholds over the same conditions counted as a family.
+const FAMILY_MIN: usize = 4;
 
 /// Booleans packed one per bit.
 #[derive(Debug, Default, Clone)]
@@ -2133,8 +2199,18 @@ struct Solver {
     is_learned: Bits,
     /// Learned clauses kept in the arena.
     learned_count: usize,
+    /// Each clause's literal block distance when learned (0 for originals).
+    glue: Vec<u32>,
+    /// Learned-clause reductions so far.
+    reductions: u64,
+    /// [`Refinements::LOCAL`]: the restriction literals set aside from each
+    /// clause learned in the current search, by clause.
+    aside: std::collections::HashMap<u32, Vec<u32>>,
+    /// See [`SmallPolicy::local_keep`].
+    local_keep: usize,
     watches: Vec<Vec<Watch>>,
     pbs: Vec<Pb>,
+    families: Vec<PbFamily>,
     /// Per variable, its slot in `pb_lists`, or [`NO_PB`].
     pb_slot: Vec<u32>,
     pb_lists: Vec<PbLists>,
@@ -2169,19 +2245,32 @@ struct Solver {
 
 impl Solver {
     fn encode(shape: &Shape, policy: SmallPolicy) -> Self {
+        let mut solver = Self::new(shape.atoms, policy);
+        solver.add_theory(shape, None);
+        solver.compact();
+        solver
+    }
+
+    /// A solver over `vars` decidable variables and no constraints yet.
+    fn new(vars: usize, policy: SmallPolicy) -> Self {
         let SmallPolicy {
             decide_all,
             refinements,
+            local_keep,
             ..
         } = policy;
-        let vars = shape.atoms;
         let mut solver = Self {
             vars,
             clauses: Arena::default(),
             is_learned: Bits::default(),
             learned_count: 0,
+            glue: Vec::new(),
+            reductions: 0,
+            aside: std::collections::HashMap::new(),
+            local_keep,
             watches: vec![Vec::new(); vars * 2],
             pbs: Vec::new(),
+            families: Vec::new(),
             pb_slot: vec![NO_PB; vars],
             pb_lists: Vec::new(),
             assigns: vec![UNDEF; vars],
@@ -2209,8 +2298,6 @@ impl Solver {
         for v in 0..idx(vars) {
             solver.heap_insert(v);
         }
-        solver.add_theory(shape, None);
-        solver.compact();
         solver
     }
 
@@ -2297,9 +2384,68 @@ impl Solver {
     /// unguarded original theories only, its support condition. Level 0.
     fn add_theory(&mut self, shape: &Shape, guard: Option<u32>) {
         self.cancel_until(0);
-        let atoms = shape.atoms;
         let nodes = shape.nodes();
         self.reserve_vars(nodes);
+        let mut clauses = Arena::default();
+        let mut pbs = Vec::new();
+        if self.refinements.has(Refinements::COMPACT) {
+            self.compact_theory(shape, guard, &mut clauses, &mut pbs);
+        } else {
+            self.full_theory(shape, guard, &mut clauses, &mut pbs);
+        }
+        self.install(&clauses, pbs);
+    }
+
+    /// Install `clauses` and thresholds `pbs` at level 0 and propagate.
+    fn install(&mut self, clauses: &Arena, mut pbs: Vec<Pb>) {
+        let first_pb = self.pbs.len();
+        let families = if self.refinements.has(Refinements::FAMILY) {
+            self.add_families(first_pb, &mut pbs)
+        } else {
+            Vec::new()
+        };
+        for (offset, pb) in pbs.into_iter().enumerate() {
+            self.add_pb(idx(first_pb + offset), pb);
+        }
+        for f in families {
+            self.install_family(f);
+        }
+        let mut clause = Vec::new();
+        for index in 0..clauses.len() {
+            clause.clear();
+            clause.extend_from_slice(clauses.get(index));
+            clause.sort_unstable();
+            clause.dedup();
+            if clause.windows(2).any(|w| w[0] == neg(w[1])) {
+                continue; // tautology
+            }
+            self.add_original(&clause);
+        }
+        if self.inconsistent {
+            return;
+        }
+        // Thresholds with nothing assigned still need an initial check.
+        for index in first_pb..self.pbs.len() {
+            if self.pb_check(idx(index)).is_some() {
+                self.inconsistent = true;
+                return;
+            }
+        }
+        self.head = 0;
+        if self.propagate().is_some() {
+            self.inconsistent = true;
+        }
+    }
+
+    /// One variable per node, defined by its operands both ways.
+    fn full_theory(
+        &mut self,
+        shape: &Shape,
+        guard: Option<u32>,
+        clauses: &mut Arena,
+        pbs: &mut Vec<Pb>,
+    ) {
+        let nodes = shape.nodes();
         // Atom nodes alias their atom; other nodes get their own variable.
         let node_var: Vec<u32> = (0..nodes)
             .map(|node| match shape.kind(node) {
@@ -2308,8 +2454,6 @@ impl Solver {
                 _ => self.fresh(false),
             })
             .collect();
-        let mut clauses = Arena::default();
-        let mut pbs = Vec::new();
         for node in 0..nodes {
             let v = node_var[node];
             let pos = lit(v, false);
@@ -2353,6 +2497,7 @@ impl Solver {
                     sure: 0,
                     open: 0,
                     heaviest: 0,
+                    family: NO_FAMILY,
                 }),
             }
         }
@@ -2364,38 +2509,201 @@ impl Solver {
             clauses.push(clause);
         }
         if let (Some(support), None) = (&shape.support, guard) {
-            self.support_clauses(support, atoms, &node_var, &mut clauses);
+            let lits: Vec<u32> = node_var.iter().map(|&v| lit(v, false)).collect();
+            self.support_clauses(support, shape.atoms, &lits, clauses);
         }
-        let first_pb = self.pbs.len();
-        for (offset, pb) in pbs.into_iter().enumerate() {
-            self.add_pb(idx(first_pb + offset), pb);
-        }
-        let mut clause = Vec::new();
-        for index in 0..clauses.len() {
-            clause.clear();
-            clause.extend_from_slice(clauses.get(index));
-            clause.sort_unstable();
-            clause.dedup();
-            if clause.windows(2).any(|w| w[0] == neg(w[1])) {
-                continue; // tautology
-            }
-            self.add_original(&clause);
-        }
-        drop(clauses);
-        if self.inconsistent {
-            return;
-        }
-        // Thresholds with nothing assigned still need an initial check.
-        for index in first_pb..self.pbs.len() {
-            if self.pb_check(idx(index)).is_some() {
-                self.inconsistent = true;
-                return;
+    }
+
+    /// [`Refinements::COMPACT`]: literals for the nodes something reads,
+    /// negations folded and root implications written as single clauses.
+    fn compact_theory(
+        &mut self,
+        shape: &Shape,
+        guard: Option<u32>,
+        clauses: &mut Arena,
+        pbs: &mut Vec<Pb>,
+    ) {
+        let nodes = shape.nodes();
+        let mut lits = vec![NO_LIT; nodes];
+        let mut is_body = vec![false; nodes];
+        if let (Some(support), None) = (&shape.support, guard) {
+            for &(body, _, _) in &support.entries {
+                if body != u32::MAX {
+                    is_body[body as usize] = true;
+                }
             }
         }
-        self.head = 0;
-        if self.propagate().is_some() {
-            self.inconsistent = true;
+        // A premise conjunction or conclusion disjunction read only by its
+        // root implication is read through.
+        let inline = |node: usize, kind: Kind| {
+            shape.kind(node) == kind
+                && !is_body[node]
+                && shape.parents_offsets[node + 1] - shape.parents_offsets[node] == 1
+        };
+        let mut negated: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        for &root in &shape.roots {
+            let mut clause = Vec::new();
+            if shape.kind(root) == Kind::Implies {
+                let row = shape.row(root);
+                let (x, y) = (row[0] as usize, row[1] as usize);
+                if inline(x, Kind::And) {
+                    for &c in shape.row(x) {
+                        clause.push(neg(self.node_lit(
+                            shape,
+                            c as usize,
+                            &mut lits,
+                            &mut negated,
+                            clauses,
+                            pbs,
+                        )));
+                    }
+                } else {
+                    clause.push(neg(self.node_lit(
+                        shape,
+                        x,
+                        &mut lits,
+                        &mut negated,
+                        clauses,
+                        pbs,
+                    )));
+                }
+                if shape.kind(y) == Kind::False {
+                } else if inline(y, Kind::Or) {
+                    for &c in shape.row(y) {
+                        clause.push(self.node_lit(
+                            shape,
+                            c as usize,
+                            &mut lits,
+                            &mut negated,
+                            clauses,
+                            pbs,
+                        ));
+                    }
+                } else {
+                    clause.push(self.node_lit(shape, y, &mut lits, &mut negated, clauses, pbs));
+                }
+            } else {
+                clause.push(self.node_lit(shape, root, &mut lits, &mut negated, clauses, pbs));
+            }
+            if let Some(guard) = guard {
+                clause.push(lit(guard, true));
+            }
+            clauses.push(clause);
         }
+        if let (Some(support), None) = (&shape.support, guard) {
+            for &(body, _, _) in &support.entries {
+                if body != u32::MAX {
+                    self.node_lit(shape, body as usize, &mut lits, &mut negated, clauses, pbs);
+                }
+            }
+            self.support_clauses(support, shape.atoms, &lits, clauses);
+        }
+    }
+
+    /// Node `node`'s literal under [`Refinements::COMPACT`], defining it and
+    /// the operands it reads on first use (an explicit stack, not recursion).
+    fn node_lit(
+        &mut self,
+        shape: &Shape,
+        node: usize,
+        lits: &mut [u32],
+        negated: &mut std::collections::HashMap<u32, u32>,
+        clauses: &mut Arena,
+        pbs: &mut Vec<Pb>,
+    ) -> u32 {
+        let mut stack = vec![(node, false)];
+        while let Some((n, ready)) = stack.pop() {
+            if lits[n] != NO_LIT {
+                continue;
+            }
+            let row = shape.row(n);
+            let negation =
+                shape.kind(n) == Kind::Implies && shape.kind(row[1] as usize) == Kind::False;
+            if !ready {
+                let operands: &[u32] = match shape.kind(n) {
+                    Kind::Atom(_) | Kind::Cut | Kind::False => &[],
+                    _ if negation => &row[..1],
+                    _ => row,
+                };
+                if operands.iter().any(|&c| lits[c as usize] == NO_LIT) {
+                    stack.push((n, true));
+                    stack.extend(operands.iter().map(|&c| (c as usize, false)));
+                    continue;
+                }
+            }
+            lits[n] = match shape.kind(n) {
+                Kind::Atom(atom) => lit(atom, false),
+                Kind::Cut => lit(self.fresh(true), false),
+                Kind::False => {
+                    let pos = lit(self.fresh(false), false);
+                    clauses.push([neg(pos)]);
+                    pos
+                }
+                Kind::Implies if negation => neg(lits[row[0] as usize]),
+                Kind::Implies => {
+                    let pos = lit(self.fresh(false), false);
+                    let (x, y) = (lits[row[0] as usize], lits[row[1] as usize]);
+                    clauses.push(vec![neg(pos), neg(x), y]);
+                    clauses.push(vec![pos, x]);
+                    clauses.push(vec![pos, neg(y)]);
+                    pos
+                }
+                Kind::And => {
+                    let pos = lit(self.fresh(false), false);
+                    let mut long = vec![pos];
+                    for &c in row {
+                        let c = lits[c as usize];
+                        clauses.push(vec![neg(pos), c]);
+                        long.push(neg(c));
+                    }
+                    clauses.push(long);
+                    pos
+                }
+                Kind::Or => {
+                    let pos = lit(self.fresh(false), false);
+                    let mut long = vec![neg(pos)];
+                    for &c in row {
+                        let c = lits[c as usize];
+                        clauses.push(vec![pos, neg(c)]);
+                        long.push(c);
+                    }
+                    clauses.push(long);
+                    pos
+                }
+                Kind::Threshold => {
+                    // Threshold conditions are variables: a negated operand
+                    // gets one equal to it.
+                    let conditions: Vec<u32> = row
+                        .iter()
+                        .map(|&c| {
+                            let l = lits[c as usize];
+                            if l & 1 == 0 {
+                                return l >> 1;
+                            }
+                            *negated.entry(l).or_insert_with(|| {
+                                let e = self.fresh(false);
+                                clauses.push(vec![lit(e, true), l]);
+                                clauses.push(vec![lit(e, false), neg(l)]);
+                                e
+                            })
+                        })
+                        .collect();
+                    let v = self.fresh(false);
+                    pbs.push(Pb {
+                        out: v,
+                        conditions,
+                        weights: shape.row_weights(n).to_vec(),
+                        bound: shape.bound(n),
+                        sure: 0,
+                        open: 0,
+                        heaviest: 0,
+                        family: NO_FAMILY,
+                    });
+                    lit(v, false)
+                }
+            };
+        }
+        lits[node]
     }
 
     /// The support condition of every atom: held only with a producer whose
@@ -2404,7 +2712,7 @@ impl Solver {
         &mut self,
         support: &Support,
         atoms: usize,
-        node_var: &[u32],
+        lits: &[u32],
         clauses: &mut Arena,
     ) {
         for atom in 0..atoms {
@@ -2421,13 +2729,13 @@ impl Solver {
                         always = true;
                         break;
                     }
-                    clause.push(lit(node_var[body as usize], false));
+                    clause.push(lits[body as usize]);
                 } else {
                     // s <-> body & !others
                     let sp = lit(self.fresh(false), false);
                     let mut long = vec![sp];
                     if body != u32::MAX {
-                        let b = lit(node_var[body as usize], false);
+                        let b = lits[body as usize];
                         clauses.push(vec![neg(sp), b]);
                         long.push(neg(b));
                     }
@@ -2448,6 +2756,11 @@ impl Solver {
     /// Install threshold `index`, counting what is already assigned.
     fn add_pb(&mut self, index: u32, mut pb: Pb) {
         self.pb_lists_mut(pb.out as usize).occurs.push(index);
+        if pb.family != NO_FAMILY {
+            // Its family counts and watches the conditions.
+            self.pbs.push(pb);
+            return;
+        }
         let mut terms: Vec<(u32, u64)> = pb
             .conditions
             .iter()
@@ -2482,6 +2795,114 @@ impl Solver {
             self.pb_lists_mut(c as usize).occurs.push(index);
         }
         self.pbs.push(pb);
+    }
+
+    /// [`Refinements::FAMILY`]: group `pbs` (thresholds `first_pb..`) by
+    /// their weighted conditions, marking the members of each group of at
+    /// least [`FAMILY_MIN`]; the families made, to install once the members
+    /// are.
+    fn add_families(&mut self, first_pb: usize, pbs: &mut [Pb]) -> Vec<u32> {
+        let mut groups: std::collections::HashMap<(&[u32], &[u64]), Vec<usize>> =
+            std::collections::HashMap::new();
+        for (k, pb) in pbs.iter().enumerate() {
+            groups
+                .entry((pb.conditions.as_slice(), pb.weights.as_slice()))
+                .or_default()
+                .push(k);
+        }
+        let mut made: Vec<Vec<usize>> = groups
+            .into_values()
+            .filter(|members| members.len() >= FAMILY_MIN)
+            .collect();
+        made.sort_unstable();
+        let mut families = Vec::new();
+        for members in made {
+            let f = idx(self.families.len());
+            let mut listed: Vec<(i128, u32, u32)> = members
+                .iter()
+                .map(|&k| (pbs[k].bound, pbs[k].out, idx(first_pb + k)))
+                .collect();
+            listed.sort_unstable();
+            for &k in &members {
+                pbs[k].family = f;
+            }
+            self.families.push(PbFamily {
+                members: listed,
+                sure: 0,
+                open: 0,
+                heaviest: 0,
+            });
+            families.push(f);
+        }
+        families
+    }
+
+    /// Count family `f`'s conditions (those of its first member) and list
+    /// it with them.
+    fn install_family(&mut self, f: u32) {
+        let first = self.families[f as usize].members[0].2 as usize;
+        let mut terms: Vec<(u32, u64)> = self.pbs[first]
+            .conditions
+            .iter()
+            .copied()
+            .zip(self.pbs[first].weights.iter().copied())
+            .collect();
+        terms.sort_unstable();
+        let mut merged: Vec<(u32, u64)> = Vec::with_capacity(terms.len());
+        for (c, w) in terms {
+            match merged.last_mut() {
+                Some(last) if last.0 == c => last.1 += w,
+                _ => merged.push((c, w)),
+            }
+        }
+        let (mut sure, mut open, mut heaviest) = (0, 0, 0);
+        let entry = FAMILY_ENTRY | f;
+        for &(c, weight) in &merged {
+            let w = i128::from(weight);
+            heaviest = heaviest.max(w);
+            match self.assigns[c as usize] {
+                TRUE => sure += w,
+                UNDEF => open += w,
+                _ => {}
+            }
+            let lists = self.pb_lists_mut(c as usize);
+            lists.terms.push((entry, weight));
+            lists.occurs.push(entry);
+        }
+        let family = &mut self.families[f as usize];
+        family.sure = sure;
+        family.open = open;
+        family.heaviest = heaviest;
+    }
+
+    /// Threshold `index`'s true weight, open weight and heaviest weight.
+    fn counters(&self, index: u32) -> (i128, i128, i128) {
+        let pb = &self.pbs[index as usize];
+        if pb.family == NO_FAMILY {
+            (pb.sure, pb.open, pb.heaviest)
+        } else {
+            let family = &self.families[pb.family as usize];
+            (family.sure, family.open, family.heaviest)
+        }
+    }
+
+    /// Check the members of family `f` that its counts can make act.
+    fn family_check(&mut self, f: u32) -> Option<Vec<u32>> {
+        let count = self.families[f as usize].members.len();
+        for k in 0..count {
+            let family = &self.families[f as usize];
+            let (sure, open, heaviest) = (family.sure, family.open, family.heaviest);
+            let (bound, out, index) = family.members[k];
+            let quiet = match self.assigns[out as usize] {
+                TRUE => sure >= bound || sure + open - heaviest >= bound,
+                FALSE => sure + open < bound || sure + heaviest < bound,
+                _ => sure < bound && bound <= sure + open,
+            };
+            if !quiet && let Some(conflict) = self.pb_check(index) {
+                return Some(conflict);
+            }
+        }
+        None
     }
 
     fn value(&self, v: u32) -> u8 {
@@ -2527,10 +2948,136 @@ impl Solver {
         self.watches[neg(clause[0]) as usize].push(watch(index, clause[1]));
         self.watches[neg(clause[1]) as usize].push(watch(index, clause[0]));
         self.is_learned.push(learned);
-        if learned {
+        let glue = if learned {
             self.learned_count += 1;
-        }
+            let mut levels: Vec<u32> = clause
+                .iter()
+                .map(|&l| self.level[var(l) as usize])
+                .collect();
+            levels.sort_unstable();
+            levels.dedup();
+            idx(levels.len())
+        } else {
+            0
+        };
+        self.glue.push(glue);
         Reason::Clause(index)
+    }
+
+    /// Record a learned clause after the backjump and assert its first
+    /// literal.
+    fn record(&mut self, learned: &[u32]) {
+        let local = self.refinements.has(Refinements::LOCAL)
+            && learned[1..]
+                .iter()
+                .any(|&l| self.level[var(l) as usize] == 1);
+        if local {
+            let mut short = vec![learned[0]];
+            let mut aside = Vec::new();
+            for &l in &learned[1..] {
+                if self.level[var(l) as usize] > 1 {
+                    short.push(l);
+                } else {
+                    aside.push(l);
+                }
+            }
+            let reason = self.attach_local(&short, aside);
+            self.counts.learned += 1;
+            self.assign(short[0], reason);
+        } else if learned.len() == 1 {
+            self.assign(learned[0], Reason::None);
+        } else {
+            let reason = self.attach(learned, true);
+            self.counts.learned += 1;
+            self.assign(learned[0], reason);
+        }
+    }
+
+    /// [`Refinements::LOCAL`]: attach `short` (asserting literal first, then
+    /// the deepest), always as an indexed clause so that the restriction
+    /// literals `aside` stay readable as part of its reason.
+    fn attach_local(&mut self, short: &[u32], aside: Vec<u32>) -> Reason {
+        let index = self.clauses.push(short);
+        if short.len() > 1 {
+            self.watches[neg(short[0]) as usize].push(watch(index, short[1]));
+            self.watches[neg(short[1]) as usize].push(watch(index, short[0]));
+        }
+        self.is_learned.push(true);
+        self.learned_count += 1;
+        let mut levels: Vec<u32> = short.iter().map(|&l| self.level[var(l) as usize]).collect();
+        levels.sort_unstable();
+        levels.dedup();
+        self.glue.push(idx(levels.len() + 1));
+        self.aside.insert(index, aside);
+        Reason::Clause(index)
+    }
+
+    /// [`Refinements::LOCAL`]: after a refutation, keep its core as a clause
+    /// (the restriction literals it used cannot all hold), so what the
+    /// search learned about the restriction outlives the clauses it set
+    /// aside.
+    fn keep_core(&mut self) {
+        if !self.refinements.has(Refinements::LOCAL) || self.core.is_empty() {
+            return;
+        }
+        self.cancel_until(0);
+        let mut clause = Vec::with_capacity(self.core.len());
+        for &l in &self.core {
+            match self.lit_value(neg(l)) {
+                TRUE => return,
+                FALSE => {}
+                _ => clause.push(neg(l)),
+            }
+        }
+        clause.sort_unstable();
+        clause.dedup();
+        match clause.len() {
+            0 => self.inconsistent = true,
+            1 => {
+                self.assign(clause[0], Reason::None);
+                if self.propagate().is_some() {
+                    self.inconsistent = true;
+                }
+            }
+            width => {
+                self.attach(&clause, true);
+                // Levels are stale at level 0: rate it by its width.
+                if width > 2
+                    && let Some(glue) = self.glue.last_mut()
+                {
+                    *glue = idx(width);
+                }
+            }
+        }
+    }
+
+    /// [`Refinements::LOCAL`], at level 0 once a search is over: put each
+    /// clause learned without its restriction literals back whole, or
+    /// forget it past `local_keep` literals.
+    fn restore_locals(&mut self) {
+        let aside = std::mem::take(&mut self.aside);
+        let mut whole: Vec<Vec<u32>> = Vec::new();
+        let mut keep = vec![true; self.clauses.len()];
+        for (&ci, set_aside) in &aside {
+            keep[ci as usize] = false;
+            let mut clause: Vec<u32> = Vec::new();
+            let mut satisfied = false;
+            for &l in self.clauses.get(ci as usize).iter().chain(set_aside) {
+                match self.lit_value(l) {
+                    TRUE => satisfied = true,
+                    FALSE => {} // false at level 0 for good
+                    _ => clause.push(l),
+                }
+            }
+            if !satisfied && clause.len() >= 2 && clause.len() <= self.local_keep {
+                whole.push(clause);
+            }
+        }
+        let dropped = aside.len();
+        self.compact_clauses(&keep, dropped);
+        for clause in whole {
+            self.attach(&clause, true);
+        }
     }
 
     fn assign(&mut self, l: u32, reason: Reason) {
@@ -2548,10 +3095,16 @@ impl Solver {
             &self.pb_lists[slot as usize].terms
         };
         for &(index, w) in terms {
-            let pb = &mut self.pbs[index as usize];
-            pb.open -= i128::from(w);
+            let (sure, open) = if index & FAMILY_ENTRY == 0 {
+                let pb = &mut self.pbs[index as usize];
+                (&mut pb.sure, &mut pb.open)
+            } else {
+                let family = &mut self.families[(index & !FAMILY_ENTRY) as usize];
+                (&mut family.sure, &mut family.open)
+            };
+            *open -= i128::from(w);
             if positive {
-                pb.sure += i128::from(w);
+                *sure += i128::from(w);
             }
         }
     }
@@ -2624,7 +3177,7 @@ impl Solver {
                     self.assign(first, Reason::Clause(idx(ci)));
                     i += 1;
                 } else {
-                    conflict = Some(self.clauses.get(ci).to_vec());
+                    conflict = Some(self.clause_lits(idx(ci)));
                     break;
                 }
             }
@@ -2643,7 +3196,12 @@ impl Solver {
             };
             let mut pb_conflict = None;
             for &index in &occurs {
-                if let Some(clause) = self.pb_check(index) {
+                let checked = if index & FAMILY_ENTRY == 0 {
+                    self.pb_check(index)
+                } else {
+                    self.family_check(index & !FAMILY_ENTRY)
+                };
+                if let Some(clause) = checked {
                     pb_conflict = Some(clause);
                     break;
                 }
@@ -2662,14 +3220,14 @@ impl Solver {
     /// Propagate one threshold: assign what it forces, with explanations, or
     /// return the conflict clause.
     fn pb_check(&mut self, index: u32) -> Option<Vec<u32>> {
+        let (sure, open, heaviest) = self.counters(index);
         let pb = &self.pbs[index as usize];
-        let (sure, open) = (pb.sure, pb.open);
         let out = self.assigns[pb.out as usize];
         let bound = pb.bound;
         if sure < bound && bound <= sure + open {
             let quiet = match out {
-                TRUE => sure + open - pb.heaviest >= bound,
-                FALSE => sure + pb.heaviest < bound,
+                TRUE => sure + open - heaviest >= bound,
+                FALSE => sure + heaviest < bound,
                 _ => true,
             };
             if quiet {
@@ -2753,10 +3311,19 @@ impl Solver {
         None
     }
 
+    /// Clause `ci` whole: with the restriction literals set aside from it.
+    fn clause_lits(&self, ci: u32) -> Vec<u32> {
+        let mut lits = self.clauses.get(ci as usize).to_vec();
+        if let Some(aside) = self.aside.get(&ci) {
+            lits.extend_from_slice(aside);
+        }
+        lits
+    }
+
     /// The reason clause of `v` (implied literal first, the rest false).
     fn reason_lits(&self, v: usize) -> Vec<u32> {
         match self.reason[v].unpack() {
-            Reason::Clause(ci) => self.clauses.get(ci as usize).to_vec(),
+            Reason::Clause(ci) => self.clause_lits(ci),
             Reason::Binary(other) => vec![lit(idx(v), self.assigns[v] == FALSE), other],
             Reason::None => Vec::new(),
             Reason::Pb(index) => self.pb_reason(index, v),
@@ -2939,10 +3506,16 @@ impl Solver {
                 &self.pb_lists[slot as usize].terms
             };
             for &(index, w) in terms {
-                let pb = &mut self.pbs[index as usize];
-                pb.open += i128::from(w);
+                let (sure, open) = if index & FAMILY_ENTRY == 0 {
+                    let pb = &mut self.pbs[index as usize];
+                    (&mut pb.sure, &mut pb.open)
+                } else {
+                    let family = &mut self.families[(index & !FAMILY_ENTRY) as usize];
+                    (&mut family.sure, &mut family.open)
+                };
+                *open += i128::from(w);
                 if l & 1 == 0 {
-                    pb.sure -= i128::from(w);
+                    *sure -= i128::from(w);
                 }
             }
             self.assigns[v] = UNDEF;
@@ -2954,6 +3527,9 @@ impl Solver {
         self.trail.truncate(start);
         self.trail_lim.truncate(level);
         self.head = start;
+        if level == 0 && !self.aside.is_empty() {
+            self.restore_locals();
+        }
     }
 
     /// Search under `assumptions`. `Unsatisfiable(n)` refutes using `n` of
@@ -3006,13 +3582,7 @@ impl Solver {
                 } else {
                     self.cancel_until(back);
                 }
-                if learned.len() == 1 {
-                    self.assign(learned[0], Reason::None);
-                } else {
-                    let reason = self.attach(&learned, true);
-                    self.counts.learned += 1;
-                    self.assign(learned[0], reason);
-                }
+                self.record(&learned);
                 if self.counts.conflicts.trailing_zeros() >= 8 {
                     cancellation.poll()?;
                 }
@@ -3033,7 +3603,12 @@ impl Solver {
                     restart_at = restart_at + restart_at / 2;
                 }
                 self.cancel_until(1);
-                if self.learned_count > 20_000 + width(self.counts.conflicts) / 4 {
+                let limit = if self.refinements.has(Refinements::GLUE) {
+                    4_000 + 500 * width(self.reductions)
+                } else {
+                    20_000 + width(self.counts.conflicts) / 4
+                };
+                if self.learned_count > limit {
                     self.reduce();
                 }
                 continue;
@@ -3219,9 +3794,8 @@ impl Solver {
                 continue;
             }
             if self.reason[v] == PackedReason::NONE {
-                if v != var(p) as usize {
-                    core.push(l);
-                }
+                // An assumption; `p` itself when the opposite one was made.
+                core.push(l);
             } else {
                 let reason = self.reason_lits(v);
                 for &q in &reason[1..] {
@@ -3249,18 +3823,40 @@ impl Solver {
         let learned = self.learned_count;
         let mut keep = vec![true; self.clauses.len()];
         let mut dropped = 0;
-        for (ci, kept) in keep.iter_mut().enumerate() {
-            if dropped >= learned / 2 {
-                break;
-            }
-            if self.is_learned.get(ci)
-                && self.clauses.get(ci).len() > 2
-                && !locked.contains(&idx(ci))
-            {
-                *kept = false;
+        self.reductions += 1;
+        if self.refinements.has(Refinements::GLUE) {
+            // Widest spans first, older first among equals; spans of two
+            // levels or fewer are kept.
+            let mut candidates: Vec<usize> = (0..self.clauses.len())
+                .filter(|&ci| {
+                    self.is_learned.get(ci) && self.glue[ci] > 2 && !locked.contains(&idx(ci))
+                })
+                .collect();
+            candidates.sort_by_key(|&ci| (std::cmp::Reverse(self.glue[ci]), ci));
+            for ci in candidates.into_iter().take(learned / 2) {
+                keep[ci] = false;
                 dropped += 1;
             }
+        } else {
+            for (ci, kept) in keep.iter_mut().enumerate() {
+                if dropped >= learned / 2 {
+                    break;
+                }
+                if self.is_learned.get(ci)
+                    && self.clauses.get(ci).len() > 2
+                    && !locked.contains(&idx(ci))
+                {
+                    *kept = false;
+                    dropped += 1;
+                }
+            }
         }
+        self.compact_clauses(&keep, dropped);
+    }
+
+    /// Keep the clauses `keep` marks (`dropped` learned ones are not),
+    /// renumbering watches, reasons and set-aside literals.
+    fn compact_clauses(&mut self, keep: &[bool], dropped: usize) {
         let mut remap = vec![u32::MAX; self.clauses.len()];
         let old = std::mem::take(&mut self.clauses);
         let mut kept = Arena {
@@ -3268,12 +3864,24 @@ impl Solver {
             spans: Vec::with_capacity(old.len() - dropped),
         };
         let mut kept_learned = Bits::with_capacity(old.len() - dropped);
+        let mut kept_glue = Vec::with_capacity(old.len() - dropped);
         for (ci, &keep) in keep.iter().enumerate() {
             if keep {
                 remap[ci] = kept.push(old.get(ci));
                 kept_learned.push(self.is_learned.get(ci));
+                kept_glue.push(self.glue[ci]);
             }
         }
+        if !self.aside.is_empty() {
+            self.aside = std::mem::take(&mut self.aside)
+                .into_iter()
+                .filter_map(|(ci, lits)| {
+                    let mapped = remap[ci as usize];
+                    (mapped != u32::MAX).then_some((mapped, lits))
+                })
+                .collect();
+        }
+        self.glue = kept_glue;
         self.clauses = kept;
         self.is_learned = kept_learned;
         self.learned_count -= dropped;
@@ -3410,3 +4018,6 @@ fn saturate(n: u128) -> u64 {
 fn width(n: u64) -> usize {
     usize::try_from(n).unwrap_or(usize::MAX)
 }
+
+#[cfg(test)]
+mod solver_tests;
