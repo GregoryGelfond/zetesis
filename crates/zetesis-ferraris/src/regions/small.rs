@@ -412,6 +412,10 @@ pub struct SmallStatistics {
     pub steer_successes: u64,
     /// Completions adopted from a peer's root probe.
     pub adopted: u64,
+    /// Splits a completion chose.
+    pub guided: u64,
+    /// Nanoseconds spent in root probes (also counted in `learned_nanos`).
+    pub root_nanos: u64,
 }
 
 /// A walker's specialized-narrowing state: its policy, the clausal reading of
@@ -1085,8 +1089,13 @@ impl SmallScratch {
                     < u64::from(YIELD_ONE) * policy.steer_yield as u64
                 && !self.jump
                 && !self.cached(region)
+                && self.probe_affordable()
             {
-                self.probe_root(policy.learn_conflicts, cancellation)?;
+                // Each second probe gets twice the allowance, up to 64 times
+                // the search's: a theory whose completions take more than one
+                // allowance to find is reached in a few probes, not dozens.
+                let growth = 1_u64 << (self.statistics.root_probes / 2).min(6);
+                self.probe_root(policy.learn_conflicts.saturating_mul(growth), cancellation)?;
             }
             if let Ok(verdict) = &verdict {
                 self.record_yield(matches!(verdict, SmallNarrowing::Refuted(_)));
@@ -1368,6 +1377,7 @@ impl SmallScratch {
             })
             .last()?;
         self.following = Some(model.clone());
+        self.statistics.guided += 1;
         Some(atom)
     }
 
@@ -1402,6 +1412,16 @@ impl SmallScratch {
         }
     }
 
+    /// Whether root probes have so far taken at most a quarter of the time
+    /// since the walk first offered a region: probing stays a bounded share
+    /// of the walk however large the allowances grow.
+    fn probe_affordable(&self) -> bool {
+        let elapsed = self
+            .first_offer
+            .map_or(0, |started| saturate(started.elapsed().as_nanos()));
+        self.statistics.root_nanos.saturating_mul(4) <= elapsed
+    }
+
     /// Search the conditions under the restriction guards alone, not the
     /// region's decisions, for a completion. Refutes nothing.
     fn probe_root(&mut self, allowance: u64, cancellation: &Cancellation) -> Result<(), Stop> {
@@ -1418,7 +1438,9 @@ impl SmallScratch {
         let before = solver.counts;
         let started = Instant::now();
         let outcome = solver.solve(&self.assumptions, allowance, cancellation, None)?;
-        self.statistics.learned_nanos += saturate(started.elapsed().as_nanos());
+        let spent = saturate(started.elapsed().as_nanos());
+        self.statistics.learned_nanos += spent;
+        self.statistics.root_nanos += spent;
         let after = solver.counts;
         self.statistics.conflicts += after.conflicts - before.conflicts;
         self.statistics.propagations += after.propagations - before.propagations;

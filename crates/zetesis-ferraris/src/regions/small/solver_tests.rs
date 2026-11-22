@@ -187,3 +187,17 @@ fn every_refinement_together_agrees_with_enumeration() {
     check(Refinements::ALL, 0);
     check(Refinements::ALL, usize::MAX);
 }
+
+#[test]
+fn root_probes_stay_within_a_quarter_of_the_walk() {
+    let mut scratch = super::SmallScratch::default();
+    assert!(scratch.probe_affordable(), "nothing spent yet");
+    let started = std::time::Instant::now()
+        .checked_sub(std::time::Duration::from_secs(1))
+        .expect("a second ago");
+    scratch.first_offer = Some(started);
+    scratch.statistics.root_nanos = 200_000_000;
+    assert!(scratch.probe_affordable(), "a fifth of the walk");
+    scratch.statistics.root_nanos = 300_000_000;
+    assert!(!scratch.probe_affordable(), "more than a quarter of the walk");
+}
