@@ -590,7 +590,7 @@ impl<'a> AssignmentSlice<'a> {
                 len: self.len(),
             })?
             .ok_or(AssignmentError::Unbound { slot })?;
-        Ok(id.cmp(&key.id))
+        Ok(id.identity_order(key.id))
     }
     /// Compare two present slots by canonical identity order without allocating
     /// or cloning a vocabulary witness. This is not ASP term order.
@@ -625,7 +625,7 @@ impl<'a> AssignmentSlice<'a> {
                 len: other.len(),
             })?
             .ok_or(AssignmentError::Unbound { slot: other_slot })?;
-        Ok(left.cmp(&right))
+        Ok(left.identity_order(right))
     }
     /// Copy only ID slots, with one witness for the resulting frame.
     /// # Errors

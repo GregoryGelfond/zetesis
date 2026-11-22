@@ -95,4 +95,20 @@ theorem freeze_establishes_law [DecidableEq α] {lt : α → α → Prop}
       exact absurd ab (irreflexive a)
     · exact absurd (transitive a b a ab (before b hb a ha h)) (irreflexive a)
 
+/-- The catalog's dispatch: a pair it knows to share one frozen generation
+compares by identity, any other pair by content. Under the law the dispatch
+is the comparison itself, so the answer never depends on which branch ran.
+`same` is the catalog's same-generation test (one sealed segment, both
+identities present); `sameSound` is the named obligation that the test only
+accepts members of the generation. -/
+theorem dispatch_eq_compare {generation : List α} {id : α → Nat} {lt : α → α → Prop}
+    (law : IdOrderEqCompare generation id lt) (a b : α) (same : Bool)
+    (sameSound : same = true → a ∈ generation ∧ b ∈ generation) :
+    ((if same = true then id a < id b else lt a b) ↔ lt a b) := by
+  cases same with
+  | false => simp
+  | true =>
+    obtain ⟨ha, hb⟩ := sameSound rfl
+    simpa using law a ha b hb
+
 end Zetesis.ContentOrderInterning

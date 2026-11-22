@@ -651,6 +651,7 @@
 'Zetesis.ContentOrderInterning.id_injective_of_law' depends on axioms: [propext, Quot.sound]
 'Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare' does not depend on any axioms
 'Zetesis.ContentOrderInterning.freeze_establishes_law' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ContentOrderInterning.dispatch_eq_compare' depends on axioms: [propext]
 'Zetesis.sub_refl' does not depend on any axioms
 'Zetesis.sub_trans' does not depend on any axioms
 'Zetesis.atoms_ext' depends on axioms: [propext, Quot.sound]

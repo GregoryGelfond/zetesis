@@ -13,6 +13,7 @@ use crate::ValueError;
 mod admission;
 mod assigned;
 mod lookup;
+mod content_order;
 mod intern;
 mod budget;
 mod index;
@@ -50,10 +51,18 @@ macro_rules! identifier {
     };
 }
 identifier!(TextId);
-identifier!(TermId);
+/// Owner-local term identity. Its order is not semantic: terms compare only
+/// through the vocabulary's content order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TermId(u32);
 impl TermId {
     pub(crate) fn position(self) -> usize {
         self.0 as usize
+    }
+    /// Owner-local identity order, for an index within one vocabulary only.
+    /// It is neither typed nor ASP term order; those come from content.
+    pub(crate) fn identity_order(self, other: Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
     }
     /// The identity word an interned relation uses as its equality ID.
     pub(crate) const fn word(self) -> u32 {
