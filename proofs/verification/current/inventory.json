@@ -5446,6 +5446,16 @@
       "name": "Zetesis.HeadContributions.extremum_head_in_context"
     },
     {
+      "file": "Zetesis/HeadKeyPublication.lean",
+      "line": 60,
+      "name": "Zetesis.HeadKeyPublication.keyed_suffix_eq_plain"
+    },
+    {
+      "file": "Zetesis/HeadKeyPublication.lean",
+      "line": 101,
+      "name": "Zetesis.HeadKeyPublication.keyed_eq_plain"
+    },
+    {
       "file": "Zetesis/HeadMeasures.lean",
       "line": 34,
       "name": "Zetesis.HeadMeasures.bound_original"
@@ -11956,6 +11966,7 @@
     "Zetesis/GroupedExclusionCoverage.lean",
     "Zetesis/GroupedWitnessExclusion.lean",
     "Zetesis/HeadContributions.lean",
+    "Zetesis/HeadKeyPublication.lean",
     "Zetesis/HeadMeasures.lean",
     "Zetesis/IndexedCandidates.lean",
     "Zetesis/IndexedEvaluation.lean",
@@ -12089,8 +12100,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "890777edb23dbb7a0d9dead5b3f8f8bea02ec89172726acc9a04ec122c6826af",
-    "Zetesis.lean": "ae805a58ae3a1b8c2fddf1fb797d369208e5736d6200347bfef0bbbc9e41d681",
+    "Audit.lean": "fa5447332754bc30ce2851f234e2818afd352866d281203a29bdac5723df27f5",
+    "Zetesis.lean": "d6c6b2bfe18971907a3831b8e3bc229da54f6d05a85766c9d44b68804a1be696",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -12190,6 +12201,7 @@
     "Zetesis/GroupedExclusionCoverage.lean": "ad4ebd566d8c577e7f4785d41db8a63f97c7152396f3f7f302de1f53745dcc3e",
     "Zetesis/GroupedWitnessExclusion.lean": "9940a70a7c770648d6664152c8dfd4a14adca8d2c73a09cb02a3c7939c8145d9",
     "Zetesis/HeadContributions.lean": "63ca708ec5f2580684f5171c26fb9996d833d96163f46b57d6cc28fd33f461f4",
+    "Zetesis/HeadKeyPublication.lean": "07bc6aeb3ddb7680e793a6d237de9ae4866caa46b41f60ce4cccad8a67b5b91b",
     "Zetesis/HeadMeasures.lean": "d682f0436d88dd536e8799c6896da0e0f3550357639b500551880a0fd9a80d89",
     "Zetesis/IndexedCandidates.lean": "8740ce6aa95c6bae37c42e0074eb15fd9c7f8edb70e9bdcb5306dfcb2b5738f9",
     "Zetesis/IndexedEvaluation.lean": "f04f168f7c5ced8617ba1b9c744caefd5ea71bd1bd59014413b1415169ccedc7",

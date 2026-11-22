@@ -5445,6 +5445,16 @@
     "line": 221
   },
   {
+    "name": "Zetesis.HeadKeyPublication.keyed_suffix_eq_plain",
+    "file": "Zetesis/HeadKeyPublication.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.HeadKeyPublication.keyed_eq_plain",
+    "file": "Zetesis/HeadKeyPublication.lean",
+    "line": 101
+  },
+  {
     "name": "Zetesis.HeadMeasures.bound_original",
     "file": "Zetesis/HeadMeasures.lean",
     "line": 34

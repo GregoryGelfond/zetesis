@@ -1089,6 +1089,8 @@ import Zetesis
 #print axioms Zetesis.HeadContributions.extremum_formula_original
 #print axioms Zetesis.HeadContributions.extremum_bound_frozen
 #print axioms Zetesis.HeadContributions.extremum_head_in_context
+#print axioms Zetesis.HeadKeyPublication.keyed_suffix_eq_plain
+#print axioms Zetesis.HeadKeyPublication.keyed_eq_plain
 #print axioms Zetesis.HeadMeasures.bound_original
 #print axioms Zetesis.HeadMeasures.bound_frozen
 #print axioms Zetesis.HeadMeasures.bound_equivalent

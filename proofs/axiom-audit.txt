@@ -1113,6 +1113,8 @@
 'Zetesis.HeadContributions.extremum_formula_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadContributions.extremum_bound_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadContributions.extremum_head_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.HeadKeyPublication.keyed_suffix_eq_plain' depends on axioms: [propext]
+'Zetesis.HeadKeyPublication.keyed_eq_plain' depends on axioms: [propext]
 'Zetesis.HeadMeasures.bound_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadMeasures.bound_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadMeasures.bound_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]

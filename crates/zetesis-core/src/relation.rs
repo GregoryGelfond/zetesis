@@ -480,8 +480,17 @@ pub struct Row<'owner, 'source> {
 
 impl<'source> Row<'_, 'source> {
     /// The exact immutable relation, independent of equal tuple content.
-    pub(crate) fn belongs_to(&self, relation: &Relation<'_>) -> bool {
+    #[must_use]
+    pub fn belongs_to(&self, relation: &Relation<'_>) -> bool {
         self.relation.same_owner(relation)
+    }
+
+    /// One argument's equality identifier in this row's relation dictionary:
+    /// within one relation, equal identifiers are equal values. Not a term
+    /// identity, a number or an order rank. Constant time.
+    #[must_use]
+    pub fn equality_id(&self, column: usize) -> Option<u32> {
+        self.relation.column(column)?.get(self.position)
     }
 
     /// Borrow this complete source occurrence without copying its arguments.

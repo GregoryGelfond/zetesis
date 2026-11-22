@@ -8,6 +8,8 @@
 
 mod replay;
 mod binding;
+mod heads;
+pub(crate) use heads::HeadKeys;
 pub(crate) mod retained;
 pub(crate) use binding::RowBinding;
 #[cfg(test)]
@@ -230,6 +232,9 @@ pub(crate) struct Batch<'plan, 'source> {
     plan: &'plan WitnessPlan<'plan, 'source>,
     completions: Buffer<Completion>,
     suffixes: PackedCoords,
+    /// One provisional head coordinate per completion, when every staged row
+    /// of this batch was keyed; see [`heads`].
+    keys: Option<Buffer<zetesis_core::intern::Pending>>,
     _lease: StorageLease,
 }
 
@@ -242,16 +247,71 @@ impl<'plan, 'source> Batch<'plan, 'source> {
     ) -> Result<Self, FormulaFailure> {
         let location = plan.location();
         let mut lease = computation.lease();
-        let header =
-            size_of::<Self>() - size_of::<Buffer<Completion>>() - size_of::<PackedCoords>();
+        let header = size_of::<Self>()
+            - size_of::<Buffer<Completion>>()
+            - size_of::<PackedCoords>()
+            - size_of::<Option<Buffer<zetesis_core::intern::Pending>>>();
         lease.observe(header, location)?;
         computation.storage_observed(&lease, 0, header, limits, counters, location)?;
         Ok(Self {
             plan,
             completions: Buffer::new(computation, limits, counters, location)?,
             suffixes: PackedCoords::new(plan.coord_width, computation, limits, counters, location)?,
+            keys: None,
             _lease: lease,
         })
+    }
+
+    /// Start keying this empty batch's rows through `keyer`.
+    fn key_heads(
+        &mut self,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        if self.completions.len() != 0 {
+            return Err(owner(self.plan.location()));
+        }
+        self.keys = Some(Buffer::new(
+            computation,
+            limits,
+            counters,
+            self.plan.location(),
+        )?);
+        Ok(())
+    }
+
+    /// Stage `row`, then its head key if this batch is still keyed. A row that
+    /// cannot be keyed returns the whole batch to the ordinary path.
+    fn stage_keyed(
+        &mut self,
+        row: &WitnessRow<'_, '_>,
+        keyer: Option<&mut heads::Keyer<'_>>,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        self.stage(row, computation, limits, counters)?;
+        let (Some(keyer), Some(_)) = (keyer, self.keys.as_ref()) else {
+            return Ok(());
+        };
+        let location = self.plan.location();
+        let key = keyer.key(
+            self.plan,
+            row,
+            Context::new(computation, limits, counters, location),
+        )?;
+        if let Some(pending) = key {
+            return self.keys.as_mut().expect("checked keyed batch").push(
+                pending,
+                computation,
+                limits,
+                counters,
+                location,
+            );
+        }
+        self.keys = None;
+        Ok(())
     }
 
     #[cfg(test)]
@@ -360,6 +420,7 @@ where
         prepared,
         rows,
         &support,
+        None,
         budget,
         Context::new(&mut computation, limits, counters, location),
     )
@@ -367,10 +428,40 @@ where
 
 /// This private read sees heads already pending at task entry. It does not see
 /// heads staged by any task until the coordinator commits the complete batch.
+#[cfg(test)]
 pub(crate) fn execute_borrowed<'plan, 'source>(
     prepared: &'plan WitnessPlan<'plan, 'source>,
     block: Range<usize>,
     append: &crate::formula_support::SupportAppend<'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<Batch<'plan, 'source>, FormulaFailure>
+where
+    'source: 'plan,
+{
+    execute_keyed(
+        prepared,
+        block,
+        Writer { append, keys: None },
+        limits,
+        budget,
+        counters,
+    )
+}
+
+/// A worker's borrowed writer and the publication's shared head keys.
+#[derive(Clone, Copy)]
+pub(crate) struct Writer<'a, 'source> {
+    pub(crate) append: &'a crate::formula_support::SupportAppend<'source>,
+    pub(crate) keys: Option<&'a HeadKeys>,
+}
+
+/// [`execute_borrowed`], interning each staged row's head key into `keys`.
+pub(crate) fn execute_keyed<'plan, 'source>(
+    prepared: &'plan WitnessPlan<'plan, 'source>,
+    block: Range<usize>,
+    Writer { append, keys }: Writer<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -390,6 +481,7 @@ where
         prepared,
         rows,
         &support,
+        keys,
         budget,
         Context::new(&mut computation, limits, counters, location),
     )
@@ -447,6 +539,7 @@ fn traverse<'plan, 'source, 'read>(
     prepared: &'plan WitnessPlan<'plan, 'source>,
     rows: &[usize],
     support: &Support<'read>,
+    keys: Option<&HeadKeys>,
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, 'read>>,
 ) -> Result<Batch<'plan, 'source>, FormulaFailure>
@@ -464,6 +557,10 @@ where
     } = context;
     let mut operation = |counters: &mut Counters| {
         let mut result = Batch::new(prepared, computation, limits, counters)?;
+        let mut keyer = keys.map(heads::Keyer::new);
+        if keyer.is_some() {
+            result.key_heads(computation, limits, counters)?;
+        }
         if rows.is_empty() {
             return Ok(result);
         }
@@ -500,7 +597,7 @@ where
             budget,
             Context::new(computation, limits, counters, location),
         )? {
-            result.stage(&row, computation, limits, counters)?;
+            result.stage_keyed(&row, keyer.as_mut(), computation, limits, counters)?;
         }
         Ok(result)
     };
@@ -513,11 +610,36 @@ where
 
 /// Walk each prefix tuple in `block` by seeding a private Join and
 /// enumerating its suffix. Used only when A′ chose `d > 1`.
+#[cfg(test)]
 pub(crate) fn execute_prefixed<'plan, 'source>(
     prepared: &'plan WitnessPlan<'plan, 'source>,
     prefixes: &Prefixes<'_>,
     block: Range<usize>,
     append: &crate::formula_support::SupportAppend<'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<Batch<'plan, 'source>, FormulaFailure>
+where
+    'source: 'plan,
+{
+    execute_prefixed_keyed(
+        prepared,
+        prefixes,
+        block,
+        Writer { append, keys: None },
+        limits,
+        budget,
+        counters,
+    )
+}
+
+/// [`execute_prefixed`], interning each staged row's head key into `keys`.
+pub(crate) fn execute_prefixed_keyed<'plan, 'source>(
+    prepared: &'plan WitnessPlan<'plan, 'source>,
+    prefixes: &Prefixes<'_>,
+    block: Range<usize>,
+    Writer { append, keys }: Writer<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -536,6 +658,7 @@ where
         prefixes,
         block,
         &support,
+        keys,
         budget,
         Context::new(&mut computation, limits, counters, location),
     )
@@ -546,6 +669,7 @@ fn traverse_prefixed<'plan, 'source, 'read>(
     prefixes: &Prefixes<'_>,
     block: Range<usize>,
     support: &Support<'read>,
+    keys: Option<&HeadKeys>,
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, 'read>>,
 ) -> Result<Batch<'plan, 'source>, FormulaFailure>
@@ -563,6 +687,10 @@ where
     } = context;
     let mut operation = |counters: &mut Counters| {
         let mut result = Batch::new(prepared, computation, limits, counters)?;
+        let mut keyer = keys.map(heads::Keyer::new);
+        if keyer.is_some() {
+            result.key_heads(computation, limits, counters)?;
+        }
         if block.is_empty() {
             return Ok(result);
         }
@@ -592,7 +720,7 @@ where
                 budget,
                 Context::new(computation, limits, counters, location),
             )? {
-                result.stage(&row, computation, limits, counters)?;
+                result.stage_keyed(&row, keyer.as_mut(), computation, limits, counters)?;
             }
         }
         Ok(result)
@@ -602,6 +730,25 @@ where
     } else {
         operation(counters)
     }
+}
+
+/// The rule a support publication belongs to, and its frozen head keys when
+/// its workers interned them.
+pub(super) struct Rule {
+    pub(super) index: usize,
+    pub(super) heads: Option<heads::Seen>,
+}
+
+/// Whether publication replays this plan's residual assignments rather than
+/// projecting rows; such heads are not keyed.
+pub(super) fn owner_replays(
+    prepared: &WitnessPlan<'_, '_>,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    replay_plan(prepared, computation, limits, counters, prepared.location())
+        .map(|(_, owner_replay)| owner_replay)
 }
 
 /// All tasks and receipts must settle before this call. Batches are supplied in
@@ -614,7 +761,10 @@ pub(super) fn publish<'plan, 'source: 'plan>(
     computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    rule_index: usize,
+    Rule {
+        index: rule_index,
+        mut heads,
+    }: Rule,
 ) -> Result<usize, FormulaFailure> {
     let location = prepared.location();
     let HeadIr::Normal(Some(pattern)) = prepared.base.rule.head else {
@@ -626,22 +776,24 @@ pub(super) fn publish<'plan, 'source: 'plan>(
         Context::new(&*computation, limits, counters, location),
     )?;
     let (skip, owner_replay) = replay_plan(prepared, computation, limits, counters, location)?;
-    let decided: Vec<usize> = if owner_replay {
-        support
-            .certainty()
-            .map(|certainty| certainty.decided(rule_index).collect())
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    let decided = decided(support, owner_replay, rule_index);
     let mut row_head = None;
     let mut assignment_head = None;
     let mut binding = None;
     let mut published = 0;
+    if owner_replay && heads.is_some() {
+        return Err(owner(location));
+    }
     for batch in batches {
         let batch = core::borrow::Borrow::borrow(&batch);
+        let mut keys = batch_keys(heads.as_ref(), batch, location)?;
         let mut rows = replay.batch(batch, limits, counters)?;
         while let Some(row) = rows.next(Context::new(&*computation, limits, counters, location))? {
+            let key = keys.as_mut().and_then(Iterator::next).copied();
+            if repeated(heads.as_mut(), key, limits, counters, location)? {
+                published = one_more(published, location)?;
+                continue;
+            }
             if owner_replay {
                 let values = if let Some(existing) = binding.as_mut() {
                     existing
@@ -679,8 +831,7 @@ pub(super) fn publish<'plan, 'source: 'plan>(
                         .expect("prepared assignment head")
                         .derive(values.assignment(), computation, limits, counters, location)?;
                     counters.work(limits, location)?;
-                    published = zetesis_algebra::Meter::check_count(published, 1, usize::MAX)
-                        .map_err(|_| owner(location))?;
+                    published = one_more(published, location)?;
                     Ok::<_, FormulaFailure>(())
                 })?;
                 continue;
@@ -705,13 +856,58 @@ pub(super) fn publish<'plan, 'source: 'plan>(
                 )?;
                 computation.support(&atom, limits, counters, location)?;
                 counters.work(limits, location)?;
-                published = zetesis_algebra::Meter::check_count(published, 1, usize::MAX)
-                    .map_err(|_| owner(location))?;
+                published = one_more(published, location)?;
                 Ok::<_, FormulaFailure>(())
             })?;
         }
     }
     Ok(published)
+}
+
+/// A keyed batch's provisional head coordinates, one per completion.
+fn batch_keys<'batch>(
+    heads: Option<&heads::Seen>,
+    batch: &'batch Batch<'_, '_>,
+    location: ProgramSite,
+) -> Result<Option<std::slice::Iter<'batch, zetesis_core::intern::Pending>>, FormulaFailure> {
+    match (heads, &batch.keys) {
+        (Some(_), Some(keys)) if keys.len() == batch.completions.len() => Ok(Some(keys.iter())),
+        (Some(_), Some(_)) => Err(owner(location)),
+        _ => Ok(None),
+    }
+}
+
+/// The rule's decided residual literals, when publication replays them.
+fn decided(support: &Support<'_>, owner_replay: bool, rule_index: usize) -> Vec<usize> {
+    if owner_replay {
+        support
+            .certainty()
+            .map(|certainty| certainty.decided(rule_index).collect())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+fn one_more(published: usize, location: ProgramSite) -> Result<usize, FormulaFailure> {
+    zetesis_algebra::Meter::check_count(published, 1, usize::MAX).map_err(|_| owner(location))
+}
+
+/// Whether a keyed row repeats a head an earlier row of this publication
+/// already admitted and retained: admission would find that atom, and
+/// retention is idempotent, so the row changes nothing.
+fn repeated(
+    heads: Option<&mut heads::Seen>,
+    key: Option<zetesis_core::intern::Pending>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    let (Some(seen), Some(key)) = (heads, key) else {
+        return Ok(false);
+    };
+    counters.work(limits, location)?;
+    Ok(!seen.first(key))
 }
 
 fn restore<'source>(

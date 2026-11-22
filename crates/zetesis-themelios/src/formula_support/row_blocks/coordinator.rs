@@ -566,13 +566,24 @@ pub(in crate::formula_support) fn derive<'source>(
             return Ok(false);
         }
     }
-    let mut completed = stage_witnesses_with(
+    // Heads replayed through residual assignments keep the ordinary path.
+    let mut keys = (!witness_rows::owner_replays(&plan, computation, limits, counters)?)
+        .then(witness_rows::HeadKeys::new);
+    let mut completed = stage_witnesses_keyed(
         executor,
         &plan,
         &prefixes,
+        keys.as_ref(),
         budget,
         Context::new(&*computation, limits, counters, location),
     )?;
+    let heads = match keys.as_mut() {
+        Some(keys) => keys.seen(
+            executor.threads(),
+            Context::new(&*computation, limits, counters, location),
+        )?,
+        None => None,
+    };
     let publication = completed.publication_limits(limits);
     witness_rows::publish(
         &plan,
@@ -581,7 +592,7 @@ pub(in crate::formula_support) fn derive<'source>(
         computation,
         &publication,
         counters,
-        index,
+        witness_rows::Rule { index, heads },
     )?;
     Ok(true)
 }
@@ -679,6 +690,19 @@ pub(crate) fn stage_witnesses_with<'plan, 'source: 'plan>(
     budget: &mut Budget,
     context: Context<'_, &Computation<'_, 'source>>,
 ) -> Result<Completed<witness_rows::Batch<'plan, 'source>>, FormulaFailure> {
+    stage_witnesses_keyed(executor, plan, prefixes, None, budget, context)
+}
+
+/// [`stage_witnesses_with`], with every worker interning its staged rows'
+/// head keys into the shared `keys` through `&self`.
+fn stage_witnesses_keyed<'plan, 'source: 'plan>(
+    executor: &Executor,
+    plan: &'plan witness_rows::WitnessPlan<'plan, 'source>,
+    prefixes: &super::prime::prefixes::Prefixes<'_>,
+    keys: Option<&witness_rows::HeadKeys>,
+    budget: &mut Budget,
+    context: Context<'_, &Computation<'_, 'source>>,
+) -> Result<Completed<witness_rows::Batch<'plan, 'source>>, FormulaFailure> {
     let Context {
         computation,
         work:
@@ -713,11 +737,12 @@ pub(crate) fn stage_witnesses_with<'plan, 'source: 'plan>(
         budget,
         Context::new(computation, limits, counters, location),
         |block, limits, budget, counters| {
+            let writer = witness_rows::Writer { append, keys };
             if prefixes.depth() <= 1 {
-                witness_rows::execute_borrowed(plan, block, append, limits, budget, counters)
+                witness_rows::execute_keyed(plan, block, writer, limits, budget, counters)
             } else {
-                witness_rows::execute_prefixed(
-                    plan, prefixes, block, append, limits, budget, counters,
+                witness_rows::execute_prefixed_keyed(
+                    plan, prefixes, block, writer, limits, budget, counters,
                 )
             }
         },

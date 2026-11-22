@@ -25,7 +25,7 @@ fn workers<'plan, 'source, 'read>(
     count: usize,
     limits: &FormulaLimits,
     expansion: ExpansionLimits,
-    pending_read: bool,
+    keys: Option<&HeadKeys>,
 ) -> Vec<Outcome<'plan, 'source>>
 where
     'source: 'plan + 'read,
@@ -42,8 +42,15 @@ where
                 let result =
                     accounting.controlled(None, Work::default(), plan.location(), |local| {
                         let block = plan.len() * block / count..plan.len() * (block + 1) / count;
-                        if pending_read {
-                            execute_borrowed(plan, block, append, limits, &mut budget, local)
+                        if keys.is_some() {
+                            execute_keyed(
+                                plan,
+                                block,
+                                Writer { append, keys },
+                                limits,
+                                &mut budget,
+                                local,
+                            )
                         } else {
                             execute(
                                 plan,
@@ -124,6 +131,7 @@ struct Report {
     published: usize,
     workers: Vec<std::thread::ThreadId>,
     positive_prefixes: usize,
+    work: u64,
 }
 
 /// Private transport observations are not charged as production execution.
@@ -133,12 +141,31 @@ fn run(source: &str, count: usize, pending: Option<Atom>) -> Report {
     run_with_reader(source, count, pending, false)
 }
 
-fn run_with_reader(
-    source: &str,
+/// Worker and publication allowances for `count` workers.
+fn grants(
+    limits: &FormulaLimits,
+    counters: &Counters,
+    support: &Support<'_>,
+    relations: &relations::Relations<'_>,
     count: usize,
-    pending: Option<Atom>,
-    pending_read: bool,
-) -> Report {
+) -> (FormulaLimits, FormulaLimits) {
+    let scratch = (limits.max_support_bytes - support.live_bytes()) / 2 / count;
+    let grant = FormulaLimits {
+        max_work: (limits.max_work - counters.accounting.work) / count as u64,
+        max_substitutions: (limits.max_substitutions - counters.accounting.substitutions)
+            / count as u64,
+        max_support_bytes: relations.current_bytes() + scratch,
+        ..*limits
+    };
+    let publication = FormulaLimits {
+        max_support_bytes: limits.max_support_bytes - count * scratch,
+        ..*limits
+    };
+    (grant, publication)
+}
+
+/// `keyed` workers read through the pending writer and intern head keys.
+fn run_with_reader(source: &str, count: usize, pending: Option<Atom>, keyed: bool) -> Report {
     let (program, mut catalog) = prepared_source(source);
     let rule = program.rules_without_facts().last().unwrap();
     let limits = FormulaLimits::default();
@@ -183,25 +210,15 @@ fn run_with_reader(
         )
         .unwrap()
     };
-    let scratch = (limits.max_support_bytes - support.live_bytes()) / 2 / count;
-    let grant = FormulaLimits {
-        max_work: (limits.max_work - counters.accounting.work) / count as u64,
-        max_substitutions: (limits.max_substitutions - counters.accounting.substitutions)
-            / count as u64,
-        max_support_bytes: relations.current_bytes() + scratch,
-        ..limits
-    };
-    let publication = FormulaLimits {
-        max_support_bytes: limits.max_support_bytes - count * scratch,
-        ..limits
-    };
+    let (grant, publication) = grants(&limits, &counters, &support, &relations, count);
+    let mut keys = keyed.then(HeadKeys::new);
     let outcomes = workers(
         &plan,
         &append,
         count,
         &grant,
         worker_expansion(count, budget.usage()),
-        pending_read,
+        keys.as_ref(),
     );
     settle(
         &outcomes,
@@ -218,6 +235,14 @@ fn run_with_reader(
     let (completions, suffix_rows, positive_prefixes) = retained_shape(&batches);
     let published = {
         let mut computation = Computation::new(&mut append, &support);
+        let heads = keys.as_mut().and_then(|keys| {
+            keys.seen(
+                None,
+                Context::new(&computation, &publication, &mut counters, rule.location),
+            )
+            .unwrap()
+        });
+        assert_eq!(heads.is_some(), keyed);
         publish(
             &plan,
             &batches,
@@ -225,7 +250,7 @@ fn run_with_reader(
             &mut computation,
             &publication,
             &mut counters,
-            0,
+            Rule { index: 0, heads },
         )
         .unwrap()
     };
@@ -238,6 +263,7 @@ fn run_with_reader(
         published,
         workers: ids,
         positive_prefixes,
+        work: counters.accounting.work,
     }
 }
 
@@ -498,7 +524,7 @@ fn staged_occurrences_are_authenticated_before_the_first_head_is_published() {
             &mut computation,
             &limits,
             &mut counters,
-            0,
+            unkeyed(),
         )
     };
     assert!(matches!(
@@ -761,9 +787,115 @@ fn run_serial_and_prefixed<'plan, 'source>(
             &mut computation,
             limits,
             counters,
-            0,
+            unkeyed(),
         )
         .unwrap()
     };
     (first, seeded, published)
+}
+
+/// The rule of a publication whose workers interned no head keys.
+fn unkeyed() -> Rule {
+    Rule {
+        index: 0,
+        heads: None,
+    }
+}
+
+#[test]
+fn keyed_heads_publish_each_head_once_in_serial_order_at_every_worker_count() {
+    // Three rows derive each `out(Y,7)`; the second and third are repeats.
+    let source = "p(1). p(2). p(3). q(2). q(1). out(Y,7):-p(X),q(Y).";
+    let reference = original_heads(source, None).0;
+    for count in [1, 2, 3, 7] {
+        let keyed = run_with_reader(source, count, None, true);
+        let plain = run(source, count, None);
+        assert_eq!(keyed.heads, reference, "workers={count}");
+        assert_eq!(keyed.heads, plain.heads, "workers={count}");
+        assert_eq!(keyed.completions, 6);
+        assert_eq!(keyed.published, keyed.completions);
+        // This harness moves block boundaries with the worker count, so
+        // receipts are compared at the fixed production geometry below.
+        assert!(keyed.work > 0);
+    }
+}
+
+struct Grounded {
+    atoms: Vec<Atom>,
+    work: u64,
+    head_work: Option<u64>,
+    tasks: usize,
+}
+
+/// Ground `source` completely, through the coordinator when `workers` is set.
+fn ground(source: &str, workers: Option<usize>) -> Grounded {
+    use crate::formula_support::{GroundingWork, SourceExecution, build_with_executor};
+    let prepared = testing::prepare(source);
+    let mut budget = prepared.budget;
+    let mut counters = Counters::resume(prepared.accounting, Work::worker(true));
+    let before = counters.accounting.work;
+    let action = || {
+        let execution = SourceExecution::new();
+        build_with_executor(
+            prepared.catalog,
+            &prepared.program,
+            None,
+            &mut budget,
+            GroundingWork::new(&prepared.limits, &mut counters, prepared.location),
+            execution.executor(),
+        )
+    };
+    let (result, tasks) = match workers {
+        Some(workers) => crate::formula_support::with_source_workers(
+            std::num::NonZeroUsize::new(workers).unwrap(),
+            action,
+        ),
+        None => (action(), 0),
+    };
+    let catalog = result.unwrap();
+    let head_work = counters.observed.snapshot().support_head_work;
+    let work = counters.accounting.work - before;
+    let snapshot = catalog
+        .snapshot(&prepared.limits, &mut counters, prepared.location)
+        .unwrap();
+    let mut atoms = Vec::new();
+    for (_, rows) in snapshot.relations.source_atoms() {
+        atoms.extend(
+            rows.iter()
+                .map(|atom| atom.to_atom(ValueLimits::default()).unwrap()),
+        );
+    }
+    Grounded {
+        atoms,
+        work,
+        head_work,
+        tasks,
+    }
+}
+
+#[test]
+fn keyed_support_publication_is_serial_exact_and_receipt_identical_across_workers() {
+    // Every `out(Y)` has 40 witnesses; `pair(X,Y)` has one each.
+    let source = "p(1..40). q(1..6). out(Y):-p(X),q(Y). pair(X,Y):-p(X),q(Y),X<4.";
+    let serial = ground(source, None);
+    let mut first: Option<Grounded> = None;
+    for workers in [1, 2, 3, 14] {
+        let actual = ground(source, Some(workers));
+        assert!(actual.tasks > 0, "workers={workers}");
+        // Atom discovery order, not only the set, matches the serial path.
+        assert_eq!(actual.atoms, serial.atoms, "workers={workers}");
+        let first = first.get_or_insert_with(|| ground(source, Some(1)));
+        assert_eq!(actual.work, first.work, "workers={workers}");
+        assert_eq!(actual.head_work, first.head_work, "workers={workers}");
+    }
+}
+
+#[test]
+fn keyed_heads_keep_pending_support_exact() {
+    let pending = || Some(atom("out", &[1, 4]));
+    let (expected, _) = original_heads(JOIN, pending());
+    for count in [1, 2, 7] {
+        let report = run_with_reader(JOIN, count, pending(), true);
+        assert_eq!(report.heads, expected, "workers={count}");
+    }
 }
