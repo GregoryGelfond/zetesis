@@ -13,6 +13,9 @@ enum Mode {
     Idle,
     Failure,
     Refusal,
+    Grant,
+    SeparatedGrants,
+    GrantsAroundFailure,
     Cancellation,
     Panic,
 }
@@ -71,6 +74,22 @@ impl Kernel {
                 counters.charge_work(u128::from(limits.max_work), limits, given_site())?;
                 unreachable!("requested grant plus one already-performed unit");
             }
+            // More than a third of the remainder, far less than all of it.
+            Mode::Grant if rows.start == 0 => {
+                let share = FormulaLimits::default().max_work / 2;
+                counters.charge_work(u128::from(share), limits, given_site())?;
+            }
+            Mode::SeparatedGrants | Mode::GrantsAroundFailure
+                if rows.start == 0 || rows.start == 2 =>
+            {
+                let share = FormulaLimits::default().max_work / 3 + 10;
+                counters.charge_work(u128::from(share), limits, given_site())?;
+            }
+            Mode::GrantsAroundFailure => {
+                return Err(FormulaFailure::UnadmittedTerm {
+                    location: given_site(),
+                });
+            }
             Mode::Cancellation => {
                 self.barrier.wait();
                 if rows.start == 0 {
@@ -82,7 +101,7 @@ impl Kernel {
                 self.barrier.wait();
                 assert_ne!(rows.start, 1, "coordinator worker fixture");
             }
-            Mode::Idle | Mode::Failure | Mode::Refusal => {}
+            Mode::Idle | Mode::Failure | Mode::Refusal | Mode::Grant | Mode::SeparatedGrants => {}
         }
         self.live.fetch_add(1, Ordering::Relaxed);
         Ok(Value {
@@ -225,11 +244,89 @@ fn the_first_logical_failure_retains_all_completed_receipts() {
 fn worker_refusal_retains_actual_work_without_spending_its_grant() {
     let baseline = capture(Mode::Idle, 3, 3);
     let report = capture(Mode::Refusal, 3, 3);
-    performed(&report, &baseline);
     assert!(!report.panicked);
+    // Every attempt's actual work settles; the block its grant refused is then
+    // repeated once on the source's own accounts, which report the ceiling.
+    assert_eq!(report.started, 0b111);
+    assert_eq!(report.work, baseline.work + 6 + 1);
+    assert_eq!(report.substitutions, baseline.substitutions + 3 + 1);
+    assert_eq!(report.expansion.term_work, 6 + 1);
+    assert_eq!(report.alive, 0);
+    assert!(report.rows.is_empty());
+    let ceiling = u128::from(FormulaLimits::default().max_work);
     assert!(matches!(report.failure, Some(FormulaFailure::Limit {
         resource: FormulaResource::Work, limit, observed, location: site,
-    }) if observed == limit + 1 && site == given_site()));
+    }) if limit == ceiling
+        && observed == u128::from(report.work) + ceiling
+        && site == given_site()));
+}
+
+#[test]
+fn a_grant_refusal_within_the_ceiling_completes_on_any_pool() {
+    for workers in [1, 3, 14] {
+        let single = capture(Mode::Idle, 1, 3);
+        let report = capture(Mode::Grant, workers, 3);
+        assert!(report.failure.is_none(), "{workers}: {:?}", report.failure);
+        assert_eq!(report.rows, single.rows);
+        assert_eq!(report.alive, 0);
+    }
+}
+
+#[test]
+fn successful_blocks_do_not_hide_later_partition_refusals() {
+    for workers in [1, 3, 14] {
+        let single = capture(Mode::Idle, 1, 3);
+        let report = capture(Mode::SeparatedGrants, workers, 3);
+        assert!(report.failure.is_none(), "{workers}: {:?}", report.failure);
+        assert!(!report.panicked);
+        assert_eq!(report.rows, single.rows);
+        assert_eq!(report.started, 0b111);
+        // Initial attempts spend 1 + 2 + 3; only refused blocks 0 and 2
+        // repeat, spending another 1 + 3 plus their admitted large charge.
+        let share = FormulaLimits::default().max_work / 3 + 10;
+        assert_eq!(report.work, single.work + 10 + 2 * share);
+        assert_eq!(report.substitutions, single.substitutions + 5);
+        assert_eq!(
+            report.expansion,
+            ExpansionUsage {
+                term_work: 10,
+                templates: 10,
+                values: 10,
+                scalar_bytes: 10,
+                origin_locations: 10,
+            }
+        );
+        assert_eq!(report.alive, 0);
+    }
+}
+
+#[test]
+fn logical_failure_stops_retries_of_later_partition_refusals() {
+    for workers in [1, 3, 14] {
+        let baseline = capture(Mode::Idle, 1, 3);
+        let report = capture(Mode::GrantsAroundFailure, workers, 3);
+        assert!(!report.panicked);
+        assert!(matches!(report.failure,
+            Some(FormulaFailure::UnadmittedTerm { location: site }) if site == given_site()));
+        assert!(report.rows.is_empty());
+        assert_eq!(report.started, 0b111);
+        // All three initial receipts settle. Only the first refusal retries;
+        // the original logical failure at block 1 prevents a retry of block 2.
+        let share = FormulaLimits::default().max_work / 3 + 10;
+        assert_eq!(report.work, baseline.work + 7 + share);
+        assert_eq!(report.substitutions, baseline.substitutions + 4);
+        assert_eq!(
+            report.expansion,
+            ExpansionUsage {
+                term_work: 7,
+                templates: 7,
+                values: 7,
+                scalar_bytes: 7,
+                origin_locations: 7,
+            }
+        );
+        assert_eq!(report.alive, 0);
+    }
 }
 
 #[test]

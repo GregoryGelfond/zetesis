@@ -33,6 +33,14 @@ known answer families; it does not replace the full hardware gate. Likewise,
 a proof build establishes its stated mathematical results, not correctness of
 the Rust implementation or shaders.
 
+Workspace development and test builds retain line tables for source backtraces,
+with debug assertions and overflow checks enabled. Full variable/type debug
+information is opt-in; it can make a Linux executable exceed the validation
+tools' 256 MiB input ceiling. Qualification uses the declared workspace profile
+without debug-profile environment overrides. Run deadline-sensitive checks at
+normal process priority; background scheduling can exhaust their elapsed-time
+allowances without exposing a program defect. Keep the allowances unchanged.
+
 ## Prepare verification tools
 
 The shell checks target macOS and Linux. Install Git and

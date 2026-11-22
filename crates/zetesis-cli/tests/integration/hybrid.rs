@@ -180,7 +180,7 @@ fn json_distinguishes_core_models_from_original_membership() {
         .semantic()
         .countermodel_statistics()
         .unwrap()
-        .region_filter
+        .constraint_refutation
         .unwrap();
     // The unit source constraint cuts b before a rejected region is formed.
     assert_eq!(regions.refuted, 0);

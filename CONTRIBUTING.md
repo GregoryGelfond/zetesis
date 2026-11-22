@@ -408,6 +408,15 @@ Matching Cargo artifact filenames do not attest which source tree produced them.
 
 ## Build storage
 
+Workspace development and test builds use `line-tables-only` debug information.
+This retains source locations in backtraces while keeping embedded debug data
+within the validation tools' unchanged 256 MiB executable ceiling on Linux.
+Debug assertions and overflow checks remain enabled. For local variable/type
+inspection, request full debug information explicitly with
+`CARGO_PROFILE_DEV_DEBUG=full` or `CARGO_PROFILE_TEST_DEBUG=full`; the resulting
+executable may exceed that ceiling and cannot qualify a bounded process check.
+Release and benchmark builds retain fat LTO with one codegen unit.
+
 Give each build directory an owner and a retirement point. Reuse an active
 checkout's target for compatible checks; keep distinct source trees and
 instrumentation populations separate. Do not create another full build tree

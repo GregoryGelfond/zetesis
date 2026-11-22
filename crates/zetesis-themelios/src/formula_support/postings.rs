@@ -200,10 +200,7 @@ impl Observation {
                 }
                 // A column without postings offers none to choose among.
                 if let super::relations::Postings::Indexed(column) = relation.postings(position) {
-                    postings.push(
-                        id.and_then(|id| column.get(&id))
-                            .map_or(&[][..], Vec::as_slice),
-                    );
+                    postings.push(id.map_or(&[][..], |id| column.get(id)));
                 }
             }
         }

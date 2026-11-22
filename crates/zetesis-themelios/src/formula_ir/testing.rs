@@ -49,6 +49,8 @@ pub(super) fn with_compiler<R>(
         .component_admission(&formula_limits, &mut counters, location)
         .unwrap();
     let domain = domain::Domain::new(&admission, &formula_limits, &counters, location).unwrap();
+    let imported =
+        super::constants::Constants::new(&admission, &formula_limits, &counters, location).unwrap();
     let mut compiler = Compiler {
         options: AdmissionOptions::default().into(),
         limits: &formula_limits,
@@ -56,6 +58,7 @@ pub(super) fn with_compiler<R>(
         source: admission,
         counters: &mut counters,
         domain,
+        imported,
         next_aggregate: 0,
         dependency_projection: false,
         location: ProgramSite::source(themelios_base::span::Location {

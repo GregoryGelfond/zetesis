@@ -33,8 +33,12 @@ impl TightPlan {
     /// Nonnegative thresholds preserve the body classification of their positive
     /// contributions; zero weights add no rank edge. Ordinal cuts use only
     /// qualifying witnesses, and endpoint-bound constants add no rank edge.
-    /// General head disjunctions,
-    /// unnegated body implications and positive cycles fall back.
+    /// A head disjunction of 2..=16 distinct atoms is shifted: each atom
+    /// gets a producer whose support also needs every other head of its
+    /// root false (`TightProducerKind::Shifted`). A tight program is
+    /// head-cycle-free, so shifting preserves its answer sets and supported
+    /// models of the shift are exactly those answer sets. Other head
+    /// disjunctions, unnegated body implications and positive cycles fall back.
     /// Every root is inspected, including constraints and candidate guards.
     ///
     /// # Errors
@@ -206,14 +210,17 @@ fn classify_operands(
     Ok(class)
 }
 
-fn producer(
+/// Extract the producers of one root, in head order, into `push`. A head
+/// disjunction of distinct atoms yields one shifted producer per atom.
+fn producers(
     theory: &Theory,
     root: usize,
     classes: &[Body],
-) -> Result<Option<TightProducer>, TightError> {
+    mut push: impl FnMut(TightProducer) -> Result<(), TightError>,
+) -> Result<(), TightError> {
     let node = theory.view().node(root).map_err(|_| Stop::InvalidProgram)?;
     let (body, head) = match node {
-        NodeView::False => return Ok(None),
+        NodeView::False => return Ok(()),
         NodeView::Implies(_, b)
             if theory
                 .view()
@@ -221,30 +228,40 @@ fn producer(
                 .map_err(|_| Stop::InvalidProgram)?
                 .is_false() =>
         {
-            return Ok(None);
+            return Ok(());
         }
         NodeView::Implies(a, b) => (Some(a), b),
         _ => (None, root),
-    };
-    let node = theory.view().node(head).map_err(|_| Stop::InvalidProgram)?;
-    let (head, kind) = match node {
-        NodeView::Atom(atom) => (atom, TightProducerKind::Normal),
-        _ => (
-            crate::atomic_choice::atom(theory, head).ok_or(TightError::UnsupportedRoot { root })?,
-            TightProducerKind::Choice,
-        ),
     };
     if let Some(body) = body
         && classes[body] == Body::Opaque
     {
         return Err(TightError::UnsupportedBody { root, body });
     }
-    Ok(Some(TightProducer {
+    let node = theory.view().node(head).map_err(|_| Stop::InvalidProgram)?;
+    let produced = |head, kind| TightProducer {
         head,
         body,
         root,
         kind,
-    }))
+    };
+    if let NodeView::Atom(atom) = node {
+        return push(produced(atom, TightProducerKind::Normal));
+    }
+    if let Some(atom) = crate::atomic_choice::atom(theory, head) {
+        return push(produced(atom, TightProducerKind::Choice));
+    }
+    let (leaves, count) = super::head_disjunction(theory, head)
+        .filter(|&(leaves, count)| {
+            count >= 2
+                && (0..count)
+                    .all(|left| (left + 1..count).all(|right| leaves[left].1 != leaves[right].1))
+        })
+        .ok_or(TightError::UnsupportedRoot { root })?;
+    for &(_, atom) in &leaves[..count] {
+        push(produced(atom, TightProducerKind::Shifted { heads: head }))?;
+    }
+    Ok(())
 }
 
 fn extract(
@@ -256,26 +273,28 @@ fn extract(
     let mut count = 0usize;
     for &root in theory.roots() {
         Tick::tick(meter)?;
-        if producer(theory, root, classes)?.is_some() {
+        producers(theory, root, classes, |_| {
             if count == limits.max_producers {
                 return Err(TightError::Limit(TightResource::Producers));
             }
             count += 1;
-        }
+            Ok(())
+        })?;
     }
     bytes(
         theory.nodes().len() as u128 * size_of::<Body>() as u128
             + count as u128 * size_of::<TightProducer>() as u128,
         limits.max_bytes,
     )?;
-    let mut producers = reserve(count)?;
+    let mut extracted = reserve(count)?;
     for &root in theory.roots() {
         Tick::tick(meter)?;
-        if let Some(producer) = producer(theory, root, classes)? {
-            producers.push(producer);
-        }
+        producers(theory, root, classes, |producer| {
+            extracted.push(producer);
+            Ok(())
+        })?;
     }
-    Ok(producers)
+    Ok(extracted)
 }
 
 fn each_dependency(
@@ -386,11 +405,23 @@ fn build(
     } else {
         derive_ranks(theory, &classes, &producers, vertices, dependencies, meter)?
     };
+    let mut shifted_reads = 0u128;
+    for producer in &producers {
+        if let TightProducerKind::Shifted { heads } = producer.kind {
+            Tick::tick(meter)?;
+            let (_, count) =
+                super::head_disjunction(theory, heads).ok_or(TightError::UnsupportedRoot {
+                    root: producer.root,
+                })?;
+            shifted_reads += count as u128;
+        }
+    }
     Ok(TightPlan {
         theory: theory.clone(),
         producers,
         ranks,
         readers: None,
+        shifted_reads,
         statistics: TightPlanStatistics {
             work: meter.charged(),
             dependencies,

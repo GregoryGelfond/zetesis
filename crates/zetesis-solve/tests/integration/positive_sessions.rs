@@ -334,7 +334,8 @@ fn optional_certificate_byte_refusal_keeps_general_solving() {
 
 #[test]
 fn disjunctive_source_declines_both_atomic_head_plans() {
-    let owner = formula("a|b.");
+    // Not head-cycle-free: a and b support each other and share a head.
+    let owner = formula("a|b. a :- b. b :- a.");
     assert_eq!(owner.analysis_basis(), AnalysisBasis::NormalizedProgram);
     assert!(!matches!(
         owner.source_analysis().classes().horn(),
@@ -352,16 +353,18 @@ fn disjunctive_source_declines_both_atomic_head_plans() {
             _ => false,
         })
         .unwrap();
-    let expected = BTreeSet::from([(model(&["a"]), None), (model(&["b"]), None)]);
+    let expected = BTreeSet::from([(model(&["a", "b"]), None)]);
     for workers in [1, 4] {
         let (actual, observations) = collect(&owner, config(workers, Oracle::Auto));
         assert_eq!(observations.membership, [Membership::General]);
         let statistics = actual.outcome().countermodel_statistics().unwrap();
         let certified = statistics.certified.unwrap();
         assert!(certified.plan.is_none());
+        // The tight certificate shifts the disjunction, then refuses the
+        // positive cycle through its heads.
         assert_eq!(
             certified.tight_refusal,
-            Some(TightError::UnsupportedRoot { root })
+            Some(TightError::PositiveCycle { atom: 0 })
         );
         assert_eq!(
             certified.positive_refusal,
@@ -371,6 +374,41 @@ fn disjunctive_source_declines_both_atomic_head_plans() {
         let (reference, _) = collect(&owner, config(workers, Oracle::Countermodel));
         assert_eq!(family(&actual), expected);
         assert_eq!(family(&reference), expected);
+    }
+}
+
+#[test]
+fn tight_disjunctive_source_takes_shifted_tight_support() {
+    // Tight, hence head-cycle-free: membership is shifted support.
+    let owner = formula("a|b.");
+    let expected = BTreeSet::from([(model(&["a"]), None), (model(&["b"]), None)]);
+    for workers in [1, 4] {
+        let (actual, observations) = collect(&owner, config(workers, Oracle::Auto));
+        assert_eq!(observations.membership, [Membership::Tight]);
+        let (reference, _) = collect(&owner, config(workers, Oracle::Countermodel));
+        assert_eq!(family(&actual), expected);
+        assert_eq!(family(&reference), expected);
+    }
+}
+
+#[test]
+fn unconditional_conditional_head_takes_shifted_tight_support() {
+    // `q(X,Y) : Y=1..2 :- X=1.` is the disjunction q(1,1) | q(1,2): its
+    // condition holds unconditionally, so its disjuncts are atoms and the
+    // tight head-cycle-free program is shifted like the written disjunction.
+    let written = formula("q(1,1) | q(1,2).");
+    let (expected, _) = collect(&written, config(1, Oracle::Countermodel));
+    let expected = family(&expected);
+    assert_eq!(expected.len(), 2);
+    for source in ["q(X,Y) : Y=1..2 :- X=1.", "q(1,1) | q(1,2)."] {
+        let owner = formula(source);
+        for workers in [1, 4] {
+            let (actual, observations) = collect(&owner, config(workers, Oracle::Auto));
+            assert_eq!(observations.membership, [Membership::Tight], "{source}");
+            let (reference, _) = collect(&owner, config(workers, Oracle::Countermodel));
+            assert_eq!(family(&actual), expected, "{source}");
+            assert_eq!(family(&reference), expected, "{source}");
+        }
     }
 }
 

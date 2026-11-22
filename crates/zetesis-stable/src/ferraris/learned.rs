@@ -37,6 +37,13 @@ impl LearnedStore {
     pub(crate) fn lock(&self) -> MutexGuard<'_, LearningStore> {
         self.rows.lock().unwrap_or_else(PoisonError::into_inner)
     }
+
+    /// Drop bound-class rows so a weaker later bound, such as the inclusive
+    /// tie pass, does not inherit cores learned under a stricter bound.
+    /// Theory-class rows stay and still seed the later stream.
+    pub fn drop_bound_class(&self) {
+        self.lock().drop_bound_class();
+    }
 }
 
 /// A walk's sharing state beside its scratch's tier: whether the tier has

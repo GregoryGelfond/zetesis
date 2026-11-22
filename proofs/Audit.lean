@@ -634,6 +634,9 @@ import Zetesis
 #print axioms Zetesis.ConstructorPatterns.binding_sound
 #print axioms Zetesis.ConstructorPatterns.acceptance_iff_consistent
 #print axioms Zetesis.ConstructorPatterns.failure_preserves_binding
+#print axioms Zetesis.ContentOrderInterning.id_injective_of_law
+#print axioms Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare
+#print axioms Zetesis.ContentOrderInterning.freeze_establishes_law
 #print axioms Zetesis.sub_refl
 #print axioms Zetesis.sub_trans
 #print axioms Zetesis.atoms_ext
@@ -1400,6 +1403,11 @@ import Zetesis
 #print axioms Zetesis.OrderedHeadActivity.formula_frozen
 #print axioms Zetesis.OrderedHeadActivity.measure_predicate
 #print axioms Zetesis.OrderedHeadActivity.bound_frozen
+#print axioms Zetesis.OrderedNormalization.following_members
+#print axioms Zetesis.OrderedNormalization.coalesce_members
+#print axioms Zetesis.OrderedNormalization.adjacent_pairwise
+#print axioms Zetesis.OrderedNormalization.following_strict
+#print axioms Zetesis.OrderedNormalization.ordered_normalization_exact
 #print axioms Zetesis.OrderedProbes.boundary_partitions
 #print axioms Zetesis.OrderedProbes.complete_match_retained
 #print axioms Zetesis.OrdinalExtrema.empty_measures
@@ -1817,6 +1825,10 @@ import Zetesis
 #print axioms Zetesis.SharedRowCharges.total_owner_le
 #print axioms Zetesis.SharedRowCharges.common_terms_preserved
 #print axioms Zetesis.SharedRowCharges.accepted_prefix_stays_within
+#print axioms Zetesis.ShiftedSupport.sole_head_forced
+#print axioms Zetesis.ShiftedSupport.producer_forces_head
+#print axioms Zetesis.ShiftedSupport.ranked_support_contained
+#print axioms Zetesis.ShiftedSupport.ranked_support_stable
 #print axioms Zetesis.SignedHeadElements.operand_original
 #print axioms Zetesis.SignedHeadElements.operand_frozen
 #print axioms Zetesis.SignedHeadElements.double_negative_differs_from_positive

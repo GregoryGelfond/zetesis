@@ -3170,6 +3170,21 @@
     "line": 183
   },
   {
+    "name": "Zetesis.ContentOrderInterning.id_injective_of_law",
+    "file": "Zetesis/ContentOrderInterning.lean",
+    "line": 28
+  },
+  {
+    "name": "Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare",
+    "file": "Zetesis/ContentOrderInterning.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.ContentOrderInterning.freeze_establishes_law",
+    "file": "Zetesis/ContentOrderInterning.lean",
+    "line": 65
+  },
+  {
     "name": "Zetesis.sub_refl",
     "file": "Zetesis/Core.lean",
     "line": 22
@@ -7000,6 +7015,31 @@
     "line": 163
   },
   {
+    "name": "Zetesis.OrderedNormalization.following_members",
+    "file": "Zetesis/OrderedNormalization.lean",
+    "line": 48
+  },
+  {
+    "name": "Zetesis.OrderedNormalization.coalesce_members",
+    "file": "Zetesis/OrderedNormalization.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.OrderedNormalization.adjacent_pairwise",
+    "file": "Zetesis/OrderedNormalization.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.OrderedNormalization.following_strict",
+    "file": "Zetesis/OrderedNormalization.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.OrderedNormalization.ordered_normalization_exact",
+    "file": "Zetesis/OrderedNormalization.lean",
+    "line": 127
+  },
+  {
     "name": "Zetesis.OrderedProbes.boundary_partitions",
     "file": "Zetesis/OrderedProbes.lean",
     "line": 43
@@ -9083,6 +9123,26 @@
     "name": "Zetesis.SharedRowCharges.accepted_prefix_stays_within",
     "file": "Zetesis/SharedRowCharges.lean",
     "line": 80
+  },
+  {
+    "name": "Zetesis.ShiftedSupport.sole_head_forced",
+    "file": "Zetesis/ShiftedSupport.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.ShiftedSupport.producer_forces_head",
+    "file": "Zetesis/ShiftedSupport.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.ShiftedSupport.ranked_support_contained",
+    "file": "Zetesis/ShiftedSupport.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.ShiftedSupport.ranked_support_stable",
+    "file": "Zetesis/ShiftedSupport.lean",
+    "line": 115
   },
   {
     "name": "Zetesis.SignedHeadElements.operand_original",

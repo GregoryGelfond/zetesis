@@ -10,7 +10,7 @@ use zetesis_test_support::programs::unary;
 
 fn admitted(source: &str) -> super::AcyclicSource {
     let SourceAdmission::Admitted(owner) = prepared(source).try_source().unwrap() else {
-        panic!("expected complete signed acyclic normal source: {source}");
+        panic!("expected complete signed stratified normal source: {source}");
     };
     owner
 }
@@ -95,6 +95,74 @@ fn complete_source_scan_matches_original_ferraris_membership() {
 }
 
 #[test]
+fn definite_recursion_matches_original_ferraris_membership() {
+    // Definite recursion: no default negation in the component or anything
+    // it reads. Negation may read the completed recursive relation from
+    // above, and constraints may reject it.
+    for source in [
+        "a :- a.",
+        "a :- b. b :- a. c.",
+        "c. a :- c. a :- b. b :- a.",
+        "e(1,2). e(2,1). r(X,Y) :- e(X,Y). r(X,Z) :- e(X,Y), r(Y,Z).",
+        "s(1). s(2). s(3). e(1,2). e(2,1). r(X) :- e(1,X). r(Y) :- r(X), e(X,Y). \
+         u(X) :- s(X), not r(X).",
+        "e(1,2). e(2,3). r(1). r(Y) :- r(X), e(X,Y), Y > X. :- r(3).",
+        "e(1,2). e(2,3). r(1). r(Y) :- r(X), e(X,Y), Y > X + 1.",
+    ] {
+        let owner = admitted(source);
+        let actual: BTreeSet<_> = interpretation(&owner).into_iter().collect();
+        assert_eq!(actual, independent(source), "{source}");
+    }
+}
+
+#[test]
+fn stratified_recursion_matches_original_ferraris_membership() {
+    // Recursion through certain components that negate completed lower
+    // strata, including nested strata and constraints.
+    for source in [
+        "p :- q. q :- p, not r. r :- not s.",
+        "r :- not s. p :- r. p :- p.",
+        "e(1,2). e(2,3). b(3). r(1). r(Y) :- r(X), e(X,Y), not b(Y).",
+        "e(1,2). e(2,3). b(2). r(1). r(Y) :- r(X), e(X,Y). u(X) :- r(X), not b(X).",
+        "e(1,2). e(2,3). b(2). u(1). u(3). w(Y) :- u(Y), not b(Y). \
+         w(Y) :- w(X), e(X,Y), not b(Y). :- w(3).",
+        "e(1,2). e(2,1). b(2). n(1). n(2). \
+         r(X) :- n(X), not b(X). r(Y) :- r(X), e(X,Y), not b(Y).",
+    ] {
+        let owner = admitted(source);
+        let actual: BTreeSet<_> = interpretation(&owner).into_iter().collect();
+        assert_eq!(actual, independent(source), "{source}");
+    }
+}
+
+#[test]
+fn certain_assignments_match_original_ferraris_membership() {
+    // Assignments whose elements read completed lower certain relations.
+    for source in [
+        "e(1,2). e(1,3). n(1). n(2). c(X,N) :- n(X), N = #count{ Y : e(X,Y) }.",
+        "e(1,2). e(2,3). r(X,Y) :- e(X,Y). r(X,Z) :- r(X,Y), e(Y,Z). \
+         c(N) :- N = #count{ X,Y : r(X,Y) }.",
+        "w(1,4). w(2,5). s(N) :- N = #sum{ V,K : w(K,V) }. m(N) :- N = #max{ V : w(_,V) }.",
+        "e(1,2). e(1,3). n(1). n(2). c(X,N) :- n(X), N = #count{ Y : e(X,Y) }. :- c(1,2).",
+    ] {
+        let owner = admitted(source);
+        let actual: BTreeSet<_> = interpretation(&owner).into_iter().collect();
+        assert_eq!(actual, independent(source), "{source}");
+    }
+}
+
+#[test]
+fn recursion_through_negation_declines_the_class() {
+    for source in ["p :- not q. q :- not p.", "p :- q. q :- p, not p."] {
+        let SourceAdmission::NotApplicable(preparation) = prepared(source).try_source().unwrap()
+        else {
+            panic!("recursion through negation admitted: {source}");
+        };
+        assert!(preparation.ground().is_ok(), "{source}");
+    }
+}
+
+#[test]
 fn a_row_a_decided_negation_blocks_names_no_head() {
     // `q` is certain and complete when the rule of `r` is read, so the row
     // `X = 1` is passed over as support completion passed over it: `r(1)`
@@ -125,9 +193,8 @@ fn alternative_producers_publish_only_after_their_dependencies() {
 }
 
 #[test]
-fn class_declines_recursion_choices_nested_bodies_and_observations() {
+fn class_declines_negative_cycles_choices_nested_bodies_and_observations() {
     for source in [
-        "a :- a.",
         "a :- not b. b :- not a.",
         "{a}.",
         "a | b.",

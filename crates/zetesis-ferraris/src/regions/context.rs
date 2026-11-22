@@ -24,6 +24,7 @@ pub(super) trait ReadingClass: Class {
     fn generator_order(data: Self::Data<'_>) -> Option<&GeneratorOrder>;
     fn learning(data: Self::Data<'_>) -> Option<&LearningOwner>;
     fn borrow_learning(state: &mut LearningScratch) -> Self::Learning<'_>;
+    fn original_subject(data: Self::Data<'_>) -> Option<OriginalSubject<'_>>;
 }
 
 /// The actual per-call capability, not an owner or a second learned-row store.
@@ -81,6 +82,9 @@ impl<'a, C: ReadingClass> Context<'a, C> {
     pub(super) fn learning(self) -> Option<&'a LearningOwner> {
         C::learning(self.data)
     }
+    pub(super) fn original_subject(self) -> Option<OriginalSubject<'a>> {
+        C::original_subject(self.data)
+    }
 }
 
 impl<'a> From<OriginalSubject<'a>> for Context<'a, AnswerSetsSought> {
@@ -120,6 +124,9 @@ impl ReadingClass for AnswerSetsSought {
     fn borrow_learning(state: &mut LearningScratch) -> Self::Learning<'_> {
         state
     }
+    fn original_subject(data: Self::Data<'_>) -> Option<OriginalSubject<'_>> {
+        Some(data)
+    }
 }
 
 impl ReadingClass for Countermodels {
@@ -145,4 +152,7 @@ impl ReadingClass for Countermodels {
         None
     }
     fn borrow_learning(_: &mut LearningScratch) -> Self::Learning<'_> {}
+    fn original_subject(_: Self::Data<'_>) -> Option<OriginalSubject<'_>> {
+        None
+    }
 }

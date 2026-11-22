@@ -3,7 +3,6 @@
 //! The scope is thread-local and restores its predecessor on return or unwind.
 //! Unit reference calls do not spawn work; newly spawned threads retain the
 //! ordinary production route rather than inheriting a parent's test control.
-
 use std::cell::RefCell;
 use zetesis_algebra::Cancellation;
 

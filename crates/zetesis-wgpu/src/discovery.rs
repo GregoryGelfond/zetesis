@@ -74,10 +74,13 @@ impl GpuDiscovery {
     /// Never fails: a thread that cannot be started leaves nothing prefetched,
     /// and consumers then enumerate as independent constructors do.
     pub fn spawn(selection: GpuSelection) -> Self {
-        let state = std::thread::Builder::new()
-            .name("zetesis-gpu-discovery".into())
-            .spawn(move || pollster::block_on(selection::enumerate_requested(selection)))
-            .map_or(State::Spent, State::Running);
+        // Counted like every solver thread. It overlaps grounding, so a GPU
+        // run may exceed `--threads` by this thread; the device driver's own
+        // threads are outside the solver's count.
+        let state = zetesis_algebra::threads::spawn("zetesis-gpu-discovery", move || {
+            pollster::block_on(selection::enumerate_requested(selection))
+        })
+        .map_or(State::Spent, State::Running);
         Self::with_state(selection, state)
     }
 

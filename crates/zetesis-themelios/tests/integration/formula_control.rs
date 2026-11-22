@@ -82,7 +82,7 @@ fn excluded_declarations_are_not_evaluated() {
             .ground()
             .unwrap();
         assert!(std::ptr::eq(input.original_program(), program.as_ref()));
-        assert!(!input.projection().is_explicit());
+        assert!(!input.projective_domain().is_explicit());
         assert_eq!(
             exhaustive(&input),
             ["p", "q"]
@@ -102,7 +102,7 @@ fn excluded_declarations_do_not_block_hybrid() {
         .unwrap()
         .ground_hybrid()
         .unwrap();
-    assert!(!input.projection().is_explicit());
+    assert!(!input.projective_domain().is_explicit());
 }
 
 #[test]

@@ -3171,6 +3171,21 @@
       "name": "Zetesis.ConstructorPatterns.failure_preserves_binding"
     },
     {
+      "file": "Zetesis/ContentOrderInterning.lean",
+      "line": 28,
+      "name": "Zetesis.ContentOrderInterning.id_injective_of_law"
+    },
+    {
+      "file": "Zetesis/ContentOrderInterning.lean",
+      "line": 47,
+      "name": "Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare"
+    },
+    {
+      "file": "Zetesis/ContentOrderInterning.lean",
+      "line": 65,
+      "name": "Zetesis.ContentOrderInterning.freeze_establishes_law"
+    },
+    {
       "file": "Zetesis/Core.lean",
       "line": 22,
       "name": "Zetesis.sub_refl"
@@ -7001,6 +7016,31 @@
       "name": "Zetesis.OrderedHeadActivity.bound_frozen"
     },
     {
+      "file": "Zetesis/OrderedNormalization.lean",
+      "line": 48,
+      "name": "Zetesis.OrderedNormalization.following_members"
+    },
+    {
+      "file": "Zetesis/OrderedNormalization.lean",
+      "line": 63,
+      "name": "Zetesis.OrderedNormalization.coalesce_members"
+    },
+    {
+      "file": "Zetesis/OrderedNormalization.lean",
+      "line": 70,
+      "name": "Zetesis.OrderedNormalization.adjacent_pairwise"
+    },
+    {
+      "file": "Zetesis/OrderedNormalization.lean",
+      "line": 89,
+      "name": "Zetesis.OrderedNormalization.following_strict"
+    },
+    {
+      "file": "Zetesis/OrderedNormalization.lean",
+      "line": 127,
+      "name": "Zetesis.OrderedNormalization.ordered_normalization_exact"
+    },
+    {
       "file": "Zetesis/OrderedProbes.lean",
       "line": 43,
       "name": "Zetesis.OrderedProbes.boundary_partitions"
@@ -9084,6 +9124,26 @@
       "file": "Zetesis/SharedRowCharges.lean",
       "line": 80,
       "name": "Zetesis.SharedRowCharges.accepted_prefix_stays_within"
+    },
+    {
+      "file": "Zetesis/ShiftedSupport.lean",
+      "line": 67,
+      "name": "Zetesis.ShiftedSupport.sole_head_forced"
+    },
+    {
+      "file": "Zetesis/ShiftedSupport.lean",
+      "line": 76,
+      "name": "Zetesis.ShiftedSupport.producer_forces_head"
+    },
+    {
+      "file": "Zetesis/ShiftedSupport.lean",
+      "line": 92,
+      "name": "Zetesis.ShiftedSupport.ranked_support_contained"
+    },
+    {
+      "file": "Zetesis/ShiftedSupport.lean",
+      "line": 115,
+      "name": "Zetesis.ShiftedSupport.ranked_support_stable"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
@@ -11801,6 +11861,7 @@
     "Zetesis/ConsequentAlternatives.lean",
     "Zetesis/ConstrainedPositive.lean",
     "Zetesis/ConstructorPatterns.lean",
+    "Zetesis/ContentOrderInterning.lean",
     "Zetesis/Core.lean",
     "Zetesis/CountEligibility.lean",
     "Zetesis/CountHeadActivity.lean",
@@ -11887,6 +11948,7 @@
     "Zetesis/OptionalIndex.lean",
     "Zetesis/OrderedBounds.lean",
     "Zetesis/OrderedHeadActivity.lean",
+    "Zetesis/OrderedNormalization.lean",
     "Zetesis/OrderedProbes.lean",
     "Zetesis/OrdinalExtrema.lean",
     "Zetesis/OriginalRowCharges.lean",
@@ -11931,6 +11993,7 @@
     "Zetesis/SelectedProducerComparisons.lean",
     "Zetesis/Semantics.lean",
     "Zetesis/SharedRowCharges.lean",
+    "Zetesis/ShiftedSupport.lean",
     "Zetesis/SignedHeadElements.lean",
     "Zetesis/SignedObjectiveBounds.lean",
     "Zetesis/SignedOriginal.lean",
@@ -11981,8 +12044,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "24e4a1e3acde2b502c2245ecb67b7a7c2106995c337f442b8e1159ecc9859c80",
-    "Zetesis.lean": "1f6e7bfc7da6d0569a28dfacaaedc04507b040f7d7b6fa251a0623d77d4f2e22",
+    "Audit.lean": "7c78d26318a77476e30ed52c3290cb5819e2de4609410357c2553a5d791bfba5",
+    "Zetesis.lean": "61c7fcbb44e3a285ff51e36463d8090338ba8939ab5423d9f44cd2b9e62aa5e9",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -12032,6 +12095,7 @@
     "Zetesis/ConsequentAlternatives.lean": "f056a33623c406de8644d47c55912ac300f855a9d9ff0afef23bdbfaff2cc306",
     "Zetesis/ConstrainedPositive.lean": "d129f55437d51a995981c55ac67ee8dc7c01495ffd907f864cf4fb707b433167",
     "Zetesis/ConstructorPatterns.lean": "9760a578639689c713f59d3fc8492e8c5aca2cdfb0c31598eca318e38bbfeeb2",
+    "Zetesis/ContentOrderInterning.lean": "7ddfdf7652280692a66dff7db4fe619e20740b61ee13fd976017e51bfe314d9c",
     "Zetesis/Core.lean": "77182e54d0d8ea63987ddc057a2928dfe06bc675c1fe07af469cfe1082931c41",
     "Zetesis/CountEligibility.lean": "d9457fe5dd6ec6a259e8bbe990aa1ae6de25c99ccf9727a5df575c02df83785b",
     "Zetesis/CountHeadActivity.lean": "245128dd761e2643d9b2dca4af1c36220923f6f5ae0f24d0bd5dc9a2accae4a7",
@@ -12118,6 +12182,7 @@
     "Zetesis/OptionalIndex.lean": "a34226123cff7834e8171673bf9df269594269a6403ffe7f26e6520361ddc421",
     "Zetesis/OrderedBounds.lean": "b29093f47a0993ad392826a3b0c70f137f3a88c22857e9d874be98722420d5d7",
     "Zetesis/OrderedHeadActivity.lean": "4111dd810459b73dc480b93fa7c46657f07d4d85624c6312e4df8964cc70e183",
+    "Zetesis/OrderedNormalization.lean": "0dc29333a6c9e5a510046667f894a2e67a1381e92516f2f5cc39c16fc1f45538",
     "Zetesis/OrderedProbes.lean": "2e598da7cefa9dfb21feb6fe4169f631623c804003f2344b7c52e77eaa50d019",
     "Zetesis/OrdinalExtrema.lean": "d39c0f1eef2981c163d277fd5779f02313510984e39925a7bbbaa48b0c5fcbde",
     "Zetesis/OriginalRowCharges.lean": "412a32a6b62f373dc5844b8cc98537fa2b4c159e98426f79282beabb1eb1b953",
@@ -12162,6 +12227,7 @@
     "Zetesis/SelectedProducerComparisons.lean": "c0b640cc6331bb35147950e8a98618b9ca06189ee9483b7e520875f71e36796e",
     "Zetesis/Semantics.lean": "fe4d59f5da0332897efa90e7b6dd9e5d1b1a4003017f1630799e5e6029f35dc8",
     "Zetesis/SharedRowCharges.lean": "e7112605798f299954c0048415980a13c29f0ec25130438634ab49fc4bd68538",
+    "Zetesis/ShiftedSupport.lean": "d38d9ee6a701c68689b6c6884256d3a5e5f6adffe42033e2c766d03460ba6a96",
     "Zetesis/SignedHeadElements.lean": "98653a0d01452caa8383ad0549be3e720c4ca027944326f3c566474abee26275",
     "Zetesis/SignedObjectiveBounds.lean": "9a196ef4647a4999a96373134d80c92ecd940d4c3ee7dc7c173545a2a4816045",
     "Zetesis/SignedOriginal.lean": "f78c51fb8a6ca332ede4a1ea4243092011d948f9cf2d21e85f025141ab5aad64",

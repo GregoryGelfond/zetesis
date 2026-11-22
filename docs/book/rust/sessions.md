@@ -23,7 +23,8 @@ already prepared representation and does not retry admission itself.
 
 `prepare_formula_execution` and `prepare_bundle_execution` apply the same
 execution policy as the CLI and native API. Under automatic CPU execution, a
-complete acyclic normal source can be evaluated during preparation, without
+complete stratified normal source (recursive only through certain
+components, never through negation or aggregates) can be evaluated during preparation, without
 constructing formulas. The returned `PreparedExecution` owns either that
 `AcyclicSource` or the selected `GroundedFormula`; `input()` borrows it for a
 session. Explicit grounding and oracle requests retain their ordinary paths.
@@ -407,7 +408,7 @@ Their invariant is `core_answers = accepted + rejected + pending`. Core answers
 still buffered by the inner enumerator are excluded. Search statistics and
 device batch receipts describe the retained core. A device-checked core
 answer is counted as an original answer only after complete source acceptance.
-The `region_filter` counters record attempted preparations, region checks,
+The `region_filter` counters (`ConstraintRefutationStatistics`) record attempted preparations, region checks,
 refutations and failures. Those are not core-answer counts. Core membership
 statistics describe surviving proposals; `verified_models()` counts original-program
 answers. Cancellation or a deadline observed during source checking uses
@@ -544,7 +545,7 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-world-v
 
 ### Projected enumeration
 
-`SessionBuilder::projected(ProjectionLimits::default())` requests one full
+`SessionBuilder::projected(ProjectiveLimits::default())` requests one full
 `AnswerSet` per key in the prepared source's explicit `#project` domain. The
 key is the answer's restriction to that fixed atom domain. Hidden atoms remain
 in the returned interpretation; `#show` remains a separate display operation.
@@ -552,7 +553,7 @@ Without this request the library enumerates full answer identities.
 
 The grounder completes the domain with the original source owner.
 `PreparedInput::projection()` exposes that immutable domain. A projected request
-without an explicit declaration returns `ProjectionError::MissingDeclaration`.
+without an explicit declaration returns `ProjectiveError::MissingDeclaration`.
 An explicit empty domain has one class if the selected family is nonempty.
 The source door uses finite formula admission; eager and hybrid owners both
 retain the complete projection domain.

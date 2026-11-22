@@ -1,5 +1,4 @@
 //! Cancellation settles leases before the native iterator exposes its final receipt.
-
 use super::*;
 use crate::ferraris::{Proposer, StableModels};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -77,4 +76,64 @@ fn cancellation_preserves_settled_interruption() {
     assert_eq!(observed.stable_models, 0);
     assert!(!models.exhausted());
     assert!(models.next().is_none());
+}
+
+#[test]
+fn a_region_walk_boundary_observes_an_expired_deadline() {
+    let theory = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let at = std::time::Instant::now() + Duration::from_millis(50);
+    let cancellation = Cancellation::with_deadline(at).unwrap();
+    let mut models = StableModels::with_region_workers(
+        &theory,
+        NonZeroUsize::new(2).unwrap(),
+        Limits::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
+    models
+        .index
+        .ensure(&crate::Cancellation::default(), |_| Ok(()))
+        .unwrap();
+    let before = models.statistics.search;
+    let Proposer::Parallel(search) = &mut models.proposer else {
+        panic!("parallel region workers were not selected")
+    };
+    search.synchronize_budget(before).unwrap();
+    search.record = super::engaged(1);
+    let shared = Arc::clone(&search.shared);
+    // A worker that only waits for the walk to close: the coordinator's own
+    // region-walk boundary must observe the deadline.
+    search.handles.push(std::thread::spawn(move || {
+        contain_worker(&shared, || {
+            while !shared.frontier.termination.is_closed() {
+                std::thread::yield_now();
+            }
+            WorkerReport {
+                regions: RegionCounts::default(),
+                statistics: Statistics::default(),
+            }
+        })
+    }));
+    while std::time::Instant::now() < at {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    // Nothing has latched the passed deadline: the flag-only view is clear.
+    let unlatched = cancellation.polling().poll();
+    let result = models.next();
+    let _ = models.stop();
+    assert_eq!(unlatched, Ok(()));
+    assert!(
+        matches!(result, Some(Err(Incomplete::Deadline))),
+        "{result:?}"
+    );
+    assert_eq!(
+        cancellation.polling().poll(),
+        Err(zetesis_algebra::Stop::Deadline)
+    );
 }

@@ -24,9 +24,9 @@ fn contradiction() -> Theory {
     )
 }
 
-fn routes(theory: &Theory, cancellation: &Cancellation) -> [StableModels; 3] {
+fn routes(theory: &Theory, cancellation: &Cancellation) -> Vec<StableModels> {
     let workers = NonZeroUsize::new(2).unwrap();
-    [
+    vec![
         StableModels::new(theory, Limits::default(), cancellation.clone()).unwrap(),
         StableModels::with_region_workers_engaging(
             theory,

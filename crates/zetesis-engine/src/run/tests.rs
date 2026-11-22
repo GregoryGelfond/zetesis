@@ -228,6 +228,23 @@ fn expired_request_has_a_budget_conclusion() {
 }
 
 #[test]
+fn a_slot_deadline_that_expires_after_opening_stops_the_run() {
+    let admitted = admit(program());
+    let at = Instant::now() + std::time::Duration::from_millis(50);
+    let window = CancellationSlot::default().open(Some(at)).unwrap();
+    let cancellation = window.cancellation().clone();
+    let mut run = run(&admitted, window, model::OutputLimits::default());
+    while Instant::now() < at {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    // Nothing has latched the passed deadline yet: the flag-only view is clear.
+    assert_eq!(cancellation.polling().poll(), Ok(()));
+    assert!(run.next_model().is_none());
+    // Budget, not interruption: a coarse boundary observed the deadline.
+    assert_eq!(run.conclusion(), Some(Conclusion::Budget));
+}
+
+#[test]
 fn exhausted_native_run_is_fused() {
     let admitted = admit(program());
     let mut run = run(&admitted, window(), model::OutputLimits::default());

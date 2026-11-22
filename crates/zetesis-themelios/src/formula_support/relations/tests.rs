@@ -703,7 +703,9 @@ fn round_publication_orders_new_rows_by_typed_identity() {
                     .unwrap();
             }
         }
-        append.order(&limits, &mut counters, location()).unwrap();
+        append
+            .order(&limits, &mut counters, location(), None)
+            .unwrap();
     }
     catalog.publish(&limits, &mut counters, location()).unwrap();
     let relations = catalog
@@ -759,7 +761,9 @@ fn predicate_runs_survive_new_directory_insertions() {
                     .unwrap();
             }
         }
-        append.order(&limits, &mut counters, location()).unwrap();
+        append
+            .order(&limits, &mut counters, location(), None)
+            .unwrap();
     }
     catalog.publish(&limits, &mut counters, location()).unwrap();
     let relations = catalog

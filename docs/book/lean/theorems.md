@@ -64,6 +64,7 @@ The maintained full index is
 | Can dependency order change original formula evaluation? | `DependencySchedule.observed_roots_equal` | Initial agreement, ready dependency reads, reference equations and covered roots; packed levels and concurrent execution remain separate |
 | Can a stored mask evaluate a reduct? | `Ferraris.masked_eval_iff_reduct` in `FerrarisMask` | Mask agrees with original truth at every formula; arbitrary tested interpretation |
 | Can joins be decomposed? | `Lifted.composition_exact` | Binding, filtering, gates and projection denote the supplied template |
+| Can ordered rows be normalized in one pass? | `OrderedNormalization.ordered_normalization_exact` | Adjacent order, transitivity and antisymmetry preserve the row set in strict unique order |
 | When may equality columns prefilter full matches? | `ColumnRelations.full_matches_preserved` | Exact dictionary/columns, supplied rows and a total matcher entailing the equalities |
 | When does table projection preserve complete rows? | `FiniteTables.narrowing_preserves_rows` | Original coherent row occurrences and complete domains; no ASP source-completeness claim |
 | Can table preselection preserve positive binding families? | `TableBindings.indexed_matches_preserved`, `join_family_preserved` | Exact row bits, successful flat-match domain necessity and the same finite join schedule; ordered source/row witnesses and bindings are retained |
@@ -101,6 +102,7 @@ The maintained full index is
 | Can empty world masks prune joins? | `WorldMasks.masked_scan_covers_world` | Membership belongs to the current immutable snapshots; no future-carrier conclusion |
 | Is reused join storage semantically harmless? | `JoinFrames.retained_frames_irrelevant` | Root reset and child overwrites follow the defined schedule |
 | Can a class certificate replace a subset query? | `TightPlans.ranked_support_stable` | Complete original producers, rank, original-model truth and support |
+| Can a tight head disjunction be checked by shifted support? | `ShiftedSupport.ranked_support_stable`; necessity `DisjunctiveSupport.answer_set_supported_with_choices` | Complete original producers including positive head disjunctions, a rank placing every unnegated body atom below every head atom, original-model truth and support by a true body whose head has no other present atom; Rust flattening and the optimized check (`TightProducerKind::Shifted`) are not proved to refine it |
 | When does positive recursion need only least consequences? | `PositiveTheory.stable_iff_least_constraints` | Positive atomic-head producers and positive constraints; no acyclicity premise |
 | Can arbitrary constraints supply additional support? | `ConstrainedPositive.positive_stable_iff` | Positive producer theory, complete original constraint list and exact satisfaction at least consequences |
 | When do positive definitions uniquely extend a base answer set? | `TerminalDefinitions.stable_iff`, `unique_stable_extension` | Disjoint base/derived atoms, arbitrary base theory, all derived producers retained and positive base-only definition bodies; source recognition and runtime reconstruction remain separate |

@@ -97,6 +97,7 @@ fn compare(theory: &Theory, formulas: &[Tree]) -> usize {
                 &Cancellation::default(),
             )
             .unwrap();
+        assert!(u128::from(result.work) <= plan.check_work_bound());
         assert_eq!(
             result.verdict == TightVerdict::Stable,
             stable(formulas, candidate),
@@ -233,7 +234,7 @@ fn unnegated_implications_disjunctions_cycles_and_missing_root_coverage_refuse()
     let a = Tree::atom(0);
     let b = Tree::atom(1);
     let cases = [
-        a.clone().or(b.clone()),
+        a.clone().or(a.clone()), // Repeated head atom: not shifted.
         a.clone().and(b.clone()),
         a.clone().imp(a.clone()),
         a.clone().imp(a.clone().or(a.clone().neg())),
@@ -251,7 +252,7 @@ fn unnegated_implications_disjunctions_cycles_and_missing_root_coverage_refuse()
             .is_err()
         );
     }
-    let source = theory(2, &[a.clone(), b.clone().imp(b)]);
+    let source = theory(2, &[a.clone(), b.clone().imp(b.clone())]);
     assert!(matches!(
         TightPlan::compile(
             &source,
@@ -260,7 +261,7 @@ fn unnegated_implications_disjunctions_cycles_and_missing_root_coverage_refuse()
         ),
         Err(TightError::PositiveCycle { atom: 1 })
     ));
-    let source = theory(2, &[a.clone(), a.or(Tree::atom(1))]);
+    let source = theory(2, &[a.clone(), a.clone().or(b.clone().and(a.clone()))]);
     assert_eq!(
         TightPlan::compile(
             &source,
@@ -272,6 +273,69 @@ fn unnegated_implications_disjunctions_cycles_and_missing_root_coverage_refuse()
             root: source.roots()[1]
         }
     );
+}
+
+#[test]
+fn head_cycle_free_disjunctions_shift_to_exact_support_checks() {
+    let a = Tree::atom(0);
+    let b = Tree::atom(1);
+    let c = Tree::atom(2);
+    let heads = [
+        a.clone().or(b.clone()),
+        b.clone().or(c.clone()),
+        a.clone().or(b.clone().or(c.clone())),
+        a.clone().or(b.clone()).or(c.clone()),
+    ];
+    let bodies = [
+        None,
+        Some(c.clone()),
+        Some(a.clone()),
+        Some(c.clone().neg()),
+        Some(a.clone().neg().and(c.clone().neg().neg())),
+        Some(b.clone().imp(Tree::False).or(c.clone())),
+    ];
+    let rules: Vec<_> = heads
+        .iter()
+        .flat_map(|head| {
+            bodies.iter().map(move |body| match body {
+                Some(body) => body.clone().imp(head.clone()),
+                None => head.clone(),
+            })
+        })
+        .collect();
+    let extras = [
+        None,
+        Some(c.clone().or(c.clone().neg())),
+        Some(a.clone().and(b.clone()).neg()),
+        Some(b.clone().imp(c.clone())),
+    ];
+    let mut worlds = 0;
+    let mut cyclic = 0;
+    for first in &rules {
+        for second in &rules {
+            for extra in &extras {
+                let mut formulas = vec![first.clone(), second.clone()];
+                formulas.extend(extra.clone());
+                let theory = theory(4, &formulas);
+                match TightPlan::compile(
+                    &theory,
+                    TightPlanLimits::default(),
+                    &Cancellation::default(),
+                ) {
+                    Ok(plan) => {
+                        assert!(plan.producers().iter().any(|producer| matches!(
+                            producer.kind(),
+                            TightProducerKind::Shifted { .. }
+                        )));
+                        worlds += compare(&theory, &formulas);
+                    }
+                    Err(TightError::PositiveCycle { .. }) => cyclic += 1,
+                    result => panic!("unexpected shape refusal: {result:?}"),
+                }
+            }
+        }
+    }
+    assert!(worlds > 0 && cyclic > 0, "{worlds} {cyclic}");
 }
 
 #[test]

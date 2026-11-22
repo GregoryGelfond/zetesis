@@ -292,3 +292,36 @@ fn ingress_equality_keeps_the_legacy_callback_trace() {
     assert_eq!(result, Ok(expected));
     assert_eq!(actual, legacy);
 }
+
+#[test]
+fn canonical_positions_are_dense_identities_compared_within_one_vocabulary() {
+    let mut store = Store::new(16_000_000);
+    let a = store
+        .import_value(&Value::String("a".into()), Limits::default())
+        .unwrap();
+    let b = store
+        .import_value(&Value::Number(2), Limits::default())
+        .unwrap();
+    let snapshot = store.snapshot(0).unwrap();
+    let (left, right) = (
+        TermRef::new(&snapshot, a).unwrap(),
+        TermRef::new(&snapshot, b).unwrap(),
+    );
+    assert_eq!(left.canonical_position(), Some(a.position()));
+    assert_eq!(right.canonical_position(), Some(b.position()));
+    assert_ne!(left.canonical_position(), right.canonical_position());
+    assert_eq!(left.same_vocabulary(right), Some(true));
+    let mut other = Store::new(16_000_000);
+    let foreign = other
+        .import_value(&Value::String("other".into()), Limits::default())
+        .unwrap();
+    let other = other.snapshot(0).unwrap();
+    let foreign = TermRef::new(&other, foreign).unwrap();
+    assert_eq!(foreign.canonical_position(), left.canonical_position());
+    assert_eq!(left.same_vocabulary(foreign), Some(false));
+    let value = Value::Number(2);
+    let ingress = TermRef::from(&value);
+    assert_eq!(ingress.canonical_position(), None);
+    assert_eq!(ingress.same_vocabulary(left), None);
+    assert_eq!(left.same_vocabulary(ingress), None);
+}

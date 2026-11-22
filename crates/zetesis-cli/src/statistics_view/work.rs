@@ -271,7 +271,7 @@ fn hybrid(rows: &mut Vec<Row>, execution: &zetesis_solve::HybridExecutionStatist
 }
 
 fn formula(rows: &mut Vec<Row>, statistics: &zetesis_stable::Statistics) {
-    if let Some(filter) = statistics.region_filter {
+    if let Some(filter) = statistics.constraint_refutation {
         let scope = if filter.overflowed {
             "original candidate regions; counts overflowed"
         } else {

@@ -128,13 +128,31 @@ use zetesis_core::TemplateComponentsRef;
 use zetesis_core::catalog::PredicateRef;
 
 use super::super::super::relations::{Memory, SupportAppend};
-use super::super::{Node, lookup};
+use super::super::{Found, Node, lookup};
 use super::{Producer, Registration, positive, predicate};
 use crate::formula_ir::{AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr, decided};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 use themelios_program::program::DefaultNegation;
 
 use super::super::super::Counters;
+
+/// Completeness of a predicate's defining component, visible crate-internally
+/// to the columnar Join hook.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::formula_support) enum PredicateStage {
+    /// Every defining producer has finished and published; the snapshot
+    /// alone is the complete relation.
+    Reached,
+    /// Snapshot union this round's pending atoms is complete; not every
+    /// atom is in the snapshot yet.
+    Settled,
+    /// The defining component is not yet complete.
+    Open,
+    /// The predicate has no component the schedule tracks (extensional
+    /// facts, or no defining producers). The snapshot is the complete
+    /// relation.
+    Extensional,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum State {
@@ -195,6 +213,15 @@ pub(super) struct Schedule<'source> {
 /// producer its first head and whether every predicate it names has a
 /// component, per component whether all of its producers' predicates do, and
 /// one producer's resolved components.
+/// What resolution reads: the registration, the graph's nodes, the component
+/// view and the predicates resolved so far.
+type Inputs<'r, 'n, 's, 'v> = (
+    &'r Registration<'s>,
+    &'n [Node<'s>],
+    TemplateComponentsRef<'v>,
+    &'r RefCell<Found<'v>>,
+);
+
 #[derive(Default)]
 struct Scratch {
     edges: Vec<(usize, usize)>,
@@ -260,7 +287,9 @@ impl<'source> Schedule<'source> {
             .max()
             .map_or(0, |last| last + 1);
         let mut scratch = Scratch::default();
-        let inputs = (registration, nodes.as_slice(), view);
+        // The predicates resolved so far, scratch released with the rest.
+        let found = RefCell::new(Found::new());
+        let inputs = (registration, nodes.as_slice(), view, &found);
         resolve_all(
             inputs,
             count,
@@ -293,7 +322,7 @@ impl<'source> Schedule<'source> {
         } else {
             (Vec::new(), Vec::new())
         };
-        memory.release(scratch.bytes());
+        memory.release(scratch.bytes() + found.borrow().bytes());
         drop(scratch);
         if waits.iter().all(Option::is_none) {
             return Ok(None);
@@ -427,6 +456,36 @@ impl<'source> Schedule<'source> {
         })
     }
 
+    /// The completeness of `predicate`'s defining component at this
+    /// moment in the round. `Open` when the predicate has no component
+    /// or that component is neither settled nor reached.
+    pub(super) fn predicate_stage(
+        &self,
+        predicate: PredicateRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<PredicateStage, FormulaFailure> {
+        let found = lookup(
+            self.nodes.len(),
+            |index| self.nodes[index].signature,
+            predicate,
+            limits,
+            counters,
+            location,
+        )?;
+        let Some(component) = found.and_then(|index| self.nodes[index].component) else {
+            return Ok(PredicateStage::Extensional);
+        };
+        if self.reached.borrow()[component] {
+            return Ok(PredicateStage::Reached);
+        }
+        if self.settled.borrow()[component] {
+            return Ok(PredicateStage::Settled);
+        }
+        Ok(PredicateStage::Open)
+    }
+
     /// Mark ready every waiting producer whose read components are complete,
     /// given this round's pending atoms in `delta`: published for a producer
     /// that joins them, settled for one that only negates their atoms. The
@@ -556,7 +615,7 @@ impl<'source> Schedule<'source> {
 /// Resolve every producer: its (head, input) edges, its first head, and
 /// whether every predicate it names has a component.
 fn resolve_all(
-    (registration, nodes, view): (&Registration<'_>, &[Node<'_>], TemplateComponentsRef<'_>),
+    (registration, nodes, view, found): Inputs<'_, '_, '_, '_>,
     count: usize,
     scratch: &mut Scratch,
     memory: &mut Memory<'_>,
@@ -577,7 +636,7 @@ fn resolve_all(
             producer,
             rule,
             nodes,
-            view,
+            (view, found),
             (&mut scratch.inputs, &mut scratch.heads, memory),
             (limits, counters, rule.location),
         )?;
@@ -644,7 +703,7 @@ fn dependencies(
 /// negated atoms alone, the gates' elements and the awaited negated atoms;
 /// records each producer's (head, producer) pairs in the scratch.
 fn classify(
-    (registration, nodes, view): (&Registration<'_>, &[Node<'_>], TemplateComponentsRef<'_>),
+    (registration, nodes, view, found): Inputs<'_, '_, '_, '_>,
     decidable: &[bool],
     scratch: &mut Scratch,
     memory: &mut Memory<'_>,
@@ -680,7 +739,7 @@ fn classify(
             producer,
             rule,
             nodes,
-            view,
+            (view, found),
             (&mut scratch.inputs, &mut scratch.heads, memory),
             (limits, counters, rule.location),
         )?;
@@ -916,27 +975,30 @@ fn by_component(
 /// derivations read into `inputs`: a certified producer's positive inputs, a
 /// rich producer's reads. Returns whether every predicate it names has a
 /// component.
-fn resolve(
+fn resolve<'v>(
     registration: &Registration<'_>,
     producer: &Producer,
     rule: &RuleIr,
     nodes: &[Node<'_>],
-    view: TemplateComponentsRef<'_>,
+    (view, found): (TemplateComponentsRef<'v>, &RefCell<Found<'v>>),
     (inputs, heads, memory): (&mut Vec<usize>, &mut Vec<usize>, &mut Memory<'_>),
     (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
 ) -> Result<bool, FormulaFailure> {
-    let component = |predicate: PredicateRef<'_>,
+    let component = |predicate: PredicateRef<'v>,
+                     memory: &mut Memory<'_>,
                      counters: &mut Counters|
      -> Result<Option<usize>, FormulaFailure> {
-        Ok(lookup(
-            nodes.len(),
-            |index| nodes[index].signature,
-            predicate,
-            limits,
-            counters,
-            location,
-        )?
-        .and_then(|index| nodes[index].component))
+        Ok(found
+            .borrow_mut()
+            .lookup(
+                nodes.len(),
+                |index| nodes[index].signature,
+                predicate,
+                (memory, limits),
+                counters,
+                location,
+            )?
+            .and_then(|index| nodes[index].component))
     };
     let mut complete = true;
     let mut record = |found: Option<usize>,
@@ -962,19 +1024,19 @@ fn resolve(
                     _ => unreachable!("a certified input is a positive occurrence"),
                 };
                 let predicate = atom.get(view, limits, counters, location)?.predicate();
-                record(component(predicate, counters)?, inputs, memory)?;
+                record(component(predicate, memory, counters)?, inputs, memory)?;
             }
         }
         Producer::Rich(reads) => {
             for &read in &registration.reads[reads.clone()] {
                 let read = predicate(read, view, limits, counters, location)?;
-                record(component(read, counters)?, inputs, memory)?;
+                record(component(read, memory, counters)?, inputs, memory)?;
             }
         }
     }
     for head in rule_heads(rule) {
         let predicate = head.get(view, limits, counters, location)?.predicate();
-        record(component(predicate, counters)?, heads, memory)?;
+        record(component(predicate, memory, counters)?, heads, memory)?;
     }
     Ok(complete)
 }

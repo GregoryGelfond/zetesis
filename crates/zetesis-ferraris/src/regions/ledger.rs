@@ -37,14 +37,30 @@ const SCAN_ROWS: usize = u64::BITS as usize;
 /// The largest tier [`LearningLimits::for_allowance`] derives.
 const MAX_TIER_ROWS: usize = 4_096;
 
+/// How a refuted region's decided literals are reduced to a core.
+///
+/// Both options are sound: each retained set is a conflict of the carrier's
+/// theory. [`Self::Full`] records every decided literal. [`Self::Minimized`]
+/// drops literals a fresh carrier narrowing still refutes without, at one
+/// probe per dropped or retained literal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConflictCore {
+    /// Every decided literal of the refuted region.
+    Full,
+    /// A subset still refuted by a fresh carrier narrowing of those literals.
+    Minimized,
+}
+
 /// Allowances for learned rows: per tier (one walk's or worker's ledger), per
 /// store, per source, and what and when a tier shares.
 ///
 /// The defaults are the limits the founded source has always had: 64 rows,
 /// 256 capture attempts, 131,072 capture reads over a tier's lifetime, 4,096
 /// reads and 65,536 bytes per capture, and rows of at most 16 conditions and
-/// 64 outputs. A tier shares rows of at most 8 conditions, or rows that have
-/// hit twice, and delivers every 4,096 regions its walk visits.
+/// 64 outputs. The conflict source starts with the same attempt cap and a
+/// condition cap of 16, and records a full decided-literal core. A tier shares
+/// rows of at most 8 conditions, or rows that have hit twice, and delivers
+/// every 4,096 regions its walk visits.
 /// [`LearningLimits::for_allowance`] raises the tier and store capacities
 /// with the memory allowance and never lowers any limit below these.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,6 +96,22 @@ pub struct LearningLimits {
     /// visited this many regions since the tier last delivered, as well as at
     /// the walk's end. Zero never triggers.
     pub publish_regions: u64,
+    /// Conflict-source capture attempts over a tier's lifetime.
+    pub conflict_attempts: usize,
+    /// Signed conditions one conflict row may require, after one decided
+    /// literal is taken as the output.
+    pub conflict_conditions: usize,
+    /// Conflict discovery, comparison and retention reads over a tier's life.
+    pub conflict_work: u64,
+    /// How a refuted region's decided literals are reduced to a core.
+    pub conflict_core: ConflictCore,
+    /// Bound-source capture attempts over a tier's lifetime.
+    pub bound_attempts: usize,
+    /// Signed conditions one bound row may require, after one decided
+    /// literal is taken as the output.
+    pub bound_conditions: usize,
+    /// Bound discovery, comparison and retention reads over a tier's life.
+    pub bound_work: u64,
 }
 
 impl LearningLimits {
@@ -98,12 +130,20 @@ impl LearningLimits {
         share_conditions: 8,
         share_hits: 2,
         publish_regions: 4_096,
+        conflict_attempts: 256,
+        conflict_conditions: 16,
+        conflict_work: 131_072,
+        conflict_core: ConflictCore::Full,
+        bound_attempts: 256,
+        bound_conditions: 16,
+        bound_work: 131_072,
     };
 
     /// The limits for a candidate-memory allowance of `bytes`: one tier row
     /// for every MiB of it, between the default's 64 rows and 4,096, and a
-    /// store four times a tier. Every other limit keeps its default, so an
-    /// allowance of 64 MiB or less keeps every default.
+    /// store four times a tier. Attempt caps grow the same way, between the
+    /// default 256 and 4,096, so an allowance of 256 MiB or less keeps the
+    /// default attempt caps, and 64 MiB or less keeps every default.
     #[must_use]
     pub const fn for_allowance(bytes: usize) -> Self {
         let defaults = Self::DEFAULT;
@@ -115,9 +155,33 @@ impl LearningLimits {
         } else {
             rows
         };
+        let attempts = if rows < defaults.founded_attempts {
+            defaults.founded_attempts
+        } else if rows > MAX_TIER_ROWS {
+            MAX_TIER_ROWS
+        } else {
+            rows
+        };
         Self {
             tier_rows: rows,
             store_rows: rows.saturating_mul(4),
+            founded_attempts: attempts,
+            conflict_attempts: attempts,
+            bound_attempts: attempts,
+            ..defaults
+        }
+    }
+
+    /// No capture: every source's attempt cap is zero. Matching already
+    /// certified rows is also empty, because a fresh tier has no rows and
+    /// seeding a disabled owner writes nothing. Answers are unchanged.
+    #[must_use]
+    pub const fn disabled() -> Self {
+        let defaults = Self::DEFAULT;
+        Self {
+            founded_attempts: 0,
+            conflict_attempts: 0,
+            bound_attempts: 0,
             ..defaults
         }
     }
@@ -129,20 +193,34 @@ impl Default for LearningLimits {
     }
 }
 
+/// Consequence class of a [`LearningOwner`]: the theory's answer sets, or
+/// the bound-restricted class of those same answer sets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LearningClass {
+    /// Every answer set of the original theory (`LearnedRegions.founded_row`).
+    Theory,
+    /// Answer sets admitted by the current objective bound. Rows of this
+    /// class must not be applied when no bound is active. A tighter later
+    /// bound still admits them, because the class only shrinks.
+    Bound,
+}
+
 /// The owner of learned rows: the consequence class every row it holds
 /// belongs to, and the allowances of its tiers.
 ///
-/// Its one class today is the original theory instance: every row holds for
-/// every answer set of the theory, as the founded source's rows do
-/// (`LearnedRegions.founded_row`). Such rows hold under any candidate
-/// restriction, objective bound or region filter, by
+/// Theory-class rows hold for every answer set of the theory, as the founded
+/// source's rows do (`LearnedRegions.founded_row`). Such rows hold under any
+/// candidate restriction, objective bound or region filter, by
 /// `LearnedRegions.row_of_narrower_class`, so a walk under a filter learns and
-/// applies them as rows of the theory.
+/// applies them as rows of the theory. Bound-class rows hold only for the
+/// bound-restricted class; a bound carrier learns and applies them, and the
+/// theory carrier never does.
 #[derive(Clone, Debug)]
 pub struct LearningOwner {
     /// The carrier subject reads this theory ([`crate::OriginalSubject::carrier`]).
     pub(in crate::regions) theory: Theory,
     limits: LearningLimits,
+    class: LearningClass,
 }
 
 impl LearningOwner {
@@ -152,6 +230,19 @@ impl LearningOwner {
         Self {
             theory: theory.clone(),
             limits,
+            class: LearningClass::Theory,
+        }
+    }
+
+    /// The owner of rows of the bound-restricted class of `theory`'s
+    /// answer sets, under `limits`. The theory is the original instance,
+    /// used as the store's class identity, not the bound restriction DAG.
+    #[must_use]
+    pub fn bound(theory: &Theory, limits: LearningLimits) -> Self {
+        Self {
+            theory: theory.clone(),
+            limits,
+            class: LearningClass::Bound,
         }
     }
 
@@ -159,6 +250,18 @@ impl LearningOwner {
     #[must_use]
     pub const fn limits(&self) -> &LearningLimits {
         &self.limits
+    }
+
+    /// The consequence class this owner certifies.
+    #[must_use]
+    pub const fn class(&self) -> LearningClass {
+        self.class
+    }
+
+    /// True when this owner is the bound-restricted class.
+    #[must_use]
+    pub const fn is_bound(&self) -> bool {
+        matches!(self.class, LearningClass::Bound)
     }
 
     /// True when this owner's class is the answer sets of `theory`, the
@@ -169,7 +272,11 @@ impl LearningOwner {
     }
 
     fn same_class(&self, theory: &Theory) -> bool {
-        self.theory.same_instance(theory)
+        self.class == LearningClass::Theory && self.theory.same_instance(theory)
+    }
+
+    fn same_owner(&self, other: &Self) -> bool {
+        self.class == other.class && self.theory.same_instance(&other.theory)
     }
 }
 
@@ -233,22 +340,58 @@ impl LearningStore {
         self.seeded
     }
 
+    /// Rows evicted from every class, over the store's life.
+    #[must_use]
+    pub fn evicted(&self) -> u64 {
+        self.classes.iter().map(Ledger::evicted).sum()
+    }
+
+    /// Peak retained bytes observed on any class ledger.
+    #[must_use]
+    pub fn peak_bytes(&self) -> u128 {
+        self.classes
+            .iter()
+            .map(Ledger::peak_bytes)
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Drop every bound-class ledger. Theory-class rows remain.
+    ///
+    /// Bound-class rows hold only under a bound at least as tight as the one
+    /// they were learned under. A later stream whose bound is weaker, such as
+    /// the inclusive tie pass after a strict optimality proof, must not
+    /// inherit them.
+    pub fn drop_bound_class(&mut self) {
+        self.classes
+            .retain(|ledger| !ledger.owner.as_ref().is_some_and(LearningOwner::is_bound));
+    }
+
+    /// Rows currently held whose source is founded, conflict, or bound.
+    #[must_use]
+    pub fn source_rows(&self) -> (usize, usize, usize) {
+        let mut founded = 0;
+        let mut conflict = 0;
+        let mut bound = 0;
+        for ledger in &self.classes {
+            founded += ledger.source_count(Source::Founded);
+            conflict += ledger.source_count(Source::Conflict);
+            bound += ledger.source_count(Source::Bound);
+        }
+        (founded, conflict, bound)
+    }
+
     fn class(&self, owner: &LearningOwner) -> Option<&Ledger> {
-        self.classes.iter().find(|ledger| {
-            ledger
-                .owner
-                .as_ref()
-                .is_some_and(|o| o.same_class(&owner.theory))
-        })
+        self.classes
+            .iter()
+            .find(|ledger| ledger.owner.as_ref().is_some_and(|o| o.same_owner(owner)))
     }
 
     fn class_mut(&mut self, owner: &LearningOwner) -> Result<&mut Ledger, Stop> {
-        let position = self.classes.iter().position(|ledger| {
-            ledger
-                .owner
-                .as_ref()
-                .is_some_and(|o| o.same_class(&owner.theory))
-        });
+        let position = self
+            .classes
+            .iter()
+            .position(|ledger| ledger.owner.as_ref().is_some_and(|o| o.same_owner(owner)));
         if let Some(position) = position {
             return Ok(&mut self.classes[position]);
         }
@@ -263,6 +406,7 @@ impl LearningStore {
         ledger.prepare(&LearningOwner {
             theory: owner.theory.clone(),
             limits,
+            class: owner.class,
         });
         self.classes.push(ledger);
         let last = self.classes.len() - 1;
@@ -315,12 +459,124 @@ impl Literals {
             outputs,
         })
     }
+
+    fn from_refutation<Q: Quota + ?Sized>(
+        input: ConflictInput<'_>,
+        max_conditions: usize,
+        remaining: &mut u64,
+        work: &mut Meter<'_, Q>,
+        peak: &mut u128,
+    ) -> Result<Option<Self>, Failure<Q::Error>> {
+        match input {
+            ConflictInput::Region(region) => {
+                Self::from_region(region, max_conditions, remaining, work, peak)
+            }
+            ConflictInput::Minimized(decided) => {
+                Self::from_conflict(decided, max_conditions, peak).map_err(Failure::from)
+            }
+        }
+    }
+
+    /// Check the width through packed words before allocating. Discovery and
+    /// materialization share the source's existing optional allowance. A scan
+    /// charges each held/cut word pair and each copied literal; an over-wide
+    /// core is declined at the first word proving it cannot fit.
+    fn from_region<Q: Quota + ?Sized>(
+        region: &crate::Region,
+        max_conditions: usize,
+        remaining: &mut u64,
+        work: &mut Meter<'_, Q>,
+        peak: &mut u128,
+    ) -> Result<Option<Self>, Failure<Q::Error>> {
+        let (held, cut) = region.decision_words();
+        let mut count = 0usize;
+        for (&held, &cut) in held.iter().zip(cut) {
+            if !capture_read(remaining, work)? {
+                return Ok(None);
+            }
+            count += (held | cut).count_ones() as usize;
+            if count.saturating_sub(1) > max_conditions {
+                return Ok(None);
+            }
+        }
+        if count == 0 {
+            return Ok(None);
+        }
+        let mut conditions = Vec::new();
+        conditions
+            .try_reserve_exact(count)
+            .map_err(|_| Stop::Allocation)?;
+        *peak = (*peak).max(conditions.capacity() as u128 * size_of::<(usize, bool)>() as u128);
+        for (word, (&held, &cut)) in held.iter().zip(cut).enumerate() {
+            if !capture_read(remaining, work)? {
+                return Ok(None);
+            }
+            for bit in Words::<u64>::bits(held | cut) {
+                if !capture_read(remaining, work)? {
+                    return Ok(None);
+                }
+                conditions.push((word * 64 + bit, held & (1u64 << bit) != 0));
+            }
+        }
+        let (atom, value) = conditions
+            .pop()
+            .expect("a non-empty conflict has an output");
+        let mut outputs = Vec::new();
+        outputs.try_reserve_exact(1).map_err(|_| Stop::Allocation)?;
+        *peak = (*peak).max(
+            (conditions.capacity() + outputs.capacity()) as u128
+                * size_of::<(usize, bool)>() as u128,
+        );
+        outputs.push((atom, !value));
+        Ok(Some(Self {
+            conditions,
+            outputs,
+        }))
+    }
+
+    /// One decided literal becomes a negated output; the rest are conditions.
+    /// The set must be non-empty and no wider than `max_conditions` plus that
+    /// output. Literals are sorted and de-duplicated by atom.
+    fn from_conflict(
+        decided: &[(usize, bool)],
+        max_conditions: usize,
+        peak: &mut u128,
+    ) -> Result<Option<Self>, Stop> {
+        let mut literals = Vec::new();
+        literals
+            .try_reserve_exact(decided.len())
+            .map_err(|_| Stop::Allocation)?;
+        literals.extend_from_slice(decided);
+        literals.sort_unstable_by_key(|&(atom, _)| atom);
+        literals.dedup();
+        *peak = (*peak).max(literals.capacity() as u128 * size_of::<(usize, bool)>() as u128);
+        if literals.is_empty() || literals.len() - 1 > max_conditions {
+            return Ok(None);
+        }
+        let (atom, value) = literals.pop().expect("a non-empty conflict has an output");
+        Ok(Some(Self {
+            conditions: literals,
+            outputs: vec![(atom, !value)],
+        }))
+    }
 }
 
 /// Which source learned a row. The founded floor protects founded rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Source {
+pub(in crate::regions) enum Source {
     Founded,
+    /// A core of a refuted carrier region, a row of the unrestricted theory.
+    Conflict,
+    /// A core of a region refuted only under the active objective bound.
+    Bound,
+}
+
+/// A complete refuted region, or the result of the optional minimization.
+/// The full path reads packed masks before admitting any literal storage.
+#[derive(Clone, Copy)]
+pub(in crate::regions) enum ConflictInput<'a> {
+    Region(&'a crate::Region),
+    Minimized(&'a [(usize, bool)]),
 }
 
 /// A retained row with what eviction and sharing read about it.
@@ -394,6 +650,14 @@ pub(in crate::regions) struct Ledger {
     indexed_steps: u64,
     /// Founded rows held, which the founded floor protects.
     founded: usize,
+    /// Conflict-source capture attempts over the tier's life.
+    conflict_attempts: usize,
+    /// Conflict discovery, comparison and retention reads still allowed.
+    conflict_remaining: u64,
+    /// Bound-source capture attempts over the tier's life.
+    bound_attempts: usize,
+    /// Bound discovery, comparison and retention reads still allowed.
+    bound_remaining: u64,
     /// Rows evicted over the tier's life.
     evicted: u64,
     /// The store this tier last read completely, and that store's retention
@@ -422,6 +686,10 @@ impl Default for Ledger {
             #[cfg(test)]
             indexed_steps: 0,
             founded: 0,
+            conflict_attempts: 0,
+            conflict_remaining: limits.conflict_work,
+            bound_attempts: 0,
+            bound_remaining: limits.bound_work,
             evicted: 0,
             seeded_from: None,
         }
@@ -438,7 +706,7 @@ impl Ledger {
             self.adopt(owner);
             return;
         };
-        if !current.same_class(&owner.theory) {
+        if !current.same_owner(owner) {
             self.adopt(owner);
         } else if current.limits != owner.limits {
             current.limits = owner.limits;
@@ -454,8 +722,12 @@ impl Ledger {
         self.seeded_from = None;
         self.owner = Some(owner.clone());
         self.attempts = 0;
+        self.conflict_attempts = 0;
+        self.bound_attempts = 0;
         self.epoch = 0;
         self.remaining = owner.limits.founded_work;
+        self.conflict_remaining = owner.limits.conflict_work;
+        self.bound_remaining = owner.limits.bound_work;
         self.sharing = owner.limits.share_work;
         self.stale = true;
         self.full = true;
@@ -488,6 +760,13 @@ impl Ledger {
 
     pub(in crate::regions) const fn evicted(&self) -> u64 {
         self.evicted
+    }
+
+    pub(in crate::regions) fn source_count(&self, source: Source) -> usize {
+        self.rows
+            .iter()
+            .filter(|entry| entry.source == source)
+            .count()
     }
 
     #[cfg(test)]
@@ -619,13 +898,134 @@ impl Ledger {
             && (self.rows.len() < limits.tier_rows || self.can_evict())
     }
 
+    pub(in crate::regions) fn can_capture_conflict(&self) -> bool {
+        let limits = self.limits();
+        self.conflict_attempts < limits.conflict_attempts
+            && self.conflict_remaining != 0
+            && (self.rows.len() < limits.tier_rows || self.can_evict())
+    }
+
+    /// Retain a theory-class row from a refuted carrier region's decided
+    /// literals, when the conflict source still has an attempt and the row
+    /// fits the condition cap. A set that is empty or too wide is declined.
+    pub(in crate::regions) fn capture_conflict<Q: Quota + ?Sized>(
+        &mut self,
+        input: ConflictInput<'_>,
+        work: &mut Meter<'_, Q>,
+        counts: &mut crate::regions::ConflictLearningStatistics,
+    ) -> Result<(), Failure<Q::Error>> {
+        if !self.can_capture_conflict() {
+            return Ok(());
+        }
+        let limits = self.limits();
+        self.conflict_attempts += 1;
+        counts.attempts += 1;
+        let mut temporary_peak = 0;
+        let retained = self.retained_bytes();
+        let mut remaining = self.conflict_remaining;
+        let result = Literals::from_refutation(
+            input,
+            limits.conflict_conditions,
+            &mut remaining,
+            work,
+            &mut temporary_peak,
+        );
+        self.conflict_remaining = remaining;
+        self.peak_bytes = self.peak_bytes.max(retained + temporary_peak);
+        let Some(literals) = result? else {
+            counts.declined += 1;
+            return Ok(());
+        };
+        let result = self.retain(
+            Proposed {
+                literals,
+                source: Source::Conflict,
+                hits: 0,
+                maximum_outputs: 1,
+            },
+            &mut remaining,
+            work,
+            &mut temporary_peak,
+        );
+        self.conflict_remaining = remaining;
+        self.peak_bytes = self
+            .peak_bytes
+            .max(retained + temporary_peak)
+            .max(self.retained_bytes());
+        match result? {
+            Retained::Added(_) => counts.certified += 1,
+            Retained::Subsumed(_) | Retained::Declined => counts.declined += 1,
+        }
+        Ok(())
+    }
+
     /// Whether a full tier has a row eviction may take.
     fn can_evict(&self) -> bool {
         self.rows.len() > self.founded || self.founded > self.limits().founded_floor
     }
 
-    /// Discovery, subsumption and conversion share the optional capture allowance.
-    /// Its exhaustion declines retention; a real quota stop still propagates.
+    /// Whether a bound-class capture still has an attempt and a row slot.
+    pub(in crate::regions) fn can_capture_bound(&self) -> bool {
+        let limits = self.limits();
+        self.bound_attempts < limits.bound_attempts
+            && self.bound_remaining != 0
+            && (self.rows.len() < limits.tier_rows || self.can_evict())
+    }
+
+    /// Retain a bound-class row from a region the bound carrier just
+    /// refuted, when the bound source still has an attempt and the row fits
+    /// the condition cap.
+    pub(in crate::regions) fn capture_bound<Q: Quota + ?Sized>(
+        &mut self,
+        input: ConflictInput<'_>,
+        work: &mut Meter<'_, Q>,
+        counts: &mut crate::regions::BoundLearningStatistics,
+    ) -> Result<(), Failure<Q::Error>> {
+        if !self.can_capture_bound() {
+            return Ok(());
+        }
+        let limits = self.limits();
+        self.bound_attempts += 1;
+        counts.attempts += 1;
+        let mut temporary_peak = 0;
+        let retained = self.retained_bytes();
+        let mut remaining = self.bound_remaining;
+        let result = Literals::from_refutation(
+            input,
+            limits.bound_conditions,
+            &mut remaining,
+            work,
+            &mut temporary_peak,
+        );
+        self.bound_remaining = remaining;
+        self.peak_bytes = self.peak_bytes.max(retained + temporary_peak);
+        let Some(literals) = result? else {
+            counts.declined += 1;
+            return Ok(());
+        };
+        let result = self.retain(
+            Proposed {
+                literals,
+                source: Source::Bound,
+                hits: 0,
+                maximum_outputs: 1,
+            },
+            &mut remaining,
+            work,
+            &mut temporary_peak,
+        );
+        self.bound_remaining = remaining;
+        self.peak_bytes = self
+            .peak_bytes
+            .max(retained + temporary_peak)
+            .max(self.retained_bytes());
+        match result? {
+            Retained::Added(_) => counts.certified += 1,
+            Retained::Subsumed(_) | Retained::Declined => counts.declined += 1,
+        }
+        Ok(())
+    }
+
     pub(in crate::regions) fn capture_read<Q: Quota + ?Sized>(
         &mut self,
         work: &mut Meter<'_, Q>,

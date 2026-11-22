@@ -131,7 +131,8 @@ This closure computation is the definition that zetesis's laws state for normal
 programs. Its executable form was the relational closure route, removed in 0.7.0.
 Ordinary formula membership uses the Ferraris translation, and
 `NormalFerraris.answer_set_iff` proves that the two definitions agree on normal
-programs. A certified acyclic normal source can instead be evaluated in dependency
+programs. A certified stratified normal source (recursion only through
+certain components, never through negation or aggregates) can instead be evaluated in dependency
 order and published by an automatic CPU session through `PreparedInput::source`,
 without materializing formulas. That route checks every original constraint before
 publication; its source certificate does not make arbitrary candidates answer sets.

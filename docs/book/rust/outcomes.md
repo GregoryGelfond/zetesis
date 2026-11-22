@@ -368,8 +368,8 @@ to answer-set semantics.
 [`zetesis_algebra::Cancellation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-algebra/src/cancellation.rs)
 carries shared cancellation and an optional absolute deadline. `Session` owns
 solving; callers pass this value to the session and can cancel it through a clone.
-`Cancellation::default()` sets no deadline. `with_deadline(Instant)` can fail if
-the timer thread cannot be started; an already expired deadline starts no thread.
+`Cancellation::default()` sets no deadline. `with_deadline(Instant)` starts no thread
+and never fails; polls read the clock once every 64 polls per thread.
 Clones observe the same flags, and `poll()` reports `Stop::Cancelled` before
 `Stop::Deadline` when both apply.
 

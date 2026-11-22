@@ -1,6 +1,8 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 pub(crate) mod arithmetic;
+pub(crate) mod algebra_join;
+pub(crate) mod algebra_rows;
 mod objectives;
 mod scoped_body;
 pub(crate) use scoped_body::SourceBodies;
@@ -12,6 +14,8 @@ mod cache;
 pub(crate) mod families;
 mod family_replay;
 mod canonical_suffix;
+mod captured_rows;
+use captured_rows::{CapturedRows, Recording};
 mod extremum_guards;
 mod decided_negation;
 use decided_negation::{Decide, Negated};
@@ -23,7 +27,7 @@ mod nodes;
 mod pairwise_exclusions;
 mod grouped_exclusions;
 mod producer;
-mod projection;
+mod projective;
 mod rejected;
 pub(crate) use rejected::validate_atom_keys;
 mod retained;
@@ -65,8 +69,8 @@ use crate::formula::{Compiled, ceiling};
 use crate::formula_assignment::{Contributions, Kind, Numeric, Reduced, Sides};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadLiteral,
-    HeadMeasure, HeadOperand, LiteralIr, Projection, RuleIr,
+    AggregateGuard, AggregateIr, AggregateKey, AnonymousWitnesses, ChoiceIr, HeadElementKey,
+    HeadIr, HeadLiteral, HeadMeasure, HeadOperand, LiteralIr, RuleIr,
 };
 use crate::formula_support::{self, Buffer, Computation, Counters, Join, Support, TermTable};
 use crate::grounding_observer::{Event, Profile};
@@ -260,7 +264,7 @@ fn ground_with_schedule(
 /// hybrid construction retains them with the unmaterialized constraint templates.
 struct Instantiation {
     expansion: crate::ExpansionUsage,
-    projection: crate::PreparedProjection,
+    projection: crate::ProjectiveDomain,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<ProgramSite>>,
@@ -287,7 +291,7 @@ fn instantiate(
         location,
         options,
     } = preparation;
-    let execution = formula_support::SourceExecution::new();
+    let execution = formula_support::SourceExecution::with_workers(options.workers);
     let cancellation = expansion_budget.cancellation().cloned();
     let published = accounting.controlled::<_, FormulaFailure>(
         cancellation.as_ref(),
@@ -452,7 +456,7 @@ pub(crate) fn complete_support_with_executor<'source>(
 /// Completed support may grow canonical terms during emission. Only owned
 /// selections and the same cumulative account cross into publication.
 struct PendingEmission {
-    projection: projection::PendingProjection,
+    projection: projective::PendingProjectiveDomain,
     objectives: objectives::PendingProgram,
     emission: Emission<formula_support::SourceSelection>,
     warnings: Warnings,
@@ -468,12 +472,15 @@ struct Streaming {
     /// Original positions of templates the core now holds, ascending.
     materialized: Option<Buffer<usize>>,
     /// Original positions and instance counts of captured templates that are
-    /// still streamed, ascending; retention may yet move them into the core.
-    streamed: Option<Buffer<(usize, u64)>>,
+    /// still streamed, ascending, with the passing rows capture kept for
+    /// retention; retention may yet move them into the core.
+    streamed: Option<Buffer<(usize, u64, Option<CapturedRows>)>>,
+    /// The retention share not yet promised to a template whose rows capture kept.
+    recording_share: u128,
 }
 
 enum Captured {
-    Streamed(u64),
+    Streamed(u64, Option<CapturedRows>),
     Materialized,
 }
 
@@ -580,7 +587,7 @@ fn emit<'source>(
             execution.executor(),
         )
     })?;
-    let projection = projection::prepare(
+    let projection = projective::prepare(
         prepared,
         queries,
         computation,
@@ -643,7 +650,7 @@ struct PublishedEmission {
     streamed: Option<formula_support::StreamedSupport>,
     /// The open catalog, returned only to a retained schedule.
     catalog: Option<formula_support::CompletedCatalog>,
-    projection: crate::PreparedProjection,
+    projection: crate::ProjectiveDomain,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<ProgramSite>>,
@@ -792,7 +799,7 @@ struct Emission<A = AtomCatalog> {
 
 pub(super) struct Builder<'a, 'terms, 'source> {
     pub(super) computation: &'a mut Computation<'terms, 'source>,
-    executor: Option<&'a formula_support::Executor>,
+    pub(super) executor: Option<&'a formula_support::Executor>,
     purpose: Purpose,
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
@@ -800,6 +807,12 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     families: Rc<families::Workspace<'terms, 'source>>,
     aggregate_atoms: formula_support::SourceSelection,
     fixed_facts: Option<formula_support::SourceSelection>,
+    /// Each fact row's atom, in item order, as fixed-fact collection named
+    /// it; emission reads a block's atoms back instead of interning again.
+    fact_atoms: Option<formula_support::FactAtoms>,
+    /// The fact rule being instantiated: its head pattern and the atom
+    /// support completion recorded for it, read instead of interning again.
+    fact_head: Option<(AtomPattern, formula_support::SourceAtom)>,
     /// The certain predicates of the completed support, whose supported atoms
     /// are fixed as the explicit facts are. Only the theory's builder reads it.
     certainty: Option<&'source Certainty>,
@@ -866,7 +879,10 @@ impl<'source> Builder<'_, '_, 'source> {
         profile: &Profile<'_>,
         schedule: Schedule<'_>,
     ) -> Result<Streaming, FormulaFailure> {
-        let mut streaming = Streaming::default();
+        let mut streaming = Streaming {
+            recording_share: self.limits.max_retained_constraint_nodes as u128,
+            ..Streaming::default()
+        };
         for item in items.iter() {
             match item {
                 crate::formula_facts::Item::Rule(index, rule) => profile.phase(
@@ -876,12 +892,16 @@ impl<'source> Builder<'_, '_, 'source> {
                         if matches!(schedule, Schedule::Hybrid | Schedule::HybridRetained)
                             && crate::formula_hybrid::eligible(rule)
                         {
-                            match self.capture_constraint(rule, support)? {
-                                Captured::Streamed(instances) => {
+                            match self.capture_constraint(
+                                rule,
+                                support,
+                                &mut streaming.recording_share,
+                            )? {
+                                Captured::Streamed(instances, rows) => {
                                     streaming.instances += instances;
                                     self.record(
                                         &mut streaming.streamed,
-                                        (index, instances),
+                                        (index, instances, rows),
                                         rule.location,
                                     )
                                 }
@@ -890,7 +910,11 @@ impl<'source> Builder<'_, '_, 'source> {
                                 }
                             }
                         } else {
-                            self.instantiate_rule(rule, index, domains, support, schedule)
+                            self.fact_head = self.recorded_head(index, rule)?;
+                            let result =
+                                self.instantiate_rule(rule, index, domains, support, schedule);
+                            self.fact_head = None;
+                            result
                         }
                     },
                 )?,
@@ -905,25 +929,75 @@ impl<'source> Builder<'_, '_, 'source> {
         Ok(streaming)
     }
 
+    /// The head atom support completion recorded for the fact rule `index`.
+    fn recorded_head(
+        &mut self,
+        index: usize,
+        rule: &RuleIr,
+    ) -> Result<Option<(AtomPattern, formula_support::SourceAtom)>, FormulaFailure> {
+        let HeadIr::Normal(Some(head)) = rule.head else {
+            return Ok(None);
+        };
+        if !rule.body.is_empty() || rule.variables != 0 {
+            return Ok(None);
+        }
+        let atom =
+            self.computation
+                .recorded_head(index, self.limits, self.counters, rule.location)?;
+        Ok(atom.map(|atom| (head, atom)))
+    }
+
     /// Emit each fact row as `Builder::normal` emits a fact rule's one passing
     /// row: the head atom, the node `⊤ → head`, its root with the statement's
     /// evidence as the root's own vector, the head's producer and its origins.
     /// No join, factoring, continuation, producer-rule, range, witness or
     /// domain-guard attempt is made: each declines on a body-free ground rule.
     fn facts(&mut self, block: crate::formula_facts::FactBlock<'_>) -> Result<(), FormulaFailure> {
-        let mut head = formula_support::facts::FactHead::new(
-            block,
-            self.computation,
-            self.limits,
-            self.counters,
-            block.location(),
-        )?;
+        let mut record = self.fact_atoms.take();
+        let result = self.fact_rows(block, record.as_mut());
+        self.fact_atoms = record;
+        result
+    }
+
+    /// Emit `block`'s rows, reading their atoms from `record` when it holds
+    /// the block, and interning them otherwise.
+    fn fact_rows(
+        &mut self,
+        block: crate::formula_facts::FactBlock<'_>,
+        record: Option<&mut formula_support::FactAtoms>,
+    ) -> Result<(), FormulaFailure> {
+        let mut recorded = match record {
+            Some(record) => record.take(
+                block,
+                self.computation,
+                self.limits,
+                self.counters,
+                block.location(),
+            )?,
+            None => None,
+        };
+        let mut head = match recorded {
+            Some(_) => None,
+            None => Some(formula_support::facts::FactHead::new(
+                block,
+                self.computation,
+                self.limits,
+                self.counters,
+                block.location(),
+            )?),
+        };
         for row in block.rows() {
             let location = row.location();
             // The row's step, and its head atom's, as for a fact rule's row.
             self.work(location)?;
             self.work(location)?;
-            let atom = head.atom(row, self.computation, self.limits, self.counters)?;
+            let atom = match (&mut recorded, &mut head) {
+                (Some(recorded), _) => recorded.next(self.limits, self.counters, location)?,
+                (None, Some(head)) => {
+                    head.atom(row, self.computation, self.limits, self.counters)?
+                }
+                (None, None) => unreachable!("a block is read back or interned"),
+            };
             let atom = self.atom_identity(&atom, location)?;
             let formula = self.node(Node::Implies(VERUM, atom), location)?;
             self.root_at(formula, Cow::Borrowed(row.evidence()), location)?;
@@ -940,8 +1014,10 @@ impl<'source> Builder<'_, '_, 'source> {
         &mut self,
         rule: &'source RuleIr,
         support: &Support<'source>,
+        share: &mut u128,
     ) -> Result<Captured, FormulaFailure> {
         let mut instances = 0;
+        let mut recording = Recording::start(rule, *share);
         let mut join = Join::rule(
             Ir::Source(rule),
             support,
@@ -980,6 +1056,13 @@ impl<'source> Builder<'_, '_, 'source> {
             }
             // Every retained count is bounded by the charged substitution cap.
             instances += 1;
+            self.record_row(
+                &mut recording,
+                &row.values,
+                instances,
+                *share,
+                rule.location,
+            )?;
             let view = self.matched_view(
                 &mut matched,
                 row.witnesses.as_ref(),
@@ -1010,7 +1093,8 @@ impl<'source> Builder<'_, '_, 'source> {
         {
             return Ok(Captured::Materialized);
         }
-        Ok(Captured::Streamed(instances))
+        let rows = recording.finish(instances, share);
+        Ok(Captured::Streamed(instances, rows))
     }
 
     /// Append to a disposition buffer, creating it at its first entry.
@@ -1047,7 +1131,9 @@ impl<'source> Builder<'_, '_, 'source> {
     /// template fits when an upper bound on what its instances add stays within
     /// what remains of `max_retained_constraint_nodes` and of the theory's own
     /// ceilings, so retention never ends in a refusal. A template that does not
-    /// fit stays streamed; a later, smaller one may still fit.
+    /// fit stays streamed; a later, smaller one may still fit. A fitting
+    /// template's instances are replayed from the rows capture kept, and its
+    /// body is joined again only when capture kept none.
     fn retain_fitting(
         &mut self,
         items: &'source crate::formula_facts::Items,
@@ -1059,12 +1145,13 @@ impl<'source> Builder<'_, '_, 'source> {
         if self.limits.max_retained_constraint_nodes == 0 {
             return Ok(());
         }
-        let Some(streamed) = streaming.streamed.take() else {
+        let Some(mut streamed) = streaming.streamed.take() else {
             return Ok(());
         };
         let mut share = self.limits.max_retained_constraint_nodes as u128;
         let mut positions = None;
-        for &(index, instances) in streamed.slice() {
+        for (index, instances, rows) in streamed.slice_mut() {
+            let (index, instances, rows) = (*index, *instances, rows.take());
             let rule = &items.rules()[index];
             let bound = InstanceBound::of(rule).times(instances);
             if bound.nodes > share || !self.holds(bound) {
@@ -1074,7 +1161,10 @@ impl<'source> Builder<'_, '_, 'source> {
             profile.phase(
                 GroundingPhase::RuleInstantiation,
                 Some(rule.location),
-                || self.retain_template(rule, support),
+                || match rows {
+                    Some(rows) => self.replay_rows(rule, support, rows),
+                    None => self.retain_template(rule, support),
+                },
             )?;
             self.retained_constraints.templates += 1;
             self.retained_constraints.instances += instances;
@@ -1103,8 +1193,9 @@ impl<'source> Builder<'_, '_, 'source> {
             && origins <= self.limits.max_origin_locations as u128
     }
 
-    /// Instantiate a captured template as eager grounding instantiates a
-    /// constraint, over the join capture took: the same rows name the same atoms.
+    /// Instantiate a captured template whose rows capture did not keep as
+    /// eager grounding instantiates a constraint, over the join capture took:
+    /// the same rows name the same atoms.
     fn retain_template(
         &mut self,
         rule: &'source RuleIr,
@@ -1203,8 +1294,16 @@ impl<'source> Builder<'_, '_, 'source> {
         {
             return Ok(());
         }
-        if crate::formula_factor::rule(self, rule, support)? {
-            return Ok(());
+        // A body-less normal rule without variables has one passing row, the
+        // empty binding, and no witness, selection or exclusion to consult:
+        // it is emitted from that binding as the join's one row would be.
+        if rule.body.is_empty()
+            && rule.variables == 0
+            && matches!(rule.head, HeadIr::Normal(Some(_)))
+        {
+            let binding =
+                Binding::new(self.computation, self.limits, self.counters, rule.location)?;
+            return self.rule(rule, &binding, support, None, None);
         }
         let candidates = domains
             .map(|domains| domains.for_rule(index, rule))
@@ -1221,6 +1320,18 @@ impl<'source> Builder<'_, '_, 'source> {
         } else {
             None
         };
+        // Range-and-arithmetic and atom-bounded complete domains can be
+        // enumerated by the shared columnar operators, which do not walk
+        // failed pairs. Prefer Bind over factored component joins when the
+        // compiler admits the body, so instantiation does not re-walk a
+        // family that support already enumerated. Domain guards remain a
+        // Join-cursor certificate for rules the compiler declines.
+        if algebra_rows::instantiate(self, rule, support)? {
+            return Ok(());
+        }
+        if crate::formula_factor::rule(self, rule, support)? {
+            return Ok(());
+        }
         let mut outer = Join::domain_rule(
             Ir::Source(rule),
             support,
@@ -1237,9 +1348,7 @@ impl<'source> Builder<'_, '_, 'source> {
             rule.location,
         )?;
         outer.select_total_body(rule, self.computation, self.limits, self.counters)?;
-        if matches!(schedule, Schedule::Eager(_)) {
-            outer.select_numeric_probes(rule, self.limits, self.counters)?;
-        }
+        outer.select_numeric_probes(rule, self.limits, self.counters)?;
         if crate::formula_factor::continuations(self, rule, &mut outer, support)? {
             return Ok(());
         }
@@ -1341,6 +1450,8 @@ impl<'source> Builder<'_, '_, 'source> {
             families,
             aggregate_atoms,
             fixed_facts: None,
+            fact_atoms: None,
+            fact_head: None,
             certainty: None,
             metadata: metadata::Metadata::default(),
             nodes: FormulaNodes::default(),
@@ -1647,6 +1758,14 @@ impl<'source> Builder<'_, '_, 'source> {
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
+        if let Some((head, atom)) = self.fact_head.take() {
+            // A ground pattern names one atom whatever the assignment.
+            let read = (head == pattern).then(|| self.atom_identity(&atom, location));
+            self.fact_head = Some((head, atom));
+            if let Some(read) = read {
+                return read;
+            }
+        }
         let pattern =
             self.computation
                 .static_pattern(pattern, self.limits, self.counters, location)?;
@@ -1656,7 +1775,7 @@ impl<'source> Builder<'_, '_, 'source> {
         self.atom_identity(&atom, location)
     }
 
-    fn matched_atom(
+    pub(super) fn matched_atom(
         &mut self,
         row: zetesis_core::relation::Row<'_, '_>,
         location: ProgramSite,
@@ -1908,10 +2027,10 @@ impl<'source> Builder<'_, '_, 'source> {
                     location,
                 )?;
                 result = self.and(result, conditional, location)?;
-            } else if let LiteralIr::ProjectedAtom(negation, _) = literal {
-                let mut projected = self.project(
+            } else if let LiteralIr::AnonymousAtom(negation, _) = literal {
+                let mut projected = self.anonymous_formula(
                     source_literal.map(|literal| {
-                        let LiteralIr::ProjectedAtom(_, value) = literal else {
+                        let LiteralIr::AnonymousAtom(_, value) = literal else {
                             unreachable!("selected projection")
                         };
                         value
@@ -1929,32 +2048,32 @@ impl<'source> Builder<'_, '_, 'source> {
         }
         Ok(result)
     }
-    pub(super) fn project(
+    pub(super) fn anonymous_formula(
         &mut self,
-        projection: Ir<'_, 'source, Projection>,
+        witnesses: Ir<'_, 'source, AnonymousWitnesses>,
         assignment: &Binding,
         support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
-        match projection.get() {
-            Projection::Arguments { predicate, terms } => {
+        match witnesses.get() {
+            AnonymousWitnesses::Arguments { predicate, terms } => {
                 let predicate = self.computation.static_predicate(
                     *predicate,
                     self.limits,
                     self.counters,
                     location,
                 )?;
-                self.project_arguments(predicate, terms, assignment, support, location)
+                self.anonymous_arguments(predicate, terms, assignment, support, location)
             }
-            Projection::Witnesses {
+            AnonymousWitnesses::Witnesses {
                 atom,
                 bindings: _,
                 variables,
                 inputs,
             } => {
                 let mut rows = Join::local(
-                    projection.map(|projection| {
-                        let Projection::Witnesses { bindings, .. } = projection else {
+                    witnesses.map(|witnesses| {
+                        let AnonymousWitnesses::Witnesses { bindings, .. } = witnesses else {
                             unreachable!("witness projection")
                         };
                         bindings.as_slice()
@@ -1988,7 +2107,7 @@ impl<'source> Builder<'_, '_, 'source> {
         }
     }
 
-    fn project_arguments(
+    fn anonymous_arguments(
         &mut self,
         predicate: zetesis_core::catalog::PredicateRef<'_>,
         terms: &[Option<components::Term>],
@@ -2258,6 +2377,12 @@ impl<'source> Builder<'_, '_, 'source> {
             } else {
                 self.head_origins(atom, rule)?;
             }
+        }
+        // An unconditional disjunct is its literal: (true -> l) and not not
+        // true is strongly equivalent to l, so the disjunction keeps atom
+        // leaves for the shifted (head-cycle-free) support route.
+        if condition == VERUM {
+            return Ok(literal);
         }
         let implication = self.node(Node::Implies(condition, literal), rule.location)?;
         let absent = self.neg(condition, rule.location)?;

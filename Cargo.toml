@@ -8,6 +8,11 @@ rust-version = "1.97"
 license = "MIT"
 version = "0.8.0"
 
+[profile.dev]
+# Keep source locations in backtraces without embedding full variable/type
+# information in development executables. The test profile inherits this.
+debug = "line-tables-only"
+
 [profile.release]
 lto = "fat"
 codegen-units = 1

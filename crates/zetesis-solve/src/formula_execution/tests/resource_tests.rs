@@ -96,7 +96,7 @@ fn assert_fresh_profile_statistics(
 
 fn supplied_profile(backend: Backend, expected_api: &str) {
     use zetesis_ferraris::{AdmissionLimits, Node, Theory};
-    use zetesis_wgpu::{GateProjection, GpuFormulaProfile};
+    use zetesis_wgpu::{BinaryNodeKernel, GpuFormulaProfile};
     let context = GpuContext::new_selected(
         GpuOptions::default(),
         crate::execution_resources::selection(backend),
@@ -115,9 +115,9 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
         backend,
         ..Default::default()
     };
-    for projection in GateProjection::ALL {
+    for node_kernel in BinaryNodeKernel::ALL {
         let profile =
-            GpuFormulaProfile::from_context_with_projection(&context, projection).unwrap();
+            GpuFormulaProfile::from_context_with_node_kernel(&context, node_kernel).unwrap();
         super::residual_tests::compare_physical_roots(&profile);
         let resources = ExecutionResources::with_formula_profile(&profile);
         assert!(resources.formula_profile().unwrap().same_instance(&profile));
@@ -143,7 +143,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
             };
             assert!(profile.same_instance(oracle.compiled_profile()));
             assert!(context.same_instance(oracle.context()));
-            assert_eq!(oracle.projection(), projection);
+            assert_eq!(oracle.node_kernel(), node_kernel);
             assert!(oracle.last_batch_stats().is_none());
             assert_eq!(queue.len(), 0);
             assert_fresh_profile_statistics(statistics, &options);

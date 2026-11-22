@@ -1,7 +1,7 @@
 //! Scope, publication and failure controls for source-backed template metadata.
 
 use super::*;
-use crate::atom_interner::{AtomInterner, Limits};
+use crate::atom_registry::{AtomRegistry, Limits};
 use crate::test_support::PERMIT;
 use crate::{Atom, Predicate, TemplateCatalogBuilder, Value, ValueNodeRef};
 
@@ -15,29 +15,29 @@ fn limits() -> Limits {
 fn atom(name: &str, value: Value) -> Atom {
     Atom::new(Predicate::new(name, 1).unwrap(), vec![value]).unwrap()
 }
-fn insert(owner: &mut AtomInterner, atom: &Atom) -> usize {
+fn insert(owner: &mut AtomRegistry, atom: &Atom) -> usize {
     owner
         .entry_atom_with(atom, limits(), PERMIT)
         .unwrap()
         .insert_with(limits(), PERMIT)
         .unwrap()
 }
-fn owner() -> AtomInterner {
-    let mut owner = AtomInterner::new();
+fn owner() -> AtomRegistry {
+    let mut owner = AtomRegistry::new();
     insert(
         &mut owner,
         &atom("p", Value::String("shared spelling".repeat(64))),
     );
     owner
 }
-fn publish(owner: &mut AtomInterner, positions: &[usize]) -> AtomCatalog {
+fn publish(owner: &mut AtomRegistry, positions: &[usize]) -> AtomCatalog {
     owner
         .publish_selection_with(positions, limits(), PERMIT)
         .unwrap()
 }
 fn append<E>(
     selection: &mut TemplateCatalogSelection,
-    owner: &AtomInterner,
+    owner: &AtomRegistry,
     max_bytes: usize,
     before: impl FnMut() -> Result<(), E>,
 ) -> Result<usize, TemplateCatalogFailure<E>> {
@@ -255,14 +255,14 @@ fn selected_catalogs_refuse_indexed_writer_construction() {
         .finish_with(publish(&mut owner, &[0]), METADATA, PERMIT)
         .unwrap();
     assert!(matches!(
-        AtomInterner::for_template_catalog(&selected, METADATA),
+        AtomRegistry::for_template_catalog(&selected, METADATA),
         Err(Error::UnindexedVocabulary)
     ));
     let closed = TemplateCatalogBuilder::new(METADATA)
         .unwrap()
         .finish()
         .unwrap();
-    assert!(AtomInterner::for_template_catalog(&closed, METADATA).is_ok());
+    assert!(AtomRegistry::for_template_catalog(&closed, METADATA).is_ok());
 }
 
 #[test]

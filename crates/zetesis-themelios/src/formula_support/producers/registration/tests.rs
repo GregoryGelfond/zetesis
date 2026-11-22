@@ -1,7 +1,6 @@
 //! A registration classifies each producer once, reads every frame a rich
 //! producer's traversal reads, and skips only traversals that would derive
 //! nothing new.
-
 use std::cell::Cell;
 use std::fmt::Write as _;
 
@@ -119,7 +118,7 @@ fn a_projection_makes_a_normal_producer_rich() {
         rules[0]
             .body
             .iter()
-            .any(|literal| matches!(literal, crate::formula_ir::LiteralIr::ProjectedAtom(..)))
+            .any(|literal| matches!(literal, crate::formula_ir::LiteralIr::AnonymousAtom(..)))
     );
     assert!(matches!(
         registered(&preparation).producers[..],

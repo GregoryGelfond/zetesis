@@ -11,8 +11,8 @@ use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{
-    ObjectiveBoundErrorKind, ObjectiveBoundResource, ObjectivePlan, ObjectiveProjectionError,
-    ObjectiveProjectionErrorKind,
+    ObjectiveBoundErrorKind, ObjectiveBoundResource, ObjectivePlan, ObjectiveReadSetError,
+    ObjectiveReadSetErrorKind,
 };
 
 fn input(owner: &AdmittedFormula) -> Input<'_> {
@@ -33,7 +33,7 @@ fn projected_preparation_charges_the_direct_constructor_once() {
     let owner = formula("unused(1..12). {a}. #minimize {2,a:a}.");
     let options = SolveConfig::default();
     let cancellation = Cancellation::default();
-    let expected = ObjectivePlan::new_projected(
+    let expected = ObjectivePlan::new_read_set(
         owner.objective_source(),
         plan_limits(&options, 0),
         options.max_candidate_bytes as u128,
@@ -88,7 +88,7 @@ fn projected_byte_refusal_keeps_its_distinct_reason() {
     assert!(prepared.refusal.is_none());
     let error = prepared.projection_refusal.unwrap();
     assert!(
-        matches!(error.kind(), ObjectiveProjectionErrorKind::Bytes { required, limit: 0 } if *required > 0)
+        matches!(error.kind(), ObjectiveReadSetErrorKind::Bytes { required, limit: 0 } if *required > 0)
     );
     assert_eq!(prepared.work(), error.statistics().work);
 }
@@ -107,7 +107,7 @@ fn projected_refusal_keeps_detailed_scores_and_performed_work() {
     let error = prepared.projection_refusal.unwrap();
     assert_eq!(
         error.kind(),
-        &ObjectiveProjectionErrorKind::Existing(ObjectiveBoundErrorKind::Limit(
+        &ObjectiveReadSetErrorKind::Existing(ObjectiveBoundErrorKind::Limit(
             ObjectiveBoundResource::Keys
         ))
     );
@@ -164,12 +164,12 @@ fn projected_choice_refusal_retains_the_exact_plan() {
 }
 
 #[derive(Default)]
-struct RefuseObservation(Option<ObjectiveProjectionError>);
+struct RefuseObservation(Option<ObjectiveReadSetError>);
 
 impl ExecutionObserver for RefuseObservation {
     type Error = io::Error;
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
-        if let ExecutionObservation::ObjectiveProjectionUnavailable(error) = observation {
+        if let ExecutionObservation::ObjectiveReadSetUnavailable(error) = observation {
             self.0 = Some(error);
             return Err(io::Error::new(
                 io::ErrorKind::BrokenPipe,
@@ -224,7 +224,7 @@ fn cancelled_projected_preparation_keeps_a_typed_stop() {
     let error = prepared.projection_refusal.unwrap();
     assert_eq!(
         error.kind(),
-        &ObjectiveProjectionErrorKind::Existing(ObjectiveBoundErrorKind::Control(
+        &ObjectiveReadSetErrorKind::Existing(ObjectiveBoundErrorKind::Control(
             zetesis_algebra::Stop::Cancelled
         ))
     );

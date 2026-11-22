@@ -6,6 +6,29 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Workspace development and test builds use line-table debug information,
+  retaining source backtraces without embedding full variable/type information
+  in executables. Debug assertions, overflow checks and validation size limits
+  are unchanged; full debug information remains an explicit local option.
+- The parallel numeric-objective scan reads each weight in place instead of
+  through an owned term key, so its workers no longer contend on one shared
+  reference count. Grounding `#minimize{1@0,X,Y:d(X),e(Y)}` over 2,048 × 2,048
+  bindings falls from about 0.58 s to about 0.12 s with fourteen workers. A
+  grounding batch's first task runs on the coordinator, and a one-task batch
+  never enters the worker pool.
+- Objective scoring tries the newest contribution key before searching the
+  sorted keys and reads the control flags through a retained poll view.
+  Scoring 4,194,304 bindings of `#minimize{1@0,X,Y:d(X),e(Y)}` falls from
+  about 2.9 s to about 0.6 s; cancellation is still observed at every tick.
+- Candidate search keeps the knowledge of only the newest 64 pending regions
+  per worker; older pending regions recompute it when visited. Peak memory
+  no longer grows with search depth times workers: on a 1,000-node coloring
+  with 14 threads it falls from about 1.3 GB to about 0.3 GB.
+- Join ordering defers an independent generator while a remaining connected
+  generator binds one of its variables, instead of first joining it with the
+  whole prefix because it decides a comparison. Arithmetic joins such as
+  `a(C,P) :- edge(C,P), val(C,X), val(P,Y), X > Y + K.` no longer enumerate the
+  product of the two value relations. The set of complete bindings is unchanged.
 - Source preparation can execute eligible join rows in a source-owned CPU pool,
   retaining ordered canonical construction, provenance and complete enumeration.
   The current development configuration requests 14 source workers, separately
@@ -20,6 +43,30 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- The tight-program certificate admits head disjunctions of distinct atoms
+  (head-cycle-free by tightness) through their shift: a head atom is supported
+  only while its body holds and no other atom of the head is present. Tight
+  disjunctive programs then decide membership by original satisfaction and
+  support instead of a general reduct query, with complete enumeration and
+  optimum ties unchanged. The device route still uses general propagation for
+  such plans. Lean proves the shifted-support sufficiency
+  (`ShiftedSupport.ranked_support_stable`).
+- The maintained benchmark corpus adds 13 of 14 reconstructed Vaelii-shaped
+  Datalog workloads (`examples/vaelii-reconstructed`), labeled as
+  reconstructions, and 9 exact Vaelii test programs transcribed from
+  Vaelii's own ASP tests (`examples/vaelii-exact`), for 117 cases in all.
+  The exact programs too slow for the corpus timeout (a 90-vertex weighted
+  cover and 13-pigeon pigeonhole) and the reconstructed `sg1k`, whose answer
+  exceeds the corpus capture limit, stay in the separate
+  `examples/vaelii-slow` supplement.
+- Direct source evaluation admits stratified recursion: recursive
+  Datalog-shaped closures, joins and arithmetic filters, including recursion
+  that negates completed lower strata and negation over their completed
+  relations from later strata, are evaluated from completed support without
+  formula construction, as are assignment aggregates over completed lower
+  relations, such as `N = #count{ Y : e(X,Y) }`. Recursion through default
+  negation or aggregates keeps the ordinary grounding door. See
+  [direct evaluation of stratified recursion](docs/book/architecture/source-pipeline.md#direct-evaluation-of-stratified-recursion).
 - `GpuFormulaOracle::from_source_with_kernel` accepts explicit kernel options
   while preserving the supplied device source and context. Existing default
   primitive constructors retain Dense propagation. The current development solve
@@ -27,6 +74,25 @@ Notable changes by release. Versions follow Semantic Versioning.
   supplied profiles remain exact. Ordinary statistics remain available, while
   private device-mode diagnostics are omitted. This is an explicit experimental
   policy, not a release-default selection or a general GPU performance claim.
+
+### Fixed
+
+- Full conflict and objective-bound learning checks its condition limit through
+  packed decisions before allocating literal storage. Discovery and copying
+  consume the source's existing work allowance; interrupted and declined
+  captures retain their observed allocation peak.
+- Columnar equality joins charge matching rows before retaining them, allowing
+  a work refusal to stop a large matching product without first staging every
+  pair. Complete bindings and successful work totals are unchanged.
+- Ordered grounding retries partition refusals even when successful tasks lie
+  between them. Successful results are retained once, all performed work is
+  settled, and the first logical failure still stops later retries.
+- Source equality joins retain the sorting and uniqueness work performed by
+  their atom-set conversions. Work exhaustion and cancellation propagate through
+  positive joins and negative filters instead of becoming optional declines.
+  Already ordered rows combine ordering and duplicate removal in one comparison
+  pass. Unordered rows retain the discovery work before charged sorting, so
+  exact work receipts and tight-limit refusal points reflect the selected path.
 
 ## 0.8.0 — 2026-11-15
 

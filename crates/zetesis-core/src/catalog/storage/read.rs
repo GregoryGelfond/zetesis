@@ -176,6 +176,14 @@ impl<'a> Read<'a> {
             PredicateId(u32::try_from(position).expect("admitted predicate identities fit u32"))
         })
     }
+    /// Number of term identities in this prefix; every one below it resolves.
+    pub(crate) fn term_count(self) -> usize {
+        self.counts().terms
+    }
+    /// Number of predicate identities in this prefix.
+    pub(crate) fn predicate_count(self) -> usize {
+        self.counts().predicates
+    }
     pub(crate) fn contains_term(self, id: TermId) -> bool {
         (id.0 as usize) < self.counts().terms
     }

@@ -10,9 +10,10 @@ pub(crate) struct Observer<'a> {
     grounding: Option<&'a crate::grounding_timing::Recorder>,
     span: RefCell<Option<StageSpan<'a>>>,
     phase: RefCell<Option<crate::grounding_timing::Attempt>>,
+    operators: Option<std::rc::Rc<crate::grounding_timing::Operators>>,
 }
 impl<'a> Observer<'a> {
-    pub(crate) const fn new(
+    pub(crate) fn new(
         recorder: &'a StageRecorder,
         grounding: Option<&'a crate::grounding_timing::Recorder>,
     ) -> Self {
@@ -21,6 +22,8 @@ impl<'a> Observer<'a> {
             grounding,
             span: RefCell::new(None),
             phase: RefCell::new(None),
+            operators: grounding
+                .map(|_| std::rc::Rc::new(crate::grounding_timing::Operators::new())),
         }
     }
 }
@@ -36,6 +39,11 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
     }
     fn domain_diagnostics_enabled(&self) -> bool {
         false
+    }
+    fn operators(&self) -> Option<std::rc::Rc<dyn zetesis_themelios::OperatorObserver>> {
+        self.operators
+            .clone()
+            .map(|operators| operators as std::rc::Rc<dyn zetesis_themelios::OperatorObserver>)
     }
     fn terminal_definitions(&self, base: zetesis_themelios::BaseKind) {
         self.recorder.mark_terminal_definitions(mark(base));
@@ -66,7 +74,7 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
             return;
         };
         let attempt = self.phase.take().expect("phase exit follows its entry");
-        grounding.exit(attempt, phase, outcome, &work);
+        grounding.exit(attempt, phase, outcome, &work, self.operators.as_deref());
     }
 }
 

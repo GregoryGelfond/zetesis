@@ -337,3 +337,32 @@ fn a_false_filter_excludes_the_body_assignment() {
     assert!(search.exhausted());
     assert_eq!(families, vec![vec!["a".to_owned(), "b".to_owned()]]);
 }
+
+/// A recursive rule's old rows must still meet a partner's new rows. The
+/// partner `m/2` is derived, so it grows after `parent/2`'s first visit; a
+/// semi-naive step that only takes the recursive atom's new rows would stop
+/// at the facts.
+#[test]
+fn recursive_rules_join_old_rows_with_a_grown_partner() {
+    let expected = |source: &str| {
+        crate::support::atom_models::answer_sets(&admit(source, &FormulaLimits::default()).unwrap())
+    };
+    let chain = "m(X,Y):-m0(X,Y).parent(S,C):-parent(P,C),m(P,S).\
+                 m0(a,b).m0(b,c).m0(c,d).parent(a,x).";
+    assert_eq!(
+        crate::support::atom_models::answer_sets(&formula(chain)),
+        expected(
+            "m0(a,b).m0(b,c).m0(c,d).m(a,b).m(b,c).m(c,d).\
+             parent(a,x).parent(b,x).parent(c,x).parent(d,x)."
+        )
+    );
+    let symmetric = "married(B,G):-married(G,B).parent(S,C):-parent(P,C),married(P,S).\
+                     married(me,widow).married(father,wd).parent(wd,son).parent(father,me).";
+    assert_eq!(
+        crate::support::atom_models::answer_sets(&formula(symmetric)),
+        expected(
+            "married(me,widow).married(widow,me).married(father,wd).married(wd,father).\
+             parent(wd,son).parent(father,me).parent(father,son).parent(wd,me)."
+        )
+    );
+}

@@ -123,3 +123,32 @@ impl Oracle {
         }
     }
 }
+
+/// Whether an optional learning source or attempt-scaling policy is in force.
+/// The ordinary policy, [`Self::DEFAULT`], is [`Self::Enabled`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LearningSwitch {
+    /// The named policy is applied.
+    Enabled,
+    /// The named policy is not applied. Measurement use: isolate a source
+    /// or keep attempt caps at [`zetesis_ferraris::LearningLimits::DEFAULT`].
+    Disabled,
+}
+
+impl LearningSwitch {
+    /// The ordinary policy, [`Self::Enabled`]; [`Default`] returns it.
+    pub const DEFAULT: Self = Self::Enabled;
+
+    /// Whether the named policy is applied.
+    #[must_use]
+    pub const fn is_enabled(self) -> bool {
+        matches!(self, Self::Enabled)
+    }
+}
+
+impl Default for LearningSwitch {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}

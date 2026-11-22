@@ -7,8 +7,10 @@
 //! and false. An ordering key is one column; equality may use a checked
 //! expression of columns. The ordinary residual comparison remains in the join.
 //!
-//! Flat normal source bodies opt in during eager emission or possible-head
-//! production. Explicit aggregate consumers additionally admit flat positive
+//! Flat normal source bodies opt in during rule instantiation, under every
+//! grounding schedule, and during possible-head production: a skipped row
+//! fails a defined comparison, so it emits nothing under any schedule.
+//! Explicit aggregate consumers additionally admit flat positive
 //! local conditions with covered bare-variable comparisons. Joins marked as
 //! original source evidence, hybrid capture/checks and direct-source exact
 //! activity never opt in. Scalar assignments may opt in after a whole-body
@@ -34,7 +36,7 @@ pub(super) struct Eligible;
 mod tests;
 
 impl<'a, 'source> Join<'a, 'source> {
-    /// Called only by eager instantiation or possible-head production.
+    /// Called only by rule instantiation or possible-head production.
     /// No totality premise is borrowed from original-family admission: a
     /// defined false plan-decided comparison excludes that row under the
     /// ordinary filters contract, including independent deferred scalar faults.

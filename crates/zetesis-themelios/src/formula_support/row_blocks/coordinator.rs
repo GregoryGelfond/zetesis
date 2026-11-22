@@ -22,6 +22,7 @@ struct Block {
     expansion: ExpansionLimits,
 }
 
+#[derive(Default)]
 struct Receipt {
     work: u64,
     substitutions: u64,
@@ -146,13 +147,115 @@ pub(crate) fn run<T: Send>(
             &kernel,
         )
     });
+    let repeated = partitioned_refusals(&completed);
     // Even an interrupted settlement visits all receipts; no completed task's
     // work or scalar traffic can disappear behind an earlier stop.
     let settlement = settle(completed.slots.slice_mut(), |receipt| {
         absorb(receipt, budget, limits, counters, location)
     });
+    if settlement.is_ok() {
+        repeat(
+            &mut completed,
+            &blocks,
+            repeated,
+            budget,
+            limits,
+            counters,
+            &kernel,
+        );
+    }
     arbitrate(&mut completed, settlement, location)?;
     Ok(completed)
+}
+
+/// A worker refuses against its partition of the remaining resources, not the
+/// source's ceiling. The leading such refusals, those before any panic or
+/// other failure that takes precedence by order, are repeated once every
+/// receipt, theirs included, has settled. Successful slots between refusals
+/// remain in place and do not terminate the retry range.
+fn partitioned_refusals<T>(completed: &Completed<T>) -> Range<usize> {
+    fn outcome<T>(
+        slot: Option<&Capture<T, FormulaFailure, Receipt>>,
+    ) -> &Outcome<T, FormulaFailure> {
+        slot.expect("joined slot").pending_outcome()
+    }
+    let slots = completed.slots.slice();
+    let Some(first) = slots
+        .iter()
+        .position(|slot| !matches!(outcome(slot.as_ref()), Outcome::Returned(Ok(_))))
+    else {
+        return 0..0;
+    };
+    let end = slots[first..]
+        .iter()
+        .position(|slot| match outcome(slot.as_ref()) {
+            Outcome::Returned(Ok(_)) => false,
+            Outcome::Returned(Err(error)) => !error.is_resource_refusal(),
+            Outcome::Panicked(_) => true,
+        })
+        .map_or(slots.len(), |offset| first + offset);
+    first..end
+}
+
+/// Repeat partition-refused blocks in order on the source's own accounts, so a
+/// refusal reports the source's ceiling and its cumulative demand, and a source
+/// within its ceiling is never refused by how the remainder was partitioned.
+/// The refused attempt's actual work stays charged. The first repeated failure
+/// ends the repetition; arbitration reports it by order.
+fn repeat<T>(
+    completed: &mut Completed<T>,
+    blocks: &Buffer<Block>,
+    repeated: Range<usize>,
+    budget: &mut Budget,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    kernel: &impl Fn(
+        Range<usize>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ) -> Result<T, FormulaFailure>,
+) {
+    let count = blocks.len();
+    let retained = completed.reserved;
+    for index in repeated {
+        if matches!(
+            completed.slots.slice()[index]
+                .as_ref()
+                .expect("joined slot")
+                .outcome(),
+            Outcome::Returned(Ok(_))
+        ) {
+            continue;
+        }
+        let block = &blocks.slice()[index];
+        let extra = retained / count + usize::from(index < retained % count);
+        // The block keeps its shared catalog bytes and may use the whole
+        // retained allowance; the other half of the remainder still bounds
+        // what earlier blocks retain.
+        let formula = FormulaLimits {
+            max_work: limits.max_work,
+            max_substitutions: limits.max_substitutions,
+            max_support_bytes: block.formula.max_support_bytes - extra + retained,
+            ..*limits
+        };
+        let mut state = (&mut *budget, &mut *counters);
+        let capture = Capture::run(
+            &mut state,
+            |(budget, counters)| kernel(block.rows.clone(), &formula, budget, counters),
+            |_| Receipt::default(),
+        );
+        let slot = &mut completed.slots.slice_mut()[index];
+        *slot = Some(capture);
+        let settled = settle(std::slice::from_mut(slot), |_| Ok::<(), FormulaFailure>(()));
+        debug_assert!(settled.is_ok());
+        if !matches!(
+            slot.as_ref().expect("repeated slot").outcome(),
+            Outcome::Returned(Ok(_))
+        ) {
+            return;
+        }
+    }
 }
 
 fn completed<T>(

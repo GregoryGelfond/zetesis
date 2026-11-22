@@ -2,7 +2,7 @@ use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_support::testing::{Fixture, binding};
 use crate::test_support::given_site;
-use zetesis_core::atom_interner::{AtomInterner, Limits as InternerLimits};
+use zetesis_core::atom_registry::{AtomRegistry, Limits as RegistryLimits};
 use zetesis_core::catalog::{
     AssignmentError, AtomCatalog, Limits as TermLimits, ReadError, TermAssignment,
 };
@@ -83,8 +83,8 @@ fn invalid_read_precedes_foreign_scope() {
 }
 
 fn published_prefixes() -> (AtomCatalog, AtomCatalog, TermAssignment) {
-    let mut owner = AtomInterner::new();
-    let limits = InternerLimits {
+    let mut owner = AtomRegistry::new();
+    let limits = RegistryLimits {
         max_atoms: 0,
         max_bytes: 1 << 20,
     };

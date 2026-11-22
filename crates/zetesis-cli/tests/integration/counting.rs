@@ -41,7 +41,7 @@ fn count_ignores_display_and_projection_identity() {
     let (outcome, bytes) = count("{p;q}. #project p/0. #show 1+1.", &config);
     assert_eq!(bytes, b"4\n");
     assert_eq!(outcome.semantic().complete_answer_count(), Some(4));
-    assert!(outcome.semantic().projection().is_none());
+    assert!(outcome.semantic().projective_statistics().is_none());
     assert_eq!(outcome.publication().models(), 0);
     assert!(outcome.publication().summary());
 }
@@ -295,7 +295,7 @@ fn later_projection_cannot_change_a_count_request() {
         Cancellation::default(),
     )
     .counting()
-    .projected(zetesis_solve::ProjectionLimits {
+    .projected(zetesis_solve::ProjectiveLimits {
         max_keys: 0,
         max_bytes: 0,
         max_work: 0,
@@ -307,7 +307,7 @@ fn later_projection_cannot_change_a_count_request() {
     }
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.complete_answer_count(), Some(4));
-    assert!(outcome.projection().is_none());
+    assert!(outcome.projective_statistics().is_none());
 }
 
 #[test]

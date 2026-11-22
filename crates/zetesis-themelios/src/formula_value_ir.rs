@@ -42,10 +42,10 @@ impl Compiler<'_> {
         }
         if literal.negation != DefaultNegation::None
             && let LiteralInner::Atom(atom) = &literal.inner
-            && let Some(projection) =
-                self.projected_atom(atom.get(), literal.negation, variables, body)?
+            && let Some(witnesses) =
+                self.anonymous_atom(atom.get(), literal.negation, variables, body)?
         {
-            body.push(projection);
+            body.push(witnesses);
             return Ok(());
         }
         if literal.negation != DefaultNegation::None

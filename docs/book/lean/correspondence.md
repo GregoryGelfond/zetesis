@@ -1417,6 +1417,20 @@ callback lifetime; their buffers own metadata, not logical payload.
 membership. Rust comparison/hash equivalence, index construction and binding
 lifetimes remain implementation obligations.
 
+The shared `zetesis_algebra::operators::Atoms::from_unsorted` conversion checks
+adjacent whole rows while coalescing equal runs. Under the named `Adjacent`,
+`Transitive` and `Antisymmetric` premises,
+`OrderedNormalization.ordered_normalization_exact` proves that this pass keeps
+exactly the input set and yields strict unique order. The supplied relation is
+lexicographic order on decoded integer rows; it need not be ASP term order.
+Rust must establish comparator agreement, equal column lengths and that the
+compacted ordinal prefix selects the first row of each run. On an inversion it
+restores every original ordinal before the ordinary sorting path. The theorem
+covers the successful ordered route; it does not verify that mutable reset,
+allocation or the callback accounting. Exact tests check ordered and unordered
+routes, late inversion, typed refusal and forwarding to the source owner. Each
+discovery comparison remains charged even when sorting follows it.
+
 The current formula join also uses a borrowed `AtomKey` at its indexed fallback
 when every argument of a flat pattern is bound. `AtomKeys.key_identity` and
 `membership_identity` identify the exact tuple; the catalog's unique insertion
@@ -2055,7 +2069,7 @@ and withholding partial certificates. These requests fit u128, and a refused
 charge reports the exact wide `Stop` for work.
 The projection `Work` in `zetesis-solve` retains its explicit poll before
 admission and preserves its native u64 overflow priority: a refused demand
-above `u64::MAX` maps to `ProjectionError::Overflow`, while other refusals
+above `u64::MAX` maps to `ProjectiveError::Overflow`, while other refusals
 retain the exact work-limit payload. Every u64 carry exceeds every u64 ceiling,
 so this mapping occurs before any receipt can change. Each caller retains one
 work counter and its other statistics; no stored meter or duplicate account is
@@ -4813,7 +4827,7 @@ compact prefix entry to truth at its stored original atom coordinate. It does
 not identify that coordinate with the compact formula-node position.
 
 The Rust
-[`ObjectivePlan::new_projected`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound.rs)
+[`ObjectivePlan::new_read_set`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound.rs)
 receives an authenticated `ObjectiveSource` from one admitted source owner. Its
 selector must collect all positive-pattern and closed-condition signed predicates
 and arities, scan that owner's complete catalog, and retain increasing original
@@ -5123,7 +5137,7 @@ owner authentication and preservation of admission remain Rust obligations;
 existing Lean laws do not certify this new execution consumer.
 
 The optional Rust
-[finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/totality.rs)
+[finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/expression_memos/totality.rs)
 adds a separate justification for ordinary row selection. A full positive
 column of the immutable snapshot covers every full binding's value at that
 variable, even when it contains extra values excluded by another argument or

@@ -177,8 +177,8 @@ fn unmapped_rows_remain_eligible() {
 }
 
 fn descending_catalog(owner: &HybridFormula) -> zetesis_core::AtomCatalog {
-    let mut catalog_owner = zetesis_core::atom_interner::AtomInterner::new();
-    let catalog_limits = zetesis_core::atom_interner::Limits {
+    let mut catalog_owner = zetesis_core::atom_registry::AtomRegistry::new();
+    let catalog_limits = zetesis_core::atom_registry::Limits {
         max_atoms: owner.atom_catalog().atoms().len(),
         max_bytes: 16 * 1024 * 1024,
     };

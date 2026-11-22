@@ -262,7 +262,7 @@ fn projected_head_metadata_has_one_live_lease() {
         .unwrap();
         let metadata = size_of::<RowHead<'_>>()
             + rule.body.len() * size_of::<&zetesis_core::relation::Relation<'_>>()
-            + 3 * size_of::<Option<zetesis_core::atom_interner::RowColumn>>();
+            + 3 * size_of::<Option<zetesis_core::atom_registry::RowColumn>>();
         assert_eq!(support.workspace_bytes() - before, metadata);
         drop(head);
         assert_eq!(support.workspace_bytes(), before);

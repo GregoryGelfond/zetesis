@@ -648,6 +648,9 @@
 'Zetesis.ConstructorPatterns.binding_sound' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConstructorPatterns.acceptance_iff_consistent' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConstructorPatterns.failure_preserves_binding' depends on axioms: [propext]
+'Zetesis.ContentOrderInterning.id_injective_of_law' depends on axioms: [propext, Quot.sound]
+'Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare' does not depend on any axioms
+'Zetesis.ContentOrderInterning.freeze_establishes_law' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.sub_refl' does not depend on any axioms
 'Zetesis.sub_trans' does not depend on any axioms
 'Zetesis.atoms_ext' depends on axioms: [propext, Quot.sound]
@@ -1438,6 +1441,11 @@
 'Zetesis.OrderedHeadActivity.formula_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.OrderedHeadActivity.measure_predicate' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.OrderedHeadActivity.bound_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.OrderedNormalization.following_members' depends on axioms: [propext]
+'Zetesis.OrderedNormalization.coalesce_members' depends on axioms: [propext]
+'Zetesis.OrderedNormalization.adjacent_pairwise' depends on axioms: [propext, Quot.sound]
+'Zetesis.OrderedNormalization.following_strict' depends on axioms: [propext, Quot.sound]
+'Zetesis.OrderedNormalization.ordered_normalization_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.OrderedProbes.boundary_partitions' depends on axioms: [propext, Quot.sound]
 'Zetesis.OrderedProbes.complete_match_retained' depends on axioms: [propext, Quot.sound]
 'Zetesis.OrdinalExtrema.empty_measures' does not depend on any axioms
@@ -1888,6 +1896,10 @@
 'Zetesis.SharedRowCharges.total_owner_le' depends on axioms: [propext, Quot.sound]
 'Zetesis.SharedRowCharges.common_terms_preserved' depends on axioms: [propext, Quot.sound]
 'Zetesis.SharedRowCharges.accepted_prefix_stays_within' depends on axioms: [propext, Quot.sound]
+'Zetesis.ShiftedSupport.sole_head_forced' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ShiftedSupport.producer_forces_head' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ShiftedSupport.ranked_support_contained' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ShiftedSupport.ranked_support_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SignedHeadElements.operand_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SignedHeadElements.operand_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SignedHeadElements.double_negative_differs_from_positive' depends on axioms: [propext,

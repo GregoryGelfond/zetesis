@@ -7,6 +7,7 @@ import Zetesis.Semantics
 import Zetesis.Iteration
 import Zetesis.FiniteClosure
 import Zetesis.Lifted
+import Zetesis.OrderedNormalization
 import Zetesis.LiftedBridge
 import Zetesis.Search
 import Zetesis.Bounds
@@ -140,6 +141,7 @@ import Zetesis.Observations
 import Zetesis.SourceSupport
 import Zetesis.BindingScopes
 import Zetesis.DisjunctiveSupport
+import Zetesis.ShiftedSupport
 import Zetesis.ExternalSupport
 import Zetesis.CertainAtoms
 import Zetesis.DecidedNegation
@@ -228,3 +230,4 @@ import Zetesis.SourceActivityReuse
 
 import Zetesis.SharedRowCharges
 import Zetesis.OriginalRowCharges
+import Zetesis.ContentOrderInterning

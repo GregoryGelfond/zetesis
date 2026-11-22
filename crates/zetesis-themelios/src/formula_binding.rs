@@ -153,6 +153,24 @@ impl Binding<'static> {
             .map_err(|error| failure(error, location))
     }
 
+    /// Copy a present source slot's identity under its borrowed witness, so no
+    /// vocabulary handle is retained; charged exactly as [`Self::set`].
+    pub(crate) fn copy_present(
+        &mut self,
+        variable: usize,
+        source: AssignmentSlice<'_>,
+        source_variable: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        self.owned()
+            .copy_slot_with(variable, source, source_variable, || {
+                counters.work(limits, location)
+            })
+            .map_err(|error| failure(error, location))
+    }
+
     /// A metadata copy keeps source absence ahead of destination failures and
     /// imposes no accessible-reader-prefix requirement on either frame.
     pub(crate) fn copy_slot(
@@ -197,6 +215,24 @@ impl Binding<'static> {
             location,
             |values, max_bytes, before| values.resize_with(end, max_bytes, before),
         )
+    }
+
+    /// Whether `extend_scope(end)` stays within this frame's storage
+    /// allowance. A query only: nothing is reserved, observed or charged.
+    pub(crate) fn admits_scope(
+        &self,
+        end: usize,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        location: ProgramSite,
+    ) -> bool {
+        let Slots::Owned { values, lease } = &self.slots else {
+            return false;
+        };
+        let extra = size_of::<Self>() - size_of::<TermAssignment>();
+        computation
+            .allowance(lease, limits, location)
+            .is_ok_and(|limit| values.admits(end, limit.saturating_sub(extra)))
     }
 
     pub(crate) fn truncate(

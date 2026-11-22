@@ -27,7 +27,7 @@ use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::ValueNodeRef;
 
 use super::multiples::{Divisor, number, positive_factors, remainder};
-use super::{Computation, Context, Counters, Join, keys, projections};
+use super::{Computation, Context, Counters, Join, expression_memos, keys};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, Operation, RuleIr};
 use crate::{FormulaFailure, FormulaLimits};
@@ -97,7 +97,7 @@ impl<'a> Join<'a, '_> {
             Divisor::Constant(_) => None,
             Divisor::Variable(slot) => Some(slot),
         };
-        if !projections::range_body(
+        if !expression_memos::range_body(
             rule,
             self.support,
             candidate.target,

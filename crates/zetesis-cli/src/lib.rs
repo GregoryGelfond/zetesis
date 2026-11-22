@@ -59,7 +59,7 @@ pub use presentation::ColorMode;
 pub use process::entry;
 
 mod grounding_timing;
-pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
+pub use zetesis_themelios::{GroundingOperator, GroundingOutcome, GroundingPhase, GroundingWork};
 
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
 
