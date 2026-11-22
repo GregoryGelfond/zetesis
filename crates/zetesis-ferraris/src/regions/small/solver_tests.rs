@@ -208,12 +208,12 @@ fn root_probes_stay_within_a_quarter_of_the_walk() {
 #[test]
 fn steering_leaves_an_optimizing_walk_alone_unless_asked() {
     let steered = SmallPolicy {
-        refinements: Refinements::MEASURED.with(Refinements::STEER, true),
+        refinements: Refinements::MEASURED,
         ..SmallPolicy::measured()
     };
     let mut scratch = super::SmallScratch::default();
     scratch.set_policy(steered);
-    assert!(scratch.steering(), "no objective: steering on");
+    assert!(scratch.steering(), "the default, no objective: steering on");
     scratch.note_objective(true);
     assert!(!scratch.steering(), "an objective: steering off");
     scratch.set_policy(SmallPolicy {
