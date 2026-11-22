@@ -18,18 +18,110 @@ use super::vocabulary::Vocabulary;
 use super::{Failure, Fault, Read, Store, TermId, budget};
 use crate::catalog::view::TermRef;
 
-/// Typed term order over canonical terms of one writer, named by their
-/// identity words.
+/// Typed term order over canonical terms of one writer. Content is a term's
+/// order key ([`KEY`] words) and its identity word. The key is a prefix of the
+/// term's preorder storage comparison: words that differ decide the order, and
+/// equal keys fall back to the full typed comparison.
 struct Typed<'a>(Read<'a>);
 
-// `Read` only borrows immutable storage for the duration of the freeze.
 impl ContentOrder for Typed<'_> {
     fn compare(&self, _: Frozen<'_>, left: &[u32], right: &[u32]) -> Ordering {
+        let order = left[..KEY].cmp(&right[..KEY]);
+        if order.is_ne() || left[0] == NUMBER {
+            return order;
+        }
         let term = |word: u32| {
             TermRef::new(self.0, TermId::from_word(word)).expect("frozen tail term resolves")
         };
-        super::super::compare::term(term(left[0]), term(right[0]))
+        super::super::compare::term(term(left[KEY]), term(right[KEY]))
     }
+}
+
+/// Storage rank of a number; a number's key decides it completely.
+const NUMBER: u32 = 1;
+/// Order-key words per term.
+const KEY: usize = 7;
+/// A text length word that stops the key: the text continues past its prefix.
+const LONG: u32 = 9;
+
+/// A tail term's interner content: its order key, then its identity.
+///
+/// The key walks the term's nodes in preorder, as storage comparison does.
+/// Each node gives its rank, then a number's order-preserving value, a tuple's
+/// arity, or a text's first eight bytes (zero-padded, big-endian) and its
+/// length capped at [`LONG`]; a function whose name fits gives its sign and
+/// arity too. A capped length ends the key. Two terms whose keys agree up to a
+/// word agree in every node before it, so they emit, stop or end at the same
+/// words: the first differing word orders them as storage comparison does.
+fn content(read: Read<'_>, identity: u32, pending: &mut Vec<TermId>) -> [u32; KEY + 1] {
+    use crate::ValueNodeRef;
+    let mut out = [0_u32; KEY + 1];
+    out[KEY] = identity;
+    let mut len = 0;
+    let mut push = |word: u32, len: &mut usize| {
+        if *len < KEY {
+            out[*len] = word;
+            *len += 1;
+        }
+    };
+    pending.clear();
+    pending.push(TermId::from_word(identity));
+    'walk: while let Some(id) = pending.pop() {
+        if len >= KEY {
+            break;
+        }
+        let term = read.term(id).expect("tail term resolves");
+        let descriptor = term.descriptor();
+        push(
+            u32::from(crate::term_order::node_storage_rank(descriptor)),
+            &mut len,
+        );
+        let text = |text: &str, len: &mut usize, push: &mut dyn FnMut(u32, &mut usize)| {
+            let mut bytes = [0_u8; 8];
+            let prefix = &text.as_bytes()[..text.len().min(8)];
+            bytes[..prefix.len()].copy_from_slice(prefix);
+            push(
+                u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+                len,
+            );
+            push(
+                u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+                len,
+            );
+            let capped = u32::try_from(text.len()).map_or(LONG, |length| length.min(LONG));
+            push(capped, len);
+            capped < LONG
+        };
+        let arity = match descriptor {
+            ValueNodeRef::Number(value) => {
+                push(value.cast_unsigned() ^ (1 << 31), &mut len);
+                0
+            }
+            ValueNodeRef::Symbol(name) | ValueNodeRef::String(name) => {
+                if !text(name, &mut len, &mut push) {
+                    break 'walk;
+                }
+                0
+            }
+            ValueNodeRef::Function { name, sign, arity } => {
+                if !text(name, &mut len, &mut push) {
+                    break 'walk;
+                }
+                push(u32::from(sign == crate::Sign::Negative), &mut len);
+                push(u32::try_from(arity).unwrap_or(u32::MAX), &mut len);
+                arity
+            }
+            ValueNodeRef::Tuple { arity } => {
+                push(u32::try_from(arity).unwrap_or(u32::MAX), &mut len);
+                arity
+            }
+            ValueNodeRef::Infimum | ValueNodeRef::Supremum => 0,
+        };
+        for index in (0..arity.min(KEY)).rev() {
+            pending.push(term.child(index).expect("compound child resolves"));
+        }
+    }
+    out
 }
 
 impl Store {
@@ -55,9 +147,9 @@ impl Store {
             return Ok(());
         }
         let start = tail.start.terms;
-        // Transient interner content (one word and one start per term, a hash
-        // and a table cell each) plus the retained order column.
-        let transient = count as u128 * (4 + 4 + 8 + 5);
+        // Transient interner content (key and identity words, one start, a
+        // hash and a table cell per term) plus the retained order column.
+        let transient = count as u128 * ((KEY as u128 + 1) * 4 + 4 + 8 + 5);
         let retained = count as u128 * 4;
         self.budget.check_extra(transient + retained)?;
         work.step()?;
@@ -68,9 +160,17 @@ impl Store {
             handles
                 .try_reserve_exact(count)
                 .map_err(|_| Fault::Allocation)?;
+            let mut pending = Vec::new();
             for local in 0..count {
                 let identity = u32::try_from(start + local).map_err(|_| Fault::IdExhausted)?;
-                handles.push(interner.intern(&[identity], &mut tally).map_err(refusal)?);
+                handles.push(
+                    interner
+                        .intern(
+                            &content(Read::Writer(self), identity, &mut pending),
+                            &mut tally,
+                        )
+                        .map_err(refusal)?,
+                );
             }
             let mut interner = interner;
             let generation = interner.freeze(None, &mut tally).map_err(refusal)?;
@@ -118,6 +218,13 @@ mod tests {
             Value::Infimum,
             Value::Supremum,
             Value::String(String::new()),
+            Value::Symbol("abcdefghx".into()),
+            Value::Symbol("abcdefgha".into()),
+            Value::Symbol("abcdefgh".into()),
+            Value::String("a\0".into()),
+            Value::String("a".into()),
+            Value::Number(i32::MIN),
+            Value::Number(i32::MAX),
         ];
         let nodes = |nodes: Vec<ValueNode>| {
             Value::from_nodes(
@@ -147,6 +254,31 @@ mod tests {
             ValueNode::Number(1),
             ValueNode::Number(2),
         ]));
+        let t = |arity| ValueNode::Tuple { arity };
+        let n = ValueNode::Number;
+        let y = |text: &str| ValueNode::Symbol(text.into());
+        values.push(nodes(vec![f("abcdefgh", 1), n(1)]));
+        values.push(nodes(vec![f("abcdefghi", 1), n(1)]));
+        values.push(nodes(vec![f("abcdefghi", 1), n(0)]));
+        values.push(nodes(vec![f("ab\0", 1), n(5)]));
+        values.push(nodes(vec![f("ab", 1), n(9)]));
+        values.push(nodes(vec![
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Negative,
+                arity: 1,
+            },
+            n(1),
+        ]));
+        values.push(nodes(vec![t(3), n(1), y("abcdefghijk"), n(3)]));
+        values.push(nodes(vec![t(3), n(1), y("abcdefghijk"), n(2)]));
+        values.push(nodes(vec![t(3), n(1), y("abcdefghijj"), n(9)]));
+        values.push(nodes(vec![t(1), t(1), t(1), t(1), t(1), t(1), t(1), n(2)]));
+        values.push(nodes(vec![t(1), t(1), t(1), t(1), t(1), t(1), t(1), n(1)]));
+        values.push(nodes(vec![t(2), t(2), n(1), n(2), n(3)]));
+        values.push(nodes(vec![t(2), t(2), n(1), n(2), n(-3)]));
+        values.push(nodes(vec![t(2), n(1), t(0)]));
+        values.push(nodes(vec![t(2), n(1), ValueNode::Supremum]));
         values
     }
 
