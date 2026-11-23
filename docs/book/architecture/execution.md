@@ -88,6 +88,19 @@ so this region walk proposes only classical models of the original theory
 that satisfy its active candidate restrictions
 (`FormulaBounds.decided_leaf_models`).
 
+A configured leaf specialization can also refute a generally closed original
+region. It reads necessary conditions through complete packed enumeration or
+bounded conflict learning; the latter builds a clausal/threshold encoding and
+includes active restrictions through guards. Neither a passing completion nor a
+spent local conflict/probe allowance establishes membership: the ordinary region
+walk and original reduct check remain authoritative. Actual admitted visits,
+including preparation, propagation, reasoning and copies, consume the same
+cumulative search-work budget. A resource or control failure retains its prefix
+and supplies no successful leaf verdict. Retained scratch capacity is observable;
+it is not a transient peak or a new hard memory limit. The
+[leaf correspondence](../lean/correspondence.md#candidate-generation-and-query-representation)
+states the necessary-condition and complete-coverage premises.
+
 Support rechecks carry two producer-row positions with the region's inherited
 knowledge. A failed body or competing held head stays unavailable in every
 descendant, so a later recheck skips that proved prefix and rechecks its remaining

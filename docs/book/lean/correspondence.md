@@ -2951,6 +2951,27 @@ visited; it may establish refutation before a quota would have stopped the old
 trailing scan. This is a semantic justification, not a proof of those Rust
 state-management obligations.
 
+The leaf specializations in `regions/small.rs` use
+`LeafRefinement.necessary_refutes` and `refutation_keeps_outputs`: a refutation of
+conditions necessary for every sought answer removes only an empty subtree.
+Packed enumeration additionally needs `Covers`, `Extensional`, membership of
+each completion in the region, and a completed test of every lane
+(`enumeration_refutes`, `lanes_refute`). A partially read word or unfinished
+later word cannot supply those premises. Learned refutation needs
+`CoreEntailed` and the region's decisions for every core literal
+(`learned_refutes`); `resolvent_sound` and `clause_entails_core` state the logical
+steps under their sound-clause hypotheses. Original roots and producer support
+supply the intended necessary predicate; active learned/probed restrictions
+must remain necessary for the candidates still sought.
+
+These laws do not certify the concrete Rust encoding, watched propagation,
+threshold reasoning, core extraction, deletion, packed lanes or cached-theory
+identity. Runtime work admission, typed refusal, complete-only refutation and
+scratch invalidation are separate obligations. The resource repair admits real
+visits through the existing meter and preserves the failed prefix; spending the
+local conflict allowance yields no refutation, while global refusal is an error.
+No proof or capacity observation establishes a total process-memory ceiling.
+
 The region candidate walk and frozen proper-subset queries share one
 immutable index constructed with the exact original `Theory`, built by its one
 owner when the walk first needs it. Reuse checks instance identity. Each

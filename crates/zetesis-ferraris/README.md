@@ -314,7 +314,7 @@ failures. See the [execution contract](../../docs/book/architecture/execution.md
 and [proof boundary](../../docs/book/lean/correspondence.md) for the complete-result,
 resource and correspondence obligations.
 
-Every narrowing entry point takes what it reads, an `OriginalSubject` (the
+The general narrowing entry points take what they read, an `OriginalSubject` (the
 theory and, when the support cut applies, its producers) or a `FrozenSubject`
 (the theory and a candidate's node truth), then the region, its knowledge and
 the walker's `NarrowingScratch`.
@@ -336,6 +336,35 @@ exercise every prefix of original and frozen narrowing and cancellation.
 The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs) compare
 carried and fresh original/frozen closure over 130 atoms and 132 nodes, including
 descendant conflicts, zero-work refusals and repeated completed closure.
+
+`OriginalSubject::narrow_small` reads a generally closed region with a
+`SmallPolicy` selected in `NarrowingScratch`. Its explicit `RegionLimits` bounds
+work and it returns `Metered<SmallNarrowing, Stop>`. The reserved variant,
+`narrow_small_reserved`, borrows the caller's existing `Meter` and returns the
+same outcome with `Failure<Q::Error>`, preserving the caller's refusal and the
+charged prefix. The reserved account owns control polling at refills; the leaf
+boundary also checks control before and after its operation and refunds unused
+grants. The receipt counts this call's work, excluding charges made before it.
+
+The specializations refute only through necessary conditions of the original
+theory and its supplied producers. Learned search and failed-literal probing
+also read guarded restrictions, whose atoms must use the original index. Packed
+enumeration must visit every completion before reporting no survivor. `Open`
+means no refutation was established, including when a local conflict/probe
+allowance was spent; it does not certify membership. Policy or representation
+ineligibility may `Decline`. Global work, allocation and control refusals return
+errors rather than a successful `Open` or `Declined` result.
+
+Leaf work includes admitted shape/encoding reads, copied words, operand and
+threshold-term visits, watched propagation, reasoning, sorting and complete
+packed-enumeration visits. Its local conflict allowance is not a proxy for this
+work. Interrupted mutable solver/enumeration state is discarded before reuse;
+changing theory instances clears learned cores and guards. The scratch's
+`retained_bytes()` includes owned leaf capacities, not shared theory storage,
+allocator overhead or temporary peaks, and introduces no new hard byte ceiling.
+The [leaf regressions](src/regions/small/tests.rs) cover interrupted wide rows
+and multiword enumeration; [public regressions](tests/integration/regions.rs)
+cover bounded prefixes, retry and theory reuse.
 
 The two mutable occurrence-count arrays use fixed-length storage: one neutral
 count per chain and one unresolved-parent count per atom. The absorbing witness

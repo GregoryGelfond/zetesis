@@ -50,7 +50,8 @@ use std::sync::OnceLock;
 
 use zetesis_algebra::region::{Narrowing, Region};
 use zetesis_algebra::{
-    AnswerSetsSought, Cancellation, Class, Countermodels, Failure, Meter, Quota, Stop, words::Words,
+    AnswerSetsSought, Cancellation, Class, Countermodels, Failure, Meter, Metered, Quota, Refusal,
+    Stop, words::Words,
 };
 
 use crate::{FormulaView, NodeView, Theory};
@@ -79,6 +80,7 @@ pub use generators::{
 };
 mod masks;
 mod preference;
+pub(crate) mod small;
 mod support;
 mod thresholds;
 mod witnesses;
@@ -194,6 +196,54 @@ impl<'a> OriginalSubject<'a> {
     #[must_use]
     pub const fn generator_order(&self) -> Option<&'a GeneratorOrder> {
         self.generator_order
+    }
+
+    /// Narrow a generally closed original region under an explicit work ceiling.
+    /// The outcome retains its admitted work even on cancellation or refusal.
+    /// The region must be closed by general narrowing of this same subject.
+    /// Learned/probed paths also read restrictions and bounds through guards;
+    /// their atoms must use the original theory's semantic index.
+    /// `Open` does not certify a model: a local search allowance may be spent.
+    /// Shape/encoding, propagation, reasoning and enumeration visits consume the
+    /// work ceiling. Global work, allocation and control refusals are errors.
+    pub fn narrow_small(
+        &self,
+        region: &Region,
+        scratch: &mut NarrowingScratch,
+        restrictions: &[&Theory],
+        limits: RegionLimits,
+        cancellation: &Cancellation,
+    ) -> Metered<small::SmallNarrowing, Stop> {
+        cancellation.metered(limits.max_work, |work| {
+            self.narrow_small_reserved(region, scratch, restrictions, cancellation, work)
+                .result
+                .map_err(Failure::into_stop)
+        })
+    }
+
+    /// Narrow using the caller's existing work account. Unused permits are
+    /// refunded on every returned outcome; typed refusals are preserved.
+    /// The reserved meter's quota owns cancellation/deadline polling at refills;
+    /// this boundary also polls on entry and before publishing a successful result.
+    /// An interrupted encoding or search is discarded before scratch reuse.
+    /// `charged` counts only this call's admitted visits; earlier meter charges
+    /// are excluded. This reads the same necessary conditions as `narrow_small`.
+    pub fn narrow_small_reserved<Q: Quota + ?Sized>(
+        &self,
+        region: &Region,
+        scratch: &mut NarrowingScratch,
+        restrictions: &[&Theory],
+        cancellation: &Cancellation,
+        work: &mut Meter<'_, Q>,
+    ) -> Metered<small::SmallNarrowing, Failure<Q::Error>> {
+        scratch.small_scratch().narrow(
+            self.theory,
+            self.producers,
+            restrictions,
+            region,
+            cancellation,
+            work,
+        )
     }
 
     /// The theory read.
@@ -2089,6 +2139,8 @@ pub struct NarrowingScratch {
     common: CommonScratch,
     learning: LearningScratch,
     arithmetic: arithmetic::runtime::ArithmeticScratch,
+    /// The walker's size-specialized narrowing state ([`small`]).
+    small: Option<Box<small::SmallScratch>>,
 }
 
 /// Worklists shared by original and frozen closure execution.
@@ -2162,6 +2214,84 @@ impl LearningScratch {
 }
 
 impl NarrowingScratch {
+    /// The size-specialized narrowings this walker made.
+    #[must_use]
+    pub fn small_statistics(&self) -> small::SmallStatistics {
+        self.small
+            .as_ref()
+            .map_or_else(small::SmallStatistics::default, |small| small.statistics)
+    }
+
+    /// The size-specialized state, created on first use.
+    fn small_scratch(&mut self) -> &mut small::SmallScratch {
+        self.small.get_or_insert_with(Box::default)
+    }
+
+    /// Whether a size-specialized narrowing policy is in force: the measured
+    /// default unless `ZETESIS_SMALL_REGIONS` (`off` disables it) or
+    /// [`Self::set_small_policy`] names another.
+    pub fn small_active(&mut self) -> bool {
+        match &mut self.small {
+            Some(small) => small.active(),
+            None => small::SmallPolicy::environment().active(),
+        }
+    }
+
+    /// Tell the size-specialized narrowing that the general narrowing refuted
+    /// `region` (an adapting policy reads its size). Each decision word read uses
+    /// the supplied account. The returned prefix survives refusal, and unused
+    /// grants are refunded; an inactive adaptive policy performs no such reads.
+    pub fn note_general_refutation<Q: Quota + ?Sized>(
+        &mut self,
+        region: &Region,
+        cancellation: &Cancellation,
+        work: &mut Meter<'_, Q>,
+    ) -> Metered<(), Failure<Q::Error>> {
+        let before = work.charged();
+        let result: Result<(), Failure<Q::Error>> = (|| {
+            cancellation.poll()?;
+            if let Some(small) = &mut self.small {
+                small.note_refuted(region, work)?;
+            }
+            cancellation.poll()?;
+            Ok(())
+        })();
+        let result = match result {
+            Err(error) if error.is_resource_refusal() => match cancellation.poll() {
+                Err(stop) => Err(Failure::Stopped(stop)),
+                Ok(()) => Err(error),
+            },
+            other => other,
+        };
+        work.refund();
+        Metered {
+            result,
+            charged: work.charged() - before,
+        }
+    }
+
+    /// Say whether this walker is the one that runs the size-specialized
+    /// learned search when only one may: a walk designates the walker that
+    /// carries its depth-first order, so a walker that would hold up the
+    /// start of parallel workers, or a second parallel worker, never builds
+    /// the clausal encoding.
+    pub fn designate_small_walker(&mut self, designated: bool) {
+        self.small_scratch().designate(designated);
+    }
+
+    /// Count of idle peers: while it is nonzero the size-specialized learned
+    /// search starts no search and ends a running one as spent, so its
+    /// region is split and shared rather than held.
+    pub fn yield_small_search_to(&mut self, idle: std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        self.small_scratch().yield_to(idle);
+    }
+
+    /// Fix the size-specialized narrowing policy instead of reading it from
+    /// the environment.
+    pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {
+        self.small_scratch().set_policy(policy);
+    }
+
     /// Worklist and pending-mask capacity in bytes; the value's own header is
     /// counted by its owner.
     #[must_use]
@@ -2182,6 +2312,10 @@ impl NarrowingScratch {
             + self.arithmetic.allocated_bytes()
             + self.learning.explanations.retained_bytes()
             + self.learning.bound.retained_bytes()
+            + self
+                .small
+                .as_ref()
+                .map_or(0, |small| small.retained_bytes())
             + (self.learning.decided.capacity() + self.learning.match_rows.capacity()) as u128
                 * size_of::<usize>() as u128
     }

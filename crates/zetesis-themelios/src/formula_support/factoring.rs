@@ -162,6 +162,68 @@ impl<'join, 'a, 'source> Continuations<'join, 'a, 'source> {
         self.join.pending.as_ref()
     }
 
+    /// Begin a continuation from an already restored base assignment. The
+    /// original cursor is not advanced; parallel staging already produced the
+    /// complete `next_base` stream.
+    pub(crate) fn start_from(
+        &mut self,
+        values: &Binding<'_>,
+        context: Context<'_, &Computation<'_, 'source>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        computation.allowance(&self.lease, limits, location)?;
+        self.suspended = false;
+        let values = values.copied(computation, limits, counters, location)?;
+        counters.record(Event::BindingSnapshot);
+        self.join.comparisons = self.join.certificate();
+        self.join.prepare_continuation(
+            values,
+            None,
+            Context::new(computation, limits, counters, location),
+        )
+    }
+
+    /// Canonical input equality used to group consecutive restored base rows.
+    pub(crate) fn equal_inputs(
+        left: &Binding<'_>,
+        right: &Binding<'_>,
+        inputs: &[usize],
+        limits: &crate::FormulaLimits,
+        counters: &mut crate::formula_support::Counters,
+        location: crate::ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        for &slot in inputs {
+            counters.work(limits, location)?;
+            if slot >= left.len() || slot >= right.len() || !left.is_bound(slot, location)? {
+                return Ok(false);
+            }
+            let Some(key) = right
+                .slots()
+                .key(slot)
+                .map_err(|error| crate::formula_binding::assignment(error, location))?
+            else {
+                return Ok(false);
+            };
+            if left
+                .slots()
+                .compare_key(slot, &key)
+                .map_err(|error| crate::formula_binding::assignment(error, location))?
+                != std::cmp::Ordering::Equal
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     /// Match every base row normally. Equal inputs lend the actual witness;
     /// a differing row remains in the base frame for the next continuation.
     pub(crate) fn witness(

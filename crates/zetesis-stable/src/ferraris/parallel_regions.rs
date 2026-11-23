@@ -876,6 +876,11 @@ impl ParallelRegions {
         let root = Entry::new(root, CandidateKnowledge::default());
         let frontier = RegionFrontier::new(workers.get(), root)?;
         let inner = InnerDeques::new(workers.get())?;
+        // The coordinator's learned search would hold up the workers' start
+        // for its whole length, so only a walk that never engages lets it run;
+        // otherwise worker 0, which continues the coordinator's walk, does.
+        let mut scratch = NarrowingScratch::default();
+        scratch.designate_small_walker(Instant::now().checked_add(delay).is_none());
         Ok(Self {
             shared: Arc::new(Shared {
                 parts,
@@ -903,7 +908,7 @@ impl ParallelRegions {
             exhausted: false,
             statistics,
             merged: Statistics::default(),
-            scratch: NarrowingScratch::default(),
+            scratch,
         })
     }
 
@@ -1849,6 +1854,10 @@ fn worker(
     let mut reported = SearchPhaseTimings::default();
     let mut search = SearchStatistics::default();
     let mut workspaces = Workspaces::new();
+    workspaces.scratch.designate_small_walker(index == 0);
+    workspaces
+        .scratch
+        .yield_small_search_to(Arc::clone(&shared.frontier.termination.idle_waiters));
     // One lease serves this worker's consecutive regions, so the shared ledger
     // is locked about twice per grant rather than twice per region. It settles
     // before this worker steals or waits for another region and before it sends

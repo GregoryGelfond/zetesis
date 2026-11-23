@@ -1160,6 +1160,16 @@ import Zetesis
 #print axioms Zetesis.LazyRounds.chunk_concatenation
 #print axioms Zetesis.LazyRounds.completed_round_closed
 #print axioms Zetesis.LazyRounds.completed_round_exact
+#print axioms Zetesis.LeafRefinement.refutation_keeps_outputs
+#print axioms Zetesis.LeafRefinement.necessary_refutes
+#print axioms Zetesis.LeafRefinement.enumeration_exact
+#print axioms Zetesis.LeafRefinement.enumeration_refutes
+#print axioms Zetesis.LeafRefinement.lanes_refute
+#print axioms Zetesis.LeafRefinement.resolvent_sound
+#print axioms Zetesis.LeafRefinement.clause_entails_core
+#print axioms Zetesis.LeafRefinement.learned_refutes
+#print axioms Zetesis.LeafRefinement.core_row
+#print axioms Zetesis.LeafRefinement.core_row_valid
 #print axioms Zetesis.LearnedRegions.decides_holds
 #print axioms Zetesis.LearnedRegions.holds_negate_excludes
 #print axioms Zetesis.LearnedRegions.holds_or_negate

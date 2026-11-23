@@ -1213,3 +1213,39 @@ fn terminal_refusal_preserves_published_models() {
     assert!(!partial.summary_published);
     assert_eq!(bytes, reference[..model_end]);
 }
+
+#[test]
+fn constant_recursive_heads_preserve_full_models() {
+    for (source, expected) in [
+        (
+            "p(2). q(2). p(1) :- p(X), q(X).",
+            vec![("p", 1), ("p", 2), ("q", 2)],
+        ),
+        (
+            "p(2). p(3). q(2). q(3). p(1) :- p(X), q(X).",
+            vec![("p", 1), ("p", 2), ("p", 3), ("q", 2), ("q", 3)],
+        ),
+    ] {
+        let expected: std::collections::BTreeSet<_> = expected.into_iter().map(|(predicate, value)| {
+            json!({"predicate": predicate, "sign": "positive", "arguments": [[{"kind": "number", "value": value}]]}).to_string()
+        }).collect();
+        for grounder in ["auto", "eager", "lazy"] {
+            let (report, document) = solve(source, &options(&["--grounder", grounder]));
+            let report = report.unwrap();
+            assert_eq!(
+                report.completion,
+                Completion::Exhausted,
+                "{grounder}: {source}"
+            );
+            assert_eq!(report.models, 1, "{grounder}: {source}");
+            assert_eq!(document["outcome"]["coverage"], "exhausted");
+            let models = document["models"].as_array().unwrap();
+            assert_eq!(models.len(), 1);
+            let full = spelled(&document, &models[0]);
+            assert_eq!(full.len(), expected.len(), "{grounder}: {source}");
+            let actual: std::collections::BTreeSet<_> =
+                full.into_iter().map(|atom| atom.to_string()).collect();
+            assert_eq!(actual, expected, "{grounder}: {source}");
+        }
+    }
+}

@@ -220,7 +220,7 @@ fn unchanged_arithmetic_work(
     arithmetic.charged()
 }
 
-/// Measure the root's direct narrowing and any explicitly enabled inspection.
+/// Account for direct root narrowing, enabled inspection, and leaf eligibility.
 fn cycle_root_work(theory: &Theory, outer_checks: bool) -> u64 {
     let cancellation = Cancellation::default();
     let extraction =
@@ -272,7 +272,17 @@ fn cycle_root_work(theory: &Theory, outer_checks: bool) -> u64 {
     } else {
         0
     };
-    direct.work + arithmetic
+    // The walk also offers this complete region to the active leaf policy.
+    // No active policy can search it: one dispatch and ceil(atoms / 64)
+    // packed decision-word reads establish that it has no open atoms.
+    // Read only the effective active/off setting, never a measured receipt;
+    // worker scratches use the same process-cached environment policy.
+    let leaf_eligibility = if scratch.small_active() {
+        1 + u64::try_from(theory.atom_count().div_ceil(64)).unwrap()
+    } else {
+        0
+    };
+    direct.work + arithmetic + leaf_eligibility
 }
 
 #[test]
@@ -310,7 +320,7 @@ fn assert_single_index_work(outer_checks: bool) {
             "{route}"
         );
         // The independent constructor receipt, exact N+E index charge,
-        // and the independent root closure account for the entire walk.
+        // and independent root closure plus leaf eligibility account for the walk.
         let region_work = setup.search.work + indexing_work(&theory) + root_work;
         assert_eq!(
             hooks::builds(&theory),

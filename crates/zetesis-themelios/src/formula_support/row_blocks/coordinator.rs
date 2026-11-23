@@ -90,6 +90,17 @@ impl<T> Completed<T> {
         })
     }
 
+    /// Yield each settled batch in task order, dropping the slot as soon as
+    /// the caller is done with that item. The conservative reservation stays
+    /// until this `Completed` is dropped, so publication limits and receipts
+    /// are unchanged; only the staged payload is released after each publish.
+    pub(crate) fn drain(&mut self) -> Drain<'_, T> {
+        Drain {
+            slots: self.slots.slice_mut(),
+            index: 0,
+        }
+    }
+
     pub(crate) fn publication_limits(&self, limits: &FormulaLimits) -> FormulaLimits {
         FormulaLimits {
             max_support_bytes: limits.max_support_bytes - self.reserved,
@@ -98,11 +109,52 @@ impl<T> Completed<T> {
     }
 }
 
+/// Ordered take of settled worker outputs. Each `next` releases that slot.
+pub(crate) struct Drain<'a, T> {
+    slots: &'a mut [Option<Capture<T, FormulaFailure, Receipt>>],
+    index: usize,
+}
+
+impl<T> Iterator for Drain<'_, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        while self.index < self.slots.len() {
+            let index = self.index;
+            self.index += 1;
+            if let Some(capture) = self.slots[index].take() {
+                return Some(match capture.into_outcome() {
+                    Outcome::Returned(Ok(value)) => value,
+                    _ => unreachable!("all outcomes checked before completion"),
+                });
+            }
+        }
+        None
+    }
+}
+
 /// The callback captures only immutable source descriptors. Fresh accounting and
 /// observation banks are constructed inside each worker, never sent as `Rc`s.
 pub(crate) fn run<T: Send>(
     executor: &Executor,
     width: usize,
+    budget: &mut Budget,
+    context: Context<'_, &Computation<'_, '_>>,
+    kernel: impl Fn(
+        Range<usize>,
+        &FormulaLimits,
+        &mut Budget,
+        &mut Counters,
+    ) -> Result<T, FormulaFailure>
+    + Sync,
+) -> Result<Completed<T>, FormulaFailure> {
+    run_grouped(executor, width, TASKS, budget, context, kernel)
+}
+
+pub(crate) fn run_grouped<T: Send>(
+    executor: &Executor,
+    width: usize,
+    groups: usize,
     budget: &mut Budget,
     context: Context<'_, &Computation<'_, '_>>,
     kernel: impl Fn(
@@ -123,7 +175,7 @@ pub(crate) fn run<T: Send>(
             },
     } = context;
     let mut completed = completed(computation, limits, counters, location)?;
-    let mut blocks = blocks(width, computation, limits, counters, location)?;
+    let mut blocks = blocks(width, groups, computation, limits, counters, location)?;
     for _ in blocks.iter() {
         completed
             .slots
@@ -137,7 +189,7 @@ pub(crate) fn run<T: Send>(
     let cancel = counters.cancellation().cloned();
     let scalar_cancel = budget.cancellation().cloned();
     let observed = counters.observed.enabled();
-    executor.run(blocks.slice(), completed.slots.slice_mut(), |block| {
+    let execute_block = |block: &Block| {
         execute(
             block,
             cancel.as_ref(),
@@ -146,7 +198,12 @@ pub(crate) fn run<T: Send>(
             location,
             &kernel,
         )
-    });
+    };
+    if groups > TASKS {
+        executor.run_prime(blocks.slice(), completed.slots.slice_mut(), execute_block);
+    } else {
+        executor.run(blocks.slice(), completed.slots.slice_mut(), execute_block);
+    }
     let repeated = partitioned_refusals(&completed);
     // Even an interrupted settlement visits all receipts; no completed task's
     // work or scalar traffic can disappear behind an earlier stop.
@@ -216,8 +273,6 @@ fn repeat<T>(
         &mut Counters,
     ) -> Result<T, FormulaFailure>,
 ) {
-    let count = blocks.len();
-    let retained = completed.reserved;
     for index in repeated {
         if matches!(
             completed.slots.slice()[index]
@@ -229,20 +284,15 @@ fn repeat<T>(
             continue;
         }
         let block = &blocks.slice()[index];
-        let extra = retained / count + usize::from(index < retained % count);
-        // The block keeps its shared catalog bytes and may use the whole
-        // retained allowance; the other half of the remainder still bounds
-        // what earlier blocks retain.
-        let formula = FormulaLimits {
-            max_work: limits.max_work,
-            max_substitutions: limits.max_substitutions,
-            max_support_bytes: block.formula.max_support_bytes - extra + retained,
-            ..*limits
-        };
+        // Work and substitutions already retry against the source ceilings.
+        // SupportBytes must as well: the worker grant is only a partition of
+        // the remainder (`shared + retained/n`). Retrying against
+        // `shared + retained` still refuses demand that fits the source
+        // ceiling and reports the partitioned cap instead of that ceiling.
         let mut state = (&mut *budget, &mut *counters);
         let capture = Capture::run(
             &mut state,
-            |(budget, counters)| kernel(block.rows.clone(), &formula, budget, counters),
+            |(budget, counters)| kernel(block.rows.clone(), limits, budget, counters),
             |_| Receipt::default(),
         );
         let slot = &mut completed.slots.slice_mut()[index];
@@ -278,20 +328,20 @@ fn completed<T>(
 
 fn blocks(
     width: usize,
+    groups: usize,
     computation: &Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Buffer<Block>, FormulaFailure> {
+    let count = super::prime::group_count(width, groups);
     let mut blocks = Buffer::new(computation, limits, counters, location)?;
-    blocks.reserve(width.min(TASKS), computation, limits, counters, location)?;
-    let mut start = 0;
-    for index in 0..width.min(TASKS) {
-        let length = width / TASKS + usize::from(index < width % TASKS);
-        let end = start + length;
+    blocks.reserve(count, computation, limits, counters, location)?;
+    for index in 0..count {
+        let rows = super::prime::group_range(width, groups, index);
         blocks.push(
             Block {
-                rows: start..end,
+                rows,
                 formula: *limits,
                 expansion: ExpansionLimits::default(),
             },
@@ -300,9 +350,8 @@ fn blocks(
             counters,
             location,
         )?;
-        start = end;
     }
-    debug_assert_eq!(start, width);
+    debug_assert_eq!(super::prime::group_start(width, groups, count), width);
     Ok(blocks)
 }
 
@@ -466,7 +515,7 @@ fn arbitrate<T>(
 /// the original cursor available to the serial implementation.
 pub(in crate::formula_support) fn derive<'source>(
     executor: &Executor,
-    rule: &'source RuleIr,
+    (index, rule): (usize, &'source RuleIr),
     outer: &mut Join<'_, 'source>,
     support: &Support<'source>,
     budget: &mut Budget,
@@ -495,22 +544,125 @@ pub(in crate::formula_support) fn derive<'source>(
         limits,
         counters,
     )?;
-    let completed = stage_witnesses(
+    let prefixes = if plan.prime() {
+        super::prime::prefixes::adapt(
+            plan.rule(),
+            plan.join_plan(),
+            plan.first_rows(),
+            support,
+            budget,
+            Context::new(computation, limits, counters, location),
+        )?
+    } else {
+        super::prime::prefixes::Prefixes::first(plan.first_rows())
+    };
+    if plan.prime() {
+        let remaining = limits
+            .max_support_bytes
+            .saturating_sub(computation.query_support().live_bytes());
+        // Until residual replay records integer columns, reserve only packed
+        // occurrence coordinates. I16 is the default integer width when a
+        // later column is added with a fitting range. Width is the prefix
+        // tuple count, which equals the first-row count when d = 1.
+        if super::prime::admit_reservation(
+            prefixes.len(),
+            plan.pattern_count(),
+            plan.max_row_index(),
+            0,
+            0,
+            0,
+            remaining,
+        )
+        .is_none()
+        {
+            return Ok(false);
+        }
+    }
+    let mut completed = stage_witnesses_with(
         executor,
         &plan,
+        &prefixes,
         budget,
         Context::new(&*computation, limits, counters, location),
     )?;
     let publication = completed.publication_limits(limits);
     witness_rows::publish(
         &plan,
-        completed.results(),
+        completed.drain(),
         support,
         computation,
         &publication,
         counters,
+        index,
     )?;
     Ok(true)
+}
+
+/// Stage emission witnesses with the same adaptive prefix split as support.
+///
+/// Already-admitted positive-flat streams still use `TASKS` groups when `d = 1`.
+/// A short first probe that actually reaches `PRIME_GROUPS` tuples at `d = 2`
+/// or `d = 3` takes that deeper list and the 56-group cap. Prime-admitted
+/// emission (generated cursors, or a body that failed `PositiveAtoms`) uses the
+/// same reservation decline as support. A deep prefix that cannot be reserved
+/// on a non-Prime stream falls back to the first-row split rather than leaving
+/// the already-admitted path.
+pub(crate) fn stage_emission_witnesses<'plan, 'source>(
+    executor: &Executor,
+    plan: &'plan witness_rows::WitnessPlan<'plan, 'source>,
+    support: &Support<'source>,
+    budget: &mut Budget,
+    context: Context<'_, &mut Computation<'_, 'source>>,
+) -> Result<Option<Completed<witness_rows::Batch<'plan, 'source>>>, FormulaFailure>
+where
+    'source: 'plan,
+{
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    let mut prefixes = super::prime::prefixes::adapt_with(
+        plan.rule(),
+        plan.join_plan(),
+        plan.first_rows(),
+        support,
+        budget,
+        plan.continuations(),
+        Context::new(computation, limits, counters, location),
+    )?;
+    if plan.prime() || prefixes.depth() > 1 {
+        let remaining = limits
+            .max_support_bytes
+            .saturating_sub(computation.query_support().live_bytes());
+        if super::prime::admit_reservation(
+            prefixes.len(),
+            plan.pattern_count(),
+            plan.max_row_index(),
+            0,
+            0,
+            0,
+            remaining,
+        )
+        .is_none()
+        {
+            if plan.prime() {
+                return Ok(None);
+            }
+            prefixes = super::prime::prefixes::Prefixes::first(plan.first_rows());
+        }
+    }
+    Ok(Some(stage_witnesses_with(
+        executor,
+        plan,
+        &prefixes,
+        budget,
+        Context::new(&*computation, limits, counters, location),
+    )?))
 }
 
 /// The pending-read borrow ends after every task joins, before any consumer can
@@ -518,6 +670,24 @@ pub(in crate::formula_support) fn derive<'source>(
 pub(crate) fn stage_witnesses<'plan, 'source: 'plan>(
     executor: &Executor,
     plan: &'plan witness_rows::WitnessPlan<'plan, 'source>,
+    budget: &mut Budget,
+    context: Context<'_, &Computation<'_, 'source>>,
+) -> Result<Completed<witness_rows::Batch<'plan, 'source>>, FormulaFailure> {
+    stage_witnesses_with(
+        executor,
+        plan,
+        &super::prime::prefixes::Prefixes::first(plan.first_rows()),
+        budget,
+        context,
+    )
+}
+
+/// Stage worker batches over `prefixes`. A′ may pass a deeper list; every
+/// other caller keeps the first-probe stream via [`stage_witnesses`].
+pub(crate) fn stage_witnesses_with<'plan, 'source: 'plan>(
+    executor: &Executor,
+    plan: &'plan witness_rows::WitnessPlan<'plan, 'source>,
+    prefixes: &super::prime::prefixes::Prefixes<'_>,
     budget: &mut Budget,
     context: Context<'_, &Computation<'_, 'source>>,
 ) -> Result<Completed<witness_rows::Batch<'plan, 'source>>, FormulaFailure> {
@@ -536,13 +706,32 @@ pub(crate) fn stage_witnesses<'plan, 'source: 'plan>(
             error: zetesis_core::relation::Failure::Owner,
             location,
         })?;
-    run(
+    let width = if prefixes.depth() <= 1 {
+        plan.len()
+    } else {
+        prefixes.len()
+    };
+    // A deepened prefix list is an A′ split: cap it at PRIME_GROUPS even when
+    // the underlying plan is a 14-task positive-flat emission stream.
+    let groups = if prefixes.depth() > 1 {
+        super::prime::PRIME_GROUPS
+    } else {
+        plan.groups()
+    };
+    run_grouped(
         executor,
-        plan.len(),
+        width,
+        groups,
         budget,
         Context::new(computation, limits, counters, location),
         |block, limits, budget, counters| {
-            witness_rows::execute_borrowed(plan, block, append, limits, budget, counters)
+            if prefixes.depth() <= 1 {
+                witness_rows::execute_borrowed(plan, block, append, limits, budget, counters)
+            } else {
+                witness_rows::execute_prefixed(
+                    plan, prefixes, block, append, limits, budget, counters,
+                )
+            }
         },
     )
 }

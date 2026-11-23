@@ -333,3 +333,94 @@ fn an_empty_component_leaves_no_unused_source_origin() {
         "an uninstantiated producer cannot become a body atom's first origin"
     );
 }
+
+#[test]
+fn parallel_continuations_preserve_counts_and_truth() {
+    use crate::formula_support::with_source_workers;
+    use std::num::NonZeroUsize;
+
+    let source = "d(1..80). {p}. q(N) :- d(_), N=#count{1:p}.";
+    let (serial, serial_counts) = compile(source, true);
+    assert_eq!(
+        serial_counts,
+        Counts {
+            runs: 1,
+            witnesses: 80,
+            continuations: 2
+        }
+    );
+    for workers in [1, 2, 14] {
+        let ((parallel, counts), tasks) =
+            with_source_workers(NonZeroUsize::new(workers).unwrap(), || {
+                compile(source, true)
+            });
+        assert!(
+            tasks > 0,
+            "workers={workers} should stage the continuation base join"
+        );
+        assert_eq!(counts, serial_counts, "workers={workers}");
+        assert_eq!(
+            compiled_atoms(&parallel),
+            compiled_atoms(&serial),
+            "workers={workers}"
+        );
+        assert_eq!(parallel.warnings, serial.warnings, "workers={workers}");
+    }
+}
+
+#[test]
+fn parallel_interleaved_keys_keep_separate_continuations() {
+    use crate::formula_support::with_source_workers;
+    use std::num::NonZeroUsize;
+
+    let source = "d(1,0).d(2,1).d(3,0).d(4,0). {a}. q(K,N) :- d(_,K), N=#count{1:a}.";
+    let (serial, serial_counts) = compile(source, true);
+    assert_eq!(
+        serial_counts,
+        Counts {
+            runs: 3,
+            witnesses: 4,
+            continuations: 6
+        }
+    );
+    let ((parallel, counts), tasks) =
+        with_source_workers(NonZeroUsize::new(14).unwrap(), || compile(source, true));
+    assert!(tasks > 0);
+    assert_eq!(counts, serial_counts);
+    assert_eq!(compiled_atoms(&parallel), compiled_atoms(&serial));
+}
+
+#[test]
+fn parallel_equal_witnesses_expand_one_continuation() {
+    use crate::formula_support::with_source_workers;
+    use std::num::NonZeroUsize;
+
+    let source = "d(1..12). {p(1..3)}. q(A,B) :- d(_), A=#count{X:p(X)}, B=#count{X:p(X)}.";
+    let (serial, serial_counts) = compile(source, true);
+    assert_eq!(
+        serial_counts,
+        Counts {
+            runs: 1,
+            witnesses: 12,
+            continuations: 16
+        }
+    );
+    let ((parallel, counts), tasks) =
+        with_source_workers(NonZeroUsize::new(14).unwrap(), || compile(source, true));
+    assert!(tasks > 0);
+    assert_eq!(counts, serial_counts);
+    assert_eq!(compiled_atoms(&parallel), compiled_atoms(&serial));
+}
+
+#[test]
+fn parallel_unbound_comparison_before_aggregate_bind() {
+    use crate::formula_support::with_source_workers;
+    use std::num::NonZeroUsize;
+    let source = "i(1..2).{p}.q(I,N):-i(I),N=#count{1:p},N<I,#count{I:p}>=N.";
+    let (serial, serial_counts) = compile(source, true);
+    let ((parallel, counts), tasks) =
+        with_source_workers(NonZeroUsize::new(14).unwrap(), || compile(source, true));
+    assert!(tasks > 0);
+    assert_eq!(counts, serial_counts);
+    assert_eq!(compiled_atoms(&parallel), compiled_atoms(&serial));
+}

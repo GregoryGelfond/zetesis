@@ -48,7 +48,67 @@ struct InternCache {
     /// Dense ranks of `sorted_keys`. Relative order is `TermRef` order, so
     /// ranks over a superset of one visit's output keys still sort that
     /// visit correctly.
-    rank: HashMap<i32, u32>,
+    rank: RankTable,
+}
+
+/// Rank of each interned key, indexed by the key's catalog position when
+/// the positions are dense enough (four bytes per position), else hashed.
+#[derive(Default)]
+enum RankTable {
+    #[default]
+    Empty,
+    Dense(Vec<u32>),
+    Sparse(HashMap<i32, u32>),
+}
+
+impl RankTable {
+    const ABSENT: u32 = u32::MAX;
+
+    /// Build from keys in rank order. Dense when the largest position is
+    /// at most four times the key count plus a small floor, so the vector
+    /// never costs much more than the hash map it replaces.
+    fn from_sorted(keys: &[i32]) -> Self {
+        if keys.is_empty() {
+            return Self::Empty;
+        }
+        let max = keys.iter().map(|&key| key_index(key)).max().unwrap_or(0);
+        if max <= keys.len().saturating_mul(4).saturating_add(4096) {
+            let mut dense = vec![Self::ABSENT; max + 1];
+            for (rank, &key) in keys.iter().enumerate() {
+                dense[key_index(key)] = u32::try_from(rank).expect("intern-cache rank fits in u32");
+            }
+            Self::Dense(dense)
+        } else {
+            let mut sparse = HashMap::with_capacity(keys.len());
+            for (rank, &key) in keys.iter().enumerate() {
+                sparse.insert(
+                    key,
+                    u32::try_from(rank).expect("intern-cache rank fits in u32"),
+                );
+            }
+            Self::Sparse(sparse)
+        }
+    }
+
+    fn get(&self, key: i32) -> Option<u32> {
+        match self {
+            Self::Empty => None,
+            Self::Dense(dense) => dense
+                .get(key_index(key))
+                .copied()
+                .filter(|&rank| rank != Self::ABSENT),
+            Self::Sparse(sparse) => sparse.get(&key).copied(),
+        }
+    }
+
+    fn contains(&self, key: i32) -> bool {
+        self.get(key).is_some()
+    }
+}
+
+/// The catalog position a join key carries (see `term_key`).
+fn key_index(key: i32) -> usize {
+    u32::from_ne_bytes(key.to_ne_bytes()) as usize
 }
 
 struct CachedBody {
@@ -62,15 +122,8 @@ impl InternCache {
             keys: HashMap::new(),
             bodies: HashMap::new(),
             sorted_keys: Vec::new(),
-            rank: HashMap::new(),
+            rank: RankTable::Empty,
         }
-    }
-
-    fn clear(&mut self) {
-        self.keys.clear();
-        self.bodies.clear();
-        self.sorted_keys.clear();
-        self.rank.clear();
     }
 }
 
@@ -78,11 +131,12 @@ thread_local! {
     static INTERN: RefCell<InternCache> = RefCell::new(InternCache::new());
 }
 
-/// Clear the support-run intern cache. Installed around
-/// `complete_with_executor` so a later program in the same thread cannot
-/// reborrow a foreign `TermKey`.
+/// Clear the support-run intern cache and release its memory. Installed
+/// around `complete_with_executor` so a later program in the same thread
+/// cannot reborrow a foreign `TermKey`, and so the snapshot columns are not
+/// held by the thread through search.
 pub(crate) fn reset_intern_cache() {
-    INTERN.with(|cell| cell.borrow_mut().clear());
+    INTERN.with(|cell| *cell.borrow_mut() = InternCache::new());
 }
 
 /// Reset on construction and on drop so both early returns and panics leave
@@ -200,23 +254,18 @@ impl Evaluated<'_> {
         let ranks = self
             .terms
             .ranks_incremental(columns.iter().copied().flatten(), rows.len());
-        // Decorate once, then integer-sort. HashMap lookups inside the
-        // comparator were dominating support time (closure ~equal to
-        // evaluate; sg even more) because each comparison re-probed ranks.
-        let arity = columns.iter().filter(|column| column.is_some()).count();
-        if arity > MAX_HEAD {
+        let rank = |key: i32| {
+            ranks
+                .table
+                .get(key)
+                .expect("join keys are interned from the snapshot")
+        };
+        let columns: Vec<&[i32]> = columns.into_iter().flatten().collect();
+        let arity = columns.len();
+        if arity > MAX_HEAD || u32::try_from(rows.len()).is_err() {
             rows.sort_by(|&left, &right| {
                 for column in &columns {
-                    let Some(column) = column else {
-                        continue;
-                    };
-                    let left_rank = ranks
-                        .get(&column[left])
-                        .expect("join keys are interned from the snapshot");
-                    let right_rank = ranks
-                        .get(&column[right])
-                        .expect("join keys are interned from the snapshot");
-                    match left_rank.cmp(right_rank) {
+                    match rank(column[left]).cmp(&rank(column[right])) {
                         std::cmp::Ordering::Equal => {}
                         ordering => return ordering,
                     }
@@ -225,22 +274,20 @@ impl Evaluated<'_> {
             });
             return rows;
         }
-        let mut decorated: Vec<([u32; MAX_HEAD], usize)> = Vec::with_capacity(rows.len());
-        for row in rows {
-            let mut key = [0u32; MAX_HEAD];
-            let mut written = 0;
+        // Decorate once with row-width keys (`arity` ranks per row), then
+        // integer-sort row positions. HashMap lookups inside a comparator
+        // were dominating support time because each comparison re-probed
+        // ranks.
+        let mut keys = Vec::with_capacity(rows.len() * arity);
+        for &row in &rows {
             for column in &columns {
-                let Some(column) = column else {
-                    continue;
-                };
-                key[written] = *ranks
-                    .get(&column[row])
-                    .expect("join keys are interned from the snapshot");
-                written += 1;
+                keys.push(rank(column[row]));
             }
-            decorated.push((key, row));
         }
-        radix_sort_decorated(decorated, arity)
+        radix_sort_keys(&keys, arity, ranks.sorted_len, rows.len())
+            .into_iter()
+            .map(|position| rows[position as usize])
+            .collect()
     }
 }
 
@@ -286,28 +333,29 @@ pub(crate) fn evaluate<'a>(
     }))
 }
 
-fn load_raw<'a>(
+/// Columns `from_row..until_row` of `predicate`'s snapshot as interned keys.
+///
+/// The support-run cache holds one interned copy of each body relation. It
+/// is moved out, extended with the rows added since the last visit, sliced,
+/// and moved back, so no visit clones the whole relation.
+fn load_slice<'a>(
     support: &'a Support<'_>,
     predicate: PredicateRef<'_>,
     arity: usize,
     terms: &mut TermMap<'a>,
+    from_row: usize,
+    until_row: Option<usize>,
 ) -> Option<Vec<Vec<i32>>> {
     let count = support.row_count(predicate);
     let position = predicate.canonical_position();
-    let (from, mut columns) = position
-        .and_then(|position| {
-            INTERN.with(|cell| {
-                let intern = cell.borrow();
-                intern.bodies.get(&position).and_then(|cached| {
-                    if cached.rows <= count && cached.columns.len() == arity {
-                        Some((cached.rows, cached.columns.clone()))
-                    } else {
-                        None
-                    }
-                })
-            })
-        })
-        .unwrap_or_else(|| (0, vec![Vec::with_capacity(count); arity]));
+    let cached = position
+        .and_then(|position| INTERN.with(|cell| cell.borrow_mut().bodies.remove(&position)));
+    let (from, mut columns) = match cached {
+        Some(cached) if cached.rows <= count && cached.columns.len() == arity => {
+            (cached.rows, cached.columns)
+        }
+        _ => (0, vec![Vec::with_capacity(count); arity]),
+    };
     if from == 0 && columns.iter().any(|column| !column.is_empty()) {
         columns = vec![Vec::with_capacity(count); arity];
     }
@@ -323,18 +371,19 @@ fn load_raw<'a>(
     {
         return None;
     }
+    let slice = slice_raw(&columns, from_row, until_row);
     if let Some(position) = position {
         INTERN.with(|cell| {
             cell.borrow_mut().bodies.insert(
                 position,
                 CachedBody {
                     rows: columns.first().map_or(0, Vec::len),
-                    columns: columns.clone(),
+                    columns,
                 },
             );
         });
     }
-    Some(columns)
+    Some(slice)
 }
 
 fn slice_raw(columns: &[Vec<i32>], from: usize, until: Option<usize>) -> Vec<Vec<i32>> {
@@ -568,34 +617,35 @@ impl<'a> TermMap<'a> {
     /// Dense semantic ranks for the keys that appear in `columns`.
     ///
     /// Only keys not already in the support-run intern cache are
-    /// TermRef-sorted; they are merged into the cached order.
+    /// TermRef-sorted; they are merged into the cached order. The cached
+    /// order and table are moved out (not cloned) and moved back when the
+    /// returned `Ranks` drops.
     fn ranks_incremental<'c>(
         &self,
         columns: impl Iterator<Item = &'c [i32]>,
         rows: usize,
-    ) -> HashMap<i32, u32> {
-        let mut needed: Vec<i32> = Vec::new();
+    ) -> Ranks {
+        let (sorted_keys, table) = INTERN.with(|cell| {
+            let mut intern = cell.borrow_mut();
+            (
+                std::mem::take(&mut intern.sorted_keys),
+                std::mem::take(&mut intern.rank),
+            )
+        });
+        let mut fresh: Vec<i32> = Vec::new();
         let mut seen: HashSet<i32> = HashSet::new();
         for column in columns {
             let end = rows.min(column.len());
             for &key in &column[..end] {
-                if seen.insert(key) {
-                    needed.push(key);
+                if !table.contains(key) && seen.insert(key) {
+                    fresh.push(key);
                 }
             }
         }
-        let (sorted_keys, rank) = INTERN.with(|cell| {
-            let intern = cell.borrow();
-            (intern.sorted_keys.clone(), intern.rank.clone())
-        });
-        let mut fresh: Vec<i32> = needed
-            .iter()
-            .copied()
-            .filter(|key| !rank.contains_key(key))
-            .collect();
         if fresh.is_empty() {
-            return rank;
+            return Ranks::new(sorted_keys, table);
         }
+        drop(table);
         fresh.sort_by(|left, right| self.get(*left).cmp(&self.get(*right)).then(left.cmp(right)));
         let mut merged = Vec::with_capacity(sorted_keys.len() + fresh.len());
         let mut old = sorted_keys.iter().copied().peekable();
@@ -613,19 +663,41 @@ impl<'a> TermMap<'a> {
         }
         merged.extend(old);
         merged.extend(new);
-        let mut new_rank = HashMap::with_capacity(merged.len());
-        for (index, key) in merged.iter().copied().enumerate() {
-            new_rank.insert(
-                key,
-                u32::try_from(index).expect("intern-cache rank fits in u32"),
-            );
+        drop(sorted_keys);
+        let table = RankTable::from_sorted(&merged);
+        Ranks::new(merged, table)
+    }
+}
+
+/// The support-run rank order, on loan from the intern cache for one
+/// emission. Dropping it returns the order and table to the cache.
+struct Ranks {
+    sorted_keys: Vec<i32>,
+    sorted_len: usize,
+    table: RankTable,
+}
+
+impl Ranks {
+    fn new(sorted_keys: Vec<i32>, table: RankTable) -> Self {
+        Self {
+            sorted_len: sorted_keys.len(),
+            sorted_keys,
+            table,
         }
-        INTERN.with(|cell| {
-            let mut intern = cell.borrow_mut();
-            intern.sorted_keys = merged;
-            intern.rank.clone_from(&new_rank);
+    }
+}
+
+impl Drop for Ranks {
+    fn drop(&mut self) {
+        let sorted_keys = std::mem::take(&mut self.sorted_keys);
+        let table = std::mem::take(&mut self.table);
+        // During thread teardown the cache may already be gone.
+        let _ = INTERN.try_with(|cell| {
+            if let Ok(mut intern) = cell.try_borrow_mut() {
+                intern.sorted_keys = sorted_keys;
+                intern.rank = table;
+            }
         });
-        new_rank
     }
 }
 
@@ -639,72 +711,46 @@ fn term_key(term: TermRef<'_>) -> Option<i32> {
 
 const MAX_HEAD: usize = 8;
 
-/// LSD radix sort of decorated head-rank keys, then the original row index,
-/// so the order matches `sort_unstable` on `([u32; MAX_HEAD], usize)`.
-fn radix_sort_decorated(mut decorated: Vec<([u32; MAX_HEAD], usize)>, arity: usize) -> Vec<usize> {
-    let len = decorated.len();
-    if len <= 1 {
-        return decorated.into_iter().map(|(_, row)| row).collect();
+/// Stable LSD radix sort of row positions by their `arity` rank lanes
+/// (`keys` is row-major, `arity` ranks per row). Positions start in row
+/// order, so ties keep the original row order, matching `sort_unstable`
+/// on `(ranks, row)`. Only the bytes that ranks below `bound` can use are
+/// sorted. The row count stays explicit because constant-only heads have
+/// zero rank lanes but still have one head emission per joined body row.
+fn radix_sort_keys(keys: &[u32], arity: usize, bound: usize, len: usize) -> Vec<u32> {
+    debug_assert_eq!(len.checked_mul(arity), Some(keys.len()));
+    let mut order: Vec<u32> = (0..len)
+        .map(|position| u32::try_from(position).expect("checked by the caller"))
+        .collect();
+    if len <= 1 || arity == 0 {
+        return order;
     }
-    let mut scratch = vec![([0u32; MAX_HEAD], 0usize); len];
-    // Row index first (least significant), then rank lanes from last to first.
-    counting_sort_usize(&mut decorated, &mut scratch, |_, row| row);
+    let bytes = (usize::BITS - bound.saturating_sub(1).leading_zeros()).div_ceil(8);
+    let mut scratch = vec![0u32; len];
     for lane in (0..arity).rev() {
-        counting_sort_u32(&mut decorated, &mut scratch, move |key, _| key[lane]);
+        for pass in 0..bytes {
+            let shift = pass * 8;
+            let digit =
+                |position: u32| ((keys[position as usize * arity + lane] >> shift) & 0xff) as usize;
+            let mut counts = [0usize; 256];
+            for &position in &order {
+                counts[digit(position)] += 1;
+            }
+            let mut sum = 0;
+            for count in &mut counts {
+                let next = sum + *count;
+                *count = sum;
+                sum = next;
+            }
+            for &position in &order {
+                let bucket = digit(position);
+                scratch[counts[bucket]] = position;
+                counts[bucket] += 1;
+            }
+            std::mem::swap(&mut order, &mut scratch);
+        }
     }
-    decorated.into_iter().map(|(_, row)| row).collect()
-}
-
-fn counting_sort_u32(
-    src: &mut [([u32; MAX_HEAD], usize)],
-    dst: &mut [([u32; MAX_HEAD], usize)],
-    digit: impl Fn(&[u32; MAX_HEAD], usize) -> u32,
-) {
-    for shift in [0u32, 8, 16, 24] {
-        let mut counts = [0usize; 256];
-        for (key, row) in src.iter() {
-            counts[((digit(key, *row) >> shift) & 0xff) as usize] += 1;
-        }
-        let mut sum = 0;
-        for count in &mut counts {
-            let next = sum + *count;
-            *count = sum;
-            sum = next;
-        }
-        for entry in src.iter() {
-            let bucket = ((digit(&entry.0, entry.1) >> shift) & 0xff) as usize;
-            dst[counts[bucket]] = *entry;
-            counts[bucket] += 1;
-        }
-        src.swap_with_slice(dst);
-    }
-}
-
-fn counting_sort_usize(
-    src: &mut [([u32; MAX_HEAD], usize)],
-    dst: &mut [([u32; MAX_HEAD], usize)],
-    digit: impl Fn(&[u32; MAX_HEAD], usize) -> usize,
-) {
-    let passes = usize::BITS / 8;
-    for pass in 0..passes {
-        let shift = pass * 8;
-        let mut counts = [0usize; 256];
-        for (key, row) in src.iter() {
-            counts[(digit(key, *row) >> shift) & 0xff] += 1;
-        }
-        let mut sum = 0;
-        for count in &mut counts {
-            let next = sum + *count;
-            *count = sum;
-            sum = next;
-        }
-        for entry in src.iter() {
-            let bucket = (digit(&entry.0, entry.1) >> shift) & 0xff;
-            dst[counts[bucket]] = *entry;
-            counts[bucket] += 1;
-        }
-        src.swap_with_slice(dst);
-    }
+    order
 }
 
 struct Plan<'a> {
@@ -905,10 +951,9 @@ fn term_table<'a>(
     terms: &mut TermMap<'a>,
     account: &mut impl FnMut(u64) -> Result<(), FormulaFailure>,
 ) -> Result<Option<Atoms>, FormulaFailure> {
-    let Some(raw) = load_raw(support, predicate, arity, terms) else {
+    let Some(columns) = load_slice(support, predicate, arity, terms, from_row, until_row) else {
         return Ok(None);
     };
-    let columns = slice_raw(&raw, from_row, until_row);
     if columns
         .iter()
         .any(|column| column.len() != columns.first().map_or(0, Vec::len))

@@ -2,8 +2,8 @@
 //! exclude a row before its retained arithmetic failure is reached.
 
 use super::{
-    Comparisons, Computation, Counters, Coverage, Evaluation, Failures, Join, compare, comparison,
-    integer_comparisons,
+    Comparisons, Computation, Context, Counters, Coverage, Evaluation, Failures, GroundingWork,
+    Join, compare, comparison, integer_comparisons, row_blocks::prime::ResidualSkip,
 };
 use crate::ProgramSite;
 use crate::formula_binding::Binding;
@@ -49,6 +49,9 @@ impl Join<'_, '_> {
             Comparisons::Verified | Comparisons::Deferred => None,
         };
         for (index, literal) in self.literals.get().iter().enumerate() {
+            if self.is_residual(index) {
+                continue;
+            }
             if crate::formula_binding_cursor::target(literal)
                 .is_some_and(|target| target >= binding.len())
                 || (self.coverage == Coverage::Selected
@@ -100,42 +103,79 @@ impl Join<'_, '_> {
                 &mut failure,
             )?;
         }
-        for guard in self.head_bounds {
-            let result = self
-                .evaluation
-                .source_expression(
-                    &guard.bound,
-                    |variable| binding.key(variable, location),
-                    computation,
-                    limits,
-                    counters,
-                    location,
-                )
-                .map(|_| true);
-            retain(
-                result,
-                self.evaluation.zero_divisor(),
-                &mut passes,
-                &mut failure,
-            )?;
+        retain_head_bounds(
+            self.head_bounds,
+            &mut self.evaluation,
+            &binding,
+            Context::new(computation, limits, counters, location),
+            &mut passes,
+            &mut failure,
+        )?;
+        conclude_filters(
+            excluded,
+            passes,
+            failure,
+            self.checked_guard,
+            &mut self.evaluation,
+            &binding,
+            Context::new(computation, limits, counters, location),
+        )
+    }
+}
+
+fn retain_head_bounds(
+    head_bounds: &[crate::formula_ir::AggregateGuard],
+    evaluation: &mut Evaluation,
+    binding: &Binding,
+    context: Context<'_, &mut Computation<'_, '_>>,
+    passes: &mut bool,
+    failure: &mut Option<(ExpansionFailure, bool)>,
+) -> Result<(), FormulaFailure> {
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
+    for guard in head_bounds {
+        let result = evaluation
+            .source_expression(
+                &guard.bound,
+                |variable| binding.key(variable, location),
+                computation,
+                limits,
+                counters,
+                location,
+            )
+            .map(|_| true);
+        retain(result, evaluation.zero_divisor(), passes, failure)?;
+    }
+    Ok(())
+}
+
+fn conclude_filters(
+    excluded: bool,
+    passes: bool,
+    failure: Option<(ExpansionFailure, bool)>,
+    checked_guard: Option<&crate::formula_guard::Guard>,
+    evaluation: &mut Evaluation,
+    binding: &Binding,
+    context: Context<'_, &mut Computation<'_, '_>>,
+) -> Result<Selection, FormulaFailure> {
+    match failure {
+        None if passes => {
+            // The guard is a consequent, read only under a row that
+            // holds: its condition comes first.
+            let undefined = consequent_zero(checked_guard, evaluation, binding, context)?;
+            Ok(undefined.map_or(Selection::Defined(true), Selection::UndefinedGuard))
         }
-        match failure {
-            None if passes => {
-                // The guard is a consequent, read only under a row that
-                // holds: its condition comes first.
-                let undefined = consequent_zero(
-                    self.checked_guard,
-                    &mut self.evaluation,
-                    &binding,
-                    super::Context::new(computation, limits, counters, location),
-                )?;
-                Ok(undefined.map_or(Selection::Defined(true), Selection::UndefinedGuard))
-            }
-            None => Ok(Selection::Defined(false)),
-            Some(_) if excluded => Ok(Selection::Excluded),
-            Some((error, true)) => Ok(Selection::Zero(error)),
-            Some((error, false)) => Err(error.into()),
-        }
+        None => Ok(Selection::Defined(false)),
+        Some(_) if excluded => Ok(Selection::Excluded),
+        Some((error, true)) => Ok(Selection::Zero(error)),
+        Some((error, false)) => Err(error.into()),
     }
 }
 
@@ -196,14 +236,24 @@ pub(super) fn excludes(
     (literals, decisions, checked): Checks<'_>,
     evaluation: &mut Evaluation,
     binding: &Binding,
-    computation: &mut Computation<'_, '_>,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: ProgramSite,
+    context: Context<'_, &mut Computation<'_, '_>>,
+    skip: ResidualSkip,
 ) -> Result<bool, FormulaFailure> {
+    let Context {
+        computation,
+        work:
+            GroundingWork {
+                limits,
+                counters,
+                location,
+            },
+    } = context;
     let mut excluded = false;
     let mut fatal = None;
     for (index, literal) in literals.iter().enumerate() {
+        if skip.contains(index) {
+            continue;
+        }
         match pending_check(
             literal,
             binding,
@@ -256,6 +306,7 @@ pub(super) fn valueless(
     evaluation: &mut Evaluation,
     binding: &Binding,
     context: super::Context<'_, &mut Computation<'_, '_>>,
+    skip: ResidualSkip,
 ) -> Result<(), FormulaFailure> {
     let super::Context {
         computation,
@@ -294,10 +345,8 @@ pub(super) fn valueless(
         (literals, decisions, None),
         evaluation,
         binding,
-        computation,
-        limits,
-        counters,
-        location,
+        Context::new(computation, limits, counters, location),
+        skip,
     )? {
         return Ok(());
     }

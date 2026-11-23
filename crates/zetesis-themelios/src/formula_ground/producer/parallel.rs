@@ -42,17 +42,21 @@ pub(super) fn rule<'source>(
         builder.limits,
         builder.counters,
     )?;
-    let mut completed = coordinator::stage_witnesses(
+    let Some(mut completed) = coordinator::stage_emission_witnesses(
         executor,
         &plan,
+        support,
         builder.budget,
         Context::new(
-            &*builder.computation,
+            builder.computation,
             builder.limits,
             builder.counters,
             rule.location,
         ),
-    )?;
+    )?
+    else {
+        return Ok(false);
+    };
     completed.attach_reservation(Context::new(
         &*builder.computation,
         builder.limits,
@@ -70,8 +74,8 @@ pub(super) fn rule<'source>(
         ),
     )?;
     let mut prepared: Option<(RowHead<'source>, Body)> = None;
-    for batch in completed.results() {
-        let mut selected = replay.batch(batch, builder.limits, builder.counters)?;
+    for batch in completed.drain() {
+        let mut selected = replay.batch(&batch, builder.limits, builder.counters)?;
         while let Some(row) = selected.next(Context::new(
             &*builder.computation,
             builder.limits,

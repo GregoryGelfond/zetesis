@@ -131,7 +131,7 @@ workspace dependencies. Parallel walkers and GPU candidate producers use
 `zetesis_algebra::walk::frontier::Frontier` for their queue and termination
 protocol. Their semantic knowledge and membership decisions remain here.
 
-No clause form of the theory is built. The candidate space is the coverage tree
+The candidate space is the coverage tree
 of `Search.lean` over the theory's atoms, walked by
 `zetesis_algebra::walk::Walk`: the
 root leaves every atom open, each region is narrowed by
@@ -144,6 +144,16 @@ its narrowing prefers, held branch first; a region with every atom decided is a
 leaf, and a leaf is a classical model of the theory and the restrictions,
 because at a full decision every root is sure or impossible and an impossible
 root refutes.
+
+After general closure, the configured leaf specialization may refute a region
+by packed enumeration or a bounded learned search over necessary original-theory
+conditions. The learned path builds a clausal/threshold encoding and reads active
+restrictions through guards. It leaves surviving regions unchanged; a passing
+completion is not an answer-set certificate. Each candidate still goes through
+the original reduct membership check. Spending the local conflict or probe
+allowance leaves the region to the ordinary walk. Work, allocation and control
+refusals instead stop the attempt, retaining its charged prefix in the same
+cumulative search-work account. See the [leaf API contract](../zetesis-ferraris/README.md#narrowing-regions-by-the-theorys-readings).
 
 Without active candidate restrictions, complete original producer coverage can
 prepare one shared `GeneratorOrder`. It prioritizes atomic choice heads and

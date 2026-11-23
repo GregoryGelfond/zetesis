@@ -215,3 +215,8 @@ fn objective_dependency_restrictions_do_not_reject_negative_constraints() {
         assert_eq!(exhaustive(&input), expected(&[model]));
     }
 }
+
+#[test]
+fn constant_head_recursive_join_preserves_support() {
+    assert_models("p(2). q(2). p(1) :- p(X), q(X).", &["p(1) p(2) q(2)"]);
+}

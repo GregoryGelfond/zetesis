@@ -6,6 +6,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Specialized original-region narrowing uses the existing work account for
+  encoding, enumeration and learned-search visits. `narrow_small` now takes
+  `RegionLimits` and returns a `Metered` outcome; `narrow_small_reserved` borrows
+  the caller's meter and preserves typed refusals. Adaptive refutation notices
+  also return their charged prefix. Exact work totals and tight-limit stopping
+  points change; local conflict/probe allowances remain distinct from global
+  work exhaustion. Owned leaf capacities are included in scratch retention.
 - Workspace development and test builds use line-table debug information,
   retaining source backtraces without embedding full variable/type information
   in executables. Debug assertions, overflow checks and validation size limits
@@ -76,6 +83,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   policy, not a release-default selection or a general GPU performance claim.
 
 ### Fixed
+
+- Constant rule heads retain their successful join witnesses when no head rank
+  lanes remain, including the automatic dependency-grounding route.
+- Reused leaf scratch clears learned cores and guards when its theory changes.
+  Work and control refusal cannot publish a partial packed refutation; interrupted
+  mutable solver and enumeration state is discarded before retry.
 
 - Full conflict and objective-bound learning checks its condition limit through
   packed decisions before allocating literal storage. Discovery and copying

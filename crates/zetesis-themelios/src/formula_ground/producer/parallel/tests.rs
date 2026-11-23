@@ -1,5 +1,6 @@
 //! Exercise the actual `instantiate_rule` dispatch, with its retained family owner.
 
+use std::fmt::Write;
 use std::num::NonZeroUsize;
 
 use super::*;
@@ -179,6 +180,40 @@ fn wide_multiblock_bodies_keep_exact_balanced_nodes_and_source_roots() {
     same(
         "p(1..18).q(1;2).r(1;2).s(1;2).t(1;2).u(1;2).h(A,B,C,D,E,F):-p(A),q(B),r(C),s(D),t(E),u(F).",
     );
+}
+
+#[test]
+fn a_wide_first_probe_keeps_fourteen_emission_groups() {
+    let source = "p(1..80).q(1..80).h(X,Y):-p(X),q(Y).";
+    same(source);
+    let one = run(source, Some(1), &Bound::default());
+    let many = run(source, Some(14), &Bound::default());
+    assert_eq!(one.tasks, 14, "d = 1 positive-flat emission stays at TASKS");
+    assert_eq!(many.tasks, 14);
+}
+
+#[test]
+fn a_short_first_probe_deepens_emission_to_fifty_six_groups() {
+    // Three generators so the stream expands after the first pattern, and a
+    // short first probe no matter whether the unary or the 4-row binary leads.
+    // The large third atom supplies at least 56 tuples at d = 2 or d = 3.
+    let mut source = String::from("r(1). r(2). e(1,10). e(1,11). e(2,10). e(2,11).\n");
+    for y in 10..=11 {
+        for z in 1..=30 {
+            write!(source, "f({y},{z}). ").expect("source buffer");
+        }
+        source.push('\n');
+    }
+    source.push_str("h(X,Y,Z):-r(X),e(X,Y),f(Y,Z).");
+    same(&source);
+    let one = run(&source, Some(1), &Bound::default());
+    let many = run(&source, Some(14), &Bound::default());
+    assert_eq!(
+        one.tasks, 56,
+        "deepened emission uses PRIME_GROUPS; actual {}",
+        one.tasks
+    );
+    assert_eq!(many.tasks, one.tasks);
 }
 
 #[test]

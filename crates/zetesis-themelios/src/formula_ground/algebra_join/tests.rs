@@ -200,3 +200,71 @@ fn negative_filter_propagates_its_source_table_refusal() {
         assert_eq!(counters.accounting.work, before + 1);
     });
 }
+
+/// Positions sorted by their rank lanes, ties by position: the order
+/// the row-width radix sort must reproduce.
+fn reference(keys: &[u32], arity: usize) -> Vec<u32> {
+    let len = keys.len() / arity;
+    let mut order: Vec<u32> = (0..u32::try_from(len).unwrap()).collect();
+    order.sort_by(|&left, &right| {
+        let row = |position: u32| {
+            let start = position as usize * arity;
+            &keys[start..start + arity]
+        };
+        row(left).cmp(row(right)).then(left.cmp(&right))
+    });
+    order
+}
+
+#[test]
+fn row_width_radix_matches_a_stable_lexicographic_sort() {
+    let mut state = 0x9e37_79b9_u32;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        state
+    };
+    for (arity, bound) in [(1, 1), (1, 7), (2, 300), (2, 70_000), (3, 5), (8, 1 << 24)] {
+        for len in [0usize, 1, 2, 17, 1000] {
+            let keys: Vec<u32> = (0..len * arity)
+                .map(|_| next() % u32::try_from(bound).unwrap())
+                .collect();
+            assert_eq!(
+                radix_sort_keys(&keys, arity, bound, len),
+                reference(&keys, arity),
+                "arity {arity}, bound {bound}, len {len}"
+            );
+        }
+    }
+}
+
+#[test]
+fn rank_tables_agree_dense_and_sparse() {
+    let dense_keys = [5, 0, 9, 3];
+    let sparse_keys = [i32::MIN, 40_000_000, 7];
+    let dense = RankTable::from_sorted(&dense_keys);
+    let sparse = RankTable::from_sorted(&sparse_keys);
+    assert!(matches!(dense, RankTable::Dense(_)));
+    assert!(matches!(sparse, RankTable::Sparse(_)));
+    for (rank, &key) in dense_keys.iter().enumerate() {
+        assert_eq!(dense.get(key), Some(u32::try_from(rank).unwrap()));
+    }
+    for (rank, &key) in sparse_keys.iter().enumerate() {
+        assert_eq!(sparse.get(key), Some(u32::try_from(rank).unwrap()));
+    }
+    assert_eq!(dense.get(4), None);
+    assert_eq!(dense.get(1_000_000), None);
+    assert_eq!(sparse.get(8), None);
+    assert_eq!(RankTable::Empty.get(0), None);
+}
+
+#[test]
+fn zero_rank_lanes_preserve_every_row() {
+    for len in [0, 1, 2, 17] {
+        assert_eq!(
+            radix_sort_keys(&[], 0, 0, len),
+            (0..u32::try_from(len).unwrap()).collect::<Vec<_>>()
+        );
+    }
+}

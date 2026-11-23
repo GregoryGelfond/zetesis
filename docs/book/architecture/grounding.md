@@ -1583,7 +1583,7 @@ equalities and provenance.
 Final formula construction can also share a continuation, with a different
 observation: it retains every positive activation. For an ordinary nonempty head
 with the checked plan, flat positive patterns and total prefix comparisons,
-[`formula_factor::continuations`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_factor/continuations.rs)
+[`formula_factor::continuations`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_factor/continuations/mod.rs)
 groups consecutive bindings with equal continuation inputs. It forms a
 disjunction of their whole positive-witness conjunctions and conjoins that guard
 with each shared continuation's remaining body. Each resulting implication and

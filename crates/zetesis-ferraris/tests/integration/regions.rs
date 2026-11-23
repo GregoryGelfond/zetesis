@@ -837,3 +837,273 @@ fn a_same_connective_node_reached_on_both_sides_is_absorbed_once() {
     assert!(matches!(narrowing, Narrowing::Fixed { changed: true }));
     assert!(region.is_held(0));
 }
+
+fn guarded_binary_conflict() -> Theory {
+    // Holding a (atom 2) makes these four binary clauses jointly inconsistent;
+    // individually none is unit. Classical Boolean closure leaves x/y open.
+    theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::implies(0, 3),
+            Node::implies(1, 3),
+            Node::or_pair([0, 1]),
+            Node::or_pair([4, 1]),
+            Node::or_pair([0, 5]),
+            Node::or_pair([4, 5]),
+            Node::implies(2, 6),
+            Node::implies(2, 7),
+            Node::implies(2, 8),
+            Node::implies(2, 9),
+        ],
+        vec![10, 11, 12, 13],
+    )
+}
+
+#[test]
+fn specialized_cores_do_not_cross_theory_instances() {
+    use zetesis_ferraris::{NarrowingScratch, OriginalSubject, SmallNarrowing, SmallPolicy};
+    let old = guarded_binary_conflict();
+    let new = theory(
+        3,
+        vec![Node::atom(0), Node::atom(1), Node::atom(2)],
+        vec![2],
+    );
+    let cancellation = Cancellation::default();
+    let policy = SmallPolicy::parse("learn=3,conflicts=1000");
+    let mut scratch = NarrowingScratch::default();
+    scratch.set_small_policy(policy);
+    let mut first = region(&old, &[2], &[]);
+    assert!(matches!(
+        narrow_fresh(
+            &old,
+            None,
+            &mut first,
+            RegionLimits::default(),
+            &cancellation
+        )
+        .unwrap()
+        .0,
+        Narrowing::Fixed { .. }
+    ));
+    assert!(matches!(
+        OriginalSubject::new(&old, None)
+            .narrow_small(
+                &first,
+                &mut scratch,
+                &[],
+                RegionLimits::default(),
+                &cancellation
+            )
+            .result
+            .unwrap(),
+        SmallNarrowing::Refuted(_)
+    ));
+    let learned = scratch.small_statistics();
+    assert!(learned.core_width > 0);
+    assert!(matches!(
+        OriginalSubject::new(&old, None)
+            .narrow_small(
+                &first,
+                &mut scratch,
+                &[],
+                RegionLimits::default(),
+                &cancellation,
+            )
+            .result
+            .unwrap(),
+        SmallNarrowing::Refuted(_)
+    ));
+    assert_eq!(scratch.small_statistics().core_hits, learned.core_hits + 1);
+    let mut second = region(&new, &[2], &[]);
+    assert!(matches!(
+        narrow_fresh(
+            &new,
+            None,
+            &mut second,
+            RegionLimits::default(),
+            &cancellation
+        )
+        .unwrap()
+        .0,
+        Narrowing::Fixed { .. }
+    ));
+    assert!(stable_models(&new).contains(&4));
+    let reused = OriginalSubject::new(&new, None)
+        .narrow_small(
+            &second,
+            &mut scratch,
+            &[],
+            RegionLimits::default(),
+            &cancellation,
+        )
+        .result
+        .unwrap();
+    let mut fresh = NarrowingScratch::default();
+    fresh.set_small_policy(policy);
+    let reference = OriginalSubject::new(&new, None)
+        .narrow_small(
+            &second,
+            &mut fresh,
+            &[],
+            RegionLimits::default(),
+            &cancellation,
+        )
+        .result
+        .unwrap();
+    assert_eq!(reused, reference);
+    assert!(!matches!(reused, SmallNarrowing::Refuted(_)));
+}
+
+/// Four binary clauses have no joint completion, but their closure is not unit.
+fn small_unsatisfiable_subject() -> (Theory, Region) {
+    let theory = theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::implies(0, 3),
+            Node::implies(1, 3),
+            Node::or_pair([0, 1]),
+            Node::or_pair([4, 1]),
+            Node::or_pair([0, 5]),
+            Node::or_pair([4, 5]),
+            Node::implies(2, 6),
+            Node::implies(2, 7),
+            Node::implies(2, 8),
+            Node::implies(2, 9),
+        ],
+        vec![10, 11, 12, 13],
+    );
+    let mut region = region(&theory, &[2], &[]);
+    assert!(matches!(
+        narrow_fresh(
+            &theory,
+            None,
+            &mut region,
+            RegionLimits::default(),
+            &Cancellation::default()
+        )
+        .unwrap()
+        .0,
+        Narrowing::Fixed { .. }
+    ));
+    assert!(!stable_models(&theory).iter().any(|bits| bits & 4 != 0));
+    (theory, region)
+}
+
+#[test]
+fn specialized_narrowing_retains_failed_work_and_reuses_interrupted_scratch() {
+    use zetesis_ferraris::{NarrowingScratch, OriginalSubject, SmallNarrowing, SmallPolicy};
+    let (theory, region) = small_unsatisfiable_subject();
+    for policy in ["enumerate=3", "learn=3,conflicts=1000", "probe=3"] {
+        let policy = SmallPolicy::parse(policy);
+        let fresh = || {
+            let mut scratch = NarrowingScratch::default();
+            scratch.set_small_policy(policy);
+            scratch
+        };
+        let subject = OriginalSubject::new(&theory, None);
+        let cancellation = Cancellation::default();
+        let completed = subject.narrow_small(
+            &region,
+            &mut fresh(),
+            &[],
+            RegionLimits::default(),
+            &cancellation,
+        );
+        assert!(matches!(completed.result, Ok(SmallNarrowing::Refuted(_))));
+        assert!(completed.charged > 10);
+        // Each prefix is independently bounded, including shape, propagation,
+        // and the last read before the complete refutation is published.
+        for maximum in [0, 1, 2, 10, completed.charged - 1] {
+            let mut scratch = fresh();
+            let refused = subject.narrow_small(
+                &region,
+                &mut scratch,
+                &[],
+                RegionLimits { max_work: maximum },
+                &cancellation,
+            );
+            assert_eq!(refused.result, Err(Stop::WorkLimit));
+            assert_eq!(refused.charged, maximum);
+            let retry = subject.narrow_small(
+                &region,
+                &mut scratch,
+                &[],
+                RegionLimits::default(),
+                &cancellation,
+            );
+            assert_eq!(retry.result, completed.result);
+        }
+        let exact = subject.narrow_small(
+            &region,
+            &mut fresh(),
+            &[],
+            RegionLimits {
+                max_work: completed.charged,
+            },
+            &cancellation,
+        );
+        assert_eq!(exact.result, completed.result);
+        assert_eq!(exact.charged, completed.charged);
+    }
+}
+
+#[test]
+fn specialized_narrowing_observes_initial_control_without_work() {
+    use zetesis_ferraris::{NarrowingScratch, OriginalSubject, SmallPolicy};
+    let (theory, region) = small_unsatisfiable_subject();
+    for policy in ["enumerate=3", "learn=3,conflicts=1000", "probe=3"] {
+        let mut scratch = NarrowingScratch::default();
+        scratch.set_small_policy(SmallPolicy::parse(policy));
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
+        let attempt = OriginalSubject::new(&theory, None).narrow_small(
+            &region,
+            &mut scratch,
+            &[],
+            RegionLimits::default(),
+            &cancellation,
+        );
+        assert_eq!(attempt.result, Err(Stop::Cancelled));
+        assert_eq!(attempt.charged, 0);
+        let deadline = Cancellation::with_deadline(std::time::Instant::now()).unwrap();
+        let attempt = OriginalSubject::new(&theory, None).narrow_small(
+            &region,
+            &mut scratch,
+            &[],
+            RegionLimits::default(),
+            &deadline,
+        );
+        assert_eq!(attempt.result, Err(Stop::Deadline));
+        assert_eq!(attempt.charged, 0);
+    }
+}
+
+#[test]
+fn specialized_owned_storage_is_visible_in_scratch_retention() {
+    use zetesis_ferraris::{NarrowingScratch, OriginalSubject, SmallPolicy};
+    let (theory, region) = small_unsatisfiable_subject();
+    for policy in ["enumerate=3", "learn=3,conflicts=1000"] {
+        let mut scratch = NarrowingScratch::default();
+        scratch.set_small_policy(SmallPolicy::parse(policy));
+        let before = scratch.retained_bytes();
+        OriginalSubject::new(&theory, None)
+            .narrow_small(
+                &region,
+                &mut scratch,
+                &[],
+                RegionLimits::default(),
+                &Cancellation::default(),
+            )
+            .result
+            .unwrap();
+        assert!(scratch.retained_bytes() > before, "{policy}");
+    }
+}

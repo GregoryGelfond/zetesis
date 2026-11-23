@@ -371,6 +371,19 @@ impl Counters {
     pub(super) fn record(&self, event: Event) {
         self.observed.record(event);
     }
+
+    /// Run `op` against the same work and storage limits, but without recording
+    /// occurrence statistics. Prefix census is charged work; `JoinRow` and
+    /// `JoinProbe` counts belong to the walk that produces staged rows.
+    pub(in crate::formula_support) fn without_observation<T>(
+        &mut self,
+        op: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let observed = std::mem::replace(&mut self.observed, Work::worker(false));
+        let result = op(self);
+        self.observed = observed;
+        result
+    }
     #[inline]
     pub(crate) fn work(
         &mut self,
@@ -1519,7 +1532,7 @@ fn derive_rule_with_executor<'source>(
     if let Some(executor) = executor
         && row_blocks::coordinator::derive(
             executor,
-            rule,
+            (index, rule),
             outer,
             support,
             budget,
@@ -1843,6 +1856,8 @@ pub(crate) struct Join<'a, 'source> {
     scalar_selection: scalar_selection::Preparation,
     literals: Ir<'a, 'source, [LiteralIr]>,
     generated: bool,
+    /// Trailing residual suffix (`u16::MAX` = none). Fits in existing padding.
+    residual_from: u16,
     /// The certificate of the last completed row, taken by its consumer.
     comparisons: Comparisons,
     /// The active proposal cursor keeps its own base certificate during lookahead.
@@ -2574,6 +2589,29 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(())
     }
 
+    /// Install a trailing residual-skip. `literals` stays on `rule.body`; the
+    /// walk omits residual indices. If every remaining body generator is in
+    /// the suffix, the binding cursor is not started.
+    pub(super) fn skip_residuals(&mut self, skip: row_blocks::prime::ResidualSkip) {
+        self.residual_from = skip.raw();
+        if self.generated && !skip.is_empty() {
+            self.generated = self
+                .literals
+                .get()
+                .iter()
+                .enumerate()
+                .any(|(index, literal)| {
+                    !skip.contains(index)
+                        && crate::formula_binding_cursor::target(literal).is_some()
+                });
+        }
+    }
+
+    fn is_residual(&self, index: usize) -> bool {
+        self.residual_from != row_blocks::prime::ResidualSkip::NONE
+            && index >= self.residual_from as usize
+    }
+
     pub(crate) fn objective(
         objective: impl Into<Ir<'a, 'source, crate::formula_ir::ObjectiveIr>>,
         support: &'a Support<'source>,
@@ -2755,6 +2793,7 @@ impl<'a, 'source> Join<'a, 'source> {
         self.evaluation.clear_zero_divisor();
         self.pending = None;
         self.pending_head = None;
+        self.residual_from = row_blocks::prime::ResidualSkip::NONE;
         self.anchor = None;
         self.positive_prefix = None;
         self.structural_query = None;
@@ -3038,13 +3077,14 @@ impl<'a, 'source> Join<'a, 'source> {
         computation.storage_observed(&lease, 0, initial, limits, counters, location)?;
         let mut values = prefix.copied(computation, limits, counters, location)?;
         values.extend_scope(variables, computation, limits, counters, location)?;
-        let mut join = Self {
+        let join = Self {
             bindings: None,
             scalar_selection: scalar_selection::Preparation::Pending,
             literals: Ir::Temporary(literals),
             generated: literals
                 .iter()
                 .any(|literal| crate::formula_binding_cursor::target(literal).is_some()),
+            residual_from: row_blocks::prime::ResidualSkip::NONE,
             pending: None,
             pending_head: None,
             head_slots: variables..variables,
@@ -3095,18 +3135,42 @@ impl<'a, 'source> Join<'a, 'source> {
             depth: 0,
             traversal: Traversal::Searching,
         };
-        join.lease.observe(join.storage_bytes(), location)?;
+        join.finish_plan(
+            prefix,
+            variables,
+            count,
+            Context::new(computation, limits, counters, location),
+        )
+    }
+
+    fn finish_plan(
+        mut self,
+        prefix: &Binding,
+        variables: usize,
+        count: usize,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        self.lease.observe(self.storage_bytes(), location)?;
         computation.storage_observed(
-            &join.lease,
+            &self.lease,
             0,
-            join.storage_header(),
+            self.storage_header(),
             limits,
             counters,
             location,
         )?;
-        join.initialize_storage(variables, count, computation, limits, counters, location)?;
-        join.classify_slots(prefix, limits, counters, location)?;
-        Ok(join)
+        self.initialize_storage(variables, count, computation, limits, counters, location)?;
+        self.classify_slots(prefix, limits, counters, location)?;
+        Ok(self)
     }
 
     fn classify_slots(
@@ -3643,10 +3707,8 @@ impl<'a, 'source> Join<'a, 'source> {
                             ),
                             &mut self.evaluation,
                             pending.binding(),
-                            computation,
-                            limits,
-                            counters,
-                            location,
+                            Context::new(computation, limits, counters, location),
+                            row_blocks::prime::ResidualSkip::from_raw(self.residual_from),
                         )?;
                         pending.reject(location)?;
                         if !excluded {
@@ -3703,6 +3765,7 @@ impl<'a, 'source> Join<'a, 'source> {
             &mut self.evaluation,
             pending.binding(),
             Context::new(computation, limits, counters, location),
+            row_blocks::prime::ResidualSkip::from_raw(self.residual_from),
         )
     }
     /// Reuse only a complete support continuation; otherwise restart its
@@ -3747,13 +3810,18 @@ impl<'a, 'source> Join<'a, 'source> {
             )?;
         } else {
             self.pending_comparisons = self.comparisons.clone();
-            let mut pending = crate::formula_binding_cursor::Cursor::new(
+            let residual_from = self.residual_from;
+            let mut pending = crate::formula_binding_cursor::Cursor::new_filtered(
                 self.literals,
                 binding,
                 self.support,
                 self.bindings,
                 0..self.head_slots.start,
                 Context::new(computation, limits, counters, location),
+                |index| {
+                    residual_from != row_blocks::prime::ResidualSkip::NONE
+                        && index >= residual_from as usize
+                },
             )?;
             if let Some(families) = &self.families {
                 pending.share_families(std::rc::Rc::clone(families), limits, counters, location)?;
@@ -3907,6 +3975,192 @@ impl<'a, 'source> Join<'a, 'source> {
             }
         }
     }
+
+    /// Install the selected first-row posting at depth 0, the same source
+    /// the d = 1 path copies, without advancing the probe.
+    fn install_first_posting(
+        &mut self,
+        first_rows: &'a [usize],
+        work: GroundingWork<'_>,
+    ) -> Result<(), FormulaFailure> {
+        if self.plan.patterns.is_empty() {
+            return Err(owner(work.location));
+        }
+        let first = self.plan.patterns[0];
+        self.resolve_probe_source(first, work)?;
+        self.probes[0] = Some(Probe::Indexed(delta::Rows::Posting(first_rows)));
+        Ok(())
+    }
+
+    /// Walk until the first `depth` patterns are bound, then yield that
+    /// tuple and backtrack so the next call continues at the last prefix
+    /// depth. Residual literals stay skipped; complete-row filters and head
+    /// publication are not applied.
+    fn next_prefix(
+        &mut self,
+        depth: usize,
+        budget: &mut Budget,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Option<row_blocks::prime::prefixes::PrefixIds>, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        if depth == 0
+            || depth > row_blocks::prime::prefixes::MAX_PREFIX_DEPTH
+            || depth > self.plan.patterns.len()
+        {
+            return Err(owner(location));
+        }
+        self.prepare_scalar_comparisons(computation, limits, budget, counters, location)?;
+        self.resume(limits, counters, location)?;
+        self.comparisons = Comparisons::Deferred;
+        if self.traversal == Traversal::Finished || self.plan.patterns.is_empty() {
+            return Ok(None);
+        }
+        loop {
+            counters.work(limits, location)?;
+            let pattern = self.plan.patterns[self.depth];
+            let row = self.advance_probe(
+                pattern,
+                Context::new(computation, limits, counters, location),
+            )?;
+            let atom = row.and_then(|row| self.resolutions[self.depth].rows()?.row(row));
+            let Some(atom) = atom else {
+                self.positions[self.depth] = 0;
+                self.probes[self.depth] = None;
+                if self.depth == 0 {
+                    self.traversal = Traversal::Finished;
+                    return Ok(None);
+                }
+                self.undo_at(self.depth - 1, limits, counters, location)?;
+                self.depth -= 1;
+                continue;
+            };
+            // The prefix census is charged work, but JoinRow counts belong
+            // to the later suffix walk (and the d = 1 path). Recording them
+            // here would double occurrence statistics on the A′ path.
+            let selected = self.permits_row(pattern, atom, limits, counters, location)?;
+            let permitted = selected.permits()
+                && self
+                    .positive_prefix
+                    .as_ref()
+                    .is_none_or(|prefix| prefix.permits(selected));
+            if let Some(selection) = self.probe_selections.get_mut(self.depth) {
+                selection.record(self.positions[self.depth] - 1, permitted);
+            }
+            if !permitted {
+                continue;
+            }
+            let matches = self.match_row(
+                pattern.pattern,
+                atom,
+                budget,
+                Context::new(computation, limits, counters, location),
+            )?;
+            if matches && self.filter_prefix(computation, limits, counters, location)? {
+                if let Some(witnesses) = &mut self.witnesses {
+                    counters.work(limits, location)?;
+                    witnesses.push(self.depth, atom);
+                }
+                if let Some(prefix) = &mut self.positive_prefix {
+                    prefix.advance(self.depth, pattern.source, selected);
+                }
+                self.depth += 1;
+                if self.depth == depth {
+                    let ids = self.prefix_ids(depth, location)?;
+                    self.undo_at(self.depth - 1, limits, counters, location)?;
+                    self.depth -= 1;
+                    return Ok(Some(ids));
+                }
+            } else {
+                self.undo_at(self.depth, limits, counters, location)?;
+            }
+        }
+    }
+
+    /// Recover the source-row identities of the just-accepted prefix from
+    /// each probe's already-advanced position. No extra Join field is kept.
+    fn prefix_ids(
+        &self,
+        depth: usize,
+        location: ProgramSite,
+    ) -> Result<row_blocks::prime::prefixes::PrefixIds, FormulaFailure> {
+        let mut packed = [0u32; row_blocks::prime::prefixes::MAX_PREFIX_DEPTH];
+        for (index, slot) in packed.iter_mut().enumerate().take(depth) {
+            let row = self.probe_row(index).ok_or_else(|| owner(location))?;
+            *slot = u32::try_from(row).map_err(|_| overflow(location))?;
+        }
+        Ok(row_blocks::prime::prefixes::PrefixIds::packed(
+            u8::try_from(depth).map_err(|_| overflow(location))?,
+            packed,
+        ))
+    }
+
+    fn probe_row(&self, depth: usize) -> Option<usize> {
+        let probe = self.probes.get(depth)?.as_ref()?;
+        let position = self.positions.get(depth)?.checked_sub(1)?;
+        match probe {
+            Probe::Indexed(rows) => rows.get(position),
+            Probe::Owned(rows) | Probe::Range(rows) => rows.slice().get(position).copied(),
+            Probe::Expression(rows) => rows.get(position),
+            Probe::Table(_) => None,
+        }
+    }
+
+    /// Bind one prefix tuple by installing a single-row interval at each
+    /// prefix depth, then leave the join at the start of its suffix walk.
+    /// Resolutions from a previous prefix of the same rule are kept. The
+    /// interval carries no borrow, so the tuple need not outlive the walk.
+    fn seed_prefix(
+        &mut self,
+        prefix: row_blocks::prime::prefixes::PrefixIds,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let depth = prefix.depth();
+        if depth == 0 || depth > self.plan.patterns.len() {
+            return Err(owner(location));
+        }
+        if self.traversal == Traversal::PendingUndo {
+            // A lent completion still holds the last suffix; drop it before
+            // installing a new prefix so the values trail stays empty.
+            // `resume` needs counters; seed is called with them by the
+            // caller via the reset below when traversal is Finished, and
+            // PendingUndo should not remain after next_witness_row returns
+            // None. Treat it as an owner error rather than silently undo
+            // without charging.
+            return Err(owner(location));
+        }
+        self.depth = 0;
+        self.traversal = Traversal::Searching;
+        self.pending = None;
+        self.pending_head = None;
+        self.held = None;
+        self.comparisons = Comparisons::Deferred;
+        self.pending_comparisons = Comparisons::Deferred;
+        self.failure = None;
+        if let Some(witnesses) = self.witnesses.as_mut() {
+            witnesses.clear();
+        }
+        for index in 0..self.positions.len() {
+            self.positions[index] = 0;
+        }
+        for probe in &mut self.probes {
+            *probe = None;
+        }
+        for index in 0..depth {
+            let id = prefix.get(index).ok_or_else(|| owner(location))?;
+            let end = id.checked_add(1).ok_or_else(|| overflow(location))?;
+            self.probes[index] = Some(Probe::Indexed(delta::Rows::Interval(id..end)));
+        }
+        Ok(())
+    }
+
     /// Authenticate this depth's relation and filter as one immutable pair.
     /// A refused authentication publishes neither half; backtracking reuses a
     /// successfully resolved pair independently of the chosen probe strategy.
@@ -4346,6 +4600,9 @@ impl<'a, 'source> Join<'a, 'source> {
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
         for index in self.plan.decisions.decided_at(depth) {
+            if self.is_residual(index) {
+                continue;
+            }
             let compared = if let Some(operands) = self
                 .scalar_selection
                 .comparisons()
@@ -4550,6 +4807,20 @@ impl<'a, 'source> Join<'a, 'source> {
 /// The comparison a literal decides: a comparison literal or an argument
 /// check. Captured arguments reuse comparison evaluation, never binding
 /// inference.
+fn owner(location: ProgramSite) -> FormulaFailure {
+    FormulaFailure::SupportRelation {
+        error: zetesis_core::relation::Failure::Owner,
+        location,
+    }
+}
+
+fn overflow(location: ProgramSite) -> FormulaFailure {
+    FormulaFailure::SupportRelation {
+        error: zetesis_core::relation::Failure::Overflow,
+        location,
+    }
+}
+
 fn comparison(literal: &LiteralIr) -> Option<&crate::formula_ir::Comparison> {
     match literal {
         LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => Some(comparison),

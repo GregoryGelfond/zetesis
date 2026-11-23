@@ -9,7 +9,7 @@ use crate::{Cancellation, Incomplete};
 use zetesis_algebra::region::Entry;
 use zetesis_ferraris::{
     ChoiceHeads, LearningLimits, Narrowing, NarrowingScratch, Node, OriginalSubject, RegionLimits,
-    Theory,
+    SmallPolicy, Theory,
 };
 
 fn original() -> Theory {
@@ -99,6 +99,10 @@ fn closed_with(
     let mut budget = budget(&cancellation, limit);
     let mut counts = RegionCounts::default();
     let mut entry = Entry::new(Region::all_open(3), CandidateKnowledge::default());
+    let mut scratch = NarrowingScratch::default();
+    // Preference accounting uses the measured policy independently of the
+    // process environment; three open atoms are below its learned-search floor.
+    scratch.set_small_policy(SmallPolicy::measured());
     let result = narrow(
         CandidateReading {
             original: OriginalSubject::new(original, None).with_choices(choices),
@@ -108,7 +112,7 @@ fn closed_with(
         },
         conditions,
         &mut entry,
-        &mut NarrowingScratch::default(),
+        &mut scratch,
         &mut budget,
         &mut counts,
         None,
@@ -207,8 +211,14 @@ fn joint_closure_charges_one_composed_preference_scan() {
     assert_eq!(counts.work, work);
     // Separate narrowing reads three degrees per subject. The joint selector
     // reads both degrees for each of the same three open atoms. Propagation
-    // itself spends the same prefix, so the complete receipts agree.
-    assert_eq!(work, separate_work);
+    // itself spends the same prefix. The joint path additionally stages each
+    // active restriction once, then spends one leaf dispatch and one read per
+    // packed decision word before the measured policy declines this tiny region.
+    // Derive that tariff from fixture geometry, not the completed work receipt.
+    let leaf_eligibility = u64::try_from(conditions.iter().count()).unwrap()
+        + 1
+        + u64::try_from(original.atom_count().div_ceil(64)).unwrap();
+    assert_eq!(work, separate_work + leaf_eligibility);
 }
 
 #[test]

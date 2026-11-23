@@ -240,3 +240,67 @@ fn frozen_probe_propagation_retains_the_owned_quota_error() {
     assert_eq!(attempt.preferred, None);
     assert_eq!(account.granted - account.refunded, 3);
 }
+
+#[test]
+fn specialized_narrowing_keeps_owned_quota_refusals_and_refunds_prior_grants() {
+    let owner = theory(
+        2,
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
+        vec![2],
+    );
+    let region = Region::all_open(2);
+    for policy in ["enumerate=2", "learn=2,conflicts=1000", "probe=2"] {
+        let policy = crate::SmallPolicy::parse(policy);
+        let mut scratch = NarrowingScratch::default();
+        scratch.set_small_policy(policy);
+        let mut account = Account::new(2);
+        let attempt = OriginalSubject::new(&owner, None).narrow_small_reserved(
+            &region,
+            &mut scratch,
+            &[],
+            &Cancellation::default(),
+            &mut Meter::reserved(&mut account),
+        );
+        assert_eq!(attempt.result, Err(exhausted(2)));
+        assert_eq!(attempt.charged, 2);
+        assert_eq!(account.granted - account.refunded, 2);
+
+        let cancellation = Cancellation::default();
+        let mut account = Account::new(1000);
+        let mut meter = Meter::reserved(&mut account);
+        meter.tick().unwrap();
+        cancellation.cancel();
+        let attempt = OriginalSubject::new(&owner, None).narrow_small_reserved(
+            &region,
+            &mut scratch,
+            &[],
+            &cancellation,
+            &mut meter,
+        );
+        assert_eq!(attempt.result, Err(Failure::Stopped(Stop::Cancelled)));
+        assert_eq!(attempt.charged, 0);
+        assert_eq!(meter.charged(), 1);
+        assert_eq!(meter.remaining(), 0);
+        assert_eq!(account.granted - account.refunded, 1);
+    }
+}
+
+#[test]
+fn adaptive_refutation_notice_uses_the_existing_account_per_decision_word() {
+    let mut scratch = NarrowingScratch::default();
+    scratch.set_small_policy(crate::SmallPolicy::parse("adapt=2"));
+    let region = Region::all_open(65);
+    let cancellation = Cancellation::default();
+    let mut account = Account::new(1);
+    let attempt =
+        scratch.note_general_refutation(&region, &cancellation, &mut Meter::reserved(&mut account));
+    assert_eq!(attempt.result, Err(exhausted(1)));
+    assert_eq!(attempt.charged, 1);
+    assert_eq!(account.granted - account.refunded, 1);
+    let mut account = Account::new(1000);
+    let attempt =
+        scratch.note_general_refutation(&region, &cancellation, &mut Meter::reserved(&mut account));
+    assert_eq!(attempt.result, Ok(()));
+    assert_eq!(attempt.charged, 2); // the carrier has exactly two packed decision words
+    assert_eq!(account.granted - account.refunded, 2);
+}

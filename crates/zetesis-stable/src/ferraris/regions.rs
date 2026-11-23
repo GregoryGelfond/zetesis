@@ -24,7 +24,7 @@
 use std::cell::Cell;
 use std::sync::Arc;
 
-use zetesis_algebra::{Failure, Meter, Stop};
+use zetesis_algebra::{Failure, Meter, Refusal, Stop};
 use zetesis_algebra::{
     region::{Entry, Narrowing, Region},
     walk::{self, Counting, Visit, Walk},
@@ -82,7 +82,9 @@ pub struct RegionCounts {
     /// the indexing of each restriction and,
     /// once a region walk first needs it, the indexing of the theory, one
     /// unit per node and operand occurrence (kept even if building the index
-    /// then fails); included in search work. A run decided by a positive
+    /// then fails); included in search work. Specialized leaf preparation, propagation,
+    /// reasoning and enumeration visits also use this same account and retain
+    /// their admitted prefix on failure. A run decided by a positive
     /// certificate walks no
     /// region and indexes no theory. Enumeration queries share the walk's
     /// original index. A standalone membership query includes its own index
@@ -1126,8 +1128,53 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     let mut late = subjects::late(&reading, filter);
     let result = joint(eager, &mut late, region, knowledge, scratch, budget, counts)?;
     if result == Narrowing::Refuted {
+        let cancellation = budget.cancellation;
+        let mut quota = BudgetQuota { budget };
+        let mut meter = Meter::reserved(&mut quota);
+        let attempt = scratch.note_general_refutation(region, cancellation, &mut meter);
+        counts.work = counts
+            .work
+            .checked_add(attempt.charged)
+            .ok_or(Incomplete::CounterOverflow)?;
+        attempt.result.map_err(meter_failure)?;
         return Ok(result);
     }
+    // Below the policy's size, a size-specialized implementation of the same
+    // narrowing may refute what the general closure left open.
+    if scratch.small_active() {
+        let cancellation = budget.cancellation;
+        let mut quota = BudgetQuota { budget };
+        let mut meter = Meter::reserved(&mut quota);
+        let result = (|| {
+            let mut active = Vec::new();
+            for (theory, _) in restrictions.iter() {
+                meter.tick()?;
+                active.try_reserve(1).map_err(|_| Stop::Allocation)?;
+                active.push(theory);
+            }
+            original
+                .narrow_small_reserved(region, scratch, &active, cancellation, &mut meter)
+                .result
+        })();
+        // Staging can refuse before narrow_small_reserved establishes its
+        // own boundary; settle that resource error against live control too.
+        let result = match result {
+            Err(error) if error.is_resource_refusal() => match cancellation.poll() {
+                Err(stop) => Err(Failure::Stopped(stop)),
+                Ok(()) => Err(error),
+            },
+            other => other,
+        };
+        meter.refund();
+        counts.work = counts
+            .work
+            .checked_add(meter.charged())
+            .ok_or(Incomplete::CounterOverflow)?;
+        if let zetesis_ferraris::SmallNarrowing::Refuted(_) = result.map_err(meter_failure)? {
+            return Ok(Narrowing::Refuted);
+        }
+    }
+
     let preferred = prefer_split(
         (original, narrower),
         restrictions,
