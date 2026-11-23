@@ -177,7 +177,13 @@ impl Metadata {
             TemplateTerm::Variable(variable) => Ok(TermData::Variable(variable)),
             TemplateTerm::Constant(value) => {
                 let id = read.selected_term(value)?;
-                self.term_extent = Some(self.term_extent.map_or(id, |old| old.max(id)));
+                self.term_extent = Some(self.term_extent.map_or(id, |old| {
+                    if old.position() < id.position() {
+                        id
+                    } else {
+                        old
+                    }
+                }));
                 Ok(TermData::Constant(id))
             }
         }

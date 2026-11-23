@@ -50,8 +50,8 @@ use std::sync::OnceLock;
 
 use zetesis_algebra::region::{Narrowing, Region};
 use zetesis_algebra::{
-    AnswerSetsSought, Cancellation, Class, Countermodels, Failure, Meter, Metered, Quota, Refusal,
-    Stop, words::Words,
+    AnswerSetsSought, Cancellation, Class, Countermodels, Failure, Meter, Metered, Quota, Stop,
+    words::Words,
 };
 
 use crate::{FormulaView, NodeView, Theory};
@@ -2214,6 +2214,27 @@ impl LearningScratch {
 }
 
 impl NarrowingScratch {
+    fn small_attempt<T, Q: Quota + ?Sized>(
+        &mut self,
+        cancellation: &Cancellation,
+        work: &mut Meter<'_, Q>,
+        absent: T,
+        operation: impl FnOnce(
+            &mut small::SmallScratch,
+            &mut Meter<'_, Q>,
+        ) -> Result<T, Failure<Q::Error>>,
+    ) -> Metered<T, Failure<Q::Error>> {
+        if let Some(small) = &mut self.small {
+            return small.attempt(cancellation, work, operation);
+        }
+        let result = cancellation
+            .poll()
+            .map(|()| absent)
+            .map_err(Failure::Stopped);
+        work.refund();
+        Metered { result, charged: 0 }
+    }
+
     /// The size-specialized narrowings this walker made.
     #[must_use]
     pub fn small_statistics(&self) -> small::SmallStatistics {
@@ -2237,6 +2258,32 @@ impl NarrowingScratch {
         }
     }
 
+    /// Whether the walk should visit `region` after the others pending: a
+    /// completion found outside it lies in another pending region.
+    pub fn small_defers<Q: Quota + ?Sized>(
+        &mut self,
+        region: &Region,
+        cancellation: &Cancellation,
+        work: &mut Meter<'_, Q>,
+    ) -> Metered<bool, Failure<Q::Error>> {
+        self.small_attempt(cancellation, work, false, |small, work| {
+            small.defers(region, work)
+        })
+    }
+
+    /// An open atom whose split walks toward a completion the learned search
+    /// found in `region`, if one is remembered.
+    pub fn small_guide<Q: Quota + ?Sized>(
+        &mut self,
+        region: &Region,
+        cancellation: &Cancellation,
+        work: &mut Meter<'_, Q>,
+    ) -> Metered<Option<usize>, Failure<Q::Error>> {
+        self.small_attempt(cancellation, work, None, |small, work| {
+            small.guide(region, work)
+        })
+    }
+
     /// Tell the size-specialized narrowing that the general narrowing refuted
     /// `region` (an adapting policy reads its size). Each decision word read uses
     /// the supplied account. The returned prefix survives refusal, and unused
@@ -2247,27 +2294,9 @@ impl NarrowingScratch {
         cancellation: &Cancellation,
         work: &mut Meter<'_, Q>,
     ) -> Metered<(), Failure<Q::Error>> {
-        let before = work.charged();
-        let result: Result<(), Failure<Q::Error>> = (|| {
-            cancellation.poll()?;
-            if let Some(small) = &mut self.small {
-                small.note_refuted(region, work)?;
-            }
-            cancellation.poll()?;
-            Ok(())
-        })();
-        let result = match result {
-            Err(error) if error.is_resource_refusal() => match cancellation.poll() {
-                Err(stop) => Err(Failure::Stopped(stop)),
-                Ok(()) => Err(error),
-            },
-            other => other,
-        };
-        work.refund();
-        Metered {
-            result,
-            charged: work.charged() - before,
-        }
+        self.small_attempt(cancellation, work, (), |small, work| {
+            small.note_refuted(region, work)
+        })
     }
 
     /// Say whether this walker is the one that runs the size-specialized
@@ -2286,14 +2315,28 @@ impl NarrowingScratch {
         self.small_scratch().yield_to(idle);
     }
 
+    /// Share one completion slot among a walk's walkers: a completion one
+    /// walker's root probe finds steers every walker that adopts it.
+    pub fn share_small_completions(&mut self, shared: std::sync::Arc<small::SharedCompletion>) {
+        self.small_scratch().share_completions(shared);
+    }
+
+    /// Say whether the walk this scratch serves optimizes an objective, which
+    /// keeps steering off unless the policy asks for it (`steer_objective`).
+    pub fn note_small_objective(&mut self, present: bool) {
+        self.small_scratch().note_objective(present);
+    }
+
     /// Fix the size-specialized narrowing policy instead of reading it from
     /// the environment.
     pub fn set_small_policy(&mut self, policy: small::SmallPolicy) {
         self.small_scratch().set_policy(policy);
     }
 
-    /// Worklist and pending-mask capacity in bytes; the value's own header is
-    /// counted by its owner.
+    /// Retained scratch capacities, including owned leaf buffers; this value's
+    /// own header is counted by its owner. Shared completion payload belongs
+    /// to its walk owner. LOCAL map entries count addressable payload and owned
+    /// rows; opaque allocator/control metadata and transient copies are excluded.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
         (self.common.learned.capacity() + self.common.heads.capacity()) as u128

@@ -76,7 +76,7 @@ fn distinct_ids_preserve_both_typed_orders() {
     let string = store
         .import_value(&Value::String("z".into()), Limits::default())
         .unwrap();
-    assert!(symbol < string);
+    assert!(symbol.identity_order(string).is_lt());
     let snapshot = store.snapshot(0).unwrap();
     let symbol = TermRef::new(&snapshot, symbol).unwrap();
     let string = TermRef::new(&snapshot, string).unwrap();

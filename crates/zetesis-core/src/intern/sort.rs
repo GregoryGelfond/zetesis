@@ -20,23 +20,39 @@ where
     T: Copy + Send + Sync,
     F: Fn(&T, &T) -> Ordering + Sync,
 {
+    let mut scratch = items.to_vec();
+    sort_with_scratch(items, &mut scratch, pool, compare)
+}
+
+pub(super) fn sort_with_scratch<T, F>(
+    items: &mut [T],
+    scratch: &mut [T],
+    pool: Option<&Pool>,
+    compare: F,
+) -> u64
+where
+    T: Copy + Send + Sync,
+    F: Fn(&T, &T) -> Ordering + Sync,
+{
     let compares = AtomicU64::new(0);
-    let sort_block = |block: &mut [T]| {
+    let sort_block = |(block, scratch): (&mut [T], &mut [T])| {
         let mut count = 0;
-        block_sort(block, &mut count, &compare);
+        block_sort(block, scratch, &mut count, &compare);
         compares.fetch_add(count, Atomic::Relaxed);
     };
     match pool {
         Some(pool) if items.len() > BLOCK => pool.scope(|scope| {
             let sort_block = &sort_block;
-            for block in items.chunks_mut(BLOCK) {
+            for block in items.chunks_mut(BLOCK).zip(scratch.chunks_mut(BLOCK)) {
                 scope.spawn(move |_| sort_block(block));
             }
         }),
-        _ => items.chunks_mut(BLOCK).for_each(sort_block),
+        _ => items
+            .chunks_mut(BLOCK)
+            .zip(scratch.chunks_mut(BLOCK))
+            .for_each(sort_block),
     }
     let mut width = BLOCK;
-    let mut scratch: Vec<T> = items.to_vec();
     while width < items.len() {
         let merge_pair = |(input, output): (&[T], &mut [T])| {
             let mut count = 0;
@@ -54,7 +70,7 @@ where
             }),
             None => pairs.for_each(merge_pair),
         }
-        items.copy_from_slice(&scratch);
+        items.copy_from_slice(scratch);
         width *= 2;
     }
     compares.into_inner()
@@ -65,7 +81,12 @@ const RUN: usize = 16;
 
 /// Sort one block: binary insertion into runs of [`RUN`], then pairwise merges
 /// through a block-sized scratch. O(b log b) comparisons and moves.
-fn block_sort<T: Copy>(block: &mut [T], count: &mut u64, compare: &impl Fn(&T, &T) -> Ordering) {
+fn block_sort<T: Copy>(
+    block: &mut [T],
+    scratch: &mut [T],
+    count: &mut u64,
+    compare: &impl Fn(&T, &T) -> Ordering,
+) {
     for run in block.chunks_mut(RUN) {
         for end in 1..run.len() {
             let item = run[end];
@@ -83,14 +104,13 @@ fn block_sort<T: Copy>(block: &mut [T], count: &mut u64, compare: &impl Fn(&T, &
             run[low] = item;
         }
     }
-    let mut scratch = block.to_vec();
     let mut width = RUN;
     while width < block.len() {
         for (input, output) in block.chunks(2 * width).zip(scratch.chunks_mut(2 * width)) {
             let (left, right) = input.split_at(width.min(input.len()));
             merge_into(left, right, output, count, compare);
         }
-        block.copy_from_slice(&scratch);
+        block.copy_from_slice(scratch);
         width *= 2;
     }
 }

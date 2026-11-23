@@ -214,11 +214,14 @@ fn joint_closure_charges_one_composed_preference_scan() {
     // itself spends the same prefix. The joint path additionally stages each
     // active restriction once, then spends one leaf dispatch and one read per
     // packed decision word before the measured policy declines this tiny region.
+    // The pinned measured policy then checks completion adoption once in defers
+    // and once in guide; both slots are empty, so each costs only its entry visit.
     // Derive that tariff from fixture geometry, not the completed work receipt.
     let leaf_eligibility = u64::try_from(conditions.iter().count()).unwrap()
         + 1
         + u64::try_from(original.atom_count().div_ceil(64)).unwrap();
-    assert_eq!(work, separate_work + leaf_eligibility);
+    let completion_checks = 2;
+    assert_eq!(work, separate_work + leaf_eligibility + completion_checks);
 }
 
 #[test]

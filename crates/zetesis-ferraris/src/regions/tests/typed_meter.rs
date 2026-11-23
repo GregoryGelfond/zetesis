@@ -304,3 +304,26 @@ fn adaptive_refutation_notice_uses_the_existing_account_per_decision_word() {
     assert_eq!(attempt.charged, 2); // the carrier has exactly two packed decision words
     assert_eq!(account.granted - account.refunded, 2);
 }
+
+#[test]
+fn steering_conduits_preserve_the_owned_quota_refusal() {
+    let region = Region::all_open(65);
+    let cancellation = Cancellation::default();
+    for guide in [false, true] {
+        let mut scratch = NarrowingScratch::default();
+        scratch.set_small_policy(crate::SmallPolicy::parse("learn=inf,steer=1"));
+        let mut account = Account::new(0);
+        if guide {
+            let attempt =
+                scratch.small_guide(&region, &cancellation, &mut Meter::reserved(&mut account));
+            assert_eq!(attempt.result, Err(exhausted(0)));
+            assert_eq!(attempt.charged, 0);
+        } else {
+            let attempt =
+                scratch.small_defers(&region, &cancellation, &mut Meter::reserved(&mut account));
+            assert_eq!(attempt.result, Err(exhausted(0)));
+            assert_eq!(attempt.charged, 0);
+        }
+        assert_eq!(account.granted - account.refunded, 0);
+    }
+}

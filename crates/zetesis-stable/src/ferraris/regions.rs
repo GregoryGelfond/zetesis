@@ -847,6 +847,11 @@ impl RegionSearch {
         self.parts.set_learned_store(store);
     }
 
+    /// Say whether the stream's search optimizes an objective.
+    pub(super) fn note_objective(&mut self, present: bool) {
+        self.scratch.note_small_objective(present);
+    }
+
     pub(super) fn refuter(&self) -> Option<&crate::constraint_refutation::ConstraintRefuter> {
         self.filter.as_ref().map(RetainedRefuter::borrow_owner)
     }
@@ -1141,38 +1146,31 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     }
     // Below the policy's size, a size-specialized implementation of the same
     // narrowing may refute what the general closure left open.
-    if scratch.small_active() {
-        let cancellation = budget.cancellation;
-        let mut quota = BudgetQuota { budget };
-        let mut meter = Meter::reserved(&mut quota);
-        let result = (|| {
-            let mut active = Vec::new();
-            for (theory, _) in restrictions.iter() {
-                meter.tick()?;
-                active.try_reserve(1).map_err(|_| Stop::Allocation)?;
-                active.push(theory);
-            }
-            original
-                .narrow_small_reserved(region, scratch, &active, cancellation, &mut meter)
-                .result
-        })();
-        // Staging can refuse before narrow_small_reserved establishes its
-        // own boundary; settle that resource error against live control too.
-        let result = match result {
-            Err(error) if error.is_resource_refusal() => match cancellation.poll() {
-                Err(stop) => Err(Failure::Stopped(stop)),
-                Ok(()) => Err(error),
-            },
-            other => other,
-        };
-        meter.refund();
-        counts.work = counts
-            .work
-            .checked_add(meter.charged())
-            .ok_or(Incomplete::CounterOverflow)?;
-        if let zetesis_ferraris::SmallNarrowing::Refuted(_) = result.map_err(meter_failure)? {
-            return Ok(Narrowing::Refuted);
-        }
+    if scratch.small_active()
+        && narrow_small(original, restrictions, region, scratch, budget, counts)?
+    {
+        return Ok(Narrowing::Refuted);
+    }
+    let cancellation = budget.cancellation;
+    let mut quota = BudgetQuota { budget };
+    let mut meter = Meter::reserved(&mut quota);
+    let deferred = scratch.small_defers(region, cancellation, &mut meter);
+    counts.work = counts
+        .work
+        .checked_add(deferred.charged)
+        .ok_or(Incomplete::CounterOverflow)?;
+    if deferred.result.map_err(meter_failure)? {
+        entry.defer();
+        return Ok(result);
+    }
+    let guided = scratch.small_guide(region, cancellation, &mut meter);
+    counts.work = counts
+        .work
+        .checked_add(guided.charged)
+        .ok_or(Incomplete::CounterOverflow)?;
+    if let Some(atom) = guided.result.map_err(meter_failure)? {
+        entry.prefer(atom);
+        return Ok(result);
     }
 
     let preferred = prefer_split(
@@ -1187,6 +1185,50 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
         entry.prefer(atom);
     }
     Ok(result)
+}
+
+/// Stage active restrictions and settle one small-region narrowing attempt.
+/// A staging refusal observes cancellation before publishing its charged work.
+fn narrow_small<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
+    original: OriginalSubject<'_>,
+    restrictions: &Conditions<R>,
+    region: &Region,
+    scratch: &mut NarrowingScratch,
+    budget: &mut Budget<'_, Q>,
+    counts: &mut RegionCounts,
+) -> Result<bool, Incomplete> {
+    let cancellation = budget.cancellation;
+    let mut quota = BudgetQuota { budget };
+    let mut meter = Meter::reserved(&mut quota);
+    let result = (|| {
+        let mut active = Vec::new();
+        for (theory, _) in restrictions.iter() {
+            meter.tick()?;
+            active.try_reserve(1).map_err(|_| Stop::Allocation)?;
+            active.push(theory);
+        }
+        original
+            .narrow_small_reserved(region, scratch, &active, cancellation, &mut meter)
+            .result
+    })();
+    // Staging can refuse before narrow_small_reserved establishes its
+    // own boundary; settle that resource error against live control too.
+    let result = match result {
+        Err(error) if error.is_resource_refusal() => match cancellation.poll() {
+            Err(stop) => Err(Failure::Stopped(stop)),
+            Ok(()) => Err(error),
+        },
+        other => other,
+    };
+    meter.refund();
+    counts.work = counts
+        .work
+        .checked_add(meter.charged())
+        .ok_or(Incomplete::CounterOverflow)?;
+    Ok(matches!(
+        result.map_err(meter_failure)?,
+        zetesis_ferraris::SmallNarrowing::Refuted(_)
+    ))
 }
 
 /// Rank open atoms only after all subjects agree on the current region. An

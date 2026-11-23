@@ -7,7 +7,7 @@ fn empty_solver(atoms: usize) -> Solver {
     let theory = theory(atoms, (0..atoms).map(crate::Node::atom).collect(), vec![]);
     let mut work = Meter::local(u64::MAX);
     let shape = Shape::read(&theory, None, &mut work).unwrap().unwrap();
-    Solver::encode(&shape, false, &mut work).unwrap()
+    Solver::encode(&shape, SmallPolicy::default(), &mut work).unwrap()
 }
 
 fn wide_watch_solver() -> Solver {
@@ -38,6 +38,7 @@ fn wide_threshold_solver() -> Solver {
                 sure: 0,
                 open: 0,
                 heaviest: 0,
+                family: NO_FAMILY,
             },
             &mut work,
         )

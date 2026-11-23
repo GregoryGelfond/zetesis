@@ -250,3 +250,105 @@ fn block_sort_agrees_with_parallel_sort() {
         assert_eq!(block, parallel);
     }
 }
+
+#[test]
+fn generation_remaps_keep_their_capacity_owner_after_the_interner_drops() {
+    let storage = super::Storage::new(usize::MAX).unwrap();
+    let header = storage.current_bytes();
+    let mut interner = ContentInterner::in_storage(Words, storage.clone()).unwrap();
+    let mut work = Work::default();
+    for value in 0..4096 {
+        interner.intern(&[value; 8], &mut work).unwrap();
+    }
+    let generation = interner.freeze(None, &mut work).unwrap();
+    assert_eq!(
+        storage.current_bytes(),
+        header + interner.bytes() + generation.storage_bytes()
+    );
+    let remap = generation.storage_bytes();
+    assert!(remap >= 4 * 4096);
+    drop(interner);
+    assert_eq!(storage.current_bytes(), header + remap);
+    drop(generation);
+    assert_eq!(storage.current_bytes(), header);
+}
+
+fn bounded_generation(limit: usize, threads: usize) -> (Result<(), super::Refusal>, u128, Work) {
+    let storage = super::Storage::new(limit).unwrap();
+    let mut work = Work::default();
+    let result = (|| {
+        let mut interner = ContentInterner::in_storage(Words, storage.clone())?;
+        for value in 0..4096 {
+            interner.intern(&[value; 8], &mut work)?;
+        }
+        let pool = pool(threads);
+        interner.freeze(Some(&pool), &mut work)?;
+        Ok(())
+    })();
+    (result, storage.peak_bytes(), work)
+}
+
+#[test]
+fn a_generation_accepts_its_exact_capacity_peak_on_every_pool() {
+    let (result, peak, expected_work) = bounded_generation(usize::MAX, 1);
+    assert!(result.is_ok());
+    let peak = usize::try_from(peak).unwrap();
+    for threads in [1, 2, 3, 4, 14] {
+        let (result, actual_peak, work) = bounded_generation(peak, threads);
+        assert!(result.is_ok(), "threads={threads}: {result:?}");
+        assert_eq!(actual_peak, peak as u128);
+        assert_eq!(work, expected_work);
+        let (result, _, _) = bounded_generation(peak - 1, threads);
+        assert!(matches!(result, Err(super::Refusal::Storage { .. })));
+    }
+}
+
+#[test]
+fn a_refused_freeze_retains_pending_content_and_completed_work() {
+    let (_, peak, _) = bounded_generation(usize::MAX, 1);
+    let storage = super::Storage::new(usize::try_from(peak).unwrap() - 1).unwrap();
+    let header = storage.current_bytes();
+    let mut interner = ContentInterner::in_storage(Words, storage.clone()).unwrap();
+    let mut work = Work::default();
+    let mut handles = Vec::new();
+    for value in 0..4096 {
+        handles.push(interner.intern(&[value; 8], &mut work).unwrap());
+    }
+    let before = work;
+    assert!(matches!(
+        interner.freeze(None, &mut work),
+        Err(super::Refusal::Storage { .. })
+    ));
+    assert_eq!(interner.pending_len(), 4096);
+    assert_eq!(interner.len(), 0);
+    assert!(work.total() > before.total());
+    assert_eq!(storage.current_bytes(), header + interner.bytes());
+    for (value, handle) in handles.into_iter().enumerate() {
+        let Handle::Pending(pending) = handle else {
+            panic!("pending before freeze");
+        };
+        assert!(interner.pending_content(pending, |content| {
+            content == [u32::try_from(value).unwrap(); 8]
+        }));
+    }
+}
+
+#[test]
+fn a_storage_refused_generation_has_an_exact_prefix_on_every_pool() {
+    let (_, peak, complete) = bounded_generation(usize::MAX, 1);
+    let maximum = usize::try_from(peak).unwrap();
+    let reference = bounded_generation(maximum - 1, 1);
+    assert!(matches!(reference.0, Err(super::Refusal::Storage { .. })));
+    assert!(reference.2.total() > 0);
+    assert!(reference.2.total() <= complete.total());
+    for threads in [1, 2, 3, 4, 14] {
+        let refused = bounded_generation(maximum - 1, threads);
+        assert_eq!(refused, reference, "threads={threads}");
+        // Retry with a fresh bounded owner; no failed generation can poison
+        // the next attempt or consume another owner's allowance.
+        let (result, observed, work) = bounded_generation(maximum, threads);
+        assert_eq!(result, Ok(()), "threads={threads}");
+        assert_eq!(observed, peak, "threads={threads}");
+        assert_eq!(work, complete, "threads={threads}");
+    }
+}

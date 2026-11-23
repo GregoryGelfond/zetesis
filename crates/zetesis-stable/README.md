@@ -153,7 +153,14 @@ completion is not an answer-set certificate. Each candidate still goes through
 the original reduct membership check. Spending the local conflict or probe
 allowance leaves the region to the ordinary walk. Work, allocation and control
 refusals instead stop the attempt, retaining its charged prefix in the same
-cumulative search-work account. See the [leaf API contract](../zetesis-ferraris/README.md#narrowing-regions-by-the-theorys-readings).
+cumulative search-work account. Refutation notices, shared completion adoption,
+steering and finite deferral use that account too. The caller records each
+`Metered` charged delta before propagating its typed failure and refunds unused
+grants. A shared completion only orders pending work; even a complete hint left
+by an attempt that later stops cannot discard a region or certify an answer.
+Local scratch retention counts each local copy, excluding the single shared
+completion payload owned by the parallel walk. See the
+[leaf API contract](../zetesis-ferraris/README.md#narrowing-regions-by-the-theorys-readings).
 
 Without active candidate restrictions, complete original producer coverage can
 prepare one shared `GeneratorOrder`. It prioritizes atomic choice heads and

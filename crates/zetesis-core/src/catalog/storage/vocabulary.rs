@@ -47,20 +47,41 @@ mod publication_tests {
             },
         )
         .unwrap();
+        let limits = Limits {
+            max_nodes: depth,
+            max_depth: depth,
+            max_bytes: 1 << 20,
+        };
         let mut owner = Store::new(1 << 20);
-        owner
-            .import_value(
-                &value,
-                Limits {
-                    max_nodes: depth,
-                    max_depth: depth,
-                    max_bytes: 1 << 20,
-                },
-            )
-            .unwrap();
+        let identity = owner.import_value(&value, limits).unwrap();
+        // Complete term ordering as setup; its own transient peak is outside
+        // the later import/publication phases compared by this test.
+        owner.order_terms(|| Ok::<_, ()>(())).unwrap();
+        owner.restart_peak();
+        let retained = owner.current_bytes();
+        // External flat ingress reserves a full expanded-node ID buffer even
+        // when every term is already interned. It changes no canonical owner.
+        assert_eq!(owner.import_value(&value, limits).unwrap(), identity);
+        assert_eq!(owner.current_bytes(), retained);
         let import_peak = owner.peak_bytes();
+        assert!(import_peak >= retained + (depth * size_of::<super::super::TermId>()) as u128);
+        // Reimport must not invalidate the completed order: this isolates
+        // actual publication capacity from new interner construction.
+        let mut reordered = 0;
+        owner
+            .order_terms(|| {
+                reordered += 1;
+                Ok::<_, ()>(())
+            })
+            .unwrap();
+        assert_eq!(reordered, 0);
         let frozen = owner.freeze_vocabulary_with(0, || Ok::<_, ()>(())).unwrap();
-        assert!(frozen.publication_peak() < import_peak);
+        assert!(
+            frozen.publication_peak() < import_peak,
+            "publication={} import={import_peak} retained={}",
+            frozen.publication_peak(),
+            frozen.retained_bytes()
+        );
         assert!(frozen.publication_peak() >= frozen.retained_bytes());
     }
 }
@@ -216,6 +237,9 @@ impl Store {
         if self.tail.count() != 0 {
             return Err(Fault::VocabularyHasAtoms.into());
         }
+        // Freezing the vocabulary is its semantic commit: its last tail's
+        // terms receive content-order identities before the tail is sealed.
+        self.order_terms_with(&mut work)?;
         self.budget.check_extra(extra)?;
         if let Vocabulary::Frozen(mut base) = self.vocabulary {
             base.publication_peak = self.budget.used + extra;

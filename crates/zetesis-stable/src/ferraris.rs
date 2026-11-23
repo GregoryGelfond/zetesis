@@ -653,6 +653,25 @@ impl StableModels {
         }
     }
 
+    /// Say whether this stream's search optimizes an objective, before the
+    /// stream starts. The region walk's size-specialized narrowing then
+    /// leaves steering toward its first completion off unless its policy
+    /// asks for it (`steer_objective=1`): an optimizing search must still
+    /// prove its first answer's cost optimal. A property of the query, not of
+    /// its encoding; answer sets are unchanged either way. A started stream
+    /// keeps what it started with.
+    pub fn note_objective(&mut self, present: bool) {
+        if self.terminal || self.started() {
+            return;
+        }
+        match &mut self.proposer {
+            Proposer::Refuted(_) => {}
+            Proposer::Regions(regions) => regions.note_objective(present),
+            Proposer::Proposals(proposals) => proposals.note_objective(present),
+            Proposer::Parallel(parallel) => parallel.note_objective(present),
+        }
+    }
+
     /// Enable coarse host timing from this point onward. Repeated calls retain
     /// existing measurements. No timing clock is read while timing is
     /// disabled; a parallel region walk reads the clock between its

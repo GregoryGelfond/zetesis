@@ -253,6 +253,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             }
         };
         models.set_query_division(config.query_division);
+        models.note_objective(self.input.objectives.is_present());
         if config.stats {
             models.enable_phase_timing();
         }

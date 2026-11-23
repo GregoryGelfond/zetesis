@@ -463,7 +463,7 @@ fn a_support_bytes_grant_refusal_within_the_ceiling_completes() {
     // that exceeds the partitioned share but fits the source ceiling must
     // complete on the source retry, including a single worker (whose grant
     // is only half the remaining bytes).
-    for workers in [1, 3, 14] {
+    for workers in [1, 2, 3, 4, 14] {
         let executor = Executor::new(NonZeroUsize::new(workers).unwrap()).unwrap();
         Fixture::default().with(location(), |_, computation, counters| {
             let limits = FormulaLimits {
@@ -555,4 +555,27 @@ fn a_support_bytes_refusal_past_the_ceiling_reports_the_source_limit() {
             "{error:?}"
         );
     });
+}
+
+#[test]
+fn publication_refusal_names_the_source_envelope() {
+    let limits = FormulaLimits::default();
+    let reserved = 8192;
+    let local = limits.max_support_bytes - reserved;
+    let error = publication_failure(
+        FormulaFailure::Limit {
+            resource: FormulaResource::SupportBytes,
+            observed: local as u128 + 1,
+            limit: local as u128,
+            location: location(),
+        },
+        reserved,
+        &limits,
+    );
+    assert!(matches!(error, FormulaFailure::Limit {
+        resource: FormulaResource::SupportBytes,
+        observed,
+        limit,
+        ..
+    } if observed == limits.max_support_bytes as u128 + 1 && limit == limits.max_support_bytes as u128));
 }

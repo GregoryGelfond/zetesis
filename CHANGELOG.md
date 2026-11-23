@@ -6,11 +6,24 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Term-order interning uses a shared bounded `intern::Storage` owner for native
+  capacities and live generation remaps. `ContentInterner::in_storage` exposes
+  that owner, and `Refusal::Storage` reports its byte boundary; exhaustive
+  callers must handle the new variant. Ordered head-key publication retains
+  parallel row/key production, then interns in coordinator order within the
+  source's existing publication allowance. Successful allocation capacities
+  and replacement overlap remain observable after a later refusal. These
+  receipts are not RSS. Catalog native-work and head-key freeze tallies still
+  settle after their operations finish; prompt cancellation and complete
+  failed-work accounting within those operations remain separate obligations.
+  Head-key insertion retains its prepaid fixed per-key tariff.
 - Specialized original-region narrowing uses the existing work account for
   encoding, enumeration and learned-search visits. `narrow_small` now takes
   `RegionLimits` and returns a `Metered` outcome; `narrow_small_reserved` borrows
-  the caller's meter and preserves typed refusals. Adaptive refutation notices
-  also return their charged prefix. Exact work totals and tight-limit stopping
+  the caller's meter and preserves typed refusals. Refutation notices and
+  `small_defers`/`small_guide` also take cancellation and the meter and return
+  their charged prefix. Completion copies, root probes and enabled learning
+  refinements use this account too. Exact work totals and tight-limit stopping
   points change; local conflict/probe allowances remain distinct from global
   work exhaustion. Owned leaf capacities are included in scratch retention.
 - Workspace development and test builds use line-table debug information,
@@ -88,7 +101,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   lanes remain, including the automatic dependency-grounding route.
 - Reused leaf scratch clears learned cores and guards when its theory changes.
   Work and control refusal cannot publish a partial packed refutation; interrupted
-  mutable solver and enumeration state is discarded before retry.
+  mutable solver, enumeration and steering state is discarded before retry.
+  Shared completion publication and adoption commit only after complete copies;
+  a complete hint surviving a later refusal remains traversal guidance alone.
 
 - Full conflict and objective-bound learning checks its condition limit through
   packed decisions before allocating literal storage. Discovery and copying

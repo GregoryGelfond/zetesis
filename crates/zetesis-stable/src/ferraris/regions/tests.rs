@@ -282,7 +282,15 @@ fn cycle_root_work(theory: &Theory, outer_checks: bool) -> u64 {
     } else {
         0
     };
-    direct.work + arithmetic + leaf_eligibility
+    // With steering enabled, defers and guide each inspect the completion
+    // slot once, even when this scalar fixture has no shared completion.
+    let steering = 2 * u64::from(
+        scratch.small_active()
+            && zetesis_ferraris::SmallPolicy::from_environment()
+                .refinements
+                .has(zetesis_ferraris::SmallRefinements::STEER),
+    );
+    direct.work + arithmetic + leaf_eligibility + steering
 }
 
 #[test]

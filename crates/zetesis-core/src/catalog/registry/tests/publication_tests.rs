@@ -138,10 +138,37 @@ fn publication_accepts_its_exact_composed_peak() {
     assert_sequence(&owner, &owner.committed, &[0, 1, 2, 3, 4]);
 }
 
+fn ordered_pending_growth() -> (AtomRegistry, usize) {
+    let mut owner = pending_growth();
+    let mut preparation_work = 0;
+    owner
+        .appender()
+        .import(limits(), |store| {
+            store.order_terms(|| {
+                preparation_work += 1;
+                Ok::<_, Infallible>(())
+            })
+        })
+        .unwrap();
+    owner.restart_storage_peak();
+    (owner, preparation_work)
+}
+
 #[test]
 fn refused_publication_growth_retries_the_same_suffix() {
-    let (peak, operations) = measured_growth();
-    let mut owner = pending_growth();
+    // Isolate the publication boundary after separately counted term ordering.
+    // The complete commit tests above still exercise ordering and publication.
+    let (mut reference, preparation_work) = ordered_pending_growth();
+    let mut operations = 0;
+    reference
+        .commit_with(limits(), || {
+            operations += 1;
+            Ok::<_, Infallible>(())
+        })
+        .unwrap();
+    let peak = reference.storage_peak_bytes();
+    let (mut owner, repeated_preparation_work) = ordered_pending_growth();
+    assert_eq!(repeated_preparation_work, preparation_work);
     let mut admitted = 0;
     let result = owner.commit_with(
         Limits {
@@ -158,6 +185,40 @@ fn refused_publication_growth_retries_the_same_suffix() {
     // All work permits passed: this is a publication capacity refusal, not
     // an earlier discovery-buffer or callback refusal.
     assert_eq!(admitted, operations);
+    assert_eq!(owner.snapshot.atom_count(), 4);
+    assert_sequence(&owner, &owner.committed, &[0, 1, 2, 3]);
+    assert_sequence(&owner, &owner.pending, &[4]);
+    assert!(AtomRef::new(&owner.snapshot, owner.pending[0]).is_none());
+    assert!(owner.storage_peak_bytes() >= owner.storage_bytes());
+    owner
+        .commit_with(limits(), || Ok::<_, Infallible>(()))
+        .unwrap();
+    assert_sequence(&owner, &owner.committed, &[0, 1, 2, 3, 4]);
+    assert!(owner.pending.is_empty());
+    validate(&owner);
+}
+
+#[test]
+fn refused_term_ordering_keeps_its_exact_work_and_unpublished_suffix() {
+    let (peak, _) = measured_growth();
+    let mut owner = pending_growth();
+    let mut admitted = 0;
+    let result = owner.commit_with(
+        Limits {
+            max_bytes: peak - 1,
+            ..limits()
+        },
+        || {
+            admitted += 1;
+            Ok::<_, Infallible>(())
+        },
+    );
+    assert!(matches!(result, Err(Failure::Bytes { required, limit })
+        if required == peak && limit == peak - 1));
+    // Five committed-buffer growth permits, one pending ID, one ordering
+    // entry, nine hash words, two probes, nine key/offset writes and one
+    // freeze-entry write have completed before the native capacity refusal.
+    assert_eq!(admitted, 5 + 1 + 1 + 9 + 2 + 9 + 1);
     assert_eq!(owner.snapshot.atom_count(), 4);
     assert_sequence(&owner, &owner.committed, &[0, 1, 2, 3]);
     assert_sequence(&owner, &owner.pending, &[4]);

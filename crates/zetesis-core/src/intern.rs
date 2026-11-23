@@ -1,8 +1,12 @@
 //! The interner: one source of identity and order for interned content.
 //!
-//! This generic interner states `ContentOrderInterning.IdOrderEqCompare`. No
-//! grounding owner uses it yet: support atoms are still owned by
-//! [`crate::atom_registry::AtomRegistry`] over the catalog's discovery IDs.
+//! This generic interner states `ContentOrderInterning.IdOrderEqCompare`.
+//! Grounding uses it for term order: every commit of a catalog vocabulary
+//! (an [`crate::atom_registry::AtomRegistry`] commit or a vocabulary freeze)
+//! freezes the commit's new terms as one generation, so terms of one
+//! generation compare by identity. Atoms are still owned by the registry over
+//! the catalog's discovery IDs, and term identity (deduplication) is still
+//! the catalog's own hash index.
 //!
 //! Content is a string of `u32` words whose meaning belongs to the caller's
 //! [`ContentOrder`]: a term's constructor and argument identities, an atom's
@@ -34,14 +38,32 @@
 //! by its identities alone; a pair from different generations compares content.
 //!
 //! # Work
-//! Every operation adds deterministic counts to a caller-owned [`Work`]: words
-//! hashed, table probes, content comparisons and words written. A generation's
-//! totals depend only on the multiset of requests, so they are the same at
-//! every worker count; [`freeze`](ContentInterner::freeze) sorts fixed-size blocks and
-//! merges them pairwise, so its comparisons do not depend on the worker count
-//! either.
+//! Operations add counts to caller-owned [`Work`]: words hashed, table probes,
+//! content comparisons and words written. Insertion counts describe the work
+//! performed; hash-match comparison counts can depend on arrival order.
+//! [`freeze`](ContentInterner::freeze) first canonicalizes the generation, then
+//! sorts fixed-size blocks and merges them pairwise, so its comparison count
+//! is independent of pool size. The caller fixes its logical request order or
+//! separate tariff and settles the tally against its work/control boundary.
+//! This API does not poll cancellation or enforce a work limit.
+//!
+//! # Storage
+//! [`ContentInterner::in_storage`] uses one shared [`Storage`] account for the
+//! interner and its live generation remaps. It checks proposed growth before
+//! allocation, observes actual capacity afterward and accounts replacement
+//! overlap. Rejected proposals do not raise the observed peak; successful
+//! allocations remain in the receipt if a later operation refuses. A remap
+//! retains its account until dropped, even after the interner is gone.
+//! These are named vector/table and control capacities, not RSS or all allocator
+//! metadata. The fixed shared-owner allocation retains Rust's infallible
+//! allocation boundary. [`ContentInterner::new`] supplies no caller byte ceiling.
+//! Empty freeze can still allocate staging and a generation header. Byte
+//! admission is separate from the caller's delayed work/control settlement.
 
 mod sort;
+mod storage;
+pub use storage::Storage;
+use storage::{Scratch, capacity};
 #[cfg(test)]
 mod tests;
 
@@ -158,6 +180,13 @@ pub enum Refusal {
     Exhausted,
     /// A reservation failed.
     Allocation,
+    /// Named live capacity or replacement overlap exceeds the byte allowance.
+    Storage {
+        /// Required simultaneous named capacity.
+        required: u128,
+        /// The account ceiling.
+        limit: usize,
+    },
 }
 
 impl std::fmt::Display for Refusal {
@@ -165,6 +194,7 @@ impl std::fmt::Display for Refusal {
         f.write_str(match self {
             Self::Exhausted => "interner identity space exhausted",
             Self::Allocation => "interner reservation failed",
+            Self::Storage { .. } => "interner byte allowance exhausted",
         })
     }
 }
@@ -193,16 +223,12 @@ impl Arena {
         self.starts.len()
     }
 
-    fn push(&mut self, content: &[u32]) -> Result<u32, Refusal> {
+    fn push(&mut self, content: &[u32], storage: &Storage) -> Result<u32, Refusal> {
         let entry = u32::try_from(self.starts.len()).map_err(|_| Refusal::Exhausted)?;
         let start = u32::try_from(self.words.len()).map_err(|_| Refusal::Exhausted)?;
         u32::try_from(self.words.len() + content.len()).map_err(|_| Refusal::Exhausted)?;
-        self.starts
-            .try_reserve(1)
-            .map_err(|_| Refusal::Allocation)?;
-        self.words
-            .try_reserve(content.len())
-            .map_err(|_| Refusal::Allocation)?;
+        storage.reserve(&mut self.starts, 1, false)?;
+        storage.reserve(&mut self.words, content.len(), false)?;
         self.starts.push(start);
         self.words.extend_from_slice(content);
         Ok(entry)
@@ -266,7 +292,8 @@ impl Frozen<'_> {
 /// The interner. See the [module documentation](self).
 pub struct ContentInterner<O> {
     order: O,
-    shards: Box<[Shard]>,
+    shards: Vec<Shard>,
+    storage: Storage,
     /// Content of every final identity, in identity order.
     arena: Arena,
     /// First identity of each completed generation, then of the open one;
@@ -276,14 +303,39 @@ pub struct ContentInterner<O> {
 
 impl<O: ContentOrder> ContentInterner<O> {
     /// An empty interner whose one order is `order`.
+    ///
+    /// # Panics
+    /// If initializing this unbounded convenience interner cannot reserve storage.
+    /// Use [`Self::in_storage`] to receive a typed construction refusal.
     #[must_use]
     pub fn new(order: O) -> Self {
-        Self {
+        let storage = Storage::new(usize::MAX).expect("unbounded interner account");
+        Self::in_storage(order, storage).expect("interner reservation failed")
+    }
+
+    /// Create an interner in one caller-owned bounded byte account.
+    /// All generation remaps retain that same account until they are dropped.
+    /// # Errors
+    /// Returns a typed refusal, retaining every successful capacity observation
+    /// in `storage`; no interner is returned on failure.
+    pub fn in_storage(order: O, storage: Storage) -> Result<Self, Refusal> {
+        storage.add(size_of::<Self>() as u128)?;
+        let mut interner = Self {
             order,
-            shards: (0..SHARDS).map(|_| Shard::default()).collect(),
+            shards: Vec::new(),
+            storage,
             arena: Arena::default(),
-            generations: vec![0],
-        }
+            generations: Vec::new(),
+        };
+        interner
+            .storage
+            .reserve(&mut interner.shards, SHARDS, true)?;
+        interner.shards.resize_with(SHARDS, Shard::default);
+        interner
+            .storage
+            .reserve(&mut interner.generations, 1, true)?;
+        interner.generations.push(0);
+        Ok(interner)
     }
 
     /// The one comparison: a view of frozen content and its order.
@@ -370,7 +422,8 @@ impl<O: ContentOrder> ContentInterner<O> {
     ///
     /// # Errors
     /// Refuses when the identity space or a reservation is exhausted; the
-    /// interner is unchanged.
+    /// content is unchanged; successfully grown capacity remains owned and
+    /// charged even when its observed overlap refuses.
     ///
     /// # Panics
     /// Never: the shard count fits `u32`.
@@ -398,11 +451,10 @@ impl<O: ContentOrder> ContentInterner<O> {
         if let Some(&local) = found {
             return Ok(Handle::Pending(Pending { shard, local }));
         }
-        hashes.try_reserve(1).map_err(|_| Refusal::Allocation)?;
-        table
-            .try_reserve(1, |&local| hashes[local as usize])
-            .map_err(|_| Refusal::Allocation)?;
-        let local = arena.push(content)?;
+        self.storage.reserve(hashes, 1, false)?;
+        self.storage
+            .table(table, 1, |&local| hashes[local as usize])?;
+        let local = arena.push(content, &self.storage)?;
         hashes.push(hash);
         table.insert_unique(hash, local, |&local| hashes[local as usize]);
         work.written += content.len() as u64 + 1;
@@ -445,93 +497,129 @@ impl<O: ContentOrder> ContentInterner<O> {
     ///
     /// # Errors
     /// Refuses when the identity space or a reservation is exhausted. On
-    /// refusal the open generation is unchanged.
+    /// refusal the open generation's content is unchanged. Successfully grown
+    /// capacity remains owned and charged. `Storage::peak_bytes` retains every
+    /// completed allocation, including temporary scratch already released.
     ///
     /// # Panics
     /// Never: identities are checked against `u32` before assignment.
     pub fn freeze(&mut self, pool: Option<&Pool>, work: &mut Work) -> Result<Generation, Refusal> {
-        let shards: Vec<Open> = self
-            .shards
-            .iter_mut()
-            .map(|shard| {
-                std::mem::take(shard.open.get_mut().unwrap_or_else(PoisonError::into_inner))
-            })
-            .collect();
+        let storage = self.storage.clone();
+        let mut shards = OpenGeneration {
+            scratch: Scratch::new(&storage, self.shards.len())?,
+            storage: &storage,
+        };
+        for shard in &mut self.shards {
+            shards.scratch.values.push(std::mem::take(
+                shard.open.get_mut().unwrap_or_else(PoisonError::into_inner),
+            ));
+        }
+        let result = self.freeze_open(&shards.scratch.values, pool, work);
+        match result {
+            Ok(generation) => Ok(generation),
+            Err(error) => {
+                // Every fallible reservation precedes frozen membership writes.
+                // Grown frozen capacities stay owned and charged; open entries
+                // are returned unchanged and can be retried.
+                for (shard, open) in self.shards.iter_mut().zip(shards.scratch.values.drain(..)) {
+                    *shard.open.get_mut().unwrap_or_else(PoisonError::into_inner) = open;
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn freeze_open(
+        &mut self,
+        shards: &[Open],
+        pool: Option<&Pool>,
+        work: &mut Work,
+    ) -> Result<Generation, Refusal> {
+        let storage = self.storage.clone();
         let count: usize = shards.iter().map(|open| open.arena.len()).sum();
         let base = self.arena.len();
+        u32::try_from(base + count).map_err(|_| Refusal::Exhausted)?;
+        let mut generation = Generation::new(base, storage.clone())?;
         if count == 0 {
-            self.restore(shards);
-            return Ok(Generation {
-                remap: Vec::new(),
-                base,
-            });
+            return Ok(generation);
         }
-        if u32::try_from(base + count).is_err() {
-            self.restore(shards);
-            return Err(Refusal::Exhausted);
-        }
-        let mut entries: Vec<Pending> = Vec::new();
-        if entries.try_reserve_exact(count).is_err() {
-            self.restore(shards);
-            return Err(Refusal::Allocation);
-        }
+        let mut entries = Scratch::new(&storage, count)?;
         for (shard, open) in shards.iter().enumerate() {
             let shard = u32::try_from(shard).expect("shard count fits u32");
-            entries.extend((0..open.arena.len()).map(|local| Pending {
-                shard,
-                local: u32::try_from(local).expect("arena entries fit u32"),
-            }));
+            entries
+                .values
+                .extend((0..open.arena.len()).map(|local| Pending {
+                    shard,
+                    local: u32::try_from(local).expect("arena entries fit u32"),
+                }));
         }
         let frozen = self.frozen();
         let content =
             |entry: &Pending| shards[entry.shard as usize].arena.get(entry.local as usize);
         let hash = |entry: &Pending| shards[entry.shard as usize].hashes[entry.local as usize];
-        // Arrival order within a shard depends on thread timing. Start the
-        // content sort from the hash order instead, so the comparisons it
-        // makes depend only on the generation's content. Equal hashes are
-        // distinct contents; their content order breaks the tie.
-        entries.sort_unstable_by(|left, right| {
+        entries.values.sort_unstable_by(|left, right| {
             hash(left)
                 .cmp(&hash(right))
                 .then_with(|| self.order.compare(frozen, content(left), content(right)))
         });
         work.written += count as u64;
-        work.compares += sort_by_content(&mut entries, pool, |left, right| {
-            self.order.compare(frozen, content(left), content(right))
-        });
-        // Remap tables: each shard's locals to their final identities.
-        let mut remap: Vec<Vec<Id>> = shards
-            .iter()
-            .map(|open| vec![Id(0); open.arena.len()])
-            .collect();
-        let total_words: usize = shards.iter().map(|open| open.arena.words.len()).sum();
-        if self.arena.words.try_reserve(total_words).is_err()
-            || self.arena.starts.try_reserve(count).is_err()
-        {
-            self.restore(shards);
-            return Err(Refusal::Allocation);
+        let mut scratch = Scratch::new(&storage, count)?;
+        scratch.values.extend_from_slice(&entries.values);
+        work.compares += sort::sort_with_scratch(
+            &mut entries.values,
+            &mut scratch.values,
+            pool,
+            |left, right| self.order.compare(frozen, content(left), content(right)),
+        );
+        drop(scratch);
+        storage.reserve(&mut generation.remap, shards.len(), true)?;
+        for open in shards {
+            generation.remap.push(Vec::new());
+            let remap = generation.remap.last_mut().expect("new remap lane");
+            storage.reserve(remap, open.arena.len(), true)?;
+            remap.resize(open.arena.len(), Id(0));
         }
-        for (offset, entry) in entries.iter().enumerate() {
+        let total_words: usize = shards.iter().map(|open| open.arena.words.len()).sum();
+        u32::try_from(
+            self.arena
+                .words
+                .len()
+                .checked_add(total_words)
+                .ok_or(Refusal::Exhausted)?,
+        )
+        .map_err(|_| Refusal::Exhausted)?;
+        storage.reserve(&mut self.arena.words, total_words, true)?;
+        storage.reserve(&mut self.arena.starts, count, true)?;
+        storage.reserve(&mut self.generations, 1, false)?;
+        let arena = &self.arena;
+        for (shard, open) in self.shards.iter_mut().zip(shards) {
+            storage.table(&mut shard.frozen, open.arena.len(), |&id| {
+                hash_of(arena.get(id as usize))
+            })?;
+        }
+        // From here through publication there are no allocations or refusals.
+        for (offset, entry) in entries.values.iter().enumerate() {
             let id = Id(u32::try_from(base + offset).expect("checked identity space"));
-            let pushed = self.arena.push(content(entry)).expect("reserved arena");
+            let pushed = self
+                .arena
+                .push(content(entry), &storage)
+                .expect("reserved arena");
             debug_assert_eq!(pushed, id.0);
-            remap[entry.shard as usize][entry.local as usize] = id;
+            generation.remap[entry.shard as usize][entry.local as usize] = id;
             work.written += 1;
         }
-        // Each shard's frozen table gains its own new identities; shards are
-        // independent, so they update in parallel.
         let arena = &self.arena;
         let update = |(shard, (open, remap)): (&mut Shard, (&Open, &Vec<Id>))| {
-            shard
-                .frozen
-                .reserve(open.arena.len(), |&id| hash_of(arena.get(id as usize)));
             for (local, id) in remap.iter().enumerate() {
                 shard.frozen.insert_unique(open.hashes[local], id.0, |&id| {
                     hash_of(arena.get(id as usize))
                 });
             }
         };
-        let pairs = self.shards.iter_mut().zip(shards.iter().zip(remap.iter()));
+        let pairs = self
+            .shards
+            .iter_mut()
+            .zip(shards.iter().zip(generation.remap.iter()));
         match pool {
             Some(pool) => pool.scope(|scope| {
                 let update = &update;
@@ -542,20 +630,15 @@ impl<O: ContentOrder> ContentInterner<O> {
             None => pairs.for_each(update),
         }
         work.written += count as u64;
-        // The next generation starts after this one's identities.
         self.generations
             .push(u32::try_from(base + count).expect("checked identity space"));
-        Ok(Generation { remap, base })
-    }
-
-    fn restore(&mut self, shards: Vec<Open>) {
-        for (shard, open) in self.shards.iter_mut().zip(shards) {
-            *shard.open.get_mut().unwrap_or_else(PoisonError::into_inner) = open;
-        }
+        Ok(generation)
     }
 
     /// Every final identity in content order: the generations' sorted runs
-    /// merged by the one comparison.
+    /// merged by the one comparison. This convenience operation's returned
+    /// vector and merge scratch are caller-owned and outside `Storage`; bounded
+    /// grounding uses `freeze` and its accounted generation remap instead.
     ///
     /// # Panics
     /// Never: every identity fits `u32`.
@@ -590,18 +673,51 @@ impl<O: ContentOrder> ContentInterner<O> {
     /// Bytes retained by tables and arenas, by capacity.
     #[must_use]
     pub fn bytes(&mut self) -> u128 {
+        self.owned_bytes()
+    }
+}
+
+impl<O> ContentInterner<O> {
+    fn owned_bytes(&mut self) -> u128 {
         let shards: u128 = self
             .shards
             .iter_mut()
             .map(|shard| {
                 let open = shard.open.get_mut().unwrap_or_else(PoisonError::into_inner);
-                table_bytes(&shard.frozen)
-                    + table_bytes(&open.table)
-                    + open.arena.bytes()
-                    + open.hashes.capacity() as u128 * 8
+                table_bytes(&shard.frozen) + open_bytes(open)
             })
             .sum();
-        shards + self.arena.bytes() + self.generations.capacity() as u128 * 4
+        size_of::<Self>() as u128
+            + capacity(&self.shards)
+            + shards
+            + self.arena.bytes()
+            + capacity(&self.generations)
+    }
+}
+
+impl<O> Drop for ContentInterner<O> {
+    fn drop(&mut self) {
+        let bytes = self.owned_bytes();
+        self.storage.release(bytes);
+    }
+}
+
+fn open_bytes(open: &Open) -> u128 {
+    table_bytes(&open.table) + open.arena.bytes() + capacity(&open.hashes)
+}
+
+/// Moved open payload is still charged. On success or unwind it drops here;
+/// on typed refusal the caller drains it back to the interner first.
+struct OpenGeneration<'a> {
+    scratch: Scratch<'a, Open>,
+    storage: &'a Storage,
+}
+
+impl Drop for OpenGeneration<'_> {
+    fn drop(&mut self) {
+        for open in &self.scratch.values {
+            self.storage.release(open_bytes(open));
+        }
     }
 }
 
@@ -633,9 +749,27 @@ fn hash_of(content: &[u32]) -> u64 {
 pub struct Generation {
     remap: Vec<Vec<Id>>,
     base: usize,
+    storage: Storage,
 }
 
 impl Generation {
+    fn new(base: usize, storage: Storage) -> Result<Self, Refusal> {
+        storage.add(size_of::<Self>() as u128)?;
+        Ok(Self {
+            remap: Vec::new(),
+            base,
+            storage,
+        })
+    }
+
+    /// This remap's named header and capacity, retained until it drops.
+    #[must_use]
+    fn storage_bytes(&self) -> u128 {
+        size_of::<Self>() as u128
+            + capacity(&self.remap)
+            + self.remap.iter().map(capacity).sum::<u128>()
+    }
+
     /// The final identity a provisional coordinate of this generation received.
     #[must_use]
     pub fn resolve(&self, pending: Pending) -> Id {
@@ -655,5 +789,11 @@ impl Generation {
     #[must_use]
     pub const fn base(&self) -> usize {
         self.base
+    }
+}
+
+impl Drop for Generation {
+    fn drop(&mut self) {
+        self.storage.release(self.storage_bytes());
     }
 }

@@ -637,6 +637,7 @@ import Zetesis
 #print axioms Zetesis.ContentOrderInterning.id_injective_of_law
 #print axioms Zetesis.ContentOrderInterning.sorted_by_id_is_sorted_by_compare
 #print axioms Zetesis.ContentOrderInterning.freeze_establishes_law
+#print axioms Zetesis.ContentOrderInterning.dispatch_eq_compare
 #print axioms Zetesis.sub_refl
 #print axioms Zetesis.sub_trans
 #print axioms Zetesis.atoms_ext
@@ -1019,6 +1020,8 @@ import Zetesis
 #print axioms Zetesis.Pending.Step.perm
 #print axioms Zetesis.Pending.Walk.perm
 #print axioms Zetesis.Pending.Walk.exhausted
+#print axioms Zetesis.Pending.outputs_perm
+#print axioms Zetesis.Pending.outputs_defer
 #print axioms Zetesis.GatePositions.rank_fold_eq_blocks
 #print axioms Zetesis.GatePositions.blockOffset_lt_cardinality
 #print axioms Zetesis.GatePositions.atoms_exact
@@ -1086,6 +1089,8 @@ import Zetesis
 #print axioms Zetesis.HeadContributions.extremum_formula_original
 #print axioms Zetesis.HeadContributions.extremum_bound_frozen
 #print axioms Zetesis.HeadContributions.extremum_head_in_context
+#print axioms Zetesis.HeadKeyPublication.keyed_suffix_eq_plain
+#print axioms Zetesis.HeadKeyPublication.keyed_eq_plain
 #print axioms Zetesis.HeadMeasures.bound_original
 #print axioms Zetesis.HeadMeasures.bound_frozen
 #print axioms Zetesis.HeadMeasures.bound_equivalent
@@ -1166,6 +1171,7 @@ import Zetesis
 #print axioms Zetesis.LeafRefinement.enumeration_refutes
 #print axioms Zetesis.LeafRefinement.lanes_refute
 #print axioms Zetesis.LeafRefinement.resolvent_sound
+#print axioms Zetesis.LeafRefinement.minimized_sound
 #print axioms Zetesis.LeafRefinement.clause_entails_core
 #print axioms Zetesis.LeafRefinement.learned_refutes
 #print axioms Zetesis.LeafRefinement.core_row

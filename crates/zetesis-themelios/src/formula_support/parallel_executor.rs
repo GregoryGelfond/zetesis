@@ -179,6 +179,18 @@ impl Executor {
         }
     }
 
+    /// The counted grounding pool, for work such as an interner freeze that
+    /// fans out on its own. It has one thread fewer than `--threads` (the
+    /// caller waits), so such work never runs wider than the request. `None`
+    /// for one requested thread, and for a test's plain pool.
+    pub(crate) fn threads(&self) -> Option<&threads::Pool> {
+        match self.pool.as_ref()? {
+            Pool::Counted(pool) => Some(pool),
+            #[cfg(test)]
+            Pool::Plain(_) => None,
+        }
+    }
+
     /// The caller alone, for a one-thread request: no pool thread exists.
     /// Unit tests choose their executors through `with_source_workers`.
     #[cfg(not(test))]

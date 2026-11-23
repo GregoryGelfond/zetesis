@@ -8,9 +8,10 @@
 //! duplicate positions, without retaining the supplied description addresses.
 //!
 //! This [`AtomRegistry`] is the atom owner grounding uses today. Its positions
-//! are discovery coordinates, not content order. It is distinct from the
-//! generation-freezing [`crate::intern::ContentInterner`], which grounding does not yet
-//! call.
+//! are discovery coordinates, not content order. Its terms are not: each
+//! [`AtomRegistry::commit_with`] freezes the round's new terms as one generation of the
+//! [`crate::intern::ContentInterner`], so terms of one generation compare by
+//! their content-order identities.
 
 mod closed;
 mod discovery;
@@ -483,7 +484,6 @@ impl AtomRegistry {
         limits: Limits,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<(), Failure<E>> {
-        let mut checked = || before().map_err(Failure::Stopped);
         let live = self.storage_bytes();
         admit(live, limits)?;
         population(self.len(), limits)?;
@@ -491,20 +491,29 @@ impl AtomRegistry {
         if additional == 0 && !self.store.has_unpublished() {
             return Ok(());
         }
-        if !self.committed.is_empty() {
-            reserve(
-                &mut self.committed,
-                additional,
-                limits.max_atoms,
-                live,
-                &mut self.peak,
-                limits,
-                &mut checked,
-            )?;
+        {
+            let mut checked = || before().map_err(Failure::Stopped);
+            if !self.committed.is_empty() {
+                reserve(
+                    &mut self.committed,
+                    additional,
+                    limits.max_atoms,
+                    live,
+                    &mut self.peak,
+                    limits,
+                    &mut checked,
+                )?;
+            }
+            for _ in &self.pending {
+                checked()?;
+            }
         }
-        for _ in &self.pending {
-            checked()?;
-        }
+        // The commit is a semantic boundary: the round's new terms receive
+        // content-order identities before publication seals them, so no
+        // pending interner handle reaches a published segment.
+        self.appender()
+            .import(limits, |store| store.order_terms(&mut before))?;
+        let mut checked = || before().map_err(Failure::Stopped);
         for _ in 0..self
             .store
             .publication_steps(&mut self.snapshot)

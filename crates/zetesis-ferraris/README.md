@@ -345,6 +345,10 @@ same outcome with `Failure<Q::Error>`, preserving the caller's refusal and the
 charged prefix. The reserved account owns control polling at refills; the leaf
 boundary also checks control before and after its operation and refunds unused
 grants. The receipt counts this call's work, excluding charges made before it.
+`NarrowingScratch::small_defers`, `small_guide` and
+`note_general_refutation` also take cancellation and that meter, returning typed
+`Metered` outcomes. Their failures cannot be treated as `false`, `None` or an
+unmetered notice.
 
 The specializations refute only through necessary conditions of the original
 theory and its supplied producers. Learned search and failed-literal probing
@@ -357,14 +361,36 @@ errors rather than a successful `Open` or `Declined` result.
 
 Leaf work includes admitted shape/encoding reads, copied words, operand and
 threshold-term visits, watched propagation, reasoning, sorting and complete
-packed-enumeration visits. Its local conflict allowance is not a proxy for this
-work. Interrupted mutable solver/enumeration state is discarded before reuse;
-changing theory instances clears learned cores and guards. The scratch's
-`retained_bytes()` includes owned leaf capacities, not shared theory storage,
-allocator overhead or temporary peaks, and introduces no new hard byte ceiling.
-The [leaf regressions](src/regions/small/tests.rs) cover interrupted wide rows
-and multiword enumeration; [public regressions](tests/integration/regions.rs)
-cover bounded prefixes, retry and theory reuse.
+packed-enumeration visits. It also includes completion publication and adoption,
+steering and root-probe visits, and enabled minimization, clause compaction,
+reduction and family processing. Its local conflict allowance is not a proxy
+for this work. Interrupted mutable solver, enumeration and steering state is
+discarded before reuse; changing theory instances clears learned cores and guards.
+The logical minimization law
+[`LeafRefinement.minimized_sound`](../../proofs/Zetesis/LeafRefinement.lean)
+requires a sound reason whose remaining literals are covered by the original
+clause apart from the removed literal; Rust reason maintenance and work admission
+remain separate obligations.
+
+Shared publication copies every word of a completion before replacing the payload
+and its generation. Adoption finishes its local copy and retention before
+advancing the walker's generation cursor. A copy refusal leaves no partial
+shared completion; a complete publication may remain if a later operation or
+final control check refuses. Such a completion only orders splits or finite
+deferrals and never establishes membership or refutation.
+[Frontier](../../proofs/Zetesis/Frontier.lean)'s `Pending.outputs_defer` preserves
+outputs for the abstract rotation; complete coverage, finite deferral and the
+Rust publication/cursor protocol remain implementation obligations.
+
+The scratch's `retained_bytes()` includes its owned leaf capacities and local
+completion copies. It excludes shared theory storage and the shared completion
+payload owned by the walk, allocator/control overhead and temporary peaks; it
+introduces no new hard byte ceiling or process-memory measurement. The
+[leaf regressions](src/regions/small/tests.rs) cover interrupted wide rows and
+multiword enumeration; [metering regressions](src/regions/small/metering_tests.rs)
+cover shared publication/adoption and enabled refinements;
+[public regressions](tests/integration/regions.rs) cover bounded prefixes, retry
+and theory reuse.
 
 The two mutable occurrence-count arrays use fixed-length storage: one neutral
 count per chain and one unresolved-parent count per atom. The absorbing witness

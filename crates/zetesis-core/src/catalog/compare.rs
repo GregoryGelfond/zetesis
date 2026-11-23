@@ -288,6 +288,8 @@ fn nodes_with<E>(
 pub(super) fn term(left: TermRef<'_>, right: TermRef<'_>) -> Ordering {
     if left.same_identity(right) {
         Ordering::Equal
+    } else if let Some(order) = left.content_order(right) {
+        order
     } else {
         infallible(nodes_with(
             Nodes::canonical(left),
@@ -305,6 +307,11 @@ pub(super) fn term_with<E>(
 ) -> Result<Ordering, E> {
     if same_term_with(left, right, before)? {
         return Ok(Ordering::Equal);
+    }
+    // One generation's identities are in content order: the identity check's
+    // permit also decides their order.
+    if let Some(order) = left.content_order(right) {
+        return Ok(order);
     }
     term_contents_with(left, right, before)
 }

@@ -93,7 +93,7 @@ pass. A representation's name alone establishes no coverage or membership law.
 | `JoinFrames` | `zetesis-themelios/src/formula_support.rs` (`Join` prefix and undo state), `zetesis-themelios/src/formula_support/component_plan.rs`, `zetesis-themelios/src/formula_support/row_blocks/component_rows.rs` | Reuses storage but replaces bindings/truth for each scan; mathematical frame laws do not prove machine bounds or scheduling. |
 | `ParallelGrounding` | `zetesis-themelios/src/formula_support/row_blocks/coordinator.rs`, `zetesis-themelios/src/formula_support/row_blocks/component_rows.rs`, `zetesis-themelios/src/formula_factor/parallel.rs` | Stages independent head-row blocks and replays in source order; ordered publication and accounting remain concrete obligations. |
 | `ColumnRelations`, `CompactColumns`, `TableBindings` | `zetesis-core/src/relation/`, `zetesis-core/src/table/`; `zetesis-themelios/src/formula_support/relations.rs`, `zetesis-themelios/src/formula_support/queries.rs` | Shared typed columns and exact finite-table selection; themelios adds demand-driven postings and completion evidence. |
-| `ContentOrderInterning.IdOrderEqCompare` | `zetesis-core/src/intern.rs`, `intern/sort.rs` | Generic generation-freezing interner; this is not yet the live grounding owner. The latter is `catalog::registry::AtomRegistry`, backed by the catalog. Catalog discovery IDs do not acquire ASP order by being integers. |
+| `ContentOrderInterning.IdOrderEqCompare` | `zetesis-core/src/intern.rs`, `intern/sort.rs` | Generation-freezing interner used for catalog term order and per-publication head keys. Canonical atom discovery remains with `catalog::registry::AtomRegistry`; term equality remains with the catalog. Discovery IDs do not acquire ASP order merely by being integers. |
 | None (source lowering) | `zetesis-themelios/src/formula_anonymous_ir.rs` (`AnonymousWitnesses`), `zetesis-themelios/src/formula_conditional_unpool.rs` | Gringo-style anonymous-variable lowering, expanded to a negated witness disjunction `not (w1 ∨ … ∨ wn)` with no auxiliary rules, and conditional-literal pool unpooling. Neither is `Lifted.Project`, and the witness disjunction goes beyond `Template.gateFalse`, which takes atom lists. |
 | `RuleFactorization` | `zetesis-themelios/src/formula_factor/plan.rs`, `zetesis-themelios/src/formula_factor.rs` | Existential body factorization; source independence and complete support are separate compiler obligations. |
 | `StreamedRegions`, `StreamedConstraints` | `zetesis-themelios/src/formula_hybrid/`, `zetesis-themelios/src/formula_fixed_constraints.rs`; `zetesis-stable/src/constraint_refutation.rs` (`ConstraintRefuter`, a refuting subject: `Algebra.refuting`) | Streamed source checks refute regions or check completed answers; they do not replace reduct membership. |
@@ -123,8 +123,27 @@ domain support (`FiniteTables.lean`), not `Lifted.Project`.
 clingo's projective enumeration (`ProjectedAnswers.lean`), not head projection.
 `zetesis_wgpu::BinaryNodeKernel` selects how a GPU formula node computes its
 exact supports (`GateProjection.lean`). `zetesis_core::intern::ContentInterner`
-and `zetesis_core::atom_registry::AtomRegistry` are distinct public APIs; the
-former is not yet wired into grounding, and the single-interner migration has
-not happened. Reserved algebra names (`Bind`, `Filter`, `Gate`, `Project`,
+and `zetesis_core::atom_registry::AtomRegistry` are distinct public APIs.
+Grounding uses the former for term order: each registry commit and each
+vocabulary freeze interns the commit's new terms as one generation and freezes
+it, so terms of one generation compare by their content-order identities;
+a term of more than 64 expanded nodes gets no identity and compares by content.
+Parallel support grounding stages each row's projected head-key words in
+charged worker buffers. The coordinator interns those keys in staged order under
+the remaining publication allowance, freezes on the grounding pool, and publishes
+only the first occurrence of each key
+([`HeadKeyPublication.keyed_eq_plain`](../../proofs/Zetesis/HeadKeyPublication.lean)).
+The worker reservation remains live through publication; native interner capacity
+and the retained generation remap are accounted once. The law requires equal
+keys to imply equal heads and insertion to preserve containment and be idempotent;
+Rust projection, lifetime and resource settlement remain separate obligations.
+This byte bound measures named capacities and replacement overlap, not RSS.
+Head-key insertion retains the worker's fixed per-key tariff; its native freeze
+tally is charged after freeze completes. Prompt interruption within freeze, and
+retaining all performed freeze work if that final charge refuses, remain separate
+obligations.
+Atom identities are still the registry's discovery positions and term
+deduplication is still the catalog's hash index; the rest of the
+single-interner migration has not happened. Reserved algebra names (`Bind`, `Filter`, `Gate`, `Project`,
 `Region`, `Narrower`, `Closed`, `Walk`, `Reduction`, `Meter`, `Pool`, …) name
 only their realizations above.

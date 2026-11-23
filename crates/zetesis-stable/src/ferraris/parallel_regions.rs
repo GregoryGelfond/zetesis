@@ -221,6 +221,9 @@ struct Shared {
     inner: InnerDeques,
     /// When a worker's query is published; fixed when the walk begins.
     division: QueryDivision,
+    /// Whether the walk's search optimizes an objective; fixed when the
+    /// walk begins.
+    objective: bool,
     /// The first stop a worker raised; written only on the cold error path,
     /// read by the enumeration once the workers have finished, after their models.
     stopped: Mutex<Option<Incomplete>>,
@@ -236,6 +239,9 @@ struct Shared {
     /// What the workers have done so far, readable while they run, so a
     /// snapshot taken before they finish is current.
     live: Live,
+    /// The completion a learned search's root probe found, which every
+    /// walker may follow. Orders the walks only.
+    completions: Arc<zetesis_ferraris::SmallSharedCompletion>,
 }
 
 /// Counters the workers add to as they go.
@@ -881,6 +887,8 @@ impl ParallelRegions {
         // otherwise worker 0, which continues the coordinator's walk, does.
         let mut scratch = NarrowingScratch::default();
         scratch.designate_small_walker(Instant::now().checked_add(delay).is_none());
+        let completions = Arc::new(zetesis_ferraris::SmallSharedCompletion::default());
+        scratch.share_small_completions(Arc::clone(&completions));
         Ok(Self {
             shared: Arc::new(Shared {
                 parts,
@@ -890,6 +898,7 @@ impl ParallelRegions {
                 frontier,
                 inner,
                 division: QueryDivision::default(),
+                objective: false,
                 stopped: Mutex::new(None),
                 budget: SharedBudget::new(limits.search, budget.statistics),
                 limits,
@@ -898,6 +907,7 @@ impl ParallelRegions {
                 timed: false,
                 candidates: AtomicU64::new(0),
                 live: Live::default(),
+                completions,
             }),
             receiver: Some(receiver),
             sender: Some(sender),
@@ -946,6 +956,15 @@ impl ParallelRegions {
 
     /// Divide the walk's queries as `division` says, before the walk begins;
     /// a walk that has begun keeps the division it began with.
+    pub(crate) fn note_objective(&mut self, present: bool) {
+        if matches!(self.record, WalkRecord::NotBegun)
+            && let Some(shared) = Arc::get_mut(&mut self.shared)
+        {
+            shared.objective = present;
+            self.scratch.note_small_objective(present);
+        }
+    }
+
     pub(crate) fn set_query_division(&mut self, division: QueryDivision) {
         if matches!(self.record, WalkRecord::NotBegun)
             && let Some(shared) = Arc::get_mut(&mut self.shared)
@@ -1855,6 +1874,10 @@ fn worker(
     let mut search = SearchStatistics::default();
     let mut workspaces = Workspaces::new();
     workspaces.scratch.designate_small_walker(index == 0);
+    workspaces.scratch.note_small_objective(shared.objective);
+    workspaces
+        .scratch
+        .share_small_completions(Arc::clone(&shared.completions));
     workspaces
         .scratch
         .yield_small_search_to(Arc::clone(&shared.frontier.termination.idle_waiters));
@@ -2165,6 +2188,9 @@ fn step<'a>(
     );
     publish_counts(shared, &before, &report.regions);
     let narrowing = narrowing?;
+    let Some(entry) = requeue_deferred(shared, index, entry, narrowing)? else {
+        return Ok(Stepped::Split);
+    };
     let atom = match walk::inspect(&entry, narrowing, Counting::Never, false) {
         walk::Step::Refuted => {
             report.regions.refuted += 1;
@@ -2209,6 +2235,34 @@ fn step<'a>(
         return Err(error);
     }
     Ok(Stepped::Split)
+}
+
+/// A region whose narrowing asked to visit it after the others goes back to
+/// the oldest end of this worker's deque, neither resolved nor split
+/// (`None`); any other region, or one alone in an empty deque, is returned.
+fn requeue_deferred(
+    shared: &Shared,
+    index: usize,
+    mut entry: Entry,
+    narrowing: zetesis_algebra::region::Narrowing,
+) -> Result<Option<Entry>, Incomplete> {
+    if !entry.take_deferred()
+        || narrowing == zetesis_algebra::region::Narrowing::Refuted
+        || shared.frontier.queue(index).is_empty()
+    {
+        return Ok(Some(entry));
+    }
+    match shared
+        .frontier
+        .requeue_oldest(index, entry, reserve_regions)
+    {
+        Ok(()) => Ok(None),
+        Err((error, entry)) => {
+            shared.stop(error);
+            drop(entry);
+            Err(error)
+        }
+    }
 }
 
 /// Decide a leaf as the scalar proposer does, unless `publication` publishes

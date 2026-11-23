@@ -96,8 +96,16 @@ spent local conflict/probe allowance establishes membership: the ordinary region
 walk and original reduct check remain authoritative. Actual admitted visits,
 including preparation, propagation, reasoning and copies, consume the same
 cumulative search-work budget. A resource or control failure retains its prefix
-and supplies no successful leaf verdict. Retained scratch capacity is observable;
-it is not a transient peak or a new hard memory limit. The
+and supplies no successful leaf verdict. Shared completion copies, steering,
+finite deferral and root probes use this account too. Publication replaces the
+shared payload only after copying every word of a completion; adoption advances its
+cursor only after retaining its local copy. A complete hint can survive a later
+control failure, but it only changes traversal order and cannot refute a region.
+The [frontier permutation law](../../../proofs/Zetesis/Frontier.lean) requires
+coverage to be preserved; the Rust copy, cursor and finite-deferral protocol is
+a separate obligation. Retained scratch capacity includes local completion
+copies but excludes the walk's shared payload. It is not a transient peak, RSS
+measurement or a new hard memory limit. The
 [leaf correspondence](../lean/correspondence.md#candidate-generation-and-query-representation)
 states the necessary-condition and complete-coverage premises.
 

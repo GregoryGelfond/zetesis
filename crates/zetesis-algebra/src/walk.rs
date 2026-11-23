@@ -149,6 +149,9 @@ pub struct Walk<S = ()> {
     /// older entries' state is shed by the given operation.
     recompute: Option<Recompute<S>>,
     statistics: RegionStatistics,
+    /// Deferrals since a region was last visited in place: at most one per
+    /// pending entry, so a full cycle of deferrals ends them.
+    deferrals: usize,
 }
 
 impl Walk {
@@ -190,6 +193,7 @@ impl<S> Walk<S> {
             narrowed_root: false,
             recompute: None,
             statistics: self::RegionStatistics::default(),
+            deferrals: 0,
         }
     }
 
@@ -374,6 +378,19 @@ impl<S> Walk<S> {
                 }
             };
             self.statistics.regions += 1;
+            if entry.take_deferred()
+                && narrowing != Narrowing::Refuted
+                && self.deferrals < self.regions.len()
+            {
+                self.deferrals += 1;
+                self.root = false;
+                if let Some((_, shed)) = self.recompute {
+                    shed(&mut entry.state);
+                }
+                self.regions.insert(0, entry);
+                continue;
+            }
+            self.deferrals = 0;
             let root = std::mem::replace(&mut self.root, false);
             let atom = match inspect(&entry, narrowing, self.counting, root) {
                 Step::Refuted => {
